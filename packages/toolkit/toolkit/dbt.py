@@ -30,15 +30,15 @@ class DbtRun(BaseModel):
     state: str = ""
     full_refresh: bool = False
 
-    def arguments(self) -> list[str]:
+    def build_arguments(self) -> list[str]:
         """Return the dbt CLI arguments in the order dbt expects.
 
         A command that takes no target or selection, such as `deps`, gets none.
 
         ```python
-        DbtRun(repository="r", select="tag:daily").arguments()
+        DbtRun(repository="r", select="tag:daily").build_arguments()
         # ["run", "--target", "dev", "--select", "tag:daily"]
-        DbtRun(repository="r", command="deps").arguments()
+        DbtRun(repository="r", command="deps").build_arguments()
         # ["deps"]
         ```
         """
@@ -77,14 +77,14 @@ def clone_repository(repository: str, destination: Path) -> Path:
     return destination
 
 
-def dbt_project_dir(repository_path: Path) -> Path:
+def find_project_dir(repository_path: Path) -> Path:
     """Return the `queries` folder of a clone if it exists, else the clone path."""
     queries_path = repository_path / "queries"
     return queries_path if queries_path.is_dir() else repository_path
 
 
 @contextmanager
-def project_profiles(project_dir: Path) -> Generator[None]:
+def use_profiles(project_dir: Path) -> Generator[None]:
     """Point dbt at the `profiles.yml` of the project, if it has one.
 
     dbt looks in `~/.dbt` otherwise, and it refuses to run if that folder is missing.
@@ -104,16 +104,16 @@ def execute_dbt(request: DbtRun) -> None:
     and `ValueError` if dbt fails.
     """
     with TemporaryDirectory(prefix="dbt_repository_") as directory:
-        project_dir = dbt_project_dir(
+        project_dir = find_project_dir(
             clone_repository(request.repository, Path(directory) / "repository")
         )
 
-        with project_profiles(project_dir):
+        with use_profiles(project_dir):
             runner = PrefectDbtRunner(
                 settings=PrefectDbtSettings(project_dir=project_dir)
             )
             runner.invoke(["deps"])
-            runner.invoke(request.arguments())
+            runner.invoke(request.build_arguments())
         logger.info(
             "dbt command finished: command=%s project=%s", request.command, project_dir
         )

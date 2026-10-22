@@ -84,7 +84,7 @@ deployments:
       read:
         table: public.table_name
       options:
-        batches:
+        chunks:
           column: created_at
           width: month
           begin: "2024-01-01"

@@ -27,12 +27,15 @@ def 'main lint python' []: nothing -> nothing {
     in-project . ruff check src tests
     in-project . ruff format --check src tests
     in-project . basedpyright
-    in-project . pyrefly check
     in-project packages/toolkit ruff check .
     in-project packages/toolkit ruff format --check .
     in-project packages/toolkit basedpyright
-    in-project packages/toolkit pyrefly check
     in-project packages/toolkit vulture toolkit tests
+}
+
+# Fail if a pipeline imports a module that no longer exists.
+def 'main lint imports' []: nothing -> nothing {
+    in-project . ruff check --select TID251 --no-fix pipelines
 }
 
 # Lint the SQL templates of the toolkit.

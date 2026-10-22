@@ -21,8 +21,8 @@ from .tasks import (
     upload_files_to_gcs,
     write_records,
 )
-from .types import Cloud, Database, DumpMode, DumpOptions, FileFormat, Read, Table
-from .utils import capture_time, extract_records
+from .types import Cloud, Database, DatabaseDumpOptions, DumpMode, DumpOptions, FileFormat, Read, Table
+from .utils import capture_time, extract_records, load_records_schema, validate_records
 
 configure_telemetry()
 
@@ -39,13 +39,13 @@ async def dump_database(
     table: Table,
     read: Read,
     dump_mode: DumpMode = "append",
-    options: DumpOptions | None = None,
+    options: DatabaseDumpOptions | None = None,
     dbt: DbtRun | None = None,
 ) -> None:
     """Dump a table or a native query of a database to a BigQuery table, without repeats.
 
-    DuckDB reads the source one window at a time and writes a Delta table in the bucket.
-    A window that did not change is never written again, so a rerun, or a retry after a
+    DuckDB reads the source one chunk at a time and writes a Delta table in the bucket.
+    A chunk that did not change is never written again, so a rerun, or a retry after a
     failure, repeats nothing. BigQuery reads the Delta table through a BigLake
     connection. Set `database` and `cloud` in the `prefect.yaml` of the pipeline, and
     `table`, `read` and `options` in each schedule. A pipeline imports this flow in its
@@ -77,7 +77,7 @@ async def dump_arcgis(
     """Dump an ArcGIS layer to a BigQuery table.
 
     `url` is the layer URL without `/query`, and `where` is the ArcGIS filter. `crs`, such
-    as `EPSG:31983`, is the system of the geometry. The layer is one window, so a run that
+    as `EPSG:31983`, is the system of the geometry. The layer is one chunk, so a run that
     finds the same layer writes nothing.
     """
     await dump_arcgis_to_gcs(
@@ -143,19 +143,27 @@ async def ingest_api(
     headers: Mapping[str, str] | None = None,
     body: JsonValue | None = None,
     records_key: str | None = None,
+    records_schema: str | None = None,
     dump_mode: DumpMode = "append",
     options: DumpOptions | None = None,
 ) -> None:
     """Send one request to an API and load its records to a BigQuery table.
 
     `records_key` is the dotted path to the list of records, or empty when the response
-    is the list. In `append` each run adds its records, and a retry of the same run adds
+    is the list. `records_schema` is the path `module:name` of a Pydantic model, a
+    dataclass or a `TypedDict` that every record must fit. A record that does not fit
+    stops the run before anything is written, and the records are written as the API
+    sent them. In `append` each run adds its records, and a retry of the same run adds
     nothing. In `overwrite` the records replace the table. A response with no record
     loads nothing. It sends one request: a paged API needs a pipeline that sends each
     page with `request_json` and loads them with `load_files`.
     """
+    schema = load_records_schema(records_schema) if records_schema else None
     data = await request_json(url, method=method, params=params, headers=headers, body=body)
     records = extract_records(data, records_key)
+
+    if schema is not None:
+        validate_records(records, schema)
 
     if not records:
         logger.warning("API response has no record: url=%s", url)

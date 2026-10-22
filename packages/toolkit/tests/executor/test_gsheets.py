@@ -33,11 +33,13 @@ async def test_the_secret_is_valid_for_the_real_extension():
     """Create a secret that the real extension accepts."""
     source = GSheetsSource(token=lambda: "token")
 
-    async with DuckDBEngine.connect(source.extensions) as engine:
+    async with DuckDBEngine(extensions=source.extensions) as engine:
         await source.setup(engine)
-        frames = [f async for f in engine.query("SELECT type FROM duckdb_secrets()")]
+        dataframes = [
+            f async for f in engine.query("SELECT type FROM duckdb_secrets()")
+        ]
 
-    assert frames[0].rows() == [("gsheet",)]
+    assert dataframes[0].rows() == [("gsheet",)]
 
 
 @pytest.fixture

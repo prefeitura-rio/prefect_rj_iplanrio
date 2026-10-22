@@ -3,16 +3,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from json import dumps
 from pathlib import Path
 from threading import Thread
-from typing import TypedDict
 from urllib.parse import parse_qs, urlparse
 
 import pytest
-from psycopg.sql import Literal
-
-from toolkit.executor.engines.duckdb import DuckDBEngine
-from toolkit.executor.executor import Executor
-from toolkit.executor.sources.backends.arcgis import ArcGISSource
-from toolkit.types import Geometry
 
 POLL_SECONDS = 0.01
 
@@ -79,36 +72,8 @@ def layer() -> Iterator[tuple[str, list[dict[str, list[str]]]]]:
     server.shutdown()
 
 
-class Point(TypedDict):
-    id: int
-    name: str
-    geom: Geometry
-
-
-async def read_layer(
-    url: str, directory: Path, where: str = "1=1", srid: str | None = None
-) -> list[int]:
-    """Read the ids of the layer with the macro, through the executor."""
-    (directory / "points.sql").write_text(
-        '{% from "duckdb/macros.sql" import arcgis_layer %}'
-        "SELECT id, name, geom FROM {{ arcgis_layer(url, where, srid | default(none)) }} ORDER BY id\n"
-    )
-    source = ArcGISSource()
-
-    async with DuckDBEngine.connect(source.extensions) as engine:
-        dataset = await Executor(engine, directory).query(
-            "points",
-            {"url": Literal(url), "where": Literal(where)}
-            | ({"srid": Literal(srid)} if srid else {}),
-            expect=Point,
-        )
-
-    assert dataset.frame.schema["geom"].is_extension()
-    return dataset.frame["id"].to_list()
-
-
 @pytest.mark.extensions
-async def test_a_layer_is_read_through_every_page(layer, tmp_path: Path):
+async def test_a_layer_is_read_through_every_page(layer, tmp_path: Path, read_layer):
     """Read every page of a layer."""
     url, queries = layer
 
@@ -117,7 +82,9 @@ async def test_a_layer_is_read_through_every_page(layer, tmp_path: Path):
 
 
 @pytest.mark.extensions
-async def test_the_where_clause_reaches_the_server_intact(layer, tmp_path: Path):
+async def test_the_where_clause_reaches_the_server_intact(
+    layer, tmp_path: Path, read_layer
+):
     """Send the where clause to the server unchanged."""
     url, queries = layer
     where = "id > 1 AND name <> 'x'"
@@ -136,7 +103,7 @@ async def test_the_where_clause_reaches_the_server_intact(layer, tmp_path: Path)
     ],
 )
 async def test_the_coordinate_system_is_asked_of_the_server(
-    layer, tmp_path: Path, srid, expected
+    layer, tmp_path: Path, srid, expected, read_layer
 ):
     """Send `outSR` only when a system is set, so the server reprojects the layer."""
     url, queries = layer

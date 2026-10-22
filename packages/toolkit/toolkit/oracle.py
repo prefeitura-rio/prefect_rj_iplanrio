@@ -1,5 +1,7 @@
 """Async view of an Oracle connection that reads a table or query as Arrow batches.
 
+The `OracleEngine` of `executor/engines/oracle.py` wraps it.
+
 The reader uses `oracledb` with the Oracle Instant Client (thick mode), and falls back
 to thin mode if the client libraries are missing. A number never loses digits: it is
 an integer, a `decimal128` or exact text. A type that Arrow cannot hold, such as an
@@ -7,10 +9,9 @@ object type, raises and names the column.
 """
 
 from asyncio import to_thread
-from collections.abc import AsyncGenerator, Callable, Mapping, Sequence
+from collections.abc import AsyncGenerator, Mapping, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from datetime import date
 from functools import lru_cache
 from typing import Self, cast
 
@@ -28,22 +29,20 @@ from pyarrow import string as arrow_string
 from pyarrow import table as arrow_table
 from pyarrow import timestamp as arrow_timestamp
 
-from .batches import NULL_WINDOW, Window
+from .chunks import NULL_CHUNK, Chunk
 from .constants import (
-    FILTER_OPERATORS,
     ORACLE_EXPRESSIONS,
     ORACLE_KEEPALIVE_MINUTES,
 )
 from .executor.constants import DEFAULT_BATCH_SIZE
 from .executor.render import render_template
+from .executor.requests import Query, UnsupportedRequestError
+from .executor.requests import Table as TableOrigin
 from .executor.sources.protocols import DBConn
+from .executor.types import Origin
 from .settings import OracleSettings
 from .telemetry import logger
-from .types import ArrowColumn, Filter, QueryParams, Scalar
-
-type Bind = Scalar | date
-type Predicate = dict[str, Composable | str]
-type Binder = Callable[[Bind], str]
+from .types import ArrowColumn, Bind, Binder, Predicate, QueryParams
 
 BARE_SCALE = -127
 """The scale that `oracledb` reports for a `NUMBER` that has none."""
@@ -65,7 +64,9 @@ class OracleColumn:
     target: DataType
 
 
-def number_column(precision: int | None, scale: int | None) -> tuple[str, DataType]:
+def build_number_column(
+    precision: int | None, scale: int | None
+) -> tuple[str, DataType]:
     """Return the expression kind and the Arrow type of a `NUMBER`.
 
     An integer of up to 18 digits is `int64`, and any other number with a precision and
@@ -73,9 +74,9 @@ def number_column(precision: int | None, scale: int | None) -> tuple[str, DataTy
     precision, or one that no `decimal128` holds, is read as exact text.
 
     ```python
-    number_column(10, 0)  # ("plain", int64())
-    number_column(20, 6)  # ("plain", decimal128(20, 6))
-    number_column(0, -127)  # ("number_text", string())
+    build_number_column(10, 0)  # ("plain", int64())
+    build_number_column(20, 6)  # ("plain", decimal128(20, 6))
+    build_number_column(0, -127)  # ("number_text", string())
     ```
     """
     if precision is None or scale is None:
@@ -110,7 +111,7 @@ def plan_column(
     ```
     """
     if type_name == "DB_TYPE_NUMBER":
-        expression, arrow = number_column(precision, scale)
+        expression, arrow = build_number_column(precision, scale)
     elif type_name in ORACLE_EXPRESSIONS:
         expression, arrow = ORACLE_EXPRESSIONS[type_name]
     else:
@@ -134,42 +135,39 @@ def init_client() -> None:
         )
 
 
-def source_sql(values: Mapping[str, object]) -> tuple[str, bool]:
+def build_source_sql(origin: Origin) -> tuple[str, bool]:
     r"""Return what a read selects from, and whether it is a table.
 
     A table is `OWNER.TABLE`, each part quoted as written. A query loses its trailing
-    `;` and goes in parentheses, so that a window can filter it.
+    `;` and goes in parentheses, so that a chunk can filter it. Raise
+    `UnsupportedRequestError` for any other origin.
 
     ```python
-    source_sql({"table": "APP.ORDERS"})  # ('"APP"."ORDERS"', True)
-    source_sql({"query": "SELECT 1 FROM dual;"})  # ("(SELECT 1 FROM dual\n)", False)
+    build_source_sql(TableOrigin("APP.ORDERS"))  # ('"APP"."ORDERS"', True)
+    build_source_sql(Query("SELECT 1 FROM dual;"))  # ("(SELECT 1 FROM dual\n)", False)
     ```
     """
-    match values.get("table"), values.get("query"):
-        case str() as table, None:
-            return Identifier(*table.split(".")).as_string(None), True
-        case None, str() as query:
-            return f"({query.strip().removesuffix(';').rstrip()}\n)", False
+    match origin:
+        case TableOrigin(name):
+            return Identifier(*name.split(".")).as_string(None), True
+        case Query(text):
+            return f"({text.strip().removesuffix(';').rstrip()}\n)", False
         case _:
-            raise ValueError("Give exactly one of table and query")
+            raise UnsupportedRequestError("OracleEngine", origin)
 
 
-def predicates(
-    filters: Sequence[Filter],
-    column: str | None,
-    window: Window | None,
-    known: Sequence[str],
+def build_predicates(
+    column: str | None, chunk: Chunk | None, known: Sequence[str]
 ) -> tuple[list[Predicate], dict[str, Bind]]:
-    """Return the filters and the window as predicates with binds, and the binds.
+    """Return the chunk as predicates with binds, and the binds.
 
-    Every column must be one of `known`, and every operator one of the list. A value is
-    always a bind, never part of the SQL text. Raise `ValueError` for anything else.
+    The column must be one of `known`. A value is always a bind, never part of the SQL
+    text. Raise `ValueError` for an unknown column.
 
     ```python
-    filters = [{"column": "STATUS", "op": "!=", "value": "x"}]
-    found, binds = predicates(filters, "DIA", window, ["STATUS", "DIA"])
-    # found: "STATUS" != :p0, "DIA" >= :p1, "DIA" < :p2
-    # binds: {"p0": "x", "p1": date(2024, 3, 1), "p2": date(2024, 3, 2)}
+    found, binds = predicates("DIA", chunk, ["STATUS", "DIA"])
+    # found: "DIA" >= :p0, "DIA" < :p1
+    # binds: {"p0": date(2024, 3, 1), "p1": date(2024, 3, 2)}
     ```
     """
     binds: dict[str, Bind] = {}
@@ -180,61 +178,35 @@ def predicates(
         binds[name] = value
         return f":{name}"
 
-    unknown = {item["column"] for item in filters} | ({column} if column else set())
-    if unknown - set(known):
-        raise ValueError(f"Unknown columns: {sorted(unknown - set(known))}")
+    if column and column not in known:
+        raise ValueError(f"Unknown columns: {[column]}")
 
-    found = [filter_predicate(item, bind) for item in filters]
-    if column and window:
-        found += window_predicates(column, window, bind)
+    found = bind_chunk_predicates(column, chunk, bind) if column and chunk else []
 
     return found, binds
 
 
-def window_predicates(column: str, window: Window, bind: Binder) -> list[Predicate]:
-    """Return the filter of one window: its range, or `IS NULL` for the NULL window."""
+def bind_chunk_predicates(column: str, chunk: Chunk, bind: Binder) -> list[Predicate]:
+    """Return the filter of one chunk: its range, or `IS NULL` for the NULL chunk."""
     name = Identifier(column)
-    if window == NULL_WINDOW:
+    if chunk == NULL_CHUNK:
         return [{"column": name, "op": "is null"}]
     return [
-        {"column": name, "op": ">=", "value": bind(window.start)},
-        {"column": name, "op": "<", "value": bind(window.stop)},
+        {"column": name, "op": ">=", "value": bind(chunk.start)},
+        {"column": name, "op": "<", "value": bind(chunk.stop)},
     ]
 
 
-def filter_predicate(item: Filter, bind: Binder) -> Predicate:
-    """Return one filter as `column`, `op` and, if any, the bind text."""
-    op = item["op"]
-    if op not in FILTER_OPERATORS:
-        raise ValueError(f"Not a filter operator: {op!r}")
-
-    column = Identifier(item["column"])
-    match op, item.get("value"):
-        case "is null" | "is not null", None:
-            return {"column": column, "op": op}
-        case "is null" | "is not null", _:
-            raise ValueError(f"The operator {op!r} takes no value")
-        case "in" | "not in", [_, *_] as values:
-            binds = ", ".join(bind(value) for value in values)
-            return {"column": column, "op": op, "value": f"({binds})"}
-        case "in" | "not in", _:
-            raise ValueError(f"The operator {op!r} needs a list of values")
-        case _, str() | int() | float() as value:
-            return {"column": column, "op": op, "value": bind(value)}
-        case _, list():
-            raise ValueError(f"The operator {op!r} needs one value, not a list")
-        case _:
-            raise ValueError(f"The operator {op!r} needs a value")
-
-
 @dataclass(frozen=True, slots=True)
-class WindowRead:
-    """One read of a window: its source, filters and the values of their binds."""
+class ChunkRead:
+    """One read of a chunk: its source, filters, chunk and the values of its binds."""
 
     source: str
     is_table: bool
+    filters: Sequence[str]
     found: Sequence[Predicate]
     binds: Mapping[str, Bind]
+    names: Sequence[Composable] = ()
 
 
 def convert(table: Table, columns: Sequence[OracleColumn]) -> Table:
@@ -247,17 +219,17 @@ def convert(table: Table, columns: Sequence[OracleColumn]) -> Table:
         array.cast(column.target)
         for column, array in zip(columns, table.columns, strict=True)
     ]
-    return Table.from_arrays(arrays, schema=target_schema(columns))
+    return Table.from_arrays(arrays, schema=build_target_schema(columns))
 
 
-def target_schema(columns: Sequence[OracleColumn]) -> Schema:
-    """Return the schema of the frames of a read."""
+def build_target_schema(columns: Sequence[OracleColumn]) -> Schema:
+    """Return the schema of the dataframes of a read."""
     return arrow_schema([arrow_field(column.name, column.target) for column in columns])
 
 
 @dataclass(frozen=True, slots=True)
 class Oracle:
-    """An async view of one synchronous Oracle connection, as an `Engine`.
+    """An async view of one synchronous Oracle connection, for SQL text.
 
     A query comes back in the types that Delta and BigQuery hold: the engine describes
     the statement, and wraps it in a select list that reads each column in its form.
@@ -288,7 +260,7 @@ class Oracle:
             yield cls(connection=connection)
 
     async def execute(self, sql: str, *, params: QueryParams | None = None) -> None:
-        """Run one statement. The params bind by position."""
+        """Run one SQL statement. The params bind by position."""
 
         def run() -> None:
             """Execute the statement on a cursor."""
@@ -304,15 +276,15 @@ class Oracle:
         params: QueryParams | None = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
     ) -> AsyncGenerator[DataFrame]:
-        """Run one query and yield Polars frames of up to `batch_size` rows.
+        """Run one SQL query and yield Polars dataframes of up to `batch_size` rows.
 
-        The params bind by position. A query with no rows still yields one frame, with
-        the columns.
+        The params bind by position. A query with no rows still yields one dataframe,
+        with the columns.
 
         ```python
         async with Oracle.connect(conn) as oracle:
             sql = "SELECT id FROM orders WHERE id > :1"
-            async for frame in oracle.query(sql, params=[7]):
+            async for dataframe in oracle.query(sql, params=[7]):
                 ...
         ```
         """
@@ -350,15 +322,19 @@ class Oracle:
             ),
         )
 
-        def next_batch() -> Table | None:
+        def read_next_batch() -> Table | None:
             """Fetch the next batch in the target types, or return `None` at the end."""
-            frame = next(batches, None)
-            return None if frame is None else convert(arrow_table(frame), columns)
+            dataframe = next(batches, None)
+            return (
+                None if dataframe is None else convert(arrow_table(dataframe), columns)
+            )
 
         yielded = False
-        while (table := await to_thread(next_batch)) is not None:
+        while (table := await to_thread(read_next_batch)) is not None:
             yielded = True
             yield cast("DataFrame", from_arrow(table))
 
         if not yielded:
-            yield cast("DataFrame", from_arrow(target_schema(columns).empty_table()))
+            yield cast(
+                "DataFrame", from_arrow(build_target_schema(columns).empty_table())
+            )

@@ -1,32 +1,60 @@
-"""Render SQL templates and run them on a client."""
+"""Orchestrate an engine: connect it, render SQL templates and read the chunks."""
 
-from collections.abc import Mapping, Sequence
+from asyncio import Lock, TaskGroup
+from collections import deque
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from pathlib import Path
-from typing import overload
+from tempfile import TemporaryDirectory
+from types import TracebackType
+from typing import Self, overload
 
 from psycopg.sql import Identifier
 
+from ..chunks import Chunk, Rows
 from ..constants import EXECUTE_SPAN, TEMPLATE_ATTRIBUTE
 from ..telemetry import logger, tracer
-from ..types import Described, QueryParams, TemplateValue
-from ..utils import column_aliases, normalize_column
+from ..types import Columns, Described, QueryParams, TemplateValue
+from ..utils import build_column_aliases, normalize_column
 from .constants import DEFAULT_BATCH_SIZE, TEMPLATES_DIR
-from .dataset import Result
-from .engines.protocol import Engine
+from .dataset import Result, build_result
+from .engines.base import Engine
 from .render import render_template
-from .schema import Column, build_columns
+from .types import Expected
 
 
 @dataclass(frozen=True, slots=True)
 class Executor:
-    """Run the statements of a template on a client.
+    """Run an engine: its templates, its reads and the chunks of a dump.
 
+    `async with` opens the engine, and an engine that is already open works without it.
     The `templates` directory of the pipeline is searched before the toolkit templates.
+
+    ```python
+    async with Executor(Engine.from_source(source), templates) as executor:
+        columns = await executor.describe()
+        total = await executor.query("count_events", expect=Total)
+    ```
     """
 
-    client: Engine
+    engine: Engine
     templates: Path | None = None
+
+    async def __aenter__(self) -> Self:
+        """Open the engine."""
+        await self.engine.__aenter__()
+
+        return self
+
+    async def __aexit__(
+        self,
+        error_type: type[BaseException] | None,
+        error: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        """Close the engine."""
+        await self.engine.__aexit__(error_type, error, traceback)
 
     @property
     def roots(self) -> tuple[Path, ...]:
@@ -45,7 +73,7 @@ class Executor:
         with tracer.start_as_current_span(
             EXECUTE_SPAN, attributes={TEMPLATE_ATTRIBUTE: path}
         ):
-            await self.client.execute(sql, params=params)
+            await self.engine.execute(sql, params=params)
 
         logger.info("Statement executed: template=%s", path)
 
@@ -67,7 +95,7 @@ class Executor:
         mapping: Mapping[str, TemplateValue] | None = None,
         *,
         params: QueryParams | None = None,
-        expect: Mapping[str, Column] | None = None,
+        expect: Expected | None = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
     ) -> Result[dict[str, object]]: ...
 
@@ -77,14 +105,14 @@ class Executor:
         mapping: Mapping[str, TemplateValue] | None = None,
         *,
         params: QueryParams | None = None,
-        expect: type[Schema] | Mapping[str, Column] | None = None,
+        expect: type[Schema] | Expected | None = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
     ) -> Result[Schema] | Result[dict[str, object]]:
         """Render a query and return its result, checked against `expect`.
 
-        `expect` is a schema class, a map of the columns for a read whose columns are
-        known only at run time, or nothing to check nothing. Raise `SchemaError` if a
-        batch does not fit.
+        `expect` is a schema class, a map of columns or Polars types (a `polars.Schema`
+        too, whose columns have no nulls), or nothing to check nothing. Raise
+        `SchemaError` if a batch does not fit.
 
         ```python
         orders = await executor.query("orders", {"source": scan}, expect=Order)
@@ -93,21 +121,97 @@ class Executor:
             ...
 
         # a dump: the first read gives the columns, and the next reads must keep them
-        first = await executor.query("window", values)
-        columns = frame_columns(first.frame)
-        async for batch in executor.query("window", values, expect=columns):
+        first = await executor.query("chunk", values)
+        columns = read_columns(first.dataframe)
+        async for batch in executor.query("chunk", values, expect=columns):
             ...
         ```
         """
         sql = render_template(path, mapping or {}, roots=self.roots)
-        frames = self.client.query(sql, params=params, batch_size=batch_size)
-        match expect:
-            case None:
-                return Result(dict, None, path, frames)
-            case Mapping():
-                return Result(dict, dict(expect), path, frames)
-            case _:
-                return Result(expect, build_columns(expect), path, frames)
+        dataframes = self.engine.query(sql, params=params, batch_size=batch_size)
+
+        return build_result(dataframes, expect, path)
+
+    async def describe(self) -> dict[str, str]:
+        """Return the name and the DuckDB type of each column of the origin."""
+        return await self.engine.describe()
+
+    @overload
+    def read[Schema](
+        self, *, expect: type[Schema], batch_size: int = DEFAULT_BATCH_SIZE
+    ) -> Result[Schema]: ...
+
+    @overload
+    def read(
+        self, *, expect: Expected | None = None, batch_size: int = DEFAULT_BATCH_SIZE
+    ) -> Result[dict[str, object]]: ...
+
+    def read[Schema](
+        self,
+        *,
+        expect: type[Schema] | Expected | None = None,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ) -> Result[Schema] | Result[dict[str, object]]:
+        """Read the rows of the origin, as datasets of up to `batch_size` rows.
+
+        `expect` is as in `query`. Raise `SchemaError` if a batch does not fit.
+
+        ```python
+        async for batch in executor.read(expect=Schema({"id": Int64})):
+            ...
+        ```
+        """
+        return build_result(self.engine.read(batch_size=batch_size), expect, "read")
+
+    async def materialize(
+        self, target: Path, rows: Rows, columns: Columns = ()
+    ) -> None:
+        """Write the rows of one chunk of the origin as one Parquet file."""
+        await self.engine.materialize(target, rows, columns)
+
+    async def run_chunks(
+        self,
+        todo: Sequence[Chunk],
+        plan: Callable[[Chunk], tuple[Rows, Columns]],
+        handle: Callable[[Chunk, Path], Awaitable[None]],
+    ) -> None:
+        """Write each chunk of `todo` as Parquet in a temporary folder, and hand it on.
+
+        `plan` gives the rows and the columns of a chunk, and `handle` takes the chunk
+        and the folder of its `out.parquet`. The engine says how many chunks are read
+        at the same time with `concurrency`. Each extra worker reads on an engine of its
+        own, and `handle` runs for one chunk at a time, so it may write to a shared
+        place. The first error cancels the other workers and is raised as it is.
+        """
+        pending = deque(todo)
+        lock = Lock()
+
+        async def work(engine: Engine) -> None:
+            """Read chunks until none is left."""
+            while pending:
+                chunk = pending.popleft()
+                rows, columns = plan(chunk)
+
+                with TemporaryDirectory() as directory:
+                    folder = Path(directory)
+                    await engine.materialize(folder / "out.parquet", rows, columns)
+
+                    async with lock:
+                        await handle(chunk, folder)
+
+        workers = self.engine.concurrency
+
+        if workers == 1:
+            await work(self.engine)
+            return
+
+        try:
+            async with AsyncExitStack() as stack, TaskGroup() as group:
+                for _ in range(workers):
+                    engine = await stack.enter_async_context(self.engine.clone())
+                    group.create_task(work(engine))
+        except ExceptionGroup as errors:
+            raise errors.exceptions[0] from errors
 
     async def normalize_columns(
         self,
@@ -131,7 +235,7 @@ class Executor:
             described = await self.query(
                 "duckdb/describe_table", {"table": identifier}, expect=Described
             )
-            columns = described.frame["column_name"].to_list()
+            columns = described.dataframe["column_name"].to_list()
 
         changed = {
             name: new
@@ -139,7 +243,7 @@ class Executor:
             if (new := normalize_column(name, separator, lowercase)) != name
         }
         if changed:
-            renames = column_aliases(list(changed), separator, lowercase)
+            renames = build_column_aliases(list(changed), separator, lowercase)
             await self.execute(
                 "duckdb/rename_columns", {"table": identifier, "renames": renames}
             )

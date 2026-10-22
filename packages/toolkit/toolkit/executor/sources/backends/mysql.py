@@ -1,15 +1,16 @@
 """MySQL, read through the DuckDB `mysql_scanner` extension."""
 
-from dataclasses import dataclass
 from typing import ClassVar
 
-from ...engines.duckdb import Extension
-from ..duckdb import DuckDBSource
+from pydantic.dataclasses import dataclass
+
+from ...constants import SOURCE_CONFIG
+from ..duckdb import AttachedSource, Extension
 
 
-@dataclass(frozen=True, slots=True)
-class MySQLSource(DuckDBSource):
+@dataclass(frozen=True, slots=True, config=SOURCE_CONFIG)
+class MySQLSource(AttachedSource):
     """MySQL, read through the DuckDB `mysql_scanner` extension."""
 
-    attach_type: ClassVar[str] = "mysql"
+    name: ClassVar[str] = "mysql"
     extensions: ClassVar[tuple[Extension, ...]] = (Extension("mysql_scanner"),)

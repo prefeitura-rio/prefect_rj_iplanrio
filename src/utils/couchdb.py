@@ -1,14 +1,14 @@
 """The CouchDB databases of bcadastro, in the shape of `brutos_bcadastro_staging`.
 
-Load a database once from `_all_docs` with `lookback: 0`, so a retry skips the windows
+Load a database once from `_all_docs` with `lookback: 0`, so a retry skips the chunks
 already loaded. Then read `_changes` with `since` set to the `last_seq` of the first
-window, which is the earliest one.
+chunk, which is the earliest one.
 """
 
 from pyarrow import json_, schema, string
 from pydantic import JsonValue
-from toolkit.executor.sources.backends.couchdb import Shape, json_text
 from toolkit.executor.sources.models import CouchDBItem
+from toolkit.executor.sources.shapes import Shape, convert_to_json_text
 
 
 def bcadastro_row(item: CouchDBItem) -> dict[str, JsonValue]:
@@ -18,10 +18,10 @@ def bcadastro_row(item: CouchDBItem) -> dict[str, JsonValue]:
     """
     return {
         "id": item.id,
-        "doc": json_text(item.doc),
+        "doc": convert_to_json_text(item.doc),
         "key": item.key,
         "seq": item.seq,
-        "value": json_text(item.value) if item.value is not None else None,
+        "value": convert_to_json_text(item.value) if item.value is not None else None,
         "last_seq": item.last_seq,
     }
 

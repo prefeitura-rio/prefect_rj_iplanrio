@@ -2,9 +2,10 @@
 
 from asyncio import to_thread
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from http import HTTPStatus
+from importlib import import_module
 from json import dumps
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -15,41 +16,42 @@ from zoneinfo import ZoneInfo
 from deltalake import DeltaTable
 from httpx2 import AsyncClient, HTTPStatusError, TransportError
 from obstore.store import ObjectStore
-from polars import DataFrame
+from polars import DataFrame, concat
 from prefect.runtime import flow_run
-from psycopg.sql import Composable, Identifier, Literal
-from pydantic import JsonValue
-from toolkit.batches import (
-    NULL_WINDOW,
-    Rows,
-    Window,
-    batch_column,
-    config_hash,
-    ledger_id,
-    pending,
-    window_predicates,
-    windows,
-)
+from pydantic import JsonValue, TypeAdapter, ValidationError
 from toolkit.bigquery import BigQuery
+from toolkit.chunks import (
+    NULL_CHUNK,
+    Chunk,
+    Rows,
+    build_batch_column,
+    build_ledger_id,
+    hash_parts,
+    select_pending,
+    split_chunks,
+)
 from toolkit.constants import BATCH_COLUMN, EXTRACTED_AT_COLUMN, TIMEZONE
 from toolkit.delta import (
-    fingerprint,
-    known_fingerprints,
+    compute_fingerprint,
     maintain,
+    read_known_fingerprints,
     sweep,
-    write_window,
+    write_chunk,
 )
-from toolkit.executor.constants import ALIAS, SECRET
+from toolkit.executor.engines.base import Engine, require_origin
 from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.executor import Executor
-from toolkit.executor.sources.protocols import Source, Stager
+from toolkit.executor.requests import Changes, Query, Table
+from toolkit.executor.sources.backends.bigquery import BigQuerySource
+from toolkit.executor.sources.protocols import Source
+from toolkit.executor.types import Origin
 from toolkit.functions.native import now_sao_paulo
 from toolkit.gcs import create_store, delete_keys, list_keys, upload
 from toolkit.telemetry import logger
-from toolkit.types import Batches, Described, TemplateValue
-from toolkit.utils import filter_predicates, select_columns
+from toolkit.types import Columns
+from toolkit.utils import select_columns
 
-from .constants import DISCORD_LIMIT, STAGING_PREFIX
+from .constants import DISCORD_LIMIT, DOCUMENT_STORES, STAGING_PREFIX
 from .types import DumpMode, DumpOptions, FileFormat, Read
 
 
@@ -107,37 +109,11 @@ async def publish(
         await bigquery.sync_delta_table(destination.table(project), destination.uri, connection)
 
 
-def source_values(source_type: str, query: str) -> dict[str, TemplateValue]:
-    """Return the template values that read `query` from a source.
-
-    `query` is the native query, the ArcGIS layer URL, the spreadsheet id or the path
-    of the files, as the type says.
-    """
-    return {
-        "type": source_type,
-        "alias": Literal(ALIAS),
-        "secret": Literal(SECRET),
-        "query": Literal(query),
-    }
-
-
 def files_glob(data_path: Path, source_format: FileFormat) -> str:
     """Return the path of a file, or the glob of the files of a folder."""
     if data_path.is_dir():
         return f"{data_path}/**/*.{source_format}"
     return str(data_path)
-
-
-async def describe_columns(executor: Executor, values: Mapping[str, TemplateValue]) -> dict[str, str]:
-    """Return the name and the DuckDB type of each column that a source returns."""
-    described = await executor.query("duckdb/describe_source", values, expect=Described)
-    return dict(
-        zip(
-            described.frame["column_name"],
-            described.frame["column_type"],
-            strict=True,
-        )
-    )
 
 
 def is_transient(error: object) -> bool:
@@ -162,116 +138,91 @@ def failure_message(flow_name: str, run_name: str, reason: str, url: str | None)
     return f":red_circle: **{flow_name}** `{run_name}` failed: {reason}{link}"[:DISCORD_LIMIT]
 
 
-def hash_config(values: dict[str, TemplateValue], options: DumpOptions) -> str:
-    """Hash everything that changes the bytes of a window.
+def hash_config(origin: Origin, options: DumpOptions) -> str:
+    """Hash everything that changes the bytes of a chunk.
 
     That is what is read, and the filters, the columns and the normalization. The range
-    of the windows and `lookback` are left out: they change which windows run, not what
-    a window holds. A capture leaves out what is read too, because its files are in a
+    of the chunks and `lookback` are left out: they change which chunks run, not what
+    a chunk holds. A capture leaves out what is read too, because its files are in a
     new folder on every run.
     """
-    batches = options.get("batches")
-    return config_hash(
+    spec = options.get("chunks")
+    return hash_parts(
         {
-            "read": None
-            if "capture" in options
-            else {
-                name: value.as_string(None) if isinstance(value, Composable) else value
-                for name, value in values.items()
-            },
+            "read": None if "capture" in options else {"origin": type(origin).__name__, **asdict(origin)},
             "filters": options.get("filters"),
             "select": options.get("select"),
             "columns": options.get("columns"),
-            "batches": batches and {"column": batches["column"], "width": batches["width"]},
+            "chunks": spec and {"column": spec["column"], "width": spec["width"]},
         }
     )
 
 
-def check_batch_column(batches: Batches, described: Mapping[str, str]) -> None:
-    """Raise `ValueError` unless the type of the batch column fits the width of the windows.
+def cut_chunks(options: DumpOptions, dump_mode: DumpMode) -> list[Chunk]:
+    """Return the chunks of a dump: the ones of `chunks`, one for a `capture`, or `all`.
 
-    A date width needs a date or a timestamp, and a number of ids needs an integer. A
-    text column holding dates would fail later, when the database compares it to a date.
+    Raise `ValueError` for a capture with `chunks` or with `overwrite`.
     """
-    column, kind = batches["column"], described[batches["column"]]
-    match batches["width"]:
-        case int():
-            fits, wanted = "INT" in kind, "an integer"
-        case _:
-            fits, wanted = kind.startswith(("DATE", "TIMESTAMP")), "a date or a timestamp"
-
-    if not fits:
-        raise ValueError(f"The batch column {column!r} is {kind}, and these windows need {wanted} column")
-
-
-def cut_windows(options: DumpOptions, dump_mode: DumpMode) -> list[Window]:
-    """Return the windows of a dump: the ones of `batches`, one for a `capture`, or `all`.
-
-    Raise `ValueError` for a capture with `batches` or with `overwrite`.
-    """
-    batches = options.get("batches")
+    spec = options.get("chunks")
     capture = options.get("capture")
 
-    if capture and (batches or dump_mode == "overwrite"):
-        raise ValueError("A capture is added as one window: drop batches, and do not overwrite")
+    if capture and (spec or dump_mode == "overwrite"):
+        raise ValueError("A capture is added as one chunk: drop chunks, and do not overwrite")
     if capture:
-        return [Window(capture.date().isoformat(), 0, 0)]
-    if batches:
-        return [*windows(batches, now_sao_paulo().date()), NULL_WINDOW]
-    return [Window("all", 0, 0)]
+        return [Chunk(capture.date().isoformat(), 0, 0)]
+    if spec:
+        return [*split_chunks(spec, now_sao_paulo().date()), NULL_CHUNK]
+    return [Chunk("all", 0, 0)]
 
 
 async def dump_to_delta(
     source: Source,
-    values: dict[str, TemplateValue],
     uri: str,
     dump_mode: DumpMode,
     options: DumpOptions,
 ) -> None:
-    """Dump what a source returns into a Delta table, one window at a time.
+    """Dump what a source returns into a Delta table, one chunk at a time.
 
-    For each window DuckDB extracts the rows (with the filters, the columns and the
-    normalization) to a local Parquet file and fingerprints it. `append` skips a window
-    whose fingerprint is in the ledger of the table, and replaces one that changed.
-    Windows that were never loaded under the same config are always read, and `lookback`
-    limits the re-checks of the others. `overwrite` writes every window again, then
-    deletes the windows outside the config. No `batches` means one window for the whole
-    source. With `batches`, the rows whose column is NULL go in a last window, `null`, that
-    every run reads. A `capture` is the exception: its rows are added to the table, in the
-    window of its day, and a capture that the ledger knows is never written again. Raise
-    `ValueError` for a capture with `batches` or with `overwrite`.
+    For each chunk the engine extracts the rows (with the filters, the columns and the
+    normalization) to a local Parquet file, and DuckDB fingerprints it. `append` skips a
+    chunk whose fingerprint is in the ledger of the table, and replaces one that
+    changed. Chunks that were never loaded under the same config are always read, and
+    `lookback` limits the re-checks of the others. `overwrite` writes every chunk
+    again, then deletes the chunks outside the config. No `chunks` means one chunk
+    for the whole source. With `chunks`, the rows whose column is NULL go in a last
+    chunk, `null`, that every run reads. The engine of the source says how many chunks
+    it reads at the same time, and the chunks are written to the table one at a time. A
+    `capture` is the exception: its rows are added to the table, in the chunk of its
+    day, and a capture that the ledger knows is never written again. Raise `ValueError`
+    for a source with no origin, for a capture with `chunks` or with `overwrite`, and
+    for `filters` that are not one predicate each.
 
-    `values` are those of `source_values`, plus the ones that the source type needs.
+    The origin is what to read, as `read_request` or a flow builds it.
     """
-    batches = options.get("batches")
+    origin = require_origin(source)
+    spec = options.get("chunks")
     columns = options.get("columns", {})
+    filters = options.get("filters", [])
 
     capture = options.get("capture")
-    config = hash_config(values, options)
-    cut = cut_windows(options, dump_mode)
-    ids = {window.key: ledger_id(config, capture.isoformat() if capture else window.key) for window in cut}
-    known = await to_thread(known_fingerprints, uri, list(ids.values()))
+    config = hash_config(origin, options)
+    cut = cut_chunks(options, dump_mode)
+    ids = {chunk.key: build_ledger_id(config, capture.isoformat() if capture else chunk.key) for chunk in cut}
+    known = await to_thread(read_known_fingerprints, uri, list(ids.values()))
     seen = {key for key, name in ids.items() if name in known}
-    todo = cut if dump_mode == "overwrite" else pending(cut, seen, (batches or {}).get("lookback"))
+    todo = cut if dump_mode == "overwrite" else select_pending(cut, seen, (spec or {}).get("lookback"))
     if capture:
-        todo = [window for window in cut if window.key not in seen]
+        todo = [chunk for chunk in cut if chunk.key not in seen]
     extracted_at = datetime.now(UTC) if columns.get("add_timestamp") else None
     written = skipped = 0
 
-    stager = source if isinstance(source, Stager) else None
-    filters = options.get("filters", [])
-
-    async with DuckDBEngine.connect() as engine, source.open(engine) as client:
-        await source.setup(client)
-        executor = Executor(engine)
-        with TemporaryDirectory() as directory:
-            read = await stager.stage(client, values, Rows(empty=True), Path(directory)) if stager else values
-            described = await describe_columns(executor, read)
+    async with Executor(Engine.from_source(source)) as executor, DuckDBEngine() as local:
+        described = await executor.describe()
         reserved = {BATCH_COLUMN, *([EXTRACTED_AT_COLUMN] if columns.get("add_timestamp") else [])}
-        if reserved & set(described) or (batches and batches["column"] not in described):
-            raise ValueError(f"The columns {sorted(reserved)} are reserved, and the batch column must exist")
-        if batches and not (stager and stager.text_windows):
-            check_batch_column(batches, described)
+        if reserved & set(described) or (spec and spec["column"] not in described):
+            raise ValueError(f"The columns {sorted(reserved)} are reserved, and the chunk column must exist")
+        if spec:
+            executor.engine.check_chunks(spec, described)
 
         base = select_columns(
             described,
@@ -280,103 +231,82 @@ async def dump_to_delta(
             transforms=columns.get("transforms"),
             select=options.get("select"),
         )
-        where = filter_predicates(filters, described)
 
-        for window in todo:
-            with TemporaryDirectory() as directory:
-                folder = Path(directory)
-                rows = Rows(filters, batches["column"] if batches else None, window if batches else None)
-                read = await stager.stage(client, values, rows, folder) if stager else values
-                window_filter = window_predicates(batches["column"], window) if batches else []
-                await executor.execute(
-                    "duckdb/extract_window",
-                    {
-                        **read,
-                        "columns": [*base, batch_column(window.key)],
-                        "predicates": [] if stager else [*where, *window_filter],
-                        "target": Literal(str(folder / "out.parquet")),
-                    },
-                )
-                number = await fingerprint(executor, folder)
+        def plan(chunk: Chunk) -> tuple[Rows, Columns]:
+            """Return the rows and the columns that one chunk reads."""
+            rows = Rows(filters, spec["column"] if spec else None, chunk if spec else None)
+            return rows, [*base, build_batch_column(chunk.key)]
 
-                if dump_mode == "append" and known.get(ids[window.key]) == number:
-                    skipped += 1
-                    continue
+        async def handle(chunk: Chunk, folder: Path) -> None:
+            """Fingerprint a chunk and write it to the table, unless it did not change."""
+            nonlocal written, skipped
+            number = await compute_fingerprint(Executor(local), folder)
 
-                await to_thread(
-                    write_window,
-                    uri,
-                    folder,
-                    window.key,
-                    ids[window.key],
-                    number,
-                    overwrite_schema=dump_mode == "overwrite",
-                    append=capture is not None,
-                    extracted_at=extracted_at,
-                )
-                written += 1
+            if dump_mode == "append" and known.get(ids[chunk.key]) == number:
+                skipped += 1
+                return
+
+            await to_thread(
+                write_chunk,
+                uri,
+                folder,
+                chunk.key,
+                ids[chunk.key],
+                number,
+                overwrite_schema=dump_mode == "overwrite",
+                append=capture is not None,
+                extracted_at=extracted_at,
+            )
+            written += 1
+
+        await executor.run_chunks(todo, plan, handle)
 
     if dump_mode == "overwrite":
-        await to_thread(sweep, uri, [window.key for window in cut])
+        await to_thread(sweep, uri, [chunk.key for chunk in cut])
 
     if written:
         await to_thread(maintain, uri)
 
-    logger.info("Delta dump finished: uri=%s windows=%d written=%d skipped=%d", uri, len(cut), written, skipped)
+    logger.info("Delta dump finished: uri=%s chunks=%d written=%d skipped=%d", uri, len(cut), written, skipped)
 
 
-def couchdb_values(read: Read) -> dict[str, TemplateValue]:
-    """Return the template values of a CouchDB read, as the source takes them.
+def bigquery_source(project: str, origin: Origin) -> Source:
+    """Return the BigQuery source of a project that reads an origin."""
+    return BigQuerySource(project=project, origin=origin)
 
-    `table` is the database, `query` a Mango selector and `since` the sequence from which
-    `_changes` reads. Raise `ValueError` for a `query` with a `since`, or for none of the
-    three.
+
+def read_request(db_type: str, read: Read, batched: bool) -> Origin:
+    """Return the origin that a `read` of a database names.
+
+    A table is read in place, so the filters and the chunks go down to the database. A
+    native query runs as it is, so it cannot be cut into chunks, except on Oracle,
+    which applies the filters and the chunks itself. A document store (CouchDB and
+    MongoDB) takes a `table` (the database or the collection), a `query` (a selector)
+    and, for CouchDB, a `since` (a sequence of `_changes`), with no more than one of
+    `query` and `since`. Raise `ValueError` for a read that does not fit.
     """
-    values: dict[str, TemplateValue] = {"type": "couchdb"}
+    table, query, since = read.get("table"), read.get("query"), read.get("since")
 
-    if (table := read.get("table")) is not None:
-        values["table"] = table
-    if (query := read.get("query")) is not None:
-        values["query"] = query
-    if (since := read.get("since")) is not None:
-        values["since"] = since
-
-    if "query" in values and "since" in values:
-        raise ValueError("Give one of query and since, not both")
-    if len(values) == 1:
+    if db_type in DOCUMENT_STORES:
+        if query is not None and since is not None:
+            raise ValueError("Give one of query and since, not both")
+        if since is not None and db_type != "couchdb":
+            raise ValueError(f"{db_type} has no since: only CouchDB reads changes")
+        if since is not None:
+            return Changes(since, table)
+        if query is not None:
+            return Query(query, db_type, table)
+        if table is not None:
+            return Table(table)
         raise ValueError("Give a table, a query or a since")
 
-    return values
-
-
-def read_values(db_type: str, read: Read, batched: bool) -> dict[str, TemplateValue]:
-    """Return the template values that read a table or a native query of a database.
-
-    A table is attached as `src`, so DuckDB pushes the filters and the windows down to
-    the database. A native query runs as it is, so it cannot be cut into windows. Oracle
-    is the exception: it applies the filters and the windows itself, on a table or on a
-    query. Raise `ValueError` unless `read` has exactly one of `table` and `query`, or for
-    windows over a query.
-    """
-    if db_type == "couchdb":
-        return couchdb_values(read)
-
-    match read.get("table"), read.get("query"):
-        case str() as table, None:
-            if db_type == "oracle":
-                return {"type": db_type, "table": table}
-            return {
-                "type": db_type,
-                "alias": Literal(ALIAS),
-                "secret": Literal(SECRET),
-                "table": Identifier(ALIAS, *table.split(".")),
-            }
-        case None, str() as query:
-            if db_type == "oracle":
-                return {"type": db_type, "query": query}
-            if batched:
-                raise ValueError("A native query is one window: set a table to cut it")
-            return source_values(db_type, query)
+    match table, query:
+        case str(), None:
+            return Table(table)
+        case None, str():
+            if batched and db_type != "oracle":
+                raise ValueError("A native query is one chunk: set a table to cut it")
+            return Query(query, db_type)
         case _:
             raise ValueError("Give exactly one of table and query")
 
@@ -384,7 +314,7 @@ def read_values(db_type: str, read: Read, batched: bool) -> dict[str, TemplateVa
 async def clear_legacy(destination: Destination, dump_mode: DumpMode) -> None:
     """Delete the files of an older layout before an `overwrite` builds a Delta table.
 
-    A Delta table is never deleted: `overwrite` rewrites its windows instead.
+    A Delta table is never deleted: `overwrite` rewrites its chunks instead.
     """
     if dump_mode == "overwrite" and not await to_thread(DeltaTable.is_deltatable, destination.uri):
         await clear_prefix(create_store(destination.bucket), destination)
@@ -392,7 +322,6 @@ async def clear_legacy(destination: Destination, dump_mode: DumpMode) -> None:
 
 async def load_to_delta(
     source: Source,
-    values: dict[str, TemplateValue],
     destination: Destination,
     dump_mode: DumpMode,
     options: DumpOptions | None,
@@ -402,31 +331,30 @@ async def load_to_delta(
     An `overwrite` first deletes the files of an older layout. See `dump_to_delta`.
     """
     await clear_legacy(destination, dump_mode)
-    await dump_to_delta(source, values, destination.uri, dump_mode, options or {})
+    await dump_to_delta(source, destination.uri, dump_mode, options or {})
 
 
-def without_batches(options: DumpOptions | None, source: str) -> DumpOptions:
-    """Return the options of a source that DuckDB cannot filter, which are not cut in windows.
+def without_chunks(options: DumpOptions | None, source: str) -> DumpOptions:
+    """Return the options of a source that DuckDB cannot filter, which are not cut in chunks.
 
-    Windows over such a source would read it whole once for each window. Raise
-    `ValueError` if `options` has `batches`.
+    Chunks over such a source would read it whole once for each chunk. Raise
+    `ValueError` if `options` has `chunks`.
     """
     chosen = options or {}
-    if "batches" in chosen:
-        raise ValueError(f"{source} is read whole, so it is one window: drop batches")
+    if "chunks" in chosen:
+        raise ValueError(f"{source} is read whole, so it is one chunk: drop chunks")
     return chosen
 
 
 async def dump_in_batches(
     source: Source,
-    values: dict[str, TemplateValue],
     destination: Destination,
     dump_mode: DumpMode,
     batch_size: int,
 ) -> None:
     """Copy the rows of a source to Parquet files in the bucket, `batch_size` rows at a time.
 
-    It reads with the `query` of the source and uploads each batch, so memory holds one
+    It reads the origin of the source and uploads each batch, so memory holds one
     batch. This is plain batching: a rerun in `append` adds the rows again. `overwrite`
     deletes the old files first.
     """
@@ -435,23 +363,18 @@ async def dump_in_batches(
     if dump_mode == "overwrite":
         await clear_prefix(store, destination)
 
-    async with DuckDBEngine.connect() as engine, source.open(engine) as client:
-        await source.setup(client)
-
-        async for dataset in Executor(client).query("duckdb/select_source", values, batch_size=batch_size):
+    async with Executor(Engine.from_source(source)) as executor:
+        async for batch in executor.read(batch_size=batch_size):
             with TemporaryDirectory() as directory:
                 path = Path(directory) / f"part-{uuid4().hex}.parquet"
-                await to_thread(dataset.frame.write_parquet, path)
+                await to_thread(batch.dataframe.write_parquet, path)
                 await upload(store, destination.prefix, path)
 
 
-async def read_frame(source: Source, values: dict[str, TemplateValue]) -> DataFrame:
-    """Read every row of a source into one frame, with the `query` of the source."""
-    async with DuckDBEngine.connect() as engine, source.open(engine) as client:
-        await source.setup(client)
-        dataset = await Executor(client).query("duckdb/select_source", values)
-
-    return dataset.frame
+async def read_dataframe(source: Source) -> DataFrame:
+    """Read every row of the origin of a source into one dataframe."""
+    async with Executor(Engine.from_source(source)) as executor:
+        return concat([batch.dataframe async for batch in executor.read()])
 
 
 def epsg_code(crs: str) -> str:
@@ -493,6 +416,52 @@ def write_json_lines(records: Sequence[Mapping[str, JsonValue]], folder: Path) -
     """Write the records as a JSON lines file in a folder, and return the folder."""
     (folder / "records.json").write_text("\n".join(dumps(record) for record in records) + "\n", encoding="utf-8")
     return folder
+
+
+def load_records_schema(path: str) -> type:
+    """Return the type that a path `module:name` names, to check the records of an API.
+
+    It is a `BaseModel`, a dataclass, a `TypedDict` or any other class that Pydantic
+    validates. Raise `ValueError` for a path that leads to no type.
+    """
+    module, _, name = path.partition(":")
+
+    if not module or not name:
+        raise ValueError(f"The records schema {path!r} is not a path of the form module:name")
+
+    try:
+        found: object = getattr(import_module(module), name, None)
+    except ImportError as error:
+        raise ValueError(f"The records schema {path!r} cannot be imported: {error}") from error
+
+    if not isinstance(found, type):
+        raise ValueError(f"The records schema {path!r} is not a type")
+
+    return found
+
+
+def validate_records(records: Sequence[Mapping[str, JsonValue]], schema: type) -> None:
+    """Raise `ValueError` for the first record that does not fit the schema.
+
+    The message names the index of the record and its fields, and never a value. The
+    records are not changed: they are written as the API sent them.
+
+    ```python
+    validate_records([{"id": "x"}], Item)
+    # ValueError: record 0: id: Input should be a valid integer
+    ```
+    """
+    adapter = TypeAdapter(schema)
+
+    for index, record in enumerate(records):
+        try:
+            adapter.validate_python(record)
+        except ValidationError as error:
+            problems = "; ".join(
+                f"{'.'.join(str(part) for part in problem['loc']) or 'record'}: {problem['msg']}"
+                for problem in error.errors()
+            )
+            raise ValueError(f"record {index}: {problems}") from None
 
 
 def capture_time() -> datetime:

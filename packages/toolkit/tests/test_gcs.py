@@ -1,11 +1,6 @@
 from asyncio import run as run_async
 from asyncio import sleep as async_sleep
-from collections.abc import Iterator
 from pathlib import Path
-from socket import socket as socket_socket
-from subprocess import DEVNULL, Popen
-from sys import executable
-from time import sleep
 
 import pytest
 from httpx2 import put
@@ -110,26 +105,6 @@ def test_no_more_calls_run_at_once_than_the_limit_and_all_of_them_finish(calls, 
     run_async(gcs.gather_limited((call() for _ in range(calls)), limit))
 
     assert (finished, peak <= limit) == (calls, True)
-
-
-@pytest.fixture(scope="module")
-def s3_endpoint() -> Iterator[str]:
-    """Serve S3 with moto on a free port, and yield its endpoint."""
-    with socket_socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
-    server = Popen(
-        [executable, "-m", "moto.server", "-p", str(port)],
-        stdout=DEVNULL,
-        stderr=DEVNULL,
-    )
-    for _ in range(50):
-        with socket_socket() as probe:
-            if probe.connect_ex(("127.0.0.1", port)) == 0:
-                break
-        sleep(0.1)
-    yield f"127.0.0.1:{port}"
-    server.terminate()
 
 
 @pytest.mark.s3

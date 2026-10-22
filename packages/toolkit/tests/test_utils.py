@@ -1,14 +1,14 @@
-from collections.abc import Mapping, Sequence
 from re import fullmatch
 
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
-from psycopg.sql import Composable, Identifier
+from psycopg.sql import Identifier
 
 from toolkit.utils import (
-    column_aliases,
-    filter_predicates,
+    build_column_aliases,
+    filter_conditions,
+    filter_selectors,
     normalize_column,
     select_columns,
 )
@@ -35,7 +35,7 @@ def test_a_column_name_becomes_one_that_bigquery_accepts(
 @given(names=st.lists(st.text(), min_size=1))
 def test_every_target_name_starts_with_a_letter_or_an_underscore(names):
     """For any names, give BigQuery a name that it accepts."""
-    aliases = column_aliases(names)
+    aliases = build_column_aliases(names)
 
     for name, alias in zip(names, aliases, strict=True):
         assert alias["source"] == Identifier(name)
@@ -189,117 +189,78 @@ def test_an_option_that_does_not_fit_the_columns_is_refused(options, message):
         select_columns(COLUMNS, **options)
 
 
-def text(fragment: Composable | str) -> str:
-    """Return a fragment of a predicate as SQL text."""
-    match fragment:
-        case str():
-            return fragment
-        case _:
-            return fragment.as_string(None)
-
-
-def sql(parts: Sequence[Mapping[str, Composable | str]]) -> list[str]:
-    """Render each predicate as `column op value`.
-
-    ```python
-    sql(filter_predicates([{"column": "id", "op": ">=", "value": 10}], {"id"}))
-    # ['"id" >= 10']
-    ```
-    """
-    return [
-        " ".join(text(fragment) for fragment in predicate.values())
-        for predicate in parts
-    ]
-
-
 @pytest.mark.parametrize(
     ("filters", "expected"),
     [
+        pytest.param(["id >= 10"], ["(id >= 10)"], id="one_predicate"),
         pytest.param(
-            [{"column": "id", "op": ">=", "value": 10}],
-            ['"id" >= 10'],
-            id="a_number_comparison",
-        ),
-        pytest.param(
-            [{"column": "Nome", "op": "!=", "value": "it's"}],
-            ["\"Nome\" != 'it''s'"],
-            id="a_quote_in_a_value_is_escaped",
-        ),
-        pytest.param(
-            [{"column": "status", "op": "in", "value": ["a", "b"]}],
-            ["\"status\" in ('a', 'b')"],
-            id="a_list_for_in",
-        ),
-        pytest.param(
-            [{"column": "status", "op": "not in", "value": [1, 2]}],
-            ['"status" not in (1, 2)'],
-            id="a_list_for_not_in",
-        ),
-        pytest.param(
-            [{"column": "id", "op": "is null"}],
-            ['"id" is null'],
-            id="is_null_takes_no_value",
-        ),
-        pytest.param(
-            [
-                {"column": "id", "op": "is not null"},
-                {"column": "dia", "op": "<", "value": "2024-01-01"},
-            ],
-            ['"id" is not null', "\"dia\" < '2024-01-01'"],
+            ["status <> 'x'", "valor > 0"],
+            ["(status <> 'x')", "(valor > 0)"],
             id="several_filters_keep_their_order",
         ),
+        pytest.param(
+            ["a = 1 OR b = 2"],
+            ["(a = 1 OR b = 2)"],
+            id="an_or_stays_inside_its_filter",
+        ),
+        pytest.param(["  id > 1  "], ["(id > 1)"], id="the_spaces_around_are_trimmed"),
         pytest.param([], [], id="no_filters"),
     ],
 )
-def test_filters_become_typed_predicates(filters, expected):
-    """Render each filter with `Identifier` and `Literal`, so no value is SQL text."""
-    assert sql(filter_predicates(filters, {"id", "Nome", "status", "dia"})) == expected
+def test_filters_become_conditions_in_parentheses(filters, expected):
+    """Wrap each filter, so an OR in one never reaches the next one."""
+    assert filter_conditions(filters) == expected
 
 
 @pytest.mark.parametrize(
     ("filters", "message"),
     [
+        pytest.param([""], "is empty", id="an_empty_filter"),
+        pytest.param(["   "], "is empty", id="a_blank_filter"),
         pytest.param(
-            [{"column": "x", "op": "=", "value": 1}],
-            "Unknown columns",
-            id="an_unknown_column",
+            ["id = 1; DROP TABLE t"], "one predicate", id="a_second_statement"
+        ),
+        pytest.param(["id = 1 -- and more"], "one predicate", id="a_line_comment"),
+        pytest.param(["id = 1 /* x */"], "one predicate", id="a_block_comment"),
+    ],
+)
+def test_a_filter_that_is_not_one_predicate_is_refused(filters, message):
+    """Raise before any read, so a second statement never reaches the source."""
+    with pytest.raises(ValueError, match=message):
+        filter_conditions(filters)
+
+
+@pytest.mark.parametrize(
+    ("filters", "expected"),
+    [
+        pytest.param([], [], id="no_filters"),
+        pytest.param(
+            ['{"situacao": "ativo"}'], [{"situacao": "ativo"}], id="one_selector"
         ),
         pytest.param(
-            [{"column": "id", "op": "like", "value": "a%"}],
-            "operator",
-            id="an_operator_outside_the_list",
+            ['{"a": 1}', '{"b": {"$gte": 2}}'],
+            [{"a": 1}, {"b": {"$gte": 2}}],
+            id="several_selectors_keep_their_order",
         ),
         pytest.param(
-            [{"column": "id", "op": "="}],
-            "needs a value",
-            id="a_comparison_without_a_value",
-        ),
-        pytest.param(
-            [{"column": "id", "op": "is null", "value": 1}],
-            "takes no value",
-            id="is_null_with_a_value",
-        ),
-        pytest.param(
-            [{"column": "id", "op": "in", "value": 1}],
-            "needs a list",
-            id="in_without_a_list",
-        ),
-        pytest.param(
-            [{"column": "id", "op": "in", "value": []}],
-            "needs a list",
-            id="in_with_an_empty_list",
-        ),
-        pytest.param(
-            [{"column": "id", "op": "=", "value": [1]}],
-            "needs one value",
-            id="a_list_for_a_comparison",
+            ['{"nome": "a;b"}'], [{"nome": "a;b"}], id="a_semicolon_is_a_value"
         ),
     ],
 )
-def test_a_filter_that_does_not_fit_is_refused(filters, message):
-    """Raise before any read, so a typo or an injection never reaches the source."""
-    with pytest.raises(ValueError, match=message):
-        filter_predicates(filters, {"id"})
+def test_filters_become_json_selectors(filters, expected):
+    """Parse each filter as a JSON object, with nothing forbidden inside a value."""
+    assert filter_selectors(filters) == expected
+
+
+@pytest.mark.parametrize(
+    "filters",
+    [["not json"], ["[1, 2]"], ['"text"'], ['{"a": 1}', ""]],
+    ids=["text", "a_list", "a_string", "an_empty_filter"],
+)
+def test_a_filter_that_is_not_a_json_object_is_refused(filters):
+    """Raise `ValueError` for a filter that is not a selector."""
+    with pytest.raises(ValueError, match="not a JSON selector"):
+        filter_selectors(filters)
 
 
 def test_select_keeps_only_the_given_columns_in_the_given_order():

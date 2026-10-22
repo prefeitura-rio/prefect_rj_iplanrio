@@ -3,7 +3,7 @@
 They name no toolkit class, so every module may import them.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime
 from typing import Annotated, Literal, NotRequired, TypedDict
 
@@ -21,12 +21,15 @@ type ArrowColumn = Array[arrow_Scalar[DataType]]
 type NativeResult = str | datetime
 type DateWidth = Literal["day", "month", "year"]
 type Scalar = str | int | float | bool
-type FilterOperator = Literal[
-    "=", "!=", "<", "<=", ">", ">=", "in", "not in", "is null", "is not null"
-]
+type Bind = Scalar | date
+type Predicate = dict[str, Composable | str]
+type Binder = Callable[[Bind], str]
 type DbtCommand = Literal[
     "build", "run", "test", "source freshness", "seed", "snapshot", "deps"
 ]
+
+type Columns = Sequence[Mapping[str, Composable]]
+"""The select list of a chunk, as `select_columns` builds it. No columns means all."""
 
 type TemplateValue = (
     str
@@ -62,12 +65,12 @@ class Described(TypedDict):
     extra: str | None
 
 
-class Batches(TypedDict):
-    """How a dump cuts a table into windows over one column.
+class Chunks(TypedDict):
+    """How a dump cuts a table into chunks over one column.
 
     `width` is `day`, `month` or `year` for a date column, or a number of ids for an
     integer column. `begin` is an ISO date or an integer, and `end` defaults to today
-    for dates. `lookback` checks only that many last windows again.
+    for dates. `lookback` checks only that many last chunks again.
     """
 
     column: str
@@ -78,20 +81,8 @@ class Batches(TypedDict):
 
 
 class Fingerprint(TypedDict):
-    """The content summary of a window: its rows and two order independent sums."""
+    """The content summary of a chunk: its rows and two order independent sums."""
 
     n: int
     low: str
     high: str
-
-
-class Filter(TypedDict):
-    """One condition on a column of the source.
-
-    `in` and `not in` take a list, `is null` and `is not null` take no value, and the
-    other operators take one value.
-    """
-
-    column: str
-    op: FilterOperator
-    value: NotRequired[Scalar | list[Scalar]]

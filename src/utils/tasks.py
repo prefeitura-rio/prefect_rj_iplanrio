@@ -7,19 +7,17 @@ from pathlib import Path
 from httpx2 import AsyncClient
 from polars import DataFrame
 from prefect import task
-from psycopg.sql import Literal
 from pydantic import JsonValue, TypeAdapter
 from toolkit.bigquery import BigQuery
 from toolkit.dbt import DbtRun, execute_dbt
 from toolkit.delta import compact, maintain
 from toolkit.executor.constants import DEFAULT_BATCH_SIZE
 from toolkit.executor.engines.duckdb import DuckDBEngine
-from toolkit.executor.executor import Executor
+from toolkit.executor.requests import Files, Layer, Sheet
 from toolkit.executor.sources.backends.arcgis import ArcGISSource
-from toolkit.executor.sources.backends.bigquery import BigQuerySource
 from toolkit.executor.sources.backends.files import FilesSource
 from toolkit.executor.sources.backends.gsheets import GSheetsSource
-from toolkit.executor.sources.protocols import DBConn, SourceContext
+from toolkit.executor.sources.protocols import DBConn
 from toolkit.executor.sources.registry import get_source
 from toolkit.settings import DatabaseSettings, DiscordSettings
 
@@ -28,6 +26,7 @@ from .hooks import retry_on_transient_error
 from .types import (
     Cloud,
     Database,
+    DatabaseDumpOptions,
     DumpMode,
     DumpOptions,
     FileFormat,
@@ -36,16 +35,16 @@ from .types import (
 )
 from .utils import (
     Destination,
+    bigquery_source,
     dump_in_batches,
     epsg_code,
     files_glob,
     load_to_delta,
     post_discord,
     publish,
-    read_frame,
-    read_values,
-    source_values,
-    without_batches,
+    read_dataframe,
+    read_request,
+    without_chunks,
     write_json_lines,
 )
 
@@ -70,8 +69,7 @@ async def upload_files_to_gcs(
     column. Run `publish_table_in_bq` after it.
     """
     await load_to_delta(
-        FilesSource(),
-        source_values(source_format, files_glob(data_path, source_format)),
+        FilesSource(origin=Files(files_glob(data_path, source_format), source_format)),
         Destination(bucket, table["dataset_id"], table["table_id"]),
         dump_mode,
         options,
@@ -100,26 +98,37 @@ async def dump_db_to_gcs(
     *,
     bucket: str,
     dump_mode: DumpMode = "append",
-    options: DumpOptions | None = None,
+    options: DatabaseDumpOptions | None = None,
 ) -> None:
     """Dump a table or a native query of a database into a Delta table in the bucket.
 
-    DuckDB reads the source one window at a time, applies the filters, the columns and
-    the normalization, and writes Parquet to a temp folder. A window whose content did
+    DuckDB reads the source one chunk at a time, applies the filters, the columns and
+    the normalization, and writes Parquet to a temp folder. A chunk whose content did
     not change is never written again, and a changed one is replaced in one commit.
     The user and the password come from `DB_USERNAME` and `DB_PASSWORD`. `read` is a
     `table` (`schema.name`) or a native `query`. `options`:
 
-    - `batches` cuts the table into windows over a column: `width` is `day`, `month`
-      or `year`, or a number of ids. `lookback` re-checks only the last windows.
-    - `filters` narrow the rows and `select` the columns, on the names of the source.
+    - `chunks` cuts the table into chunks over a column: `width` is `day`, `month`
+      or `year`, or a number of ids. `lookback` re-checks only the last chunks.
+    - `filters` narrow the rows and `select` the columns, on the names of the source. A
+      filter is one SQL predicate in the dialect of the source, or a JSON selector for
+      CouchDB and MongoDB, and the filters join with AND.
+    - `batch_size` is the rows of one read from Oracle, or the documents of one page from
+      CouchDB or MongoDB. The other databases stream through DuckDB, so it raises for them.
+    - `concurrency` is the chunks that CouchDB or MongoDB read at the same time, 2 unless
+      it is set. The other databases read one chunk at a time, so it raises for them.
     - `columns` sets `normalize_columns` (a slug, the default), `normalize_values` and
       `transforms`, such as `{"cpf": "normalize_cpf"}`.
 
-    `append` skips what did not change. `overwrite` writes every window again and
-    deletes the windows outside the range. Run `publish_table_in_bq` after it.
+    `append` skips what did not change. `overwrite` writes every chunk again and
+    deletes the chunks outside the range. Run `publish_table_in_bq` after it.
     """
     chosen = options or {}
+    source_options: dict[str, JsonValue] = {**database.get("options", {})}
+    if "batch_size" in chosen:
+        source_options["batch_size"] = chosen["batch_size"]
+    if "concurrency" in chosen:
+        source_options["concurrency"] = chosen["concurrency"]
     credentials = DatabaseSettings()
     conn = DBConn(
         database["host"],
@@ -129,8 +138,9 @@ async def dump_db_to_gcs(
         credentials.DB_PASSWORD.get_secret_value(),
     )
     await load_to_delta(
-        get_source(database["type"]).from_context(SourceContext(conn, database.get("options", {}))),
-        read_values(database["type"], read, "batches" in chosen),
+        get_source(database["type"])(
+            conn=conn, origin=read_request(database["type"], read, "chunks" in chosen), **source_options
+        ),
         Destination(bucket, table["dataset_id"], table["table_id"]),
         dump_mode,
         chosen,
@@ -155,8 +165,7 @@ async def dump_bq_to_gcs(
     rows again, and `overwrite` deletes the old files first.
     """
     await dump_in_batches(
-        BigQuerySource(project),
-        read_values("bigquery", read, batched=False),
+        bigquery_source(project, read_request("bigquery", read, batched=False)),
         Destination(bucket, table["dataset_id"], table["table_id"]),
         dump_mode,
         batch_size,
@@ -178,19 +187,14 @@ async def dump_arcgis_to_gcs(
 
     `url` is the layer URL without `/query`, and `where` is the ArcGIS filter. `crs`,
     such as `EPSG:31983`, makes the server answer in that system, and without it the
-    layer keeps its own. The geometry stays a geometry column. The layer is one window.
-    `options` is as in `dump_db_to_gcs`, without `batches`.
+    layer keeps its own. The geometry stays a geometry column. The layer is one chunk.
+    `options` is as in `dump_db_to_gcs`, without `chunks`.
     """
-    values = {**source_values("arcgis", url), "where": Literal(where)}
-    if crs:
-        values["srid"] = Literal(epsg_code(crs))
-
     await load_to_delta(
-        ArcGISSource(),
-        values,
+        ArcGISSource(origin=Layer(url, where, epsg_code(crs) if crs else None)),
         Destination(bucket, table["dataset_id"], table["table_id"]),
         dump_mode,
-        without_batches(options, "An ArcGIS layer"),
+        without_chunks(options, "An ArcGIS layer"),
     )
 
 
@@ -207,19 +211,14 @@ async def dump_gsheet_to_gcs(
     """Load a Google Sheet into a Delta table in the bucket.
 
     A sheet name picks the sheet, and no name reads the first one. The first row is the
-    header. The sheet is one window. `options` is as in `dump_db_to_gcs`, without
-    `batches`.
+    header. The sheet is one chunk. `options` is as in `dump_db_to_gcs`, without
+    `chunks`.
     """
-    values = source_values("gsheets", spreadsheet_id)
-    if sheet:
-        values["sheet"] = Literal(sheet)
-
     await load_to_delta(
-        GSheetsSource(),
-        values,
+        GSheetsSource(origin=Sheet(spreadsheet_id, sheet or None)),
         Destination(bucket, table["dataset_id"], table["table_id"]),
         dump_mode,
-        without_batches(options, "A Google Sheet"),
+        without_chunks(options, "A Google Sheet"),
     )
 
 
@@ -235,16 +234,10 @@ async def write_sheet(
 
     The service account needs edit access to the spreadsheet.
     """
-    source = GSheetsSource()
-    values = {
-        **source_values(source_format, files_glob(data_path, source_format)),
-        "spreadsheet": Literal(spreadsheet_id),
-        "sheet": Literal(sheet),
-    }
+    files = Files(files_glob(data_path, source_format), source_format)
 
-    async with DuckDBEngine.connect() as engine, source.open(engine) as client:
-        await source.setup(client)
-        await Executor(client).execute("duckdb/write_gsheet", values)
+    async with DuckDBEngine(GSheetsSource()) as engine:
+        await engine.write_sheet(files, spreadsheet_id, sheet)
 
 
 @task(
@@ -286,12 +279,12 @@ async def write_records(records: Sequence[Mapping[str, JsonValue]], folder: Path
 
 @task
 async def read_bq(query: str, *, project: str) -> DataFrame:
-    """Run a BigQuery query and return its rows as a Polars frame.
+    """Run a BigQuery query and return its rows as a Polars dataframe.
 
     `project` is the project that runs the read. The whole result is in memory, so
     use `dump_bq_to_gcs` for a large one.
     """
-    return await read_frame(BigQuerySource(project), read_values("bigquery", {"query": query}, batched=False))
+    return await read_dataframe(bigquery_source(project, read_request("bigquery", {"query": query}, batched=False)))
 
 
 @task

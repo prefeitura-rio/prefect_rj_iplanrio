@@ -38,7 +38,7 @@ def cnpj_with_digits(base: list[int]) -> str:
 
 
 def evaluate(expression: Expr) -> object:
-    """Return the value of an expression on no frame."""
+    """Return the value of an expression on no dataframe."""
     return select(expression).item()
 
 

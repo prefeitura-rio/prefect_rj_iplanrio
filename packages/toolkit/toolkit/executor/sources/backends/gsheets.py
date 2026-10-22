@@ -10,12 +10,12 @@ from google.auth.exceptions import TransportError
 from google.auth.transport import Request
 from httpx2 import USE_CLIENT_DEFAULT, Client, HTTPError
 from psycopg.sql import Identifier
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ...constants import SECRET, SHEETS_SCOPES
-from ...engines.duckdb import Extension
-from ...engines.protocol import Engine
+from ...constants import SECRET, SHEETS_SCOPES, SOURCE_CONFIG
+from ...engines.base import Engine
 from ...render import render_template
-from ..base import SourceBase
+from ..duckdb import DuckDBSource, Extension
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,7 +60,7 @@ class HttpxRequest(Request):
         return HttpResponse(response.status_code, response.headers, response.content)
 
 
-def sheets_token() -> str:
+def read_sheets_token() -> str:
     """Return a fresh access token of the workload identity for the Sheets scopes."""
     credentials, _ = default(scopes=list(SHEETS_SCOPES))
     with Client() as client:
@@ -68,24 +68,25 @@ def sheets_token() -> str:
     return cast("str", cast("object", credentials.token))
 
 
-@dataclass(frozen=True, slots=True)
-class GSheetsSource(SourceBase):
+@pydantic_dataclass(frozen=True, slots=True, config=SOURCE_CONFIG)
+class GSheetsSource(DuckDBSource):
     """Read and write Google Sheets with workload identity.
 
     A template calls `read_gsheet` or `COPY ... (FORMAT gsheet)`. The access token lives
     one hour.
     """
 
+    name: ClassVar[str] = "gsheets"
     extensions: ClassVar[tuple[Extension, ...]] = (
         Extension("gsheets", community=True),
     )
 
-    token: Callable[[], str] = field(default=sheets_token)
+    token: Callable[[], str] = field(default=read_sheets_token)
 
     @override
-    async def setup(self, client: Engine) -> None:
+    async def setup(self, engine: Engine) -> None:
         """Create the secret with the access token as a bound value."""
         sql = render_template(
             "duckdb/create_gsheets_secret", {"secret": Identifier(SECRET)}
         )
-        await client.execute(sql, params=[await to_thread(self.token)])
+        await engine.execute(sql, params=[await to_thread(self.token)])

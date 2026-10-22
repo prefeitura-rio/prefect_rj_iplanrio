@@ -2,17 +2,55 @@
 
 from typing import ClassVar
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict, JsonValue, PositiveInt
 
 
-class CouchDBOptions(BaseModel):
-    """The options that a deployment gives to a CouchDB source.
+class SourceOptions(BaseModel):
+    """The options that a deployment gives to a source. This base has none.
 
-    `shape` is the path `module:name` of a `Shape`, and `key_width` the digits that cut
-    the windows. Any other key is an error.
+    Any key that a source does not declare is an error.
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+
+class BatchOptions(SourceOptions):
+    """The options of a source that reads in chunks.
+
+    `batch_size` is the rows of one read, and the source keeps its own size without it.
+    """
+
+    batch_size: PositiveInt | None = None
+
+
+class BigQueryOptions(SourceOptions):
+    """The options that a deployment gives to a BigQuery source.
+
+    `project` is the project that runs the read.
+    """
+
+    project: str | None = None
+
+
+class MongoDBOptions(BatchOptions):
+    """The options that a deployment gives to a MongoDB source.
+
+    `shape` is the path `module:name` of a PyMongoArrow `Schema`, which must have the
+    field `_id`. `auth_source` is the database that holds the user, and `tls` turns
+    TLS on or off.
+    """
+
+    shape: str | None = None
+    auth_source: str | None = None
+    tls: bool | None = None
+
+
+class CouchDBOptions(BatchOptions):
+    """The options that a deployment gives to a CouchDB source.
+
+    `batch_size` is the documents of one page, `shape` the path `module:name` of a
+    `Shape`, and `key_width` the digits that cut the chunks.
+    """
 
     shape: str | None = None
     key_width: int | None = None

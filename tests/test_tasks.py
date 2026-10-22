@@ -2,7 +2,6 @@ from json import loads
 
 import pytest
 from httpx2 import HTTPStatusError
-from psycopg.sql import Literal
 
 from utils import tasks
 from utils.constants import DISCORD_LIMIT
@@ -92,20 +91,20 @@ async def test_a_statement_runs_in_the_project_and_returns_the_changed_rows(bigq
 @pytest.mark.parametrize(
     ("crs", "expected"),
     [
-        pytest.param("EPSG:31983", Literal("31983"), id="a_crs_becomes_the_srid"),
+        pytest.param("EPSG:31983", "31983", id="a_crs_becomes_the_srid"),
         pytest.param(None, None, id="no_crs_no_srid"),
     ],
 )
-async def test_the_crs_of_a_layer_reaches_the_template_as_a_srid(monkeypatch, crs, expected):
+async def test_the_crs_of_a_layer_reaches_the_read_as_a_srid(monkeypatch, crs, expected):
     """Pass the EPSG number to the read, and nothing when there is no `crs`."""
     seen = []
 
     async def record(*args):
-        """Keep the values of the read."""
-        seen.append(args[1])
+        """Keep the layer of the read."""
+        seen.append(args[0].origin)
 
     monkeypatch.setattr(tasks, "load_to_delta", record)
 
     await dump_arcgis_to_gcs.fn({"dataset_id": "d", "table_id": "t"}, "https://x/layer", bucket="b", crs=crs)
 
-    assert seen[0].get("srid") == expected
+    assert seen[0].srid == expected

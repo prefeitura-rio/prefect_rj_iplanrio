@@ -58,7 +58,7 @@ class ArrowFunction:
         """Apply the expression to a column."""
         return self.expression(column)
 
-    def vectorized(self, values: TextColumn) -> ArrowColumn:
+    def evaluate_batch(self, values: TextColumn) -> ArrowColumn:
         """Evaluate the expression on one batch of the column, for DuckDB."""
         series = select(self.expression(lit(Series(values)))).to_series()
         return cast("ArrowColumn", series.to_arrow())
@@ -71,7 +71,7 @@ class ArrowFunction:
         """
         conn.create_function(
             self.name,
-            self.vectorized,
+            self.evaluate_batch,
             [VARCHAR],
             self.return_type,
             type=ARROW,

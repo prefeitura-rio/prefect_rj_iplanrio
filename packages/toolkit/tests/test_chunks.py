@@ -7,37 +7,37 @@ from hypothesis import given
 from hypothesis import strategies as st
 from psycopg.sql import Identifier, Literal
 
-from toolkit.batches import (
-    NULL_WINDOW,
-    config_hash,
-    ledger_id,
-    pending,
-    window_predicates,
-    windows,
+from toolkit.chunks import (
+    NULL_CHUNK,
+    build_chunk_predicates,
+    build_ledger_id,
+    hash_parts,
+    select_pending,
+    split_chunks,
 )
-from toolkit.types import Batches, DateWidth
+from toolkit.types import Chunks, DateWidth
 
 TODAY = date(2024, 3, 10)
 
 
-def keys(batches) -> list[str]:
-    """Return the keys of the windows of a configuration.
+def keys(spec) -> list[str]:
+    """Return the keys of the chunks of a configuration.
 
     ```python
     keys({"column": "d", "width": "day", "begin": "2024-03-01", "end": "2024-03-03"})
     # ["2024-03-01", "2024-03-02", "2024-03-03"]
     ```
     """
-    return [window.key for window in windows(batches, TODAY)]
+    return [chunk.key for chunk in split_chunks(spec, TODAY)]
 
 
 @pytest.mark.parametrize(
-    ("batches", "expected"),
+    ("spec", "expected"),
     [
         pytest.param(
             {"column": "d", "width": "day", "begin": "2024-03-01", "end": "2024-03-03"},
             ["2024-03-01", "2024-03-02", "2024-03-03"],
-            id="one_window_for_each_day",
+            id="one_chunk_for_each_day",
         ),
         pytest.param(
             {
@@ -67,22 +67,22 @@ def keys(batches) -> list[str]:
         pytest.param(
             {"column": "id", "width": 10, "begin": 0, "end": 25},
             ["000000000000", "000000000010", "000000000020"],
-            id="a_number_window_holds_width_values",
+            id="a_number_chunk_holds_width_values",
         ),
         pytest.param(
             {"column": "id", "width": 10, "begin": 5, "end": 5},
             ["000000000005"],
-            id="begin_equal_to_end_is_one_window",
+            id="begin_equal_to_end_is_one_chunk",
         ),
     ],
 )
-def test_the_windows_cut_the_range_by_the_width(batches, expected):
-    """Give one window per day, month, year or run of ids, with a stable key."""
-    assert keys(batches) == expected
+def test_the_chunks_cut_the_range_by_the_width(spec, expected):
+    """Give one chunk per day, month, year or run of ids, with a stable key."""
+    assert keys(spec) == expected
 
 
 @pytest.mark.parametrize(
-    ("batches", "message"),
+    ("spec", "message"),
     [
         pytest.param(
             {"column": "d", "width": "day", "begin": "2024-03-05", "end": "2024-03-01"},
@@ -102,7 +102,7 @@ def test_the_windows_cut_the_range_by_the_width(batches, expected):
         pytest.param(
             {"column": "id", "width": 10, "begin": 0},
             "needs an end",
-            id="a_number_window_needs_an_end",
+            id="a_number_chunk_needs_an_end",
         ),
         pytest.param(
             {"column": "id", "width": 10, "begin": "2024-03-01", "end": 5},
@@ -116,10 +116,10 @@ def test_the_windows_cut_the_range_by_the_width(batches, expected):
         ),
     ],
 )
-def test_a_configuration_that_does_not_fit_is_refused(batches, message):
+def test_a_configuration_that_does_not_fit_is_refused(spec, message):
     """Raise before any read, so a typo never reaches the database."""
     with pytest.raises(ValueError, match=message):
-        windows(batches, TODAY)
+        split_chunks(spec, TODAY)
 
 
 @given(
@@ -127,31 +127,31 @@ def test_a_configuration_that_does_not_fit_is_refused(batches, message):
     days=st.integers(0, 800),
     width=st.sampled_from(["day", "month", "year"]),
 )
-def test_the_windows_touch_and_cover_the_whole_range(begin, days, width):
-    """Leave no gap and no overlap, and hold both `begin` and `end` in a window."""
+def test_the_chunks_touch_and_cover_the_whole_range(begin, days, width):
+    """Leave no gap and no overlap, and hold both `begin` and `end` in a chunk."""
     end = begin + timedelta(days=days)
-    batches = Batches(
+    spec = Chunks(
         column="d",
         width=cast("DateWidth", width),
         begin=begin.isoformat(),
         end=end.isoformat(),
     )
 
-    cut = windows(batches, TODAY)
+    cut = split_chunks(spec, TODAY)
 
     assert all(a.stop == b.start for a, b in pairwise(cut))
     assert cut[0].start <= begin < cut[0].stop
     assert cut[-1].start <= end < cut[-1].stop
 
 
-def test_a_date_window_is_a_half_open_filter_on_its_column():
+def test_a_date_chunk_is_a_half_open_filter_on_its_column():
     """Filter `column >= start AND column < stop`, with typed values."""
-    [window] = windows(
+    [chunk] = split_chunks(
         {"column": "d", "width": "day", "begin": "2024-03-01", "end": "2024-03-01"},
         TODAY,
     )
 
-    predicates = window_predicates("d", window)
+    predicates = build_chunk_predicates("d", chunk)
 
     assert predicates == [
         {"column": Identifier("d"), "op": ">=", "value": Literal(date(2024, 3, 1))},
@@ -159,19 +159,19 @@ def test_a_date_window_is_a_half_open_filter_on_its_column():
     ]
 
 
-def test_a_number_window_filters_a_run_of_ids_with_typed_values():
-    """Filter `id >= start AND id < start + width` for the second window."""
-    window = windows({"column": "id", "width": 10, "begin": 0, "end": 25}, TODAY)[1]
+def test_a_number_chunk_filters_a_run_of_ids_with_typed_values():
+    """Filter `id >= start AND id < start + width` for the second chunk."""
+    chunk = split_chunks({"column": "id", "width": 10, "begin": 0, "end": 25}, TODAY)[1]
 
-    assert window_predicates("id", window) == [
+    assert build_chunk_predicates("id", chunk) == [
         {"column": Identifier("id"), "op": ">=", "value": Literal(10)},
         {"column": Identifier("id"), "op": "<", "value": Literal(20)},
     ]
 
 
-def test_the_null_window_filters_the_rows_that_have_no_value():
-    """Select the rows whose batch column is NULL, which no range holds."""
-    assert window_predicates("d", NULL_WINDOW) == [
+def test_the_null_chunk_filters_the_rows_that_have_no_value():
+    """Select the rows whose chunk column is NULL, which no range holds."""
+    assert build_chunk_predicates("d", NULL_CHUNK) == [
         {"column": Identifier("d"), "op": "is null"}
     ]
 
@@ -179,24 +179,24 @@ def test_the_null_window_filters_the_rows_that_have_no_value():
 @pytest.mark.parametrize(
     ("known", "lookback", "expected"),
     [
-        pytest.param({0, 1, 2}, 1, [2, "null"], id="the_null_window_is_always_read"),
+        pytest.param({0, 1, 2}, 1, [2, "null"], id="the_null_chunk_is_always_read"),
         pytest.param(
             {0, 1, 2}, 0, ["null"], id="and_it_does_not_count_for_the_lookback"
         ),
         pytest.param(
-            set(), None, [0, 1, 2, "null"], id="every_window_without_a_lookback"
+            set(), None, [0, 1, 2, "null"], id="every_chunk_without_a_lookback"
         ),
     ],
 )
-def test_the_null_window_is_read_every_time(known, lookback, expected):
+def test_the_null_chunk_is_read_every_time(known, lookback, expected):
     """Read the rows with no value on every run."""
-    ranges = windows({"column": "id", "width": 1, "begin": 0, "end": 2}, TODAY)
-    cut = [*ranges, NULL_WINDOW]
+    ranges = split_chunks({"column": "id", "width": 1, "begin": 0, "end": 2}, TODAY)
+    cut = [*ranges, NULL_CHUNK]
 
-    chosen = pending(cut, {ranges[index].key for index in known}, lookback)
+    chosen = select_pending(cut, {ranges[index].key for index in known}, lookback)
 
     assert [
-        ranges.index(window) if window != NULL_WINDOW else "null" for window in chosen
+        ranges.index(chunk) if chunk != NULL_CHUNK else "null" for chunk in chosen
     ] == expected
 
 
@@ -211,10 +211,10 @@ def test_the_null_window_is_read_every_time(known, lookback, expected):
             id="no_lookback_checks_all",
         ),
         pytest.param(
-            {"a", "b", "c", "d"}, 2, ["c", "d"], id="lookback_checks_the_last_windows"
+            {"a", "b", "c", "d"}, 2, ["c", "d"], id="lookback_checks_the_last_chunks"
         ),
         pytest.param(
-            {"a", "c", "d"}, 1, ["b", "d"], id="an_unknown_window_is_always_loaded"
+            {"a", "c", "d"}, 1, ["b", "d"], id="an_unknown_chunk_is_always_loaded"
         ),
         pytest.param(
             {"a", "b", "c", "d"}, 0, [], id="a_lookback_of_zero_checks_nothing"
@@ -224,11 +224,11 @@ def test_the_null_window_is_read_every_time(known, lookback, expected):
 def test_lookback_limits_the_rechecks_but_not_the_first_loads(
     known, lookback, expected
 ):
-    """Re-read only the last windows, and load every window never loaded before."""
-    cut = windows({"column": "id", "width": 1, "begin": 0, "end": 3}, TODAY)
+    """Re-read only the last chunks, and load every chunk never loaded before."""
+    cut = split_chunks({"column": "id", "width": 1, "begin": 0, "end": 3}, TODAY)
     names = dict(zip("abcd", cut, strict=True))
 
-    chosen = pending(cut, {names[k].key for k in known}, lookback)
+    chosen = select_pending(cut, {names[k].key for k in known}, lookback)
 
     assert [next(n for n, w in names.items() if w == c) for c in chosen] == expected
 
@@ -237,11 +237,11 @@ def test_the_config_hash_ignores_key_order_and_tracks_every_value():
     """Give the same hash for the same settings, and another one for any change."""
     base = {"table": "t", "select": ["a", "b"], "normalize_values": True}
 
-    assert config_hash(base) == config_hash(dict(reversed(base.items())))
-    assert config_hash(base) != config_hash(base | {"normalize_values": False})
-    assert config_hash(base) != config_hash(base | {"select": ["b", "a"]})
+    assert hash_parts(base) == hash_parts(dict(reversed(base.items())))
+    assert hash_parts(base) != hash_parts(base | {"normalize_values": False})
+    assert hash_parts(base) != hash_parts(base | {"select": ["b", "a"]})
 
 
-def test_the_ledger_id_joins_the_config_and_the_window():
-    """Name the ledger entry of one window under one config."""
-    assert ledger_id("abc", "2024-03-01") == "abc:2024-03-01"
+def test_the_ledger_id_joins_the_config_and_the_chunk():
+    """Name the ledger entry of one chunk under one config."""
+    assert build_ledger_id("abc", "2024-03-01") == "abc:2024-03-01"

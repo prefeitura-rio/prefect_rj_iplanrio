@@ -6,36 +6,67 @@ bcadastro CouchDB sends. They run in the process, with no network and no contain
 `conftest.py` registers this module as a plugin, so a test asks for a fixture by name.
 """
 
+import sys
 from collections import deque
 from collections.abc import AsyncGenerator, Callable, Iterator, Mapping, Sequence
-from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from contextlib import AsyncExitStack, asynccontextmanager
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from hashlib import md5
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BytesIO
 from json import dumps, loads
 from multiprocessing import get_context
+from pathlib import Path
+from re import findall, search
 from threading import Thread
-from types import SimpleNamespace
-from typing import ClassVar, cast, override
+from types import ModuleType, SimpleNamespace
+from typing import ClassVar, Self, TypedDict, Unpack, cast, override
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 from deltalake import DeltaTable
+from duckdb import DuckDBPyConnection, Error
+from duckdb import connect as duckdb_connect
 from fake_gcs_server import serve
-from obstore.store import MemoryStore
+from obstore.store import MemoryStore, ObjectStore
 from oracledb import Connection as oracle_Connection
 from oracledb import DatabaseError
+from polars import DataFrame, from_arrow, read_parquet
 from pyarrow import Schema, Table
 from pyarrow import array as arrow_array
 from pyarrow import int64 as arrow_int64
 from pyarrow import table as arrow_table
-from pydantic import JsonValue
+from pyarrow.parquet import ParquetWriter
+from pydantic import BaseModel, JsonValue
+from pydantic.dataclasses import dataclass as pydantic_dataclass
+from toolkit import gcs
+from toolkit.chunks import Rows
+from toolkit.executor.constants import DEFAULT_BATCH_SIZE, SOURCE_CONFIG
+from toolkit.executor.engines.base import Engine
+from toolkit.executor.engines.couchdb import write_page
 from toolkit.executor.engines.duckdb import DuckDBEngine
-from toolkit.executor.engines.protocol import Engine
-from toolkit.executor.sources.protocols import DBConn
+from toolkit.executor.requests import Files
+from toolkit.executor.sources.backends.files import FilesSource
+from toolkit.executor.sources.duckdb import DuckDBSource
+from toolkit.executor.sources.models import CouchDBAllDocs
+from toolkit.executor.sources.protocols import DBConn, Source
+from toolkit.executor.sources.registry import get_source
+from toolkit.executor.types import Origin
+from toolkit.gcs import create_store
 from toolkit.oracle import Oracle
+from toolkit.types import Columns, QueryParams
 
 from utils import tasks, utils
+from utils.couchdb import BCADASTRO
+from utils.types import DatabaseDumpOptions, DumpMode, DumpOptions, Read
+from utils.utils import (
+    Destination,
+    dump_to_delta,
+    publish,
+    read_request,
+    write_json_lines,
+)
 
 READABLE = {"timestampNtz", "columnMapping", "deletionVectors"}
 """The reader features that BigQuery supports, with reader version 3 as the most it reads."""
@@ -154,25 +185,21 @@ class FakeBigQuery:
         self.tables[table] = FakeTable(uri)
 
 
-@dataclass
-class FakeDatabase:
+@pydantic_dataclass(frozen=True, config=SOURCE_CONFIG)
+class FakeDatabaseSource(DuckDBSource):
     """A database in memory, attached as `src` the way the real extension attaches one.
 
     A table named `schema.name` is read as `"src"."schema"."name"`, so a dump that reads
-    an attached table runs the same SQL as it does against Postgres.
+    an attached table runs the same SQL as it does against Postgres. It is a source that
+    DuckDB reads in place, so the `DuckDBEngine` serves it.
     """
 
-    name: ClassVar[str] = "fake"
-    tables: dict[str, Table] = field(default_factory=dict)
+    tables: dict[str, Table] = field(default_factory=dict[str, Table])
 
-    @asynccontextmanager
-    async def open(self, engine: Engine) -> AsyncGenerator[Engine]:
-        """Yield the engine itself."""
-        yield engine
-
-    async def setup(self, client: Engine) -> None:
+    @override
+    async def setup(self, engine: Engine) -> None:
         """Attach an empty database as `src`, and create the tables in it."""
-        connection = cast("DuckDBEngine", client).connection
+        connection = cast("DuckDBEngine", engine).connection
         connection.execute("ATTACH ':memory:' AS src")
 
         for name, table in self.tables.items():
@@ -182,6 +209,67 @@ class FakeDatabase:
             connection.register("pending", table)
             connection.execute(f'CREATE TABLE src."{schema}"."{short}" AS SELECT * FROM pending')
             connection.unregister("pending")
+
+
+@dataclass(frozen=True)
+class ConcurrentFilesSource:
+    """Local files that an engine reads with `workers` chunks at the same time."""
+
+    workers: int
+    origin: Origin | None = None
+
+
+@dataclass
+class ConcurrentFilesEngine(Engine):
+    """An engine that reads the files of its source through DuckDB, in `workers` chunks."""
+
+    source_type: ClassVar[type[Source]] = ConcurrentFilesSource
+
+    source: ConcurrentFilesSource
+    inner: DuckDBEngine = field(init=False, repr=False)
+
+    @property
+    @override
+    def concurrency(self) -> int:
+        """Return the chunks that the source reads at the same time."""
+        return self.source.workers
+
+    @override
+    async def open(self, stack: AsyncExitStack) -> None:
+        """Open the DuckDB engine that reads the files."""
+        self.inner = await stack.enter_async_context(DuckDBEngine(FilesSource(origin=self.source.origin)))
+
+    @override
+    def clone(self) -> Self:
+        """Return a new unopened engine of the source."""
+        return replace(self)
+
+    @override
+    async def execute(self, sql: str, *, params: QueryParams | None = None) -> None:
+        """Run the statement on the DuckDB engine."""
+        await self.inner.execute(sql, params=params)
+
+    @override
+    def query(
+        self, sql: str, *, params: QueryParams | None = None, batch_size: int = DEFAULT_BATCH_SIZE
+    ) -> AsyncGenerator[DataFrame]:
+        """Run the query on the DuckDB engine."""
+        return self.inner.query(sql, params=params, batch_size=batch_size)
+
+    @override
+    def read(self, *, batch_size: int = DEFAULT_BATCH_SIZE) -> AsyncGenerator[DataFrame]:
+        """Read the files whole."""
+        return self.inner.read(batch_size=batch_size)
+
+    @override
+    async def describe(self) -> dict[str, str]:
+        """Describe the files."""
+        return await self.inner.describe()
+
+    @override
+    async def materialize(self, target: Path, rows: Rows, columns: Columns = ()) -> None:
+        """Write a chunk of the files."""
+        await self.inner.materialize(target, rows, columns)
 
 
 class FakeBigQueryCalls:
@@ -331,9 +419,9 @@ def fake_api() -> Iterator[FakeApi]:
 
 
 @pytest.fixture
-def fake_database() -> FakeDatabase:
+def fake_database() -> FakeDatabaseSource:
     """Return an empty database in memory."""
-    return FakeDatabase()
+    return FakeDatabaseSource()
 
 
 class FakeOracleError(Exception):
@@ -349,7 +437,7 @@ class FakeOracle:
     """An Oracle connection that describes canned columns and answers each read with `rows_for`.
 
     It records every read. `snapshot_error` fails the read of the system change number,
-    and `read_errors` fail the next windows that are read as of one.
+    and `read_errors` fail the next chunks that are read as of one.
     """
 
     def __init__(
@@ -362,6 +450,8 @@ class FakeOracle:
         self.description = self.columns
         self.rows_for = rows_for
         self.reads: list[tuple[str, list[object]]] = []
+        self.sizes: list[int] = []
+        self.scn_reads = 0
         self.snapshot_error: int | None = None
         self.read_errors: list[int] = []
         self.closed = False
@@ -370,6 +460,13 @@ class FakeOracle:
     def column(name: str, kind: str, precision: int | None, scale: int | None) -> SimpleNamespace:
         """Return the description of one column, as a cursor gives it."""
         return SimpleNamespace(name=name, type=SimpleNamespace(name=kind), precision=precision, scale=scale)
+
+    def chosen(self, sql: str) -> list[SimpleNamespace]:
+        """Return the columns that a read selects, or all of them for `SELECT *`."""
+        found = search(r'SELECT ((?:"\w+"(?:, )?)+)\s+FROM "APP"', sql)
+        names = findall(r'"(\w+)"', found.group(1)) if found else []
+
+        return [column for column in self.columns if column.name in names] if names else self.columns
 
     def cursor(self) -> "FakeOracle":
         """Return itself as the cursor."""
@@ -386,7 +483,7 @@ class FakeOracle:
         """Describe a statement: the system change number has one column, and a read has the table's."""
         if self.snapshot_error is not None and ("v$database" in sql or "DBMS_FLASHBACK" in sql):
             raise DatabaseError(FakeOracleError(self.snapshot_error))
-        self.description = [self.column("scn", "DB_TYPE_NUMBER", 18, 0)] if '"scn"' in sql else self.columns
+        self.description = [self.column("scn", "DB_TYPE_NUMBER", 18, 0)] if '"scn"' in sql else self.chosen(sql)
 
     def execute(self, sql: str, params: Sequence[object]) -> None:
         """Run a statement of the session, which the fake only needs to accept."""
@@ -394,17 +491,19 @@ class FakeOracle:
     def fetch_df_batches(
         self, sql: str, params: Sequence[object], size: int, requested_schema: Schema
     ) -> Iterator[Table]:
-        """Record the read, fail if asked to, and yield what `rows_for` answers."""
+        """Record the size of a read, fail if asked to, and yield what `rows_for` answers."""
         if '"scn"' in sql:
+            self.scn_reads += 1
             yield arrow_table({"scn": arrow_array([4242], arrow_int64())})
             return
+        self.sizes.append(size)
         if self.read_errors and "AS OF SCN" in sql:
             raise DatabaseError(FakeOracleError(self.read_errors.pop(0)))
         if "WHERE 1 = 0" in sql:
             yield self.rows_for(sql, params).slice(0, 0)
             return
         self.reads.append((sql, list(params)))
-        yield self.rows_for(sql, params)
+        yield self.rows_for(sql, params).select([column.name for column in self.chosen(sql)])
 
     def close(self) -> None:
         """Record that the connection closed."""
@@ -583,3 +682,237 @@ def cpf_changes_page() -> bytes:
     erased = {"_id": "00000008001", "_rev": f"2-{revision('00000008001')[2:]}", "_deleted": True}
 
     return changes_page([(2, cpf_document(272)), (4, cpf_document(353)), (12, erased)], pending=0)
+
+
+@pytest.fixture(scope="module")
+def read_gs_uri():
+    """Provide the `read_gs_uri` helper."""
+
+    def read_gs_uri(destination: Destination) -> str:
+        """Return the `gs://` URI, which `object_store` reads from the fake bucket."""
+        return f"gs://{destination.bucket}/{destination.prefix}"
+
+    return read_gs_uri
+
+
+SIMULATED_PROJECT = "simulated-project"
+
+
+@dataclass(frozen=True)
+class SimulatedCloud:
+    """A fake GCS and a fake BigQuery."""
+
+    gcs: FakeGcs
+    bigquery: type[FakeBigQuery]
+    bucket: str = "simulated-bucket"
+    project: str = SIMULATED_PROJECT
+
+    def destination(self, name: str) -> Destination:
+        """Return the destination of a table of this run."""
+        return Destination(self.bucket, "simulated_dataset", name)
+
+    async def publish(self, destination: Destination) -> None:
+        """Create or refresh the fake BigQuery table of a destination."""
+        await publish(destination, self.project, f"{self.project}.us.connection")
+
+    def read(self, destination: Destination) -> DataFrame:
+        """Return the rows that the fake BigQuery returns, with the columns it detected."""
+        detected = self.bigquery.tables[destination.table(self.project)]
+        return cast("DataFrame", from_arrow(DeltaTable(detected.uri).to_pyarrow_table(columns=list(detected.schema))))
+
+    def types(self, destination: Destination) -> dict[str, str]:
+        """Return the types that the fake BigQuery detected."""
+        return self.bigquery.tables[destination.table(self.project)].schema
+
+    def store(self) -> ObjectStore:
+        """Return the store of the fake bucket."""
+        return create_store(self.bucket)
+
+
+@pytest.fixture(scope="module")
+def cloud(fake_gcs: FakeGcs, fake_bigquery: type[FakeBigQuery], read_gs_uri) -> Iterator[SimulatedCloud]:
+    """Return the simulated cloud, where `deltalake`, `obstore` and BigQuery reach the fakes.
+
+    `Destination.uri` is `gcs://` (OpenDAL), which has no setting for a fake endpoint, so it
+    reads `gs://` here.
+    """
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(Destination, "uri", property(read_gs_uri))
+        yield SimulatedCloud(fake_gcs, fake_bigquery)
+
+
+@pytest.fixture
+def dump_to_cloud():
+    """Provide the `dump_to_cloud` helper."""
+
+    async def dump_to_cloud(
+        database: FakeDatabaseSource,
+        destination: Destination,
+        dump_mode: DumpMode = "append",
+        table: str = "public.orders",
+        **options: Unpack[DumpOptions],
+    ) -> None:
+        """Dump a table of the database into the Delta table of a destination."""
+        values = read_request("postgres", {"table": table}, "chunks" in options)
+        await dump_to_delta(replace(database, origin=values), destination.uri, dump_mode, options)
+
+    return dump_to_cloud
+
+
+@pytest.fixture
+def capture():
+    """Provide the `capture` helper."""
+
+    async def capture(destination: Destination, folder, records: list[dict[str, JsonValue]], moment: datetime) -> None:
+        """Write the records as JSON lines, and add them to the table as the capture of a moment."""
+        (folder / "records.json").unlink(missing_ok=True)
+        write_json_lines(records, folder)
+        values = Files(f"{folder}/**/*.json", "json")
+        await dump_to_delta(FilesSource(origin=values), destination.uri, "append", {"capture": moment})
+
+    return capture
+
+
+@pytest.fixture
+def stage_page():
+    """Provide the `stage_page` helper."""
+
+    def stage_page(page: bytes, path: Path) -> CouchDBAllDocs:
+        """Write a page of `_all_docs` as the bcadastro source writes it, and return the page."""
+        parsed = CouchDBAllDocs.model_validate_json(page)
+
+        with ParquetWriter(path, BCADASTRO.columns) as writer:
+            write_page(writer, BCADASTRO, parsed.rows, parsed.update_seq)
+
+        return parsed
+
+    return stage_page
+
+
+@pytest.fixture
+def query_rows():
+    """Provide the `query_rows` helper."""
+
+    async def query_rows(path: Path, sql: str) -> list[tuple[object, ...]]:
+        """Run a query over the staged file, and return its rows."""
+        async with DuckDBEngine() as engine:
+            [dataframe] = [batch async for batch in engine.query(sql.format(path=path))]
+
+        return dataframe.rows()
+
+    return query_rows
+
+
+@pytest.fixture
+def dump_oracle():
+    """Provide the `dump_oracle` helper."""
+
+    async def dump_oracle(uri: Path, read: Read, **options: Unpack[DatabaseDumpOptions]) -> None:
+        """Dump an Oracle read to a local Delta table, with the batch size as the flow gives it."""
+        conn = DBConn("h", 1521, "SVC", "u", "p")
+        given: dict[str, int] = {"batch_size": options["batch_size"]} if "batch_size" in options else {}
+        origin = read_request("oracle", read, "chunks" in options)
+        source = get_source("oracle")(conn=conn, origin=origin, **given)
+        await dump_to_delta(source, str(uri), "append", options)
+
+    return dump_oracle
+
+
+@pytest.fixture
+def commits():
+    """Provide the `commits` helper."""
+
+    def commits(uri: Path) -> int:
+        """Return how many commits the table has."""
+        return DeltaTable(str(uri)).version() + 1
+
+    return commits
+
+
+@pytest.fixture
+def put():
+    """Provide the `put` helper."""
+
+    async def put(store, *keys: str) -> None:
+        """Store a small object under each key."""
+        for key in keys:
+            await store.put_async(key, b"old")
+
+    return put
+
+
+@pytest.fixture
+def stamps():
+    """Provide the `stamps` helper."""
+
+    def stamps(lake) -> dict[int, datetime]:
+        """Return the extraction time of each id."""
+        table = DeltaTable(lake.uri).to_pyarrow_table()
+        ids, times = table.column("id").to_pylist(), table.column("_prefect_extracted_at").to_pylist()
+        return cast("dict[int, datetime]", dict(zip(ids, times, strict=True)))
+
+    return stamps
+
+
+@pytest.fixture
+def stored_rows():
+    """Provide the `stored_rows` helper."""
+
+    async def stored_rows(store, prefix: str) -> list[int]:
+        """Return the ids of every Parquet object under a prefix."""
+        ids: list[int] = []
+        for key in await gcs.list_keys(store, prefix):
+            data = bytes(await (await store.get_async(key)).bytes_async())
+            ids += read_parquet(BytesIO(data))["id"].to_list()
+        return sorted(ids)
+
+    return stored_rows
+
+
+@pytest.fixture
+def naive():
+    """Provide the `naive` helper."""
+
+    def naive(year: int, month: int, day: int, hour: int = 0, minute: int = 0) -> datetime:
+        """Return a timestamp without a time zone, as a database column holds it."""
+        return datetime(year, month, day, hour, minute, tzinfo=UTC).replace(tzinfo=None)
+
+    return naive
+
+
+@pytest.fixture(scope="module")
+def delta_reader() -> DuckDBPyConnection:
+    """Return a DuckDB connection with the delta extension, an independent reader of the log."""
+    connection = duckdb_connect()
+    try:
+        connection.execute("INSTALL delta")
+        connection.execute("LOAD delta")
+    except Error:
+        pytest.skip("The DuckDB delta extension is not available")
+    return connection
+
+
+class ItemModel(BaseModel):
+    id: int
+    nome: str
+
+
+@dataclass
+class ItemData:
+    id: int
+    nome: str
+
+
+class ItemDict(TypedDict):
+    id: int
+    nome: str
+
+
+@pytest.fixture
+def schemas(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    """Put a module with the three kinds of schema, and a name that is no type."""
+    module = ModuleType("schemas_of_the_test")
+    module.__dict__.update(MODEL=ItemModel, DATA=ItemData, DICT=ItemDict, NOT_A_TYPE="text")
+    monkeypatch.setitem(sys.modules, "schemas_of_the_test", module)
+
+    return module

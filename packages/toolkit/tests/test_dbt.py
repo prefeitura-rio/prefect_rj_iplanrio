@@ -1,55 +1,12 @@
 from os import environ
-from pathlib import Path
-from types import SimpleNamespace
-from typing import ClassVar
 
 import pytest
-from git import Actor, Repo
 from pydantic import ValidationError
 
 from toolkit import dbt
 from toolkit.dbt import DbtRun
 
 REPOSITORY = "https://example.invalid/queries.git"
-
-
-class FakeRunner:
-    """A `PrefectDbtRunner` that records the settings and the arguments."""
-
-    instances: ClassVar[list[FakeRunner]] = []
-    error: ClassVar[Exception | None] = None
-
-    def __init__(self, **kwargs: object) -> None:
-        """Record the keyword arguments and register the instance."""
-        self.kwargs = kwargs
-        self.invoked: list[list[str]] = []
-        FakeRunner.instances.append(self)
-
-    @property
-    def settings(self):
-        """Return the settings that the runner got."""
-        return self.kwargs["settings"]
-
-    def invoke(self, arguments: list[str]) -> SimpleNamespace:
-        """Record the arguments, and fail if an error is set."""
-        self.invoked.append(arguments)
-        if FakeRunner.error is not None:
-            raise FakeRunner.error
-        return SimpleNamespace(success=True)
-
-
-@pytest.fixture
-def fake_runner(monkeypatch, tmp_path):
-    """Replace the dbt runner, and clone into a folder of the test."""
-    project = tmp_path / "queries"
-    project.mkdir()
-    FakeRunner.instances = []
-    FakeRunner.error = None
-    monkeypatch.setattr(dbt, "PrefectDbtRunner", FakeRunner)
-    monkeypatch.setattr(
-        dbt, "clone_repository", lambda repository, destination: project
-    )
-    return FakeRunner
 
 
 @pytest.mark.parametrize(
@@ -86,7 +43,10 @@ def test_the_command_line_of_a_request(values, expected):
     """Regression: each call mutated the shared word list of a two-word command."""
     request = DbtRun(repository=REPOSITORY, **values)
 
-    assert [request.arguments(), request.arguments()] == [expected, expected]
+    assert [request.build_arguments(), request.build_arguments()] == [
+        expected,
+        expected,
+    ]
 
 
 @pytest.mark.parametrize(
@@ -138,21 +98,6 @@ def test_a_failed_dbt_command_raises(fake_runner):
         dbt.execute_dbt(DbtRun(repository=REPOSITORY))
 
 
-def make_repository(path: Path, *, queries: bool) -> Path:
-    """Create a git repository with a dbt project.
-
-    The project is in `queries` or at the root.
-    """
-    repository = Repo.init(path)
-    project = path / "queries" if queries else path
-    project.mkdir(exist_ok=True)
-    (project / "dbt_project.yml").write_text("name: test\n")
-    repository.index.add([str(project / "dbt_project.yml")])
-    actor = Actor("tester", "tester@example.com")
-    repository.index.commit("init", author=actor, committer=actor)
-    return path
-
-
 @pytest.mark.parametrize(
     ("queries", "expected"),
     [
@@ -161,14 +106,14 @@ def make_repository(path: Path, *, queries: bool) -> Path:
     ],
 )
 def test_the_dbt_project_is_the_queries_folder_when_there_is_one(
-    queries, expected, tmp_path
+    queries, expected, tmp_path, make_repository
 ):
     """Use the `queries` folder as the dbt project if there is one."""
     origin = make_repository(tmp_path / "origin", queries=queries)
 
     clone = dbt.clone_repository(str(origin), tmp_path / "clone")
 
-    assert dbt.dbt_project_dir(clone) == tmp_path / expected
+    assert dbt.find_project_dir(clone) == tmp_path / expected
 
 
 def test_a_failed_clone_is_reported(tmp_path):

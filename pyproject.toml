@@ -69,7 +69,6 @@ members = ["pipelines/*", "packages/*"]
 [dependency-groups]
 dev = [
   "basedpyright>=1.30.0",
-  "pyrefly>=1.3.2",
   "pytest>=8.0.0",
   "pytest-asyncio>=0.24.0",
   "pytest-xdist>=3.8.0",
@@ -78,10 +77,11 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = ["--import-mode=importlib"]
-pythonpath = ["tests"]
+addopts = ["--import-mode=importlib", "-m", "not parity"]
+pythonpath = ["tests", "tests/parity"]
 markers = [
   "extensions: needs a DuckDB extension that is downloaded the first time",
+  "parity: needs the real engines that `tests/parity/engines.nu` starts",
 ]
 
 [tool.basedpyright]
@@ -90,6 +90,23 @@ venvPath = "."
 venv = ".venv"
 include = ["src", "tests"]
 reportUnusedCallResult = false # side-effect calls (an upload, a delete) return handles that nobody needs
+
+[[tool.basedpyright.executionEnvironments]]
+root = "tests/parity"
+extraPaths = ["src", "tests/parity"]
+reportImplicitRelativeImport = false # the folder is on `pythonpath`, so the tests import the lab by name
+reportMissingParameterType = false # pytest fixtures and parametrized arguments arrive untyped
+reportUnknownParameterType = false # same cause as above
+reportUnknownArgumentType = false # values from untyped fixtures
+reportUnknownMemberType = false # members of untyped fixtures
+reportUnknownVariableType = false # variables built from untyped fixtures
+reportUnknownLambdaType = false # lambdas passed to the lab
+reportAny = false # rows of the lab come from several drivers
+reportArgumentType = false # rows of the lab hold values of several drivers
+reportIndexIssue = false # rows of the lab hold values of several drivers
+reportOperatorIssue = false # rows of the lab hold values of several drivers
+reportImplicitStringConcatenation = false # the SQL of the lab is written in lines
+reportPrivateImportUsage = false # the tests patch a name that the engine imports
 
 [[tool.basedpyright.executionEnvironments]]
 root = "tests"
@@ -109,21 +126,6 @@ reportAny = false # values from untyped fakes
 [[tool.basedpyright.executionEnvironments]]
 root = "src/utils/hooks.py"
 reportUnusedParameter = false # Prefect calls a retry check and a hook with a fixed signature
-
-[tool.pyrefly]
-project-includes = ["src", "tests"]
-python-version = "3.14"
-python-interpreter-path = ".venv/bin/python"
-search-path = ["tests"]
-preset = "strict"
-
-# The tests keep type safety on the shared code; these rules are noise for pytest code.
-[[tool.pyrefly.sub-config]]
-matches = "tests/**"
-
-[tool.pyrefly.sub-config.errors]
-implicit-any-parameter = false  # pytest fixtures and parametrized arguments arrive untyped
-implicit-any-lambda = false  # lambdas passed to fakes
 
 [tool.ruff]
 target-version = "py314"
@@ -149,6 +151,15 @@ select = [
   "T20",
   "W",
 ]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"prefect_rj_iplanrio".msg = "The package is gone: use `utils` and `toolkit`."
+"iplanrio".msg = "The package is gone: use `utils` and `toolkit`."
+"toolkit.pipelines_utils".msg = "The legacy modules are gone: use `utils.tasks` and `toolkit`."
+"toolkit.pipelines_templates".msg = "The templates are gone: use `utils.flows.dump_database`."
+"toolkit.dump".msg = "The module is gone: use `utils.flows`."
+"toolkit.tasks".msg = "The module is gone: use `utils.tasks`."
+"toolkit.prefect".msg = "The module is gone: write schedules in the `prefect.yaml`."
 
 [tool.ruff.lint.per-file-ignores]
 "src/utils/tasks.py" = [

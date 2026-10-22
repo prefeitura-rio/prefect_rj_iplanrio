@@ -13,3 +13,6 @@ RETRY_DELAY_SECONDS: Final = 60
 
 DISCORD_LIMIT: Final = 2000
 """The most characters that Discord accepts in one message."""
+
+DOCUMENT_STORES: Final = frozenset({"couchdb", "mongodb"})
+"""The database types that store documents, and read a selector instead of SQL."""

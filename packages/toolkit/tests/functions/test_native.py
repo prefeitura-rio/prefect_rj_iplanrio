@@ -19,9 +19,9 @@ async def test_the_normalize_function_takes_its_options_as_parameters(
     """Register one `normalize` whose separator and case are parameters."""
     sql = f"SELECT normalize('Código do Órgão', {arguments})"
 
-    [frame] = [frame async for frame in duckdb_memory.query(sql)]
+    [dataframe] = [dataframe async for dataframe in duckdb_memory.query(sql)]
 
-    assert frame.rows() == [(expected,)]
+    assert dataframe.rows() == [(expected,)]
 
 
 @pytest.mark.parametrize(
@@ -33,9 +33,11 @@ async def test_the_normalize_function_takes_its_options_as_parameters(
 )
 async def test_a_null_argument_gives_null(duckdb_memory, call):
     """Leave a NULL as NULL, whichever argument it is."""
-    [frame] = [frame async for frame in duckdb_memory.query(f"SELECT {call}")]
+    [dataframe] = [
+        dataframe async for dataframe in duckdb_memory.query(f"SELECT {call}")
+    ]
 
-    assert frame.rows() == [(None,)]
+    assert dataframe.rows() == [(None,)]
 
 
 @pytest.mark.parametrize(
@@ -53,18 +55,18 @@ async def test_a_call_with_the_wrong_types_is_rejected_before_it_runs(
 ):
     """Reject the wrong types and the wrong count when DuckDB binds the call."""
     with pytest.raises(BinderException, match="No function matches"):
-        _ = [frame async for frame in duckdb_memory.query(f"SELECT {call}")]
+        _ = [dataframe async for dataframe in duckdb_memory.query(f"SELECT {call}")]
 
 
 async def test_every_engine_has_the_functions_however_it_is_built():
-    """Register `normalize` when the engine is built, not only in `connect`."""
+    """Register `normalize` when an engine wraps a connection, not only on open."""
     with duckdb_connect() as connection:
-        engine = DuckDBEngine(connection)
+        engine = DuckDBEngine.wrap(connection)
 
         sql = "SELECT normalize('A b', '_', true)"
-        [frame] = [frame async for frame in engine.query(sql)]
+        [dataframe] = [dataframe async for dataframe in engine.query(sql)]
 
-    assert frame.rows() == [("a_b",)]
+    assert dataframe.rows() == [("a_b",)]
 
 
 async def test_to_sao_paulo_converts_a_timestamp_with_a_time_zone(scalar):

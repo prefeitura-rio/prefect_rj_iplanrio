@@ -27,6 +27,8 @@ target = "'b.parquet'"
 query = "'select 1'"
 seconds = "3600"
 columns = [{"source": "\"a\"", "target": "\"b\""}]
+filters = ["(b = 1)"]
+names = ["\"a\"", "\"b\""]
 predicates = [{"column": "\"a\"", "op": ">=", "value": "1"}]
 table = t
 renames = []

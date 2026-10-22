@@ -19,7 +19,7 @@ from .constants import TEMPLATES_DIR
 
 
 @lru_cache
-def jinja_environment(roots: tuple[Path, ...]) -> Environment:
+def build_environment(roots: tuple[Path, ...]) -> Environment:
     """Return a strict Jinja environment over the template directories.
 
     The first directory that has a template wins.
@@ -63,5 +63,5 @@ def render_template(
     variable.
     """
     rendered = {key: to_sql(value) for key, value in mapping.items()}
-    template = jinja_environment(roots).get_template(f"{path}.sql").render(rendered)
+    template = build_environment(roots).get_template(f"{path}.sql").render(rendered)
     return cast("LiteralString", template)

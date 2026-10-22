@@ -148,10 +148,10 @@ AREA_CODES: Final = frozenset(
 """The area codes (DDD) that ANATEL assigns, which a phone must start with."""
 
 BATCH_COLUMN: Final = "batch"
-"""The column that holds the key of the window, which partitions a Delta table."""
+"""The column that holds the key of the chunk, which partitions a Delta table."""
 
 EXTRACTED_AT_COLUMN: Final = "_prefect_extracted_at"
-"""The column that holds when the window of a row was written, if a dump asks for it."""
+"""The column that holds when the chunk of a row was written, if a dump asks for it."""
 
 COMMIT_ATTEMPTS: Final = 5
 """How many times a Delta write tries again after a commit conflict."""
@@ -159,13 +159,14 @@ COMMIT_ATTEMPTS: Final = 5
 VACUUM_RETENTION_HOURS: Final = 168
 """How long replaced Delta files stay, for the queries that still read them."""
 
-FILTER_OPERATORS: Final = frozenset(
-    {"=", "!=", "<", "<=", ">", ">=", "in", "not in", "is null", "is not null"}
-)
-"""The operators of a filter. Anything else raises, so no operator is free text."""
+FILTER_FORBIDDEN: Final = (";", "--", "/*")
+"""The marks that a filter may not hold, so that it stays one predicate."""
 
 ORACLE_BATCH_ROWS: Final = 50_000
-"""The rows of one fetch from Oracle, so a window never sits whole in memory."""
+"""The rows of one fetch from Oracle, so a chunk never sits whole in memory."""
+
+MONGO_BATCH_ROWS: Final = 50_000
+"""The documents of one page of MongoDB, so a chunk never sits whole in memory."""
 
 ORACLE_KEEPALIVE_MINUTES: Final = 2
 """The minutes between the probes that stop a firewall from dropping a connection."""

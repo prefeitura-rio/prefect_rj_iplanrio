@@ -4,8 +4,7 @@ from psycopg.sql import SQL, Identifier, Literal
 
 from toolkit.executor.constants import TEMPLATES_DIR
 from toolkit.executor.render import render_template, to_sql
-from toolkit.types import TemplateValue
-from toolkit.utils import column_aliases
+from toolkit.utils import build_column_aliases
 
 ATTACH = {"alias": '"a"', "project": "'project=p'"}
 
@@ -80,23 +79,25 @@ def test_a_pipeline_template_can_import_a_toolkit_macro(tmp_path):
         ),
     ],
 )
-def test_the_columns_are_renamed_to_slugs_that_bigquery_accepts(columns, expected):
+def test_the_columns_are_renamed_to_slugs_that_bigquery_accepts(
+    columns, expected, dump_values
+):
     """Rename each column to a slug, and quote the original name."""
-    values = dump_values(columns=column_aliases(columns))
+    values = dump_values(columns=build_column_aliases(columns))
 
-    sql = render_template("duckdb/extract_window", values)
+    sql = render_template("duckdb/extract_chunk", values)
 
     assert f"SELECT {expected}\n" in sql
 
 
-def test_a_cast_column_is_cast_in_the_select_list():
+def test_a_cast_column_is_cast_in_the_select_list(dump_values):
     """Cast the column that the select list marks with a type."""
     values = dump_values(
         columns=[{"source": SQL('"h"'), "target": SQL('"h"'), "cast": SQL("VARCHAR")}]
     )
 
     assert 'SELECT CAST("h" AS VARCHAR) AS "h"\n' in render_template(
-        "duckdb/extract_window", values
+        "duckdb/extract_chunk", values
     )
 
 
@@ -119,9 +120,11 @@ def test_a_cast_column_is_cast_in_the_select_list():
         pytest.param("mssql", "mssql_scan('src', 'q')", id="mssql"),
     ],
 )
-def test_each_source_runs_a_native_query_through_its_own_function(db_type, expected):
+def test_each_source_runs_a_native_query_through_its_own_function(
+    db_type, expected, dump_values
+):
     """Wrap the native query in the function of the source extension."""
-    sql = render_template("duckdb/extract_window", dump_values(type=db_type))
+    sql = render_template("duckdb/extract_chunk", dump_values(type=db_type))
 
     assert f"FROM {expected}\n" in sql
 
@@ -146,14 +149,16 @@ def test_each_source_runs_a_native_query_through_its_own_function(db_type, expec
         ),
     ],
 )
-def test_the_options_of_a_source_reach_its_table_expression(changes, expected):
+def test_the_options_of_a_source_reach_its_table_expression(
+    changes, expected, dump_values
+):
     """Pass the sheet name and the ArcGIS where clause to the table expression."""
-    sql = render_template("duckdb/extract_window", dump_values(**changes))
+    sql = render_template("duckdb/extract_chunk", dump_values(**changes))
 
     assert expected in sql
 
 
-def test_a_sheet_is_written_from_local_files():
+def test_a_sheet_is_written_from_local_files(dump_values):
     """Read the files, and copy them to the spreadsheet with the `gsheet` format."""
     values = dump_values(type="csv", spreadsheet=Literal("id1"), sheet=Literal("Aba 1"))
 
@@ -163,43 +168,59 @@ def test_a_sheet_is_written_from_local_files():
     assert "TO 'id1' (FORMAT gsheet, SHEET 'Aba 1')" in sql
 
 
-def test_an_attached_table_wins_over_the_native_query():
+def test_an_attached_table_wins_over_the_native_query(dump_values):
     """Read `src.public.orders`, so DuckDB can push the filters down to the source."""
     values = dump_values(table=Identifier("src", "public", "orders"))
 
-    sql = render_template("duckdb/extract_window", values)
+    sql = render_template("duckdb/extract_chunk", values)
 
     assert 'FROM "src"."public"."orders"\n' in sql
     assert "postgres_query" not in sql
 
 
 @pytest.mark.parametrize(
-    ("predicates", "expected"),
+    ("filters", "predicates", "expected"),
     [
         pytest.param(
+            [],
             [{"column": Identifier("id"), "op": ">=", "value": Literal(10)}],
             'WHERE "id" >= 10',
-            id="one_filter",
+            id="a_chunk_alone",
         ),
         pytest.param(
+            [],
             [
                 {"column": Identifier("id"), "op": ">=", "value": Literal(10)},
                 {"column": Identifier("nome"), "op": "is null"},
             ],
             'WHERE "id" >= 10 AND "nome" is null',
-            id="filters_joined_by_and",
+            id="chunk_conditions_joined_by_and",
+        ),
+        pytest.param(
+            ["(status <> 'x')", "(a = 1 OR b = 2)"],
+            [],
+            "WHERE (status <> 'x') AND (a = 1 OR b = 2)",
+            id="filters_alone",
+        ),
+        pytest.param(
+            ["(status <> 'x')"],
+            [{"column": Identifier("id"), "op": "<", "value": Literal(5)}],
+            "WHERE (status <> 'x') AND \"id\" < 5",
+            id="filters_come_before_the_chunk",
         ),
     ],
 )
-def test_the_filters_become_a_where_clause(predicates, expected):
-    """Add `WHERE` with every filter, and nothing when there are no filters."""
-    values = dump_values(predicates=predicates)
+def test_the_filters_and_the_chunk_become_a_where_clause(
+    filters, predicates, expected, dump_values
+):
+    """Add `WHERE` with every condition, and nothing when there are none."""
+    values = dump_values(filters=filters, predicates=predicates)
 
-    assert expected in render_template("duckdb/extract_window", values)
-    assert "WHERE" not in render_template("duckdb/extract_window", dump_values())
+    assert expected in render_template("duckdb/extract_chunk", values)
+    assert "WHERE" not in render_template("duckdb/extract_chunk", dump_values())
 
 
-def test_a_source_is_read_whole_with_a_plain_select():
+def test_a_source_is_read_whole_with_a_plain_select(dump_values):
     """Select every row of a native query or of an attached table."""
     native = render_template("duckdb/select_source", dump_values(type="bigquery"))
     attached = render_template(
@@ -208,16 +229,3 @@ def test_a_source_is_read_whole_with_a_plain_select():
 
     assert "SELECT * FROM bigquery_query('src', 'q')" in native
     assert 'SELECT * FROM "src"."ds"."t"' in attached
-
-
-def dump_values(**changes):
-    """Return the values of a dump, with the given changes."""
-    values: dict[str, TemplateValue] = {
-        "type": "postgres",
-        "alias": Literal("src"),
-        "secret": Literal("src_secret"),
-        "query": Literal("q"),
-        "target": Literal("out.parquet"),
-        "columns": column_aliases(["a"]),
-    }
-    return values | changes

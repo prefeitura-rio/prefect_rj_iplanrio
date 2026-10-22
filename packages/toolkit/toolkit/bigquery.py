@@ -51,7 +51,7 @@ class BigQuery:
             stack.push_async_callback(to_thread, client.close)
             yield cls(client=client)
 
-    async def table_exists(self, table: str) -> bool:
+    async def has_table(self, table: str) -> bool:
         """Return whether `project.dataset.table` exists."""
 
         def run() -> bool:

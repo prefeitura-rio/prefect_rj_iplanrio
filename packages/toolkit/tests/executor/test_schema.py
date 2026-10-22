@@ -34,7 +34,13 @@ from polars import (
 from polars import Decimal as polars_Decimal
 
 from toolkit.executor.constants import GEOMETRY_EXTENSION
-from toolkit.executor.schema import Column, SchemaError, build_columns, validate_frame
+from toolkit.executor.dataset import convert_columns
+from toolkit.executor.schema import (
+    Column,
+    SchemaError,
+    build_columns,
+    validate_dataframe,
+)
 from toolkit.types import Geometry
 
 
@@ -90,12 +96,12 @@ DAY = date(2024, 1, 1)
 
 
 def order(**columns: object) -> DataFrame:
-    """Build a frame of one order, with extra columns."""
+    """Build a dataframe of one order, with extra columns."""
     return DataFrame({"id": [1], "name": ["a"], "day": [DAY], **columns})
 
 
 def place(dtype: DataType) -> DataFrame:
-    """Build a frame of one place whose geometry has the type."""
+    """Build a dataframe of one place whose geometry has the type."""
     wkb = Series("geom", [b"\x01\x01\x00\x00\x00" + bytes(16)], dtype=Binary)
     return DataFrame({"id": [1], "geom": wkb.cast(dtype)})
 
@@ -159,7 +165,7 @@ def test_an_annotation_without_a_polars_type_is_rejected(annotation, message):
 
 
 @pytest.mark.parametrize(
-    ("schema", "frame", "expected"),
+    ("schema", "dataframe", "expected"),
     [
         pytest.param(
             Order,
@@ -223,13 +229,15 @@ def test_an_annotation_without_a_polars_type_is_rejected(annotation, message):
         ),
     ],
 )
-def test_a_frame_that_fits_is_returned_with_the_schema_types(schema, frame, expected):
-    """Return a frame that fits, with the schema types."""
-    assert validate_frame(frame, build_columns(schema)).schema == expected
+def test_a_dataframe_that_fits_is_returned_with_the_schema_types(
+    schema, dataframe, expected
+):
+    """Return a dataframe that fits, with the schema types."""
+    assert validate_dataframe(dataframe, build_columns(schema)).schema == expected
 
 
 @pytest.mark.parametrize(
-    ("schema", "frame", "message"),
+    ("schema", "dataframe", "message"),
     [
         pytest.param(
             Order, order().drop("name"), "missing columns: name", id="missing"
@@ -270,18 +278,18 @@ def test_a_frame_that_fits_is_returned_with_the_schema_types(schema, frame, expe
         ),
     ],
 )
-def test_a_frame_that_does_not_fit_is_rejected_naming_the_column(
-    schema, frame, message
+def test_a_dataframe_that_does_not_fit_is_rejected_naming_the_column(
+    schema, dataframe, message
 ):
-    """Reject a frame that does not fit, naming the column."""
+    """Reject a dataframe that does not fit, naming the column."""
     with pytest.raises(SchemaError, match=message):
-        validate_frame(frame, build_columns(schema))
+        validate_dataframe(dataframe, build_columns(schema))
 
 
 def test_every_problem_is_reported_at_once():
     """Report every problem at once."""
     with pytest.raises(SchemaError) as error:
-        validate_frame(DataFrame({"id": ["1"], "extra": [1]}), build_columns(Order))
+        validate_dataframe(DataFrame({"id": ["1"], "extra": [1]}), build_columns(Order))
 
     assert str(error.value).split("; ")[:2] == [
         "missing columns: name, day",
@@ -310,9 +318,58 @@ def test_any_integer_type_widens_to_int64_and_keeps_its_values(data):
     dtype, low, high = data.draw(st.sampled_from(INTEGERS))
     values = data.draw(st.lists(st.integers(low, high), min_size=1))
 
-    result = validate_frame(
+    result = validate_dataframe(
         DataFrame({"id": Series(values, dtype=dtype)}), build_columns(OnlyId)
     )
 
     assert result.schema == Schema({"id": Int64})
     assert result["id"].to_list() == values
+
+
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        pytest.param(
+            Schema({"id": Int64, "nome": String}),
+            {
+                "id": Column(Int64, nullable=False),
+                "nome": Column(String, nullable=False),
+            },
+            id="a_polars_schema_has_no_nulls",
+        ),
+        pytest.param(
+            {"id": Int64, "nota": Column(String, nullable=True)},
+            {
+                "id": Column(Int64, nullable=False),
+                "nota": Column(String, nullable=True),
+            },
+            id="a_column_keeps_its_nullability",
+        ),
+        pytest.param(
+            {"id": Int64()},
+            {"id": Column(Int64(), nullable=False)},
+            id="a_type_instance_has_no_nulls",
+        ),
+        pytest.param({}, {}, id="an_empty_map_expects_nothing"),
+    ],
+)
+def test_a_map_of_polars_types_is_a_map_of_columns(given, expected):
+    """Make a bare type a column with no nulls, and keep a `Column` as it is."""
+    assert convert_columns(given) == expected
+
+
+def test_a_polars_schema_refuses_a_null():
+    """Raise `SchemaError` for a null in a column of a Polars schema."""
+    dataframe = DataFrame({"id": [1, None]})
+
+    with pytest.raises(SchemaError, match="id: 1 null values"):
+        validate_dataframe(dataframe, convert_columns(Schema({"id": Int64})))
+
+
+def test_a_column_that_says_nullable_accepts_the_null():
+    """Return the dataframe when the schema says that the column holds nulls."""
+    dataframe = DataFrame({"id": [1, None]})
+
+    assert validate_dataframe(
+        dataframe, convert_columns({"id": Column(Int64, nullable=True)})
+    ).equals(dataframe)

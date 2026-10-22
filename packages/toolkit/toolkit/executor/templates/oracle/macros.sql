@@ -31,16 +31,17 @@ XMLSERIALIZE(CONTENT {{ column.name }} AS CLOB)
 {
   "kind": "macro",
   "name": "oracle.where_clause",
-  "description": "List the filters of a read as a WHERE clause with binds, or nothing when there are none.",
+  "description": "List the filters and the chunk of a read as a WHERE clause with binds, or nothing when there are none.",
   "inputs": {
-    "predicates": "Each filter as a mapping with a column identifier, an operator from the fixed list and, for most operators, the text of a bind or of a list of binds."
+    "predicates": "Each condition of the chunk as a mapping with a column identifier, an operator from the fixed list and, for most operators, the text of a bind.",
+    "filters": "Each filter as the text of one Oracle condition, already in parentheses. Optional."
   },
-  "returns": "A clause such as WHERE \"ID\" >= :p0."
+  "returns": "A clause such as WHERE (\"STATUS\" <> 'x') AND \"ID\" >= :p0."
 }
 #}
-{% macro where_clause(predicates) -%}
-{%- if predicates -%}
-WHERE {% for item in predicates -%}
+{% macro where_clause(predicates, filters=[]) -%}
+{%- if predicates or filters -%}
+WHERE {{ filters | join(" AND ") }}{{ " AND " if filters and predicates }}{% for item in predicates -%}
 {{ item.column }} {{ item.op }}{% if item.value is defined %} {{ item.value }}{% endif %}{{ " AND " if not loop.last }}
 {%- endfor -%}
 {%- endif -%}

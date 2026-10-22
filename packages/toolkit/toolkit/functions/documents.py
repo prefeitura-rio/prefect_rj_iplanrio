@@ -13,12 +13,12 @@ from ..constants import AREA_CODES
 from .decorators import arrow
 
 
-def cpf_weights(count: int) -> Sequence[int]:
+def build_cpf_weights(count: int) -> Sequence[int]:
     """Return the CPF weights of the first `count` digits, `count + 1` down to 2."""
     return range(count + 1, 1, -1)
 
 
-def cnpj_weights(count: int) -> Sequence[int]:
+def build_cnpj_weights(count: int) -> Sequence[int]:
     """Return the weights of the first `count` characters of a CNPJ, from 2 to 9."""
     return [position % 8 + 2 for position in reversed(range(count))]
 
@@ -48,23 +48,23 @@ def has_check_digits(
     )
 
 
-def cpf_text(column: Expr) -> Expr:
+def clean_cpf_text(column: Expr) -> Expr:
     """Keep the digits of a text."""
     return column.str.replace_all(r"\D", "")
 
 
-def cpf_valid(text: Expr) -> Expr:
+def check_cpf(text: Expr) -> Expr:
     """Tell if a text of digits is a CPF."""
     digits = text.str.extract_all(r"\d").list.eval(element().cast(Int64))
-    return has_check_digits(digits, 11, cpf_weights)
+    return has_check_digits(digits, 11, build_cpf_weights)
 
 
-def cnpj_text(column: Expr) -> Expr:
+def clean_cnpj_text(column: Expr) -> Expr:
     """Keep the digits and the upper case letters of a text."""
     return column.str.to_uppercase().str.replace_all(r"[^0-9A-Z]", "")
 
 
-def cnpj_valid(text: Expr) -> Expr:
+def check_cnpj(text: Expr) -> Expr:
     """Tell if a text of digits and letters is a CNPJ, with the new letters too.
 
     The value of a character is its ASCII code minus 48, so `A` is 17.
@@ -73,7 +73,7 @@ def cnpj_valid(text: Expr) -> Expr:
     values = text.str.extract_all(r"[0-9A-Z]").list.eval(
         when(code >= 10).then(code + 7).otherwise(code)
     )
-    return has_check_digits(values, 14, cnpj_weights)
+    return has_check_digits(values, 14, build_cnpj_weights)
 
 
 @arrow(BOOLEAN)
@@ -84,7 +84,7 @@ def is_cpf(column: Expr) -> Expr:
     SELECT is_cpf('529.982.247-25')  -- true
     ```
     """
-    return cpf_valid(cpf_text(column))
+    return check_cpf(clean_cpf_text(column))
 
 
 @arrow(VARCHAR)
@@ -95,8 +95,8 @@ def normalize_cpf(column: Expr) -> Expr:
     SELECT normalize_cpf('529.982.247-25')  -- '52998224725'
     ```
     """
-    text = cpf_text(column)
-    return when(cpf_valid(text)).then(text)
+    text = clean_cpf_text(column)
+    return when(check_cpf(text)).then(text)
 
 
 @arrow(BOOLEAN)
@@ -107,7 +107,7 @@ def is_cnpj(column: Expr) -> Expr:
     SELECT is_cnpj('12.ABC.345/01DE-35')  -- true
     ```
     """
-    return cnpj_valid(cnpj_text(column))
+    return check_cnpj(clean_cnpj_text(column))
 
 
 @arrow(VARCHAR)
@@ -118,8 +118,8 @@ def normalize_cnpj(column: Expr) -> Expr:
     SELECT normalize_cnpj('12.abc.345/01de-35')  -- '12ABC34501DE35'
     ```
     """
-    text = cnpj_text(column)
-    return when(cnpj_valid(text)).then(text)
+    text = clean_cnpj_text(column)
+    return when(check_cnpj(text)).then(text)
 
 
 @arrow(BOOLEAN)

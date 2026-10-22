@@ -1,7 +1,6 @@
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from io import BytesIO
 from json import loads
 from pathlib import Path
 from re import compile as compile_pattern
@@ -10,19 +9,20 @@ from typing import Unpack, cast
 import pytest
 from deltalake import DeltaTable
 from deltalake.exceptions import SchemaMismatchError
-from duckdb import DuckDBPyConnection, Error
 from duckdb import connect as duckdb_connect
+from fixtures import ConcurrentFilesSource, ItemData, ItemDict, ItemModel
 from httpx2 import ConnectError, ConnectTimeout, HTTPStatusError, Request, Response
-from polars import read_parquet
-from psycopg.sql import Composable
 from pyarrow import Table, decimal128
 from pyarrow import array as arrow_array
 from pyarrow import table as arrow_table
 from pyarrow import timestamp as arrow_timestamp
 from pyarrow.parquet import write_table
 from toolkit import gcs
+from toolkit.constants import BATCH_COLUMN
+from toolkit.executor.requests import Changes, Files, Query
+from toolkit.executor.requests import Table as TableOrigin
 from toolkit.executor.sources.backends.files import FilesSource
-from toolkit.types import Batches, TemplateValue
+from toolkit.types import Chunks
 
 from utils import utils
 from utils.constants import DISCORD_LIMIT
@@ -39,22 +39,17 @@ from utils.utils import (
     failure_message,
     files_glob,
     is_transient,
+    load_records_schema,
     load_to_delta,
     publish,
-    read_frame,
-    read_values,
-    source_values,
-    without_batches,
+    read_dataframe,
+    read_request,
+    validate_records,
+    without_chunks,
     write_json_lines,
 )
 
 DESTINATION = Destination("b", "ds", "tb")
-
-
-async def put(store, *keys: str) -> None:
-    """Store a small object under each key."""
-    for key in keys:
-        await store.put_async(key, b"old")
 
 
 def test_a_destination_names_the_files_and_the_external_table():
@@ -65,7 +60,7 @@ def test_a_destination_names_the_files_and_the_external_table():
     assert DESTINATION.table("p") == "p.ds_staging.tb"
 
 
-async def test_regression_clearing_a_table_leaves_a_similar_name_alone(store):
+async def test_regression_clearing_a_table_leaves_a_similar_name_alone(store, put):
     """Regression: the folder of `tb` must not match the files of `tb2`."""
     await put(store, "staging/ds/tb/old.parquet", "staging/ds/tb2/keep.parquet")
 
@@ -142,8 +137,8 @@ ROWS = [
     {"id": 3, "nome": "Caio", "dia": date(2024, 3, 2), "valor": 30.0},
     {"id": 4, "nome": "Dani", "dia": date(2024, 3, 3), "valor": 40.0},
 ]
-NULL_WINDOW = 1  # a dump with `batches` also has the window of the rows with no value
-DAYS: Batches = {"column": "dia", "width": "day", "begin": "2024-03-01", "end": "2024-03-03"}
+NULL_CHUNK = 1  # a dump with `chunks` also has the chunk of the rows with no value
+DAYS: Chunks = {"column": "dia", "width": "day", "begin": "2024-03-01", "end": "2024-03-03"}
 
 
 class Lake:
@@ -168,8 +163,8 @@ class Lake:
 
     async def dump(self, dump_mode: DumpMode = "append", **options: Unpack[DumpOptions]) -> int:
         """Dump the source and return how many commits the table has."""
-        values = source_values("parquet", f"{self.source}/*.parquet")
-        await dump_to_delta(FilesSource(), values, self.uri, dump_mode, options)
+        values = Files(f"{self.source}/*.parquet", "parquet")
+        await dump_to_delta(FilesSource(origin=values), self.uri, dump_mode, options)
         return DeltaTable(self.uri).version() + 1
 
     def writes(self) -> int:
@@ -177,7 +172,7 @@ class Lake:
         return sum(1 for entry in DeltaTable(self.uri).history() if entry.get("operation") == "WRITE")
 
     def rows(self) -> list[tuple[object, ...]]:
-        """Return the rows of the table, sorted by id, without the window column."""
+        """Return the rows of the table, sorted by id, without the chunk column."""
         table = DeltaTable(self.uri).to_pyarrow_table().drop(["batch"])
         return sorted((tuple(row.values()) for row in table.to_pylist()), key=lambda r: r[0])
 
@@ -190,11 +185,11 @@ def lake(tmp_path: Path) -> Lake:
     return lake
 
 
-async def test_the_first_dump_loads_every_window(lake):
-    """Write each day as its own window, and normalize the names of the columns."""
-    commits = await lake.dump(batches=DAYS)
+async def test_the_first_dump_loads_every_chunk(lake):
+    """Write each day as its own chunk, and normalize the names of the columns."""
+    commits = await lake.dump(chunks=DAYS)
 
-    assert commits == 3 + NULL_WINDOW
+    assert commits == 3 + NULL_CHUNK
     assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
     assert sorted(cast("list[str]", DeltaTable(lake.uri).to_pyarrow_table().column("batch").to_pylist())) == [
         "2024-03-01",
@@ -205,41 +200,41 @@ async def test_the_first_dump_loads_every_window(lake):
 
 
 async def test_the_same_data_is_never_written_again(lake):
-    """Skip every window whose fingerprint is in the ledger, so the table gets no commit."""
-    first = await lake.dump(batches=DAYS)
+    """Skip every chunk whose fingerprint is in the ledger, so the table gets no commit."""
+    first = await lake.dump(chunks=DAYS)
 
-    second = await lake.dump(batches=DAYS)
+    second = await lake.dump(chunks=DAYS)
 
     assert second == first
 
 
-async def test_a_changed_window_is_replaced_and_the_others_are_left(lake):
+async def test_a_changed_chunk_is_replaced_and_the_others_are_left(lake):
     """Commit once for the one day that changed, and keep the other days as they are."""
-    first = await lake.dump(batches=DAYS)
+    first = await lake.dump(chunks=DAYS)
     lake.put([*ROWS[:2], {**ROWS[2], "valor": 99.0}, ROWS[3]])
 
-    second = await lake.dump(batches=DAYS)
+    second = await lake.dump(chunks=DAYS)
 
     assert second == first + 1
     assert next(row for row in lake.rows() if row[0] == 3)[3] == 99.0
     assert len(lake.rows()) == 4
 
 
-async def test_a_window_that_became_empty_loses_its_rows(lake):
+async def test_a_chunk_that_became_empty_loses_its_rows(lake):
     """Expire the rows of a day that has none in the source now."""
-    await lake.dump(batches=DAYS)
+    await lake.dump(chunks=DAYS)
     lake.put(ROWS[:3])
 
-    await lake.dump(batches=DAYS)
+    await lake.dump(chunks=DAYS)
 
     assert [row[0] for row in lake.rows()] == [1, 2, 3]
 
 
-async def test_regression_rows_with_no_value_in_the_batch_column_are_loaded(lake):
-    """Regression: a real table had NULL dates, and the windows left them out silently."""
+async def test_regression_rows_with_no_value_in_the_chunk_column_are_loaded(lake):
+    """Regression: a real table had NULL dates, and the chunks left them out silently."""
     lake.put([*ROWS, {"id": 5, "nome": "Eli", "dia": None, "valor": 50.0}])
 
-    await lake.dump(batches=DAYS)
+    await lake.dump(chunks=DAYS)
 
     assert [row[0] for row in lake.rows()] == [1, 2, 3, 4, 5]
     batch = DeltaTable(lake.uri).to_pyarrow_table().to_pylist()
@@ -266,19 +261,19 @@ async def test_the_day_of_a_timestamp_with_a_time_zone_is_the_day_in_sao_paulo(l
         lake.source / "rows.parquet",
     )
 
-    await lake.dump(batches={"column": "instante", "width": "day", "begin": "2024-02-28", "end": "2024-03-03"})
+    await lake.dump(chunks={"column": "instante", "width": "day", "begin": "2024-02-28", "end": "2024-03-03"})
 
     table = DeltaTable(lake.uri).to_pyarrow_table().to_pylist()
     assert {row["id"]: row["batch"] for row in table} == {1: "2024-02-29", 2: "2024-03-01", 3: "2024-03-01"}
 
 
 async def test_the_rows_with_no_value_change_with_the_source(lake):
-    """Replace the NULL window like any other, so a removed row goes away."""
+    """Replace the NULL chunk like any other, so a removed row goes away."""
     lake.put([*ROWS, {"id": 5, "nome": "Eli", "dia": None, "valor": 50.0}])
-    await lake.dump(batches=DAYS)
+    await lake.dump(chunks=DAYS)
 
     lake.put(ROWS)
-    await lake.dump(batches=DAYS)
+    await lake.dump(chunks=DAYS)
 
     assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
 
@@ -286,14 +281,29 @@ async def test_the_rows_with_no_value_change_with_the_source(lake):
 async def test_filters_and_select_narrow_the_rows_and_the_columns(lake):
     """Keep the rows that pass the filters, and only the columns that were asked for."""
     await lake.dump(
-        batches=DAYS,
-        filters=[{"column": "valor", "op": ">", "value": 15}],
+        chunks=DAYS,
+        filters=["valor > 15"],
         select=["id", "dia"],
     )
 
     table = DeltaTable(lake.uri).to_pyarrow_table()
     assert table.column_names == ["id", "dia", "batch"]
     assert sorted(cast("list[int]", table.column("id").to_pylist())) == [2, 3, 4]
+
+
+@pytest.mark.parametrize(
+    ("filters", "ids"),
+    [
+        pytest.param(["valor > 15", "id < 4"], [2, 3], id="filters_join_with_and"),
+        pytest.param(["id = 1 OR id = 4"], [1, 4], id="an_or_stays_inside_its_filter"),
+        pytest.param(["id = 1 OR id = 4", "valor > 15"], [4], id="an_or_does_not_reach_the_next_filter"),
+    ],
+)
+async def test_filters_are_where_statements_joined_by_and(lake, filters, ids):
+    """Read a filter as one predicate of the source, and join the filters with AND."""
+    await lake.dump(filters=filters)
+
+    assert [row[0] for row in lake.rows()] == ids
 
 
 @pytest.mark.parametrize(
@@ -359,8 +369,7 @@ async def test_regression_a_capture_from_another_folder_is_still_the_same_captur
     write_table(Table.from_pylist(ROWS), elsewhere / "rows.parquet")
 
     await dump_to_delta(
-        FilesSource(),
-        source_values("parquet", f"{elsewhere}/*.parquet"),
+        FilesSource(origin=Files(f"{elsewhere}/*.parquet", "parquet")),
         lake.uri,
         "append",
         {"capture": FIRST_RUN},
@@ -369,8 +378,8 @@ async def test_regression_a_capture_from_another_folder_is_still_the_same_captur
     assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
 
 
-async def test_a_capture_is_in_the_window_of_its_day(lake):
-    """Name the window after the day of the capture, so a day is a partition."""
+async def test_a_capture_is_in_the_chunk_of_its_day(lake):
+    """Name the chunk after the day of the capture, so a day is a partition."""
     await lake.dump(capture=FIRST_RUN)
     await lake.dump(capture=SECOND_RUN)
     await lake.dump(capture=NEXT_DAY_RUN)
@@ -383,7 +392,7 @@ async def test_a_capture_is_in_the_window_of_its_day(lake):
     ("dump_mode", "options"),
     [
         pytest.param("overwrite", {}, id="overwrite"),
-        pytest.param("append", {"batches": DAYS}, id="batches"),
+        pytest.param("append", {"chunks": DAYS}, id="chunks"),
     ],
 )
 async def test_a_capture_refuses_what_would_replace_the_earlier_ones(lake, dump_mode, options):
@@ -394,31 +403,24 @@ async def test_a_capture_refuses_what_would_replace_the_earlier_ones(lake, dump_
     assert not DeltaTable.is_deltatable(lake.uri)
 
 
-def stamps(lake) -> dict[int, datetime]:
-    """Return the extraction time of each id."""
-    table = DeltaTable(lake.uri).to_pyarrow_table()
-    ids, times = table.column("id").to_pylist(), table.column("_prefect_extracted_at").to_pylist()
-    return cast("dict[int, datetime]", dict(zip(ids, times, strict=True)))
-
-
-async def test_the_extraction_time_is_added_and_only_a_changed_window_gets_a_new_one(lake):
-    """Keep the time of a window that did not change, and stamp the one that was replaced."""
-    await lake.dump(batches=DAYS, columns={"add_timestamp": True})
+async def test_the_extraction_time_is_added_and_only_a_changed_chunk_gets_a_new_one(lake, stamps):
+    """Keep the time of a chunk that did not change, and stamp the one that was replaced."""
+    await lake.dump(chunks=DAYS, columns={"add_timestamp": True})
     first = stamps(lake)
 
     lake.put([ROWS[0], ROWS[1], {**ROWS[2], "valor": 99.0}, ROWS[3]])
-    await lake.dump(batches=DAYS, columns={"add_timestamp": True})
+    await lake.dump(chunks=DAYS, columns={"add_timestamp": True})
     second = stamps(lake)
 
     assert (second[1], second[2], second[4]) == (first[1], first[2], first[4])
     assert second[3] > first[3]
 
 
-async def test_the_extraction_time_does_not_make_a_window_look_changed(lake):
+async def test_the_extraction_time_does_not_make_a_chunk_look_changed(lake):
     """Write no commit on a rerun, because the time is not part of the fingerprint."""
-    commits = await lake.dump(batches=DAYS, columns={"add_timestamp": True})
+    commits = await lake.dump(chunks=DAYS, columns={"add_timestamp": True})
 
-    assert await lake.dump(batches=DAYS, columns={"add_timestamp": True}) == commits
+    assert await lake.dump(chunks=DAYS, columns={"add_timestamp": True}) == commits
 
 
 async def test_a_source_column_with_the_name_of_the_time_is_refused(lake):
@@ -431,95 +433,95 @@ async def test_a_source_column_with_the_name_of_the_time_is_refused(lake):
 
 async def test_normalize_values_cleans_the_text_columns(lake):
     """Trim the text inside the dump."""
-    await lake.dump(batches=DAYS, columns={"normalize_values": True})
+    await lake.dump(chunks=DAYS, columns={"normalize_values": True})
 
     assert next(row[1] for row in lake.rows()) == "Ana"
 
 
-async def test_a_new_config_loads_every_window_again(lake):
-    """Treat the windows as not loaded when what is written changes."""
-    first = await lake.dump(batches=DAYS)
+async def test_a_new_config_loads_every_chunk_again(lake):
+    """Treat the chunks as not loaded when what is written changes."""
+    first = await lake.dump(chunks=DAYS)
 
-    second = await lake.dump(batches=DAYS, columns={"normalize_values": True})
+    second = await lake.dump(chunks=DAYS, columns={"normalize_values": True})
 
-    assert second == first + 3 + NULL_WINDOW
+    assert second == first + 3 + NULL_CHUNK
 
 
 async def test_append_refuses_a_change_of_columns_and_overwrite_applies_it(lake):
     """Keep one schema in append, and replace it when the dump is rebuilt in overwrite."""
-    await lake.dump(batches=DAYS)
+    await lake.dump(chunks=DAYS)
 
     with pytest.raises(SchemaMismatchError):
-        await lake.dump(batches=DAYS, select=["id", "dia"])
+        await lake.dump(chunks=DAYS, select=["id", "dia"])
 
-    await lake.dump("overwrite", batches=DAYS, select=["id", "dia"])
+    await lake.dump("overwrite", chunks=DAYS, select=["id", "dia"])
 
     table = DeltaTable(lake.uri).to_pyarrow_table()
     assert table.column_names == ["id", "dia", "batch"]
     assert table.num_rows == len(ROWS)
 
 
-async def test_overwrite_writes_every_window_again_and_sweeps_the_old_ones(lake):
-    """Rewrite the same data in overwrite mode, and delete the windows outside the range."""
-    await lake.dump(batches=DAYS)
+async def test_overwrite_writes_every_chunk_again_and_sweeps_the_old_ones(lake):
+    """Rewrite the same data in overwrite mode, and delete the chunks outside the range."""
+    await lake.dump(chunks=DAYS)
     before = lake.writes()
 
-    await lake.dump("overwrite", batches={**DAYS, "begin": "2024-03-02"})
+    await lake.dump("overwrite", chunks={**DAYS, "begin": "2024-03-02"})
 
-    assert lake.writes() == before + 2 + NULL_WINDOW
+    assert lake.writes() == before + 2 + NULL_CHUNK
     assert [row[0] for row in lake.rows()] == [3, 4]
 
 
-async def test_overwrite_ignores_lookback_and_rebuilds_every_window(lake):
-    """Rewrite all the windows in overwrite mode, even when lookback names only the last one."""
-    await lake.dump(batches=DAYS)
+async def test_overwrite_ignores_lookback_and_rebuilds_every_chunk(lake):
+    """Rewrite all the chunks in overwrite mode, even when lookback names only the last one."""
+    await lake.dump(chunks=DAYS)
     before = lake.writes()
 
-    await lake.dump("overwrite", batches={**DAYS, "lookback": 1})
+    await lake.dump("overwrite", chunks={**DAYS, "lookback": 1})
 
-    assert lake.writes() == before + 3 + NULL_WINDOW
+    assert lake.writes() == before + 3 + NULL_CHUNK
 
 
-async def test_an_earlier_window_never_loaded_is_loaded_even_with_lookback(lake):
-    """Let lookback limit the re-checks only, and not the first load of an older window."""
-    await lake.dump(batches={**DAYS, "begin": "2024-03-02"})
+async def test_an_earlier_chunk_never_loaded_is_loaded_even_with_lookback(lake):
+    """Let lookback limit the re-checks only, and not the first load of an older chunk."""
+    await lake.dump(chunks={**DAYS, "begin": "2024-03-02"})
 
-    await lake.dump(batches={**DAYS, "lookback": 1})
+    await lake.dump(chunks={**DAYS, "lookback": 1})
 
     assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
 
 
-async def test_a_new_filter_reaches_the_windows_that_lookback_does_not_recheck(lake):
-    """Treat every window as not loaded after a new filter, so no old window keeps its rows."""
-    await lake.dump(batches=DAYS)
+async def test_a_new_filter_reaches_the_chunks_that_lookback_does_not_recheck(lake):
+    """Treat every chunk as not loaded after a new filter, so no old chunk keeps its rows."""
+    await lake.dump(chunks=DAYS)
 
-    await lake.dump(batches={**DAYS, "lookback": 1}, filters=[{"column": "valor", "op": ">", "value": 15}])
+    await lake.dump(chunks={**DAYS, "lookback": 1}, filters=["valor > 15"])
 
     assert [row[0] for row in lake.rows()] == [2, 3, 4]
 
 
 async def test_a_dump_that_writes_leaves_a_checkpoint_for_bigquery(lake):
-    """Write a checkpoint after the windows, so a query does not replay a long log."""
-    await lake.dump(batches=DAYS)
+    """Write a checkpoint after the chunks, so a query does not replay a long log."""
+    await lake.dump(chunks=DAYS)
 
     log = Path(lake.uri, "_delta_log")
     assert any("checkpoint" in entry.name for entry in log.iterdir())
 
 
-async def test_lookback_skips_the_windows_that_it_does_not_recheck(lake):
-    """Do not read an old window again, but always load a window that is new."""
-    await lake.dump(batches=DAYS)
+async def test_lookback_skips_the_chunks_that_it_does_not_recheck(lake):
+    """Do not read an old chunk again, but always load a chunk that is new."""
+    await lake.dump(chunks=DAYS)
     lake.put([{**ROWS[0], "valor": 11.0}, *ROWS[1:], {**ROWS[3], "id": 5, "dia": date(2024, 3, 4)}])
     wider = {**DAYS, "end": "2024-03-04", "lookback": 1}
 
-    await lake.dump(batches=wider)
+    await lake.dump(chunks=wider)
 
     by_id = {row[0]: row for row in lake.rows()}
     assert by_id[1][3] == 10.0
     assert 5 in by_id
 
 
-async def test_without_batches_the_whole_source_is_one_window(lake):
+async def test_without_batches_the_whole_source_is_one_chunk(lake):
     """Replace the whole table when the data changes, and skip it when it does not."""
     first = await lake.dump()
     assert await lake.dump() == first
@@ -533,12 +535,9 @@ async def test_without_batches_the_whole_source_is_one_window(lake):
 @pytest.mark.parametrize(
     ("options", "message"),
     [
-        pytest.param({"batches": {**DAYS, "column": "nada"}}, "must exist", id="a_batch_column_that_is_missing"),
-        pytest.param(
-            {"filters": [{"column": "nada", "op": "=", "value": 1}]},
-            "Unknown columns",
-            id="a_filter_on_a_missing_column",
-        ),
+        pytest.param({"chunks": {**DAYS, "column": "nada"}}, "must exist", id="a_chunk_column_that_is_missing"),
+        pytest.param({"filters": ["id = 1; DROP TABLE t"]}, "one predicate", id="a_second_statement_in_a_filter"),
+        pytest.param({"filters": [" "]}, "is empty", id="an_empty_filter"),
         pytest.param({"select": ["nada"]}, "Unknown columns", id="a_missing_column_to_select"),
     ],
 )
@@ -568,29 +567,46 @@ async def test_a_delta_table_without_a_connection_is_refused():
         await publish(DESTINATION, "p", None)
 
 
-def composed(value: TemplateValue) -> str:
-    """Return a template value that is an SQL fragment, as text."""
-    match value:
-        case Composable():
-            return value.as_string(None)
-        case _:
-            raise AssertionError(value)
-
-
 @pytest.mark.parametrize(
     ("db_type", "read", "batched", "expected"),
     [
-        pytest.param("postgres", {"table": "public.orders"}, True, 'FROM "src"."public"."orders"', id="a_table"),
-        pytest.param("mysql", {"table": "app.orders"}, False, '"src"."app"."orders"', id="a_table_of_mysql"),
-        pytest.param("postgres", {"query": "SELECT 1"}, False, "'SELECT 1'", id="a_native_query"),
+        pytest.param("postgres", {"table": "public.orders"}, True, TableOrigin("public.orders"), id="a_table"),
+        pytest.param("oracle", {"table": "APP.ORDERS"}, True, TableOrigin("APP.ORDERS"), id="a_table_of_oracle"),
+        pytest.param("postgres", {"query": "SELECT 1"}, False, Query("SELECT 1", "postgres"), id="a_native_query"),
+        pytest.param("bigquery", {"query": "SELECT 1"}, False, Query("SELECT 1", "bigquery"), id="a_bigquery_query"),
+        pytest.param(
+            "oracle",
+            {"query": "SELECT 1 FROM dual"},
+            True,
+            Query("SELECT 1 FROM dual", "oracle"),
+            id="a_query_of_oracle_is_cut",
+        ),
+        pytest.param("couchdb", {"table": "db"}, True, TableOrigin("db"), id="a_couchdb_database"),
+        pytest.param("couchdb", {"query": "{}"}, False, Query("{}", "couchdb"), id="a_couchdb_selector"),
+        pytest.param(
+            "couchdb",
+            {"table": "db", "query": "{}"},
+            False,
+            Query("{}", "couchdb", "db"),
+            id="a_selector_of_a_database",
+        ),
+        pytest.param("couchdb", {"since": "0"}, False, Changes("0"), id="couchdb_changes"),
+        pytest.param(
+            "couchdb", {"table": "db", "since": "now"}, False, Changes("now", "db"), id="changes_of_a_database"
+        ),
+        pytest.param("mongodb", {"table": "pessoas"}, True, TableOrigin("pessoas"), id="a_mongodb_collection"),
+        pytest.param(
+            "mongodb",
+            {"table": "p", "query": '{"a": 1}'},
+            False,
+            Query('{"a": 1}', "mongodb", "p"),
+            id="a_mongodb_selector",
+        ),
     ],
 )
-def test_a_table_is_attached_and_a_query_is_a_literal(db_type, read, batched, expected):
-    """Give an identifier for a table, and a literal for a native query."""
-    values = read_values(db_type, read, batched)
-
-    key = "table" if "table" in read else "query"
-    assert expected.split("FROM ")[-1] == composed(values[key])
+def test_a_read_names_the_origin_that_the_database_reads(db_type, read, batched, expected):
+    """Give a table, a query or the changes of a database, as the type of database reads."""
+    assert read_request(db_type, read, batched) == expected
 
 
 @pytest.mark.parametrize(
@@ -598,38 +614,32 @@ def test_a_table_is_attached_and_a_query_is_a_literal(db_type, read, batched, ex
     [
         pytest.param("postgres", {}, False, "exactly one", id="neither"),
         pytest.param("postgres", {"table": "a.b", "query": "SELECT 1"}, False, "exactly one", id="both"),
-        pytest.param("postgres", {"query": "SELECT 1"}, True, "one window", id="windows_over_a_query"),
+        pytest.param("postgres", {"query": "SELECT 1"}, True, "one chunk", id="chunks_over_a_query"),
+        pytest.param("couchdb", {}, False, "Give a table", id="a_database_with_nothing"),
+        pytest.param("couchdb", {"query": "{}", "since": "0"}, False, "not both", id="query_and_since"),
+        pytest.param("mongodb", {"table": "c", "since": "0"}, False, "only CouchDB", id="mongodb_has_no_changes"),
     ],
 )
 def test_a_read_that_does_not_fit_is_refused(db_type, read, batched, message):
     """Raise before any connection, so a typo never reaches the database."""
     with pytest.raises(ValueError, match=message):
-        read_values(db_type, read, batched)
-
-
-async def stored_rows(store, prefix: str) -> list[int]:
-    """Return the ids of every Parquet object under a prefix."""
-    ids: list[int] = []
-    for key in await gcs.list_keys(store, prefix):
-        data = bytes(await (await store.get_async(key)).bytes_async())
-        ids += read_parquet(BytesIO(data))["id"].to_list()
-    return sorted(ids)
+        read_request(db_type, read, batched)
 
 
 @pytest.fixture
 def batches_in_a_bucket(store, lake, monkeypatch):
     """Return a function that copies the lake in batches to an in-memory bucket."""
     monkeypatch.setattr(utils, "create_store", lambda *_: store)
-    values = source_values("parquet", f"{lake.source}/*.parquet")
+    values = Files(f"{lake.source}/*.parquet", "parquet")
 
     async def run(dump_mode: DumpMode, batch_size: int) -> None:
         """Copy the four sample rows."""
-        await dump_in_batches(FilesSource(), values, DESTINATION, dump_mode, batch_size)
+        await dump_in_batches(FilesSource(origin=values), DESTINATION, dump_mode, batch_size)
 
     return run
 
 
-async def test_a_source_is_copied_in_batches_of_the_given_size(store, batches_in_a_bucket):
+async def test_a_source_is_copied_in_batches_of_the_given_size(store, batches_in_a_bucket, stored_rows):
     """Write one Parquet object for each batch of rows, and lose no row."""
     await batches_in_a_bucket("append", 3)
 
@@ -638,7 +648,7 @@ async def test_a_source_is_copied_in_batches_of_the_given_size(store, batches_in
     assert await stored_rows(store, DESTINATION.prefix) == [1, 2, 3, 4]
 
 
-async def test_append_keeps_the_old_objects_and_overwrite_deletes_them(store, batches_in_a_bucket):
+async def test_append_keeps_the_old_objects_and_overwrite_deletes_them(store, batches_in_a_bucket, put):
     """Add objects in append mode, and start from an empty prefix in overwrite mode."""
     await put(store, f"{DESTINATION.prefix}/old.parquet")
 
@@ -656,30 +666,29 @@ async def test_append_keeps_the_old_objects_and_overwrite_deletes_them(store, ba
     [
         pytest.param(None, False, id="no_options"),
         pytest.param({"select": ["a"]}, False, id="options_without_batches"),
-        pytest.param({"batches": DAYS}, True, id="batches_over_a_source_read_whole"),
+        pytest.param({"chunks": DAYS}, True, id="batches_over_a_source_read_whole"),
     ],
 )
-def test_a_source_read_whole_is_never_cut_into_windows(options, fails):
-    """Refuse windows over a source that DuckDB cannot filter, so it is not read many times."""
+def test_a_source_read_whole_is_never_cut_into_chunks(options, fails):
+    """Refuse chunks over a source that DuckDB cannot filter, so it is not read many times."""
     if fails:
-        with pytest.raises(ValueError, match="one window"):
-            without_batches(options, "A layer")
+        with pytest.raises(ValueError, match="one chunk"):
+            without_chunks(options, "A layer")
     else:
-        assert without_batches(options, "A layer") == (options or {})
+        assert without_chunks(options, "A layer") == (options or {})
 
 
 @pytest.mark.parametrize(
-    ("dump_mode", "is_delta", "cleared"),
+    "case",
     [
-        pytest.param("overwrite", False, True, id="overwrite_clears_the_files_of_an_older_layout"),
-        pytest.param("overwrite", True, False, id="overwrite_never_deletes_a_delta_table"),
-        pytest.param("append", False, False, id="append_never_deletes_anything"),
+        pytest.param(("overwrite", False, True), id="overwrite_clears_the_files_of_an_older_layout"),
+        pytest.param(("overwrite", True, False), id="overwrite_never_deletes_a_delta_table"),
+        pytest.param(("append", False, False), id="append_never_deletes_anything"),
     ],
 )
-async def test_the_files_of_an_older_layout_go_before_an_overwrite_builds_a_delta_table(
-    store, monkeypatch, dump_mode, is_delta, cleared
-):
+async def test_the_files_of_an_older_layout_go_before_an_overwrite_builds_a_delta_table(store, monkeypatch, case, put):
     """Delete the old Hive files only when an overwrite meets no Delta table."""
+    dump_mode, is_delta, cleared = case
     monkeypatch.setattr(utils, "create_store", lambda *_: store)
     monkeypatch.setattr(DeltaTable, "is_deltatable", staticmethod(lambda *_: is_delta))
     key = f"{DESTINATION.prefix}/old.parquet"
@@ -700,31 +709,26 @@ async def test_a_delta_load_clears_the_older_layout_before_it_writes(monkeypatch
 
     async def fake_dump(*args: object) -> None:
         """Record the dump, with its URI."""
-        order.append(f"dump:{args[2]}")
+        order.append(f"dump:{args[1]}")
 
     monkeypatch.setattr(utils, "clear_legacy", fake_clear)
     monkeypatch.setattr(utils, "dump_to_delta", fake_dump)
 
-    await load_to_delta(FilesSource(), {}, DESTINATION, "overwrite", None)
+    await load_to_delta(FilesSource(origin=Files("x.parquet", "parquet")), DESTINATION, "overwrite", None)
 
     assert order == ["clear:overwrite", "dump:gcs://b/staging/ds/tb"]
 
 
 async def test_a_number_width_cuts_an_integer_column_into_runs_of_ids(lake):
-    """Window by runs of ids, and keep every row."""
-    commits = await lake.dump(batches={"column": "id", "width": 2, "begin": 1, "end": 4})
+    """Chunk by runs of ids, and keep every row."""
+    commits = await lake.dump(chunks={"column": "id", "width": 2, "begin": 1, "end": 4})
 
-    assert commits == 2 + NULL_WINDOW
+    assert commits == 2 + NULL_CHUNK
     assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
 
 
-def naive(year: int, month: int, day: int, hour: int = 0, minute: int = 0) -> datetime:
-    """Return a timestamp without a time zone, as a database column holds it."""
-    return datetime(year, month, day, hour, minute, tzinfo=UTC).replace(tzinfo=None)
-
-
-async def test_a_date_width_also_cuts_a_timestamp_column(lake):
-    """Window by day over a timestamp, and keep the rows of a day whatever the time."""
+async def test_a_date_width_also_cuts_a_timestamp_column(lake, naive):
+    """Chunk by day over a timestamp, and keep the rows of a day whatever the time."""
     lake.put(
         [
             {"id": 1, "dia": naive(2024, 3, 1, 9), "nome": "a", "valor": 1.0},
@@ -733,14 +737,14 @@ async def test_a_date_width_also_cuts_a_timestamp_column(lake):
         ]
     )
 
-    commits = await lake.dump(batches=DAYS)
+    commits = await lake.dump(chunks=DAYS)
 
-    assert commits == 3 + NULL_WINDOW
+    assert commits == 3 + NULL_CHUNK
     assert [row[0] for row in lake.rows()] == [1, 2, 3]
 
 
 @pytest.mark.parametrize(
-    ("batches", "message"),
+    ("chunks", "message"),
     [
         pytest.param(
             {"column": "nome", "width": "day", "begin": "2024-03-01"},
@@ -756,10 +760,10 @@ async def test_a_date_width_also_cuts_a_timestamp_column(lake):
         pytest.param({"column": "nome", "width": 10, "begin": 0, "end": 5}, "an integer", id="a_number_width_on_text"),
     ],
 )
-async def test_the_batch_column_must_have_the_type_that_the_windows_need(lake, batches, message):
+async def test_the_chunk_column_must_have_the_type_that_the_chunks_need(lake, chunks, message):
     """Refuse a column of another type before any write, as a database would fail on the compare."""
     with pytest.raises(ValueError, match=message):
-        await lake.dump(batches=batches)
+        await lake.dump(chunks=chunks)
 
     assert not DeltaTable.is_deltatable(lake.uri)
 
@@ -795,41 +799,29 @@ def assert_bigquery_can_read(uri: str) -> None:
     assert all(IDENTIFIER.fullmatch(name) for name in schema)
 
 
-@pytest.fixture(scope="module")
-def delta_reader() -> DuckDBPyConnection:
-    """Return a DuckDB connection with the delta extension, an independent reader of the log."""
-    connection = duckdb_connect()
-    try:
-        connection.execute("INSTALL delta")
-        connection.execute("LOAD delta")
-    except Error:
-        pytest.skip("The DuckDB delta extension is not available")
-    return connection
-
-
 async def after_first_load(lake: Lake) -> None:
     """Load the three days."""
-    await lake.dump(batches=DAYS)
+    await lake.dump(chunks=DAYS)
 
 
-async def after_a_replaced_window(lake: Lake) -> None:
+async def after_a_replaced_chunk(lake: Lake) -> None:
     """Change one row, so one day is replaced."""
-    await lake.dump(batches=DAYS)
+    await lake.dump(chunks=DAYS)
     lake.put([*ROWS[:2], {**ROWS[2], "valor": 99.0}, ROWS[3]])
-    await lake.dump(batches=DAYS)
+    await lake.dump(chunks=DAYS)
 
 
-async def after_an_empty_window(lake: Lake) -> None:
+async def after_an_empty_chunk(lake: Lake) -> None:
     """Delete a whole day, so its rows are removed."""
-    await lake.dump(batches=DAYS)
+    await lake.dump(chunks=DAYS)
     lake.put(ROWS[:3])
-    await lake.dump(batches=DAYS)
+    await lake.dump(chunks=DAYS)
 
 
 async def after_an_overwrite_with_other_columns(lake: Lake) -> None:
     """Rebuild with fewer columns, which replaces the schema."""
-    await lake.dump(batches=DAYS)
-    await lake.dump("overwrite", batches=DAYS, select=["id", "dia"])
+    await lake.dump(chunks=DAYS)
+    await lake.dump("overwrite", chunks=DAYS, select=["id", "dia"])
 
 
 @pytest.mark.extensions
@@ -837,8 +829,8 @@ async def after_an_overwrite_with_other_columns(lake: Lake) -> None:
     "scenario",
     [
         pytest.param(after_first_load, id="after_the_first_load"),
-        pytest.param(after_a_replaced_window, id="after_a_replaced_window"),
-        pytest.param(after_an_empty_window, id="after_an_empty_window"),
+        pytest.param(after_a_replaced_chunk, id="after_a_replaced_chunk"),
+        pytest.param(after_an_empty_chunk, id="after_an_empty_chunk"),
         pytest.param(after_an_overwrite_with_other_columns, id="after_an_overwrite_with_other_columns"),
     ],
 )
@@ -857,7 +849,7 @@ async def test_a_reader_that_is_not_ours_sees_what_we_wrote_and_the_log_fits_big
 async def test_the_types_of_the_pipelines_get_the_delta_types_that_bigquery_maps(tmp_path):
     """Pin the Delta type of each column, which BigQuery reads as INTEGER, NUMERIC, DATETIME and so on."""
     instant = datetime(2024, 3, 1, 10, tzinfo=UTC)
-    frame = arrow_table(
+    dataframe = arrow_table(
         {
             "id": [1],
             "texto": ["a"],
@@ -869,10 +861,10 @@ async def test_the_types_of_the_pipelines_get_the_delta_types_that_bigquery_maps
             "instante_utc": arrow_array([instant], arrow_timestamp("us", "UTC")),
         }
     )
-    write_table(frame, tmp_path / "types.parquet")
+    write_table(dataframe, tmp_path / "types.parquet")
     uri = str(tmp_path / "table")
 
-    await dump_to_delta(FilesSource(), source_values("parquet", str(tmp_path / "types.parquet")), uri, "append", {})
+    await dump_to_delta(FilesSource(origin=Files(str(tmp_path / "types.parquet"), "parquet")), uri, "append", {})
 
     assert delta_log(uri)[1] == {
         "id": "long",
@@ -926,8 +918,7 @@ async def test_json_lines_load_as_rows_and_nested_values_stay_nested(tmp_path):
     uri = str(tmp_path / "table")
 
     await dump_to_delta(
-        FilesSource(),
-        source_values("json", f"{folder}/**/*.json"),
+        FilesSource(origin=Files(f"{folder}/**/*.json", "json")),
         uri,
         "append",
         {"capture": datetime(2024, 3, 10, 9, tzinfo=UTC)},
@@ -937,11 +928,11 @@ async def test_json_lines_load_as_rows_and_nested_values_stay_nested(tmp_path):
     assert [(row["id"], row["nome"], row["tags"]) for row in table] == [(1, "Ana", ["a", "b"]), (2, "Bia", [])]
 
 
-async def test_a_query_is_read_into_one_frame(lake):
-    """Return every row of the source in one Polars frame."""
-    frame = await read_frame(FilesSource(), source_values("parquet", f"{lake.source}/*.parquet"))
+async def test_a_query_is_read_into_one_dataframe(lake):
+    """Return every row of the source in one Polars dataframe."""
+    dataframe = await read_dataframe(FilesSource(origin=Files(f"{lake.source}/*.parquet", "parquet")))
 
-    assert frame["id"].to_list() == [1, 2, 3, 4]
+    assert dataframe["id"].to_list() == [1, 2, 3, 4]
 
 
 def test_the_capture_time_is_the_scheduled_start_in_sao_paulo():
@@ -967,3 +958,91 @@ def test_a_text_that_is_not_an_epsg_code_is_refused(crs):
     """Raise before the number goes into a URL."""
     with pytest.raises(ValueError, match="EPSG"):
         epsg_code(crs)
+
+
+@pytest.mark.parametrize("workers", [2, 4])
+async def test_chunks_read_together_land_in_the_table_as_chunks_read_one_by_one(lake, tmp_path, workers):
+    """Write the same rows and the same chunks, whether one worker reads or several."""
+    origin = Files(f"{lake.source}/*.parquet", "parquet")
+    together = str(tmp_path / "together")
+
+    await dump_to_delta(ConcurrentFilesSource(workers, origin), together, "append", {"chunks": DAYS})
+    await lake.dump(chunks=DAYS)
+
+    def chunks(uri: str) -> list[tuple[object, ...]]:
+        """Return the rows of a table with their chunk, in a fixed order."""
+        table = DeltaTable(uri).to_pyarrow_table().sort_by("id")
+        return [(row["id"], row[BATCH_COLUMN]) for row in table.to_pylist()]
+
+    assert chunks(together) == chunks(lake.uri)
+    assert len(chunks(together)) == len(ROWS)
+
+
+@pytest.mark.parametrize("schema", [ItemModel, ItemData, ItemDict], ids=["model", "dataclass", "typeddict"])
+def test_records_that_fit_a_schema_pass(schema):
+    """Accept a Pydantic model, a dataclass and a `TypedDict`."""
+    validate_records([{"id": 1, "nome": "Ana"}, {"id": 2, "nome": "Bia"}], schema)
+
+
+@pytest.mark.parametrize("schema", [ItemModel, ItemData, ItemDict], ids=["model", "dataclass", "typeddict"])
+def test_a_record_that_does_not_fit_names_its_index_and_its_field(schema):
+    """Raise at the first bad record, and name where it is."""
+    records = [{"id": 1, "nome": "Ana"}, {"id": "dois", "nome": "Bia"}]
+
+    with pytest.raises(ValueError, match=r"record 1: id: "):
+        validate_records(records, schema)
+
+
+def test_the_error_of_a_bad_record_never_holds_its_value():
+    """Keep the data out of the message, so a log or a Discord alert never leaks it."""
+    secret = "valor-secreto-123"
+
+    with pytest.raises(ValueError, match="record 0") as error:
+        validate_records([{"id": secret, "nome": "Ana"}], ItemModel)
+
+    assert secret not in str(error.value)
+
+
+def test_a_missing_field_is_named():
+    """Name a field that the record lacks."""
+    with pytest.raises(ValueError, match=r"record 0: nome: Field required"):
+        validate_records([{"id": 1}], ItemModel)
+
+
+def test_records_are_not_changed_by_the_check():
+    """Leave the records as the API sent them, with no coercion."""
+    records = [{"id": "1", "nome": "Ana"}]
+
+    validate_records(records, ItemModel)
+
+    assert records == [{"id": "1", "nome": "Ana"}]
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        pytest.param("MODEL", ItemModel, id="a_model"),
+        pytest.param("DATA", ItemData, id="a_dataclass"),
+        pytest.param("DICT", ItemDict, id="a_typeddict"),
+    ],
+)
+@pytest.mark.usefixtures("schemas")
+def test_a_records_schema_is_found_by_its_path(name, expected):
+    """Return the type that `module:name` names."""
+    assert load_records_schema(f"schemas_of_the_test:{name}") is expected
+
+
+@pytest.mark.parametrize(
+    ("path", "message"),
+    [
+        pytest.param("no_colon", "module:name", id="a_path_without_a_colon"),
+        pytest.param("missing_module_of_the_test:X", "cannot be imported", id="a_module_that_does_not_exist"),
+        pytest.param("schemas_of_the_test:MISSING", "is not a type", id="a_name_that_does_not_exist"),
+        pytest.param("schemas_of_the_test:NOT_A_TYPE", "is not a type", id="a_name_of_another_kind"),
+    ],
+)
+@pytest.mark.usefixtures("schemas")
+def test_a_records_schema_that_cannot_be_found_is_refused(path, message):
+    """Raise `ValueError` that says what is wrong with the path."""
+    with pytest.raises(ValueError, match=message):
+        load_records_schema(path)

@@ -1,13 +1,13 @@
 """Helpers of the toolkit that no other module owns: the columns of a dump."""
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
-from psycopg.sql import SQL, Composable, Identifier, Literal
+from psycopg.sql import SQL, Composable, Identifier
+from pydantic import JsonValue, TypeAdapter, ValidationError
 
-from .constants import DELTA_CASTS, FILTER_OPERATORS, TEXT_TYPE
+from .constants import DELTA_CASTS, FILTER_FORBIDDEN, TEXT_TYPE
 from .functions.native import normalize
 from .functions.registry import get_functions
-from .types import Filter
 
 
 def normalize_column(name: str, separator: str = "_", lowercase: bool = True) -> str:
@@ -26,7 +26,7 @@ def normalize_column(name: str, separator: str = "_", lowercase: bool = True) ->
     return f"_{text}" if not text or text[0].isdigit() else text
 
 
-def column_aliases(
+def build_column_aliases(
     names: Sequence[str], separator: str = "_", lowercase: bool = True
 ) -> list[dict[str, Identifier]]:
     """Return each column name with its normalized name, as SQL identifiers.
@@ -34,7 +34,7 @@ def column_aliases(
     They are the values of the `normalized_columns` macro of `duckdb/macros.sql`.
 
     ```python
-    column_aliases(["Código", "id"])
+    build_column_aliases(["Código", "id"])
     # [{"source": Identifier("Código"), "target": Identifier("codigo")},
     #  {"source": Identifier("id"), "target": Identifier("id")}]
     ```
@@ -105,7 +105,7 @@ def select_column(
     """Return one column of the select list, with `function` if there is one."""
     if function is not None:
         return {
-            "source": as_text(source, kind),
+            "source": convert_to_text(source, kind),
             "target": Identifier(target),
             "function": Identifier(function),
         }
@@ -116,7 +116,7 @@ def select_column(
     return {**column, "cast": SQL(DELTA_CASTS[kind])} if kind in DELTA_CASTS else column
 
 
-def as_text(name: str, kind: str) -> Composable:
+def convert_to_text(name: str, kind: str) -> Composable:
     """Return a column as text, because the Arrow functions read text."""
     match kind:
         case "VARCHAR":
@@ -127,47 +127,49 @@ def as_text(name: str, kind: str) -> Composable:
             return SQL("CAST({} AS VARCHAR)").format(Identifier(name))
 
 
-def filter_predicates(
-    filters: Sequence[Filter], columns: Collection[str]
-) -> list[dict[str, Composable | str]]:
-    """Return the filters of a dump as typed predicates, ready for `WHERE`.
+def filter_conditions(filters: Sequence[str]) -> list[str]:
+    """Return the filters of a dump as conditions for `WHERE`, each in parentheses.
 
-    Every column must be one of `columns` and every operator one of the list. A value
-    goes through `Literal`, so it never reaches the SQL as text. Anything else raises a
-    `ValueError`.
+    A filter is one SQL predicate in the dialect of the source, so `a = 1 OR b = 2`
+    stays one condition. Raise `ValueError` for an empty filter, for a `;`, or for a
+    comment, so that a filter cannot hold more than one predicate.
 
     ```python
-    filter_predicates([{"column": "id", "op": ">=", "value": 10}], {"id"})
-    # [{"column": Identifier("id"), "op": ">=", "value": Literal(10)}]
+    filter_conditions(["a = 1", "b > 2 OR c IS NULL"])
+    # ["(a = 1)", "(b > 2 OR c IS NULL)"]
     ```
     """
-    unknown = {item["column"] for item in filters} - set(columns)
-    if unknown:
-        raise ValueError(f"Unknown columns: {sorted(unknown)}")
+    conditions: list[str] = []
 
-    return [predicate(item) for item in filters]
+    for item in filters:
+        text = item.strip()
+
+        if not text:
+            raise ValueError("A filter is empty")
+        if any(mark in text for mark in FILTER_FORBIDDEN):
+            raise ValueError(
+                f"A filter is one predicate, without ';' or a comment: {text!r}"
+            )
+
+        conditions.append(f"({text})")
+
+    return conditions
 
 
-def predicate(item: Filter) -> dict[str, Composable | str]:
-    """Return one filter as `column`, `op` and, if the operator takes one, `value`."""
-    op = item["op"]
-    if op not in FILTER_OPERATORS:
-        raise ValueError(f"Not a filter operator: {op!r}")
+def filter_selectors(filters: Sequence[str]) -> list[dict[str, JsonValue]]:
+    """Return the filters of a dump as JSON selectors, for a document store.
 
-    column = Identifier(item["column"])
-    match op, item.get("value"):
-        case "is null" | "is not null", None:
-            return {"column": column, "op": op}
-        case "is null" | "is not null", _:
-            raise ValueError(f"The operator {op!r} takes no value")
-        case "in" | "not in", [_, *_] as values:
-            joined = SQL(", ").join(Literal(value) for value in values)
-            return {"column": column, "op": op, "value": SQL("({})").format(joined)}
-        case "in" | "not in", _:
-            raise ValueError(f"The operator {op!r} needs a list of values")
-        case _, list():
-            raise ValueError(f"The operator {op!r} needs one value, not a list")
-        case _, None:
-            raise ValueError(f"The operator {op!r} needs a value")
-        case _, value:
-            return {"column": column, "op": op, "value": Literal(value)}
+    A filter is the text of one selector, a JSON object: a Mango selector for CouchDB
+    and a query document for MongoDB. Raise `ValueError` for a filter that is not a JSON
+    object.
+
+    ```python
+    filter_selectors(['{"situacao": "ativo"}'])  # [{"situacao": "ativo"}]
+    ```
+    """
+    adapter = TypeAdapter(dict[str, JsonValue])
+
+    try:
+        return [adapter.validate_json(text) for text in filters]
+    except ValidationError as error:
+        raise ValueError(f"A filter is not a JSON selector: {error}") from error

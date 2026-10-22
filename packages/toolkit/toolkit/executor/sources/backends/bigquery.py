@@ -1,25 +1,27 @@
 """BigQuery, attached to DuckDB through the community `bigquery` extension (ADC)."""
 
-from dataclasses import dataclass, field
+from dataclasses import field
 from typing import ClassVar, override
 
 from psycopg.sql import Identifier, Literal
+from pydantic.dataclasses import dataclass
 
 from ....settings import BigQuerySettings
-from ...constants import ALIAS
-from ...engines.duckdb import Extension
-from ...engines.protocol import Engine
+from ...constants import ALIAS, SOURCE_CONFIG
+from ...engines.base import Engine
 from ...render import render_template
-from ..base import SourceBase
+from ..duckdb import DuckDBSource, Extension
 
 
-@dataclass(frozen=True, slots=True)
-class BigQuerySource(SourceBase):
+@dataclass(frozen=True, slots=True, config=SOURCE_CONFIG)
+class BigQuerySource(DuckDBSource):
     """Read BigQuery with workload identity and no password.
 
-    The project is attached read-only as `src`.
+    The project is attached read-only as `src`. The `BIGQUERY_PROJECT` setting is the
+    project without one.
     """
 
+    name: ClassVar[str] = "bigquery"
     extensions: ClassVar[tuple[Extension, ...]] = (
         Extension("bigquery", community=True),
     )
@@ -27,7 +29,7 @@ class BigQuerySource(SourceBase):
     project: str = field(default_factory=lambda: BigQuerySettings().BIGQUERY_PROJECT)
 
     @override
-    async def setup(self, client: Engine) -> None:
+    async def setup(self, engine: Engine) -> None:
         """Attach the project.
 
         Raise `ValueError` if there is no project.
@@ -44,4 +46,4 @@ class BigQuerySource(SourceBase):
                 "project": Literal(f"project={self.project}"),
             },
         )
-        await client.execute(sql)
+        await engine.execute(sql)

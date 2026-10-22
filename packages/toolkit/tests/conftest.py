@@ -1,19 +1,46 @@
+from asyncio import sleep
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
+from contextlib import AsyncExitStack
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from decimal import Decimal
+from pathlib import Path
+from socket import socket as socket_socket
+from subprocess import DEVNULL, Popen
+from sys import executable
+from time import sleep as sleep_blocking
 from types import SimpleNamespace
+from typing import ClassVar, Self, override
 
 import pytest
+from deltalake import DeltaTable
+from git import Actor, Repo
 from polars import DataFrame
-from pyarrow import Schema, Table
+from pyarrow import Schema, Table, decimal128
+from pyarrow import array as arrow_array
+from pyarrow import int64 as arrow_int64
+from pyarrow import string as arrow_string
+from pyarrow import table as arrow_table
+from pyarrow import timestamp as arrow_timestamp
 
+from toolkit import dbt
+from toolkit.chunks import Rows
 from toolkit.executor.constants import DEFAULT_BATCH_SIZE
+from toolkit.executor.engines.base import Engine
 from toolkit.executor.engines.duckdb import DuckDBEngine
-from toolkit.types import QueryParams
+from toolkit.executor.executor import Executor
+from toolkit.executor.requests import (
+    UnsupportedRequestError,
+)
+from toolkit.executor.sources.protocols import Source
+from toolkit.executor.types import Origin
+from toolkit.types import Columns, QueryParams
 
 
 @pytest.fixture
 async def duckdb_memory() -> AsyncGenerator[DuckDBEngine]:
     """Yield an in-memory DuckDB engine with no extensions and no secrets."""
-    async with DuckDBEngine.connect() as engine:
+    async with DuckDBEngine() as engine:
         yield engine
 
 
@@ -23,26 +50,48 @@ def scalar(duckdb_memory: DuckDBEngine) -> Callable[[str], Awaitable[object]]:
 
     async def run(expression: str) -> object:
         """Return the value of one SQL expression."""
-        [frame] = [f async for f in duckdb_memory.query(f"SELECT {expression}")]
-        return frame.item()
+        [dataframe] = [f async for f in duckdb_memory.query(f"SELECT {expression}")]
+        return dataframe.item()
 
     return run
 
 
-class FakeEngine:
-    """An engine that records the SQL and returns canned rows as frames."""
+@dataclass(frozen=True)
+class FakeSource:
+    """A source that only the fake engine serves."""
 
-    def __init__(self, rows: list[dict[str, object]] | None = None) -> None:
-        """Start with the canned rows and no recorded statements."""
-        self.rows = rows or []
-        self.statements: list[str] = []
-        self.params: list[QueryParams | None] = []
+    origin: Origin | None = None
 
+
+@dataclass
+class FakeEngine(Engine):
+    """An engine that records the SQL and returns canned rows as dataframes."""
+
+    source_type: ClassVar[type[Source]] = FakeSource
+
+    source: FakeSource = field(default_factory=FakeSource)
+    rows: list[dict[str, object]] = field(default_factory=list[dict[str, object]])
+    statements: list[str] = field(default_factory=list[str], init=False)
+    params: list[QueryParams | None] = field(
+        default_factory=list[QueryParams | None], init=False
+    )
+
+    @override
+    async def open(self, stack: AsyncExitStack) -> None:
+        """Open nothing: the fake has no connection."""
+
+    @override
+    def clone(self) -> Self:
+        """Return a new fake with the same rows."""
+        return type(self)(self.source, self.rows)
+
+    @override
     async def execute(self, sql: str, *, params: QueryParams | None = None) -> None:
         """Record the statement and its params."""
         self.statements.append(sql)
         self.params.append(params)
 
+    @override
     async def query(
         self,
         sql: str,
@@ -53,15 +102,136 @@ class FakeEngine:
         """Record the query and yield the canned rows in batches."""
         self.statements.append(sql)
         self.params.append(params)
-        frame = DataFrame(self.rows)
-        for offset in range(0, max(frame.height, 1), batch_size):
-            yield frame.slice(offset, batch_size)
+        dataframe = DataFrame(self.rows)
+        for offset in range(0, max(dataframe.height, 1), batch_size):
+            yield dataframe.slice(offset, batch_size)
+
+    @override
+    def read(
+        self, *, batch_size: int = DEFAULT_BATCH_SIZE
+    ) -> AsyncGenerator[DataFrame]:
+        """Refuse every read: the fake only records SQL."""
+        raise UnsupportedRequestError("FakeEngine", None)
+
+    @override
+    async def describe(self) -> dict[str, str]:
+        """Refuse to describe: the fake only records SQL."""
+        raise UnsupportedRequestError("FakeEngine", None)
+
+    @override
+    async def materialize(
+        self, target: Path, rows: Rows, columns: Columns = ()
+    ) -> None:
+        """Refuse every write: the fake only records SQL."""
+        raise UnsupportedRequestError("FakeEngine", target)
+
+
+@dataclass
+class Activity:
+    """What the chunks of a fake engine did: who ran together, and who opened."""
+
+    running: int = 0
+    peak: int = 0
+    opened: int = 0
+    closed: int = 0
+    materialized: list[str] = field(default_factory=list[str])
+
+    def close(self) -> None:
+        """Count one closing."""
+        self.closed += 1
+
+
+@dataclass
+class FakeChunkEngine(Engine):
+    """An engine that writes a file for each chunk, and counts the overlaps.
+
+    `fail_on` names a chunk that raises. The activity is shared with the clones.
+    """
+
+    source_type: ClassVar[type[Source]] = FakeSource
+
+    source: FakeSource = field(default_factory=FakeSource)
+    workers: int = 1
+    fail_on: str | None = None
+    activity: Activity = field(default_factory=Activity)
+
+    @property
+    @override
+    def concurrency(self) -> int:
+        """Return the chunks that the fake reads at the same time."""
+        return self.workers
+
+    @override
+    async def open(self, stack: AsyncExitStack) -> None:
+        """Count the opening, and the closing when the stack unwinds."""
+        self.activity.opened += 1
+        stack.callback(self.activity.close)
+
+    @override
+    def clone(self) -> Self:
+        """Return a new unopened fake that shares the activity."""
+        return type(self)(self.source, self.workers, self.fail_on, self.activity)
+
+    @override
+    async def execute(self, sql: str, *, params: QueryParams | None = None) -> None:
+        """Refuse every statement."""
+        raise UnsupportedRequestError("FakeChunkEngine", sql)
+
+    @override
+    def query(
+        self,
+        sql: str,
+        *,
+        params: QueryParams | None = None,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ) -> AsyncGenerator[DataFrame]:
+        """Refuse every query."""
+        raise UnsupportedRequestError("FakeChunkEngine", sql)
+
+    @override
+    def read(
+        self, *, batch_size: int = DEFAULT_BATCH_SIZE
+    ) -> AsyncGenerator[DataFrame]:
+        """Refuse every read."""
+        raise UnsupportedRequestError("FakeChunkEngine", None)
+
+    @override
+    async def describe(self) -> dict[str, str]:
+        """Return one column."""
+        return {"id": "BIGINT"}
+
+    @override
+    async def materialize(
+        self, target: Path, rows: Rows, columns: Columns = ()
+    ) -> None:
+        """Write the key of the chunk to the file, after the others had a turn."""
+        key = rows.column or ""
+        activity = self.activity
+        activity.running += 1
+        activity.peak = max(activity.peak, activity.running)
+
+        try:
+            await sleep(0.01)
+
+            if key == self.fail_on:
+                raise ValueError(f"The chunk {key} failed")
+
+            target.write_text(key)
+            activity.materialized.append(key)
+        finally:
+            activity.running -= 1
 
 
 @pytest.fixture(scope="session")
 def fake_engine() -> type[FakeEngine]:
     """Return the fake engine class."""
     return FakeEngine
+
+
+@pytest.fixture(scope="session")
+def fake_chunk_engine() -> type[FakeChunkEngine]:
+    """Return the fake engine that writes a file for each chunk."""
+    return FakeChunkEngine
 
 
 class FakeOracle:
@@ -159,3 +329,163 @@ class FakeBigQueryClient:
 def fake_bigquery_client() -> Callable[[int | None], FakeBigQueryClient]:
     """Return a function that builds a fake BigQuery client."""
     return FakeBigQueryClient
+
+
+class FakeRunner:
+    """A `PrefectDbtRunner` that records the settings and the arguments."""
+
+    instances: ClassVar[list[FakeRunner]] = []
+    error: ClassVar[Exception | None] = None
+
+    def __init__(self, **kwargs: object) -> None:
+        """Record the keyword arguments and register the instance."""
+        self.kwargs = kwargs
+        self.invoked: list[list[str]] = []
+        FakeRunner.instances.append(self)
+
+    @property
+    def settings(self):
+        """Return the settings that the runner got."""
+        return self.kwargs["settings"]
+
+    def invoke(self, arguments: list[str]) -> SimpleNamespace:
+        """Record the arguments, and fail if an error is set."""
+        self.invoked.append(arguments)
+        if FakeRunner.error is not None:
+            raise FakeRunner.error
+        return SimpleNamespace(success=True)
+
+
+@pytest.fixture
+def fake_runner(monkeypatch, tmp_path):
+    """Replace the dbt runner, and clone into a folder of the test."""
+    project = tmp_path / "queries"
+    project.mkdir()
+    FakeRunner.instances = []
+    FakeRunner.error = None
+    monkeypatch.setattr(dbt, "PrefectDbtRunner", FakeRunner)
+    monkeypatch.setattr(
+        dbt, "clone_repository", lambda repository, destination: project
+    )
+    return FakeRunner
+
+
+@pytest.fixture
+def make_repository():
+    """Provide the `make_repository` helper."""
+
+    def make_repository(path: Path, *, queries: bool) -> Path:
+        """Create a git repository with a dbt project.
+
+        The project is in `queries` or at the root.
+        """
+        repository = Repo.init(path)
+        project = path / "queries" if queries else path
+        project.mkdir(exist_ok=True)
+        (project / "dbt_project.yml").write_text("name: test\n")
+        repository.index.add([str(project / "dbt_project.yml")])
+        actor = Actor("tester", "tester@example.com")
+        repository.index.commit("init", author=actor, committer=actor)
+        return path
+
+    return make_repository
+
+
+@pytest.fixture
+def read_rows(uri):
+    """Provide the `read_rows` helper."""
+
+    def read_rows(uri: str) -> dict[str, list[int]]:
+        """Return the ids of the table, grouped by chunk.
+
+        ```python
+        read_rows(uri)  # {"2024-03-01": [1, 2], "2024-03-02": [3]}
+        ```
+        """
+        grouped: dict[str, list[int]] = {}
+        for row in DeltaTable(uri).to_pyarrow_table().to_pylist():
+            grouped.setdefault(row["batch"], []).append(row["id"])
+        return {key: sorted(ids) for key, ids in sorted(grouped.items())}
+
+    return read_rows
+
+
+@pytest.fixture
+def uri(tmp_path: Path) -> str:
+    """Return the path of a Delta table that does not exist yet."""
+    return str(tmp_path / "table")
+
+
+@pytest.fixture(scope="module")
+def s3_endpoint() -> Iterator[str]:
+    """Serve S3 with moto on a free port, and yield its endpoint."""
+    with socket_socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    server = Popen(
+        [executable, "-m", "moto.server", "-p", str(port)],
+        stdout=DEVNULL,
+        stderr=DEVNULL,
+    )
+    for _ in range(50):
+        with socket_socket() as probe:
+            if probe.connect_ex(("127.0.0.1", port)) == 0:
+                break
+        sleep_blocking(0.1)
+    yield f"127.0.0.1:{port}"
+    server.terminate()
+
+
+@pytest.fixture
+def rendered():
+    """Provide the `rendered` helper."""
+
+    def rendered(found) -> list[str]:
+        """Return each predicate as the text of its clause.
+
+        ```python
+        found, _ = build_predicates(
+            [{"column": "ID", "op": ">", "value": 1}], None, None, ["ID"]
+        )
+        rendered(found)  # ['"ID" > :p0']
+        ```
+        """
+        return [
+            f"{item['column'].as_string(None)} {item['op']}"
+            + (f" {item['value']}" if "value" in item else "")
+            for item in found
+        ]
+
+    return rendered
+
+
+@pytest.fixture
+def select():
+    """Provide the `select` helper."""
+
+    async def select(fake_engine, **values) -> str:
+        """Render `oracle/select_chunk` through the executor and return the SQL."""
+        engine = fake_engine()
+        await Executor(engine).query("oracle/select_chunk", values)
+        return engine.statements[0]
+
+    return select
+
+
+@pytest.fixture
+def batch():
+    """Provide the `batch` helper."""
+
+    def batch(rows: int) -> Table:
+        """Return a batch as `oracledb` gives it: an instant with no time zone."""
+        instant = datetime(2024, 3, 1, 12, tzinfo=UTC).replace(tzinfo=None)
+        return arrow_table(
+            {
+                "ID": arrow_array(range(rows), arrow_int64()),
+                "VALOR": arrow_array([Decimal("1.5")] * rows, decimal128(20, 6)),
+                "QUANDO": arrow_array([instant] * rows, arrow_timestamp("us")),
+                "SOLTO": arrow_array(["3.14"] * rows, arrow_string()),
+            }
+        )
+
+    return batch

@@ -81,16 +81,17 @@ read_json({{ query }}, hive_partitioning = false)
 {
   "kind": "macro",
   "name": "duckdb.where_clause",
-  "description": "List the filters of a dump as a WHERE clause, or nothing when there are none.",
+  "description": "List the filters and the chunk of a dump as a WHERE clause, or nothing when there are none.",
   "inputs": {
-    "predicates": "Each filter as a mapping with a column identifier, an operator from the fixed list and, for most operators, a value. Build them with filter_predicates and window_predicates."
+    "predicates": "Each condition of the chunk as a mapping with a column identifier, an operator from the fixed list and, for most operators, a value. Build them with chunk_predicates.",
+    "filters": "Each filter as the text of one condition, already in parentheses. Build them with filter_conditions. Optional."
   },
-  "returns": "A clause such as WHERE \"id\" >= 10 AND \"dia\" < '2024-01-01'."
+  "returns": "A clause such as WHERE (status <> 'x') AND \"dia\" < '2024-01-01'."
 }
 #}
-{% macro where_clause(predicates) -%}
-{%- if predicates -%}
-WHERE {% for item in predicates -%}
+{% macro where_clause(predicates, filters=[]) -%}
+{%- if predicates or filters -%}
+WHERE {{ filters | join(" AND ") }}{{ " AND " if filters and predicates }}{% for item in predicates -%}
 {{ item.column }} {{ item.op }}{% if item.value is defined %} {{ item.value }}{% endif %}{{ " AND " if not loop.last }}
 {%- endfor -%}
 {%- endif -%}

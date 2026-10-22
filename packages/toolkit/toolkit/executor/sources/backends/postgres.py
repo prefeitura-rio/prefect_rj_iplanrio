@@ -1,15 +1,16 @@
 """PostgreSQL, read through the DuckDB `postgres_scanner` extension."""
 
-from dataclasses import dataclass
 from typing import ClassVar
 
-from ...engines.duckdb import Extension
-from ..duckdb import DuckDBSource
+from pydantic.dataclasses import dataclass
+
+from ...constants import SOURCE_CONFIG
+from ..duckdb import AttachedSource, Extension
 
 
-@dataclass(frozen=True, slots=True)
-class PostgresSource(DuckDBSource):
+@dataclass(frozen=True, slots=True, config=SOURCE_CONFIG)
+class PostgresSource(AttachedSource):
     """PostgreSQL, read through the DuckDB `postgres_scanner` extension."""
 
-    attach_type: ClassVar[str] = "postgres"
+    name: ClassVar[str] = "postgres"
     extensions: ClassVar[tuple[Extension, ...]] = (Extension("postgres_scanner"),)

@@ -6,9 +6,10 @@ from duckdb import CatalogException
 from polars import Int64, Schema, String, read_parquet
 from psycopg.sql import Identifier, Literal
 
-from toolkit.executor.engines.duckdb import DuckDBEngine, Extension
+from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.executor import Executor
-from toolkit.executor.schema import SchemaError, frame_columns
+from toolkit.executor.schema import Column, SchemaError, read_columns
+from toolkit.executor.sources.duckdb import Extension
 from toolkit.types import Geometry
 from toolkit.utils import select_columns
 
@@ -31,12 +32,6 @@ class Place(TypedDict):
     geom: Geometry
 
 
-def write(directory: Path, name: str, sql: str) -> Path:
-    """Write a template and return its directory."""
-    (directory / f"{name}.sql").write_text(sql)
-    return directory
-
-
 @pytest.mark.parametrize(
     ("batch_size", "sizes"),
     [
@@ -45,7 +40,7 @@ def write(directory: Path, name: str, sql: str) -> Path:
     ],
 )
 async def test_a_query_is_read_whole_or_batch_by_batch(
-    tmp_path: Path, duckdb_memory, batch_size, sizes
+    tmp_path: Path, duckdb_memory, batch_size, sizes, write
 ):
     """Read a result whole with `await`, or batch by batch with `async for`."""
     templates = write(tmp_path, "numbers", "SELECT i AS n FROM range(10) r(i)\n")
@@ -60,12 +55,12 @@ async def test_a_query_is_read_whole_or_batch_by_batch(
     whole = await executor.query("numbers", expect=Number, batch_size=batch_size)
 
     assert batches == sizes
-    assert whole.frame["n"].to_list() == list(range(10))
-    assert whole.frame.schema == Schema({"n": Int64})
+    assert whole.dataframe["n"].to_list() == list(range(10))
+    assert whole.dataframe.schema == Schema({"n": Int64})
 
 
 async def test_a_result_with_no_rows_keeps_the_declared_columns(
-    tmp_path: Path, duckdb_memory
+    tmp_path: Path, duckdb_memory, write
 ):
     """Keep the declared columns in a result with no rows."""
     templates = write(tmp_path, "none", "SELECT 1::BIGINT AS a, 'x' AS b WHERE false\n")
@@ -73,11 +68,11 @@ async def test_a_result_with_no_rows_keeps_the_declared_columns(
     dataset = await Executor(duckdb_memory, templates).query("none", expect=Pair)
 
     assert len(dataset) == 0
-    assert dataset.frame.schema == Schema({"a": Int64, "b": String})
+    assert dataset.dataframe.schema == Schema({"a": Int64, "b": String})
 
 
 async def test_rows_that_do_not_fit_the_schema_are_rejected(
-    tmp_path: Path, duckdb_memory
+    tmp_path: Path, duckdb_memory, write
 ):
     """Regression: the data-proxy executor skipped validation (unresolved TypeVar)."""
     templates = write(tmp_path, "pair", "SELECT 1::BIGINT AS a, 'x' AS b\n")
@@ -87,7 +82,7 @@ async def test_rows_that_do_not_fit_the_schema_are_rejected(
 
 
 async def test_an_unsupported_schema_fails_before_anything_runs(
-    fake_engine, tmp_path: Path
+    fake_engine, tmp_path: Path, write
 ):
     """Fail before the query runs if the schema has no Polars type."""
 
@@ -103,19 +98,19 @@ async def test_an_unsupported_schema_fails_before_anything_runs(
 
 
 async def test_execute_renders_the_values_into_the_statement(
-    tmp_path: Path, duckdb_memory
+    tmp_path: Path, duckdb_memory, write
 ):
     """Render the values into the statement."""
     templates = write(tmp_path, "make", "CREATE TABLE {{ table }} AS SELECT 1 AS n\n")
 
     await Executor(duckdb_memory, templates).execute("make", {"table": Identifier("t")})
 
-    [frame] = [f async for f in duckdb_memory.query("SELECT n FROM t")]
-    assert frame.rows() == [(1,)]
+    [dataframe] = [f async for f in duckdb_memory.query("SELECT n FROM t")]
+    assert dataframe.rows() == [(1,)]
 
 
 async def test_a_pipeline_template_overrides_a_toolkit_one_of_the_same_name(
-    fake_engine, tmp_path: Path
+    fake_engine, tmp_path: Path, write
 ):
     """Prefer a pipeline template to a toolkit template of the same name."""
     (tmp_path / "duckdb").mkdir()
@@ -130,34 +125,24 @@ async def test_a_pipeline_template_overrides_a_toolkit_one_of_the_same_name(
 
 
 @pytest.mark.extensions
-async def test_a_duckdb_geometry_is_read_with_its_crs(tmp_path: Path):
+async def test_a_duckdb_geometry_is_read_with_its_crs(tmp_path: Path, write):
     """Read a DuckDB geometry with its CRS."""
     templates = write(
         tmp_path, "place", "SELECT ST_Point(1, 2)::GEOMETRY('EPSG:4326') AS geom\n"
     )
 
-    async with DuckDBEngine.connect([Extension("spatial")]) as engine:
+    async with DuckDBEngine(extensions=[Extension("spatial")]) as engine:
         dataset = await Executor(engine, templates).query("place", expect=Place)
 
-    dtype = str(dataset.frame.schema["geom"])
+    dtype = str(dataset.dataframe.schema["geom"])
     assert dtype.startswith("Extension('geoarrow.wkb'")
     assert "EPSG" in dtype
 
 
-async def stand_in_for_postgres(engine: DuckDBEngine) -> None:
-    """Make `postgres_query` return a small table, as a real database would."""
-    await engine.execute(
-        "CREATE TABLE stub AS SELECT 1 AS id, 'a' AS \"Nome Completo\", 2024 AS ano"
-    )
-    await engine.execute(
-        "CREATE MACRO postgres_query(alias, query) AS TABLE SELECT * FROM stub"
-    )
-
-
-async def test_a_window_is_one_local_file_with_the_schema_even_when_it_is_empty(
-    tmp_path: Path, duckdb_memory
+async def test_a_chunk_is_one_local_file_with_the_schema_even_when_it_is_empty(
+    tmp_path: Path, duckdb_memory, stand_in_for_postgres
 ):
-    """Keep the schema of an empty window, so Delta can remove its rows."""
+    """Keep the schema of an empty chunk, so Delta can remove its rows."""
     await stand_in_for_postgres(duckdb_memory)
     values = {
         "type": "postgres",
@@ -177,13 +162,13 @@ async def test_a_window_is_one_local_file_with_the_schema_even_when_it_is_empty(
     ):
         target = tmp_path / f"{name}.parquet"
         await executor.execute(
-            "duckdb/extract_window",
+            "duckdb/extract_chunk",
             {**values, "predicates": predicates, "target": Literal(str(target))},
         )
 
-        frame = read_parquet(target)
-        assert frame.height == rows
-        assert frame.columns == ["id", "Nome Completo", "ano"]
+        dataframe = read_parquet(target)
+        assert dataframe.height == rows
+        assert dataframe.columns == ["id", "Nome Completo", "ano"]
 
 
 @pytest.mark.parametrize(
@@ -205,7 +190,7 @@ async def test_a_window_is_one_local_file_with_the_schema_even_when_it_is_empty(
         ),
     ],
 )
-async def test_a_window_reads_local_files_in_a_folder_with_a_hive_name(
+async def test_a_chunk_reads_local_files_in_a_folder_with_a_hive_name(
     tmp_path: Path, duckdb_memory, file_type, name, content, rows
 ):
     """Read the files, and add no column from a Hive folder in their path."""
@@ -215,7 +200,7 @@ async def test_a_window_reads_local_files_in_a_folder_with_a_hive_name(
     target = tmp_path / "out.parquet"
 
     await Executor(duckdb_memory).execute(
-        "duckdb/extract_window",
+        "duckdb/extract_chunk",
         {
             "type": file_type,
             "alias": Literal("src"),
@@ -228,12 +213,12 @@ async def test_a_window_reads_local_files_in_a_folder_with_a_hive_name(
         },
     )
 
-    frame = read_parquet(target)
-    assert frame.columns == ["code", "amount"]
-    assert frame.rows() == rows
+    dataframe = read_parquet(target)
+    assert dataframe.columns == ["code", "amount"]
+    assert dataframe.rows() == rows
 
 
-async def test_a_window_cleans_and_transforms_the_values_with_the_functions(
+async def test_a_chunk_cleans_and_transforms_the_values_with_the_functions(
     tmp_path: Path, duckdb_memory
 ):
     """Compute the values of the columns with the functions, inside the `COPY`."""
@@ -244,7 +229,7 @@ async def test_a_window_cleans_and_transforms_the_values_with_the_functions(
     target = tmp_path / "out.parquet"
 
     await Executor(duckdb_memory).execute(
-        "duckdb/extract_window",
+        "duckdb/extract_chunk",
         {
             "type": "postgres",
             "alias": Literal("src"),
@@ -310,9 +295,9 @@ async def test_normalize_columns_renames_the_columns_of_a_table(
 
     result = await executor.normalize_columns("t", columns, separator, lowercase)
 
-    [frame] = [f async for f in duckdb_memory.query("SELECT * FROM t")]
+    [dataframe] = [f async for f in duckdb_memory.query("SELECT * FROM t")]
     assert result == changed
-    assert frame.columns == names
+    assert dataframe.columns == names
 
 
 async def test_normalize_columns_never_reaches_an_attached_source(duckdb_memory):
@@ -323,12 +308,12 @@ async def test_normalize_columns_never_reaches_an_attached_source(duckdb_memory)
     with pytest.raises(CatalogException):
         await Executor(duckdb_memory).normalize_columns("src.t")
 
-    [frame] = [f async for f in duckdb_memory.query("SELECT * FROM src.t")]
-    assert frame.columns == ["A b"]
+    [dataframe] = [f async for f in duckdb_memory.query("SELECT * FROM src.t")]
+    assert dataframe.columns == ["A b"]
 
 
-async def test_a_query_with_no_expect_yields_the_frames_unchecked(
-    duckdb_memory, tmp_path: Path
+async def test_a_query_with_no_expect_yields_the_dataframes_unchecked(
+    duckdb_memory, tmp_path: Path, write
 ):
     """Read a result whose columns the caller does not declare, batch by batch."""
     executor = Executor(
@@ -341,11 +326,11 @@ async def test_a_query_with_no_expect_yields_the_frames_unchecked(
     datasets = [dataset async for dataset in executor.query("numbers", batch_size=2)]
 
     assert [len(dataset) for dataset in datasets] == [2, 2, 1]
-    assert datasets[0].frame.columns == ["i", "t"]
+    assert datasets[0].dataframe.columns == ["i", "t"]
 
 
 async def test_a_query_with_no_expect_counts_the_rows_like_any_other(
-    duckdb_memory, tmp_path: Path, caplog
+    duckdb_memory, tmp_path: Path, caplog, write
 ):
     """Log the template and the rows when the result ends."""
     executor = Executor(
@@ -360,13 +345,13 @@ async def test_a_query_with_no_expect_counts_the_rows_like_any_other(
 
 
 async def test_the_columns_of_a_first_read_check_the_next_ones(
-    duckdb_memory, tmp_path: Path
+    duckdb_memory, tmp_path: Path, write
 ):
     """Keep the columns of the first read, so a column that changes later raises."""
     first = write(tmp_path, "first", "SELECT 1 AS id, 'a' AS name")
     changed = write(tmp_path, "changed", "SELECT 1 AS id, 2 AS name")
-    columns = frame_columns(
-        (await Executor(duckdb_memory, templates=first).query("first")).frame
+    columns = read_columns(
+        (await Executor(duckdb_memory, templates=first).query("first")).dataframe
     )
 
     same = await Executor(duckdb_memory, templates=first).query("first", expect=columns)
@@ -375,4 +360,78 @@ async def test_the_columns_of_a_first_read_check_the_next_ones(
             "changed", expect=columns
         )
 
-    assert same.frame.columns == ["id", "name"]
+    assert same.dataframe.columns == ["id", "name"]
+
+
+async def test_a_polars_schema_checks_the_result_of_a_query(
+    duckdb_memory, tmp_path, write
+):
+    """Check a query against a `polars.Schema`, whose columns have no nulls."""
+    templates = write(tmp_path, "pair", "SELECT 1::BIGINT AS a, 'x' AS b\n")
+    executor = Executor(duckdb_memory, templates)
+
+    good = await executor.query("pair", expect=Schema({"a": Int64, "b": String}))
+    assert good.dataframe.rows() == [(1, "x")]
+
+    with pytest.raises(SchemaError, match="b: String is not Int64"):
+        await executor.query("pair", expect=Schema({"a": Int64, "b": Int64}))
+
+
+async def test_a_mixed_map_lets_one_column_hold_nulls(duckdb_memory, tmp_path, write):
+    """Allow the nulls of the column that says so, and refuse them in the others."""
+    templates = write(tmp_path, "nulls", "SELECT 1::BIGINT AS a, NULL::VARCHAR AS b\n")
+    executor = Executor(duckdb_memory, templates)
+
+    allowed = await executor.query(
+        "nulls", expect={"a": Int64, "b": Column(String, nullable=True)}
+    )
+    assert allowed.dataframe.rows() == [(1, None)]
+
+    with pytest.raises(SchemaError, match="b: 1 null values"):
+        await executor.query("nulls", expect=Schema({"a": Int64, "b": String}))
+
+
+class NumberRow(TypedDict):
+    id: int
+    nome: str | None
+
+
+async def test_read_checks_every_batch_against_the_schema(numbers):
+    """Yield checked datasets, for a map of Polars types or for a schema class."""
+    async with numbers as executor:
+        mixed = {"id": Int64, "nome": Column(String, nullable=True)}
+        by_map = [batch async for batch in executor.read(expect=mixed, batch_size=2)]
+        by_class = [
+            batch async for batch in executor.read(expect=NumberRow, batch_size=2)
+        ]
+
+    assert [len(batch) for batch in by_map] == [2, 1]
+    assert [len(batch) for batch in by_class] == [2, 1]
+
+
+async def test_read_refuses_a_batch_that_does_not_fit(numbers):
+    """Raise `SchemaError` for a null in a column with no nulls, or a wrong type."""
+    async with numbers as executor:
+        with pytest.raises(SchemaError, match="nome: 1 null values"):
+            _ = [
+                batch
+                async for batch in executor.read(
+                    expect=Schema({"id": Int64, "nome": String})
+                )
+            ]
+
+        with pytest.raises(SchemaError, match="id: Int64 is not String"):
+            _ = [
+                batch
+                async for batch in executor.read(
+                    expect=Schema({"id": String, "nome": String})
+                )
+            ]
+
+
+async def test_read_without_expect_yields_every_row_unchecked(numbers):
+    """Check nothing when there is no `expect`."""
+    async with numbers as executor:
+        batches = [batch async for batch in executor.read()]
+
+    assert sum(len(batch) for batch in batches) == 3

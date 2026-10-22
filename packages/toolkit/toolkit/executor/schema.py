@@ -1,4 +1,4 @@
-"""Schema classes, and the check of a Polars frame against one.
+"""Schema classes, and the check of a Polars dataframe against one.
 
 A schema class is a `TypedDict`, a dataclass, a `NamedTuple` or any class with annotated
 fields. `X | None` lets a column hold nulls.
@@ -67,21 +67,21 @@ def build_columns(schema: type) -> dict[str, Column]:
     }
 
 
-def frame_columns(frame: DataFrame) -> dict[str, Column]:
-    """Return the columns of a frame, all nullable, with widened integers and floats.
+def read_columns(dataframe: DataFrame) -> dict[str, Column]:
+    """Return the columns of a dataframe: all nullable, integers and floats widened.
 
-    It is the schema of a read whose columns are known only at run time. The first frame
-    of a read gives it, and the next frames are checked against it.
+    It is the schema of a read whose columns are known only at run time. The first
+    dataframe of a read gives it, and the next dataframes are checked against it.
 
     ```python
-    frame_columns(DataFrame({"id": [1], "nome": ["a"]}))
+    read_columns(DataFrame({"id": [1], "nome": ["a"]}))
     # {"id": Column(dtype=Int64, nullable=True),
     #  "nome": Column(dtype=String, nullable=True)}
     ```
     """
     return {
         name: Column(widen(dtype), nullable=True)
-        for name, dtype in frame.schema.items()
+        for name, dtype in dataframe.schema.items()
     }
 
 
@@ -134,29 +134,29 @@ def resolve_dtype(annotation: object) -> DataType | type[DataType]:
     raise TypeError(f"unsupported annotation: {annotation!r}")
 
 
-def validate_frame(frame: DataFrame, columns: dict[str, Column]) -> DataFrame:
-    """Check a frame against the columns and return it in schema order.
+def validate_dataframe(dataframe: DataFrame, columns: dict[str, Column]) -> DataFrame:
+    """Check a dataframe against the columns and return it in schema order.
 
-    Raise `SchemaError` with every problem found. A frame with no rows and no columns
-    becomes an empty frame with the schema.
+    Raise `SchemaError` with every problem found. A dataframe with no rows and no
+    columns becomes an empty dataframe with the schema.
 
     ```python
-    validate_frame(DataFrame({"a": ["x"]}), {"a": Column(Int64, nullable=False)})
+    validate_dataframe(DataFrame({"a": ["x"]}), {"a": Column(Int64, nullable=False)})
     # SchemaError: a: String is not Int64
     ```
     """
-    if frame.shape == (0, 0):
+    if dataframe.shape == (0, 0):
         return DataFrame(schema={name: c.dtype for name, c in columns.items()})
 
-    problems = name_problems(frame, columns)
+    problems = find_name_problems(dataframe, columns)
     fitted: list[Series] = []
 
     for name in columns:
-        if name not in frame.columns:
+        if name not in dataframe.columns:
             continue
 
         try:
-            fitted.append(fit(frame[name], columns[name]))
+            fitted.append(fit(dataframe[name], columns[name]))
         except SchemaError as error:
             problems.append(str(error))
 
@@ -166,14 +166,14 @@ def validate_frame(frame: DataFrame, columns: dict[str, Column]) -> DataFrame:
     return DataFrame(fitted)
 
 
-def name_problems(frame: DataFrame, columns: dict[str, Column]) -> list[str]:
+def find_name_problems(dataframe: DataFrame, columns: dict[str, Column]) -> list[str]:
     """Return one message for the missing columns and one for the unexpected ones."""
-    missing = [name for name in columns if name not in frame.columns]
-    unexpected = [name for name in frame.columns if name not in columns]
+    missing = [name for name in columns if name not in dataframe.columns]
+    unexpected = [name for name in dataframe.columns if name not in columns]
 
     return [
-        f"{label} columns: {', '.join(names)}"
-        for label, names in [("missing", missing), ("unexpected", unexpected)]
+        f"{describe_type} columns: {', '.join(names)}"
+        for describe_type, names in [("missing", missing), ("unexpected", unexpected)]
         if names
     ]
 
@@ -188,9 +188,9 @@ def fit(series: Series, column: Column) -> Series:
 
     dtype = widen(series.dtype)
 
-    if not same_type(dtype, column.dtype):
+    if not is_same_type(dtype, column.dtype):
         raise SchemaError(
-            f"{series.name}: {label(series.dtype)} is not {label(column.dtype)}"
+            f"{series.name}: {describe_type(series.dtype)} is not {describe_type(column.dtype)}"
         )
 
     if series.null_count() and not column.nullable:
@@ -235,7 +235,7 @@ def widen(dtype: DataType) -> DataType:
             return dtype
 
 
-def same_type(actual: DataType, expected: DataType | type[DataType]) -> bool:
+def is_same_type(actual: DataType, expected: DataType | type[DataType]) -> bool:
     """Return whether two types are equal.
 
     Extension types compare by name only. Their metadata, such as a geometry CRS, does
@@ -248,7 +248,7 @@ def same_type(actual: DataType, expected: DataType | type[DataType]) -> bool:
             return actual == expected
 
 
-def label(dtype: DataType | type[DataType]) -> str:
+def describe_type(dtype: DataType | type[DataType]) -> str:
     """Return the type as text for an error message, without extension metadata."""
     match dtype:
         case Extension():

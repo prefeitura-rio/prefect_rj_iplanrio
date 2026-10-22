@@ -1,17 +1,18 @@
 """Local files, read and written by DuckDB itself."""
 
-from dataclasses import dataclass
 from typing import ClassVar
 
-from ...engines.duckdb import Extension
-from ..base import SourceBase
+from pydantic.dataclasses import dataclass
+
+from ...constants import SOURCE_CONFIG
+from ..duckdb import DuckDBSource
 
 
-@dataclass(frozen=True, slots=True)
-class FilesSource(SourceBase):
+@dataclass(frozen=True, slots=True, config=SOURCE_CONFIG)
+class FilesSource(DuckDBSource):
     """Read Parquet, CSV and JSON files with the core of DuckDB.
 
     A template reads them with the `source_table` macro of `duckdb/macros.sql`.
     """
 
-    extensions: ClassVar[tuple[Extension, ...]] = ()
+    name: ClassVar[str] = "files"
