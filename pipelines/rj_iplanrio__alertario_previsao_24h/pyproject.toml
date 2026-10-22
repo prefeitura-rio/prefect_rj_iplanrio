@@ -5,8 +5,6 @@ description = "Pipeline previsão meteorológica AlertaRio 24h da secretaria ipl
 dependencies = [
     "prefect_rj_iplanrio",
     "defusedxml",
-    "google-cloud-bigquery",
-    "requests",
 ]
 
 [tool.uv.sources]

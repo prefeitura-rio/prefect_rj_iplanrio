@@ -32,7 +32,8 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_iplanrio__alertario_previsao_24h/flow.py:rj_iplanrio__alertario_previsao_24h
     parameters:
-      send_discord_alerts: true
+      alerts:
+        send: true
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio
@@ -54,7 +55,8 @@ deployments:
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__alertario_previsao_24h/flow.py:rj_iplanrio__alertario_previsao_24h
     parameters:
-      send_discord_alerts: true
+      alerts:
+        send: true
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio

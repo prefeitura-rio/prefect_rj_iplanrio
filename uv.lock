@@ -5275,17 +5275,13 @@ version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__alertario_previsao_24h" }
 dependencies = [
     { name = "defusedxml" },
-    { name = "google-cloud-bigquery" },
     { name = "prefect-rj-iplanrio" },
-    { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "defusedxml" },
-    { name = "google-cloud-bigquery" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "requests" },
 ]
 
 [[package]]
