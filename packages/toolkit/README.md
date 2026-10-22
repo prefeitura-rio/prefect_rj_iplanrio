@@ -17,7 +17,7 @@ toolkit = { workspace = true }
 from pathlib import Path
 from typing import TypedDict
 
-from toolkit.executor.engines.duckdb import DuckDBEngine
+from toolkit.executor.engines.base import Engine
 from toolkit.executor.executor import Executor
 from toolkit.executor.sources.backends.postgres import PostgresSource
 from toolkit.executor.sources.protocols import DBConn
@@ -30,13 +30,22 @@ class Total(TypedDict):
 
 source = PostgresSource(DBConn("db.internal", 5432, "app", "reader", "..."))
 
-async with DuckDBEngine.connect() as engine, source.open(engine) as client:
-    await source.setup(client)
-    executor = Executor(client, Path(__file__).parent / "queries")
+async with Executor(
+    Engine.from_source(source), Path(__file__).parent / "queries"
+) as executor:
     totals = await executor.query("count_events", expect=Total)  # Dataset[Total]
 ```
 
 O SQL é um modelo `Jinja` em `queries/count_events.sql`, que lê o banco anexado como `src`.
+
+`expect` aceita três formas: uma classe anotada (`TypedDict`, `dataclass`, `NamedTuple`), em que `X | None` aceita nulos; um `polars.Schema` ou um mapa de tipos do `Polars`, em que um tipo sozinho é uma coluna sem nulos e `Column(tipo, nullable=True)` aceita nulos; ou nada, e então não se confere nada. `Executor.query` e `Executor.read` conferem cada lote e levantam `SchemaError` com todos os problemas.
+
+```python
+from polars import Int64, Schema, String
+
+async for lote in executor.read(expect=Schema({"id": Int64, "nome": String})):
+    ...
+```
 
 ## Módulos
 
@@ -44,14 +53,14 @@ O SQL é um modelo `Jinja` em `queries/count_events.sql`, que lê o banco anexad
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `toolkit.executor`  | `Executor`, `Engine`, as fontes e os modelos SQL. `query` devolve um `Dataset` tipado.                                                                  |
 | `toolkit.functions` | As funções do `DuckDB`, que toda conexão tem. Veja a lista abaixo.                                                                                      |
-| `toolkit.batches`   | As janelas de um `dump` e o `hash` da configuração.                                                                                                     |
-| `toolkit.delta`     | A tabela `Delta` de um `dump`: `write_window` (troca uma janela, soma linhas com `append` ou grava a hora com `extracted_at`), `compact` e `maintain`.  |
+| `toolkit.chunks`    | Os chunks de um `dump` e o `hash` da configuração.                                                                                                     |
+| `toolkit.delta`     | A tabela `Delta` de um `dump`: `write_chunk` (troca um chunk, soma linhas com `append` ou grava a hora com `extracted_at`), `compact` e `maintain`.  |
 | `toolkit.gcs`       | `create_store`, `list_keys`, `upload` e `delete_keys`, com `obstore` e chaves `HMAC`.                                                                   |
-| `toolkit.bigquery`  | `BigQuery`: `table_exists`, `create_dataset`, `execute` (uma instrução, como um `MERGE`) e `sync_delta_table` (tabela `Delta` por uma conexão BigLake). |
-| `toolkit.oracle`    | `Oracle`, um `Engine` com `connect`, `execute` e `query`. A consulta volta em `Polars`, nos tipos que o `Delta` guarda.                                 |
+| `toolkit.bigquery`  | `BigQuery`: `has_table`, `create_dataset`, `execute` (uma instrução, como um `MERGE`) e `sync_delta_table` (tabela `Delta` por uma conexão BigLake). |
+| `toolkit.oracle`    | `Oracle`, o cliente `SQL` da conexão com `connect`, `execute` e `query`. A consulta volta em `Polars`, nos tipos que o `Delta` guarda.                                 |
 | `toolkit.dbt`       | Clona o repositório de consultas e roda um comando `dbt`.                                                                                               |
 | `toolkit.settings`  | `ToolkitSettings` (o log e a telemetria) e um grupo por parte, como `GcsSettings`. Cada parte cria o seu grupo quando precisa dele.                     |
-| `toolkit.utils`     | As colunas e os filtros de um `dump`: `normalize_column`, `column_aliases`, `select_columns` e `filter_predicates`.                                     |
+| `toolkit.utils`     | As colunas e os filtros de um `dump`: `normalize_column`, `build_column_aliases`, `select_columns` e `filter_conditions`.                                     |
 | `toolkit.telemetry` | O `logger` do pacote e `configure_telemetry()`.                                                                                                         |
 
 **Funções do `DuckDB`** (em SQL, sem importar nada):
@@ -61,7 +70,44 @@ O SQL é um modelo `Jinja` em `queries/count_events.sql`, que lê o banco anexad
 - Documentos: `is_cpf`, `normalize_cpf`, `is_cnpj` (aceita as letras do CNPJ novo), `normalize_cnpj` e `is_phone` (telefone fixo ou celular do Brasil, com ou sem `55`).
 - Nomes de colunas: `Executor.normalize_columns(tabela, colunas, separador, minúsculas)`.
 
-**Fontes** (`toolkit.executor.sources.backends`): `PostgresSource`, `MySQLSource`, `MSSQLSource`, `OracleSource`, `CouchDBSource`, `BigQuerySource`, `GSheetsSource` e `ArcGISSource`. `load_sources()["postgres"]` acha a classe pelo nome.
+**Fontes** (`toolkit.executor.sources.backends`): `PostgresSource`, `MySQLSource`, `MSSQLSource`, `OracleSource`, `CouchDBSource`, `MongoDBSource`, `BigQuerySource`, `GSheetsSource` e `ArcGISSource`. `load_sources()["postgres"]` acha a classe pelo nome.
+
+Uma **fonte** é só configuração: a conexão, as opções e a origem do que ler. Um **motor** (`Engine`) nasce de uma fonte e faz tudo com o sistema: abre a conexão, lê, executa e grava. O `Executor` recebe o motor e orquestra: abre o motor, roda os modelos `SQL` e lê os chunks de um `dump`.
+
+```mermaid
+flowchart LR
+  DS[DuckDBSource postgres mysql mssql bigquery files gsheets arcgis] --> D[DuckDBEngine]
+  OS[OracleSource] --> O[OracleEngine]
+  CS[CouchDBSource] --> C[CouchDBEngine]
+  MS[MongoDBSource] --> M[MongoDBEngine]
+  D --> X[Executor]
+  O --> X
+  C --> X
+  M --> X
+```
+
+Uma fonte é uma `dataclass` do `Pydantic`, e as chaves de `options` são os campos dela: `get_source("couchdb")(conn=conn, origin=origin, **options)`. Uma chave que a fonte não declara é um erro, e um campo errado também.
+
+| Campo (de toda fonte) | O que é                                                                                                                           |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                | O nome do registro: `PostgresSource` é `postgres`. Só uma fonte que define `name` entra em `load_sources()`.                      |
+| `origin`              | O que ler (`Table`, `Query`, `Changes`, `Files`, `Layer` ou `Sheet`), ou `None` para uma fonte só conectada.                      |
+
+`Engine.from_source(fonte)` devolve o motor da fonte, ainda fechado. `async with` abre a conexão. O motor escolhe a fonte pelo atributo `source_type`, e `TypeError` diz que nenhum motor serve a fonte. `DuckDBEngine` serve toda `DuckDBSource`: carrega as extensões, roda o `setup` da fonte (o `ATTACH`) e lê no lugar. Os outros três implementam o `Engine` direto: cada um extrai (`extract`) as linhas do chunk para um `Parquet` com o cliente próprio, e abre um `DuckDBEngine` que descreve a origem e grava o arquivo final, com `describe_extracted` e `materialize_extracted` (`engines/duckdb.py`).
+
+`Engine` é uma classe abstrata (`toolkit.executor.engines.base`). Um motor trata as origens que o sistema dele responde, com um `match` no tipo, e levanta `UnsupportedRequestError` para as outras.
+
+| Membro                                | O que faz                                                                                                                         |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `execute(sql)`                        | Roda uma instrução `SQL` que não devolve linhas.                                                                                  |
+| `query(sql, batch_size)`              | Roda uma consulta `SQL`, em quadros `Polars` de até `batch_size` linhas.                                                          |
+| `read(batch_size)`                    | Lê a origem da fonte inteira, em quadros `Polars`.                                                                                |
+| `describe()`                          | Devolve o nome e o tipo `DuckDB` de cada coluna da origem.                                                                        |
+| `materialize(destino, linhas, colunas)` | Grava um chunk da origem como `Parquet`. Sem `colunas`, grava todas.                                                          |
+| `check_chunks(chunks, colunas)`       | Levanta `ValueError` se a coluna de `chunks` não serve aos chunks. O padrão pede inteiro ou data. O CouchDB pede só o `id`.      |
+| `concurrency`                         | Quantos chunks um `dump` lê ao mesmo tempo. O padrão é 1. O CouchDB e o MongoDB usam o `concurrency` da fonte (padrão 2).        |
+
+`Executor.run_chunks(todo, plan, handle)` grava cada chunk em uma pasta temporária e o entrega ao `handle`. Cada leitor extra usa um motor próprio (`clone()`), e o `handle` roda para um chunk por vez, então ele pode gravar num lugar compartilhado. O primeiro erro cancela os outros leitores e sobe como veio.
 
 ## Bancos: tipos e limites
 
@@ -81,8 +127,8 @@ Conferido em Postgres, MySQL, SQL Server e Oracle de verdade.
 **Oracle**
 
 - O `oracledb` lê com o `Instant Client` (modo `thick`, que a imagem base já tem). Sem ele, o `oracledb` usa o modo `thin`, que não lê usuários com verifier `10G`. A pasta do cliente vem de `ORACLE_CLIENT_LIB_DIR` ou do `ldconfig`.
-- Cada janela vira um `Parquet` local, com filtros e janela aplicados pelo Oracle. `read.table` é `DONO.TABELA`, `read.query` é uma consulta (pode ter `;` no fim), e as duas aceitam `batches` e `filters`. Os nomes das colunas são os do Oracle, em maiúsculas: `batches: { column: DATA_PEDIDO }`.
-- A tabela é lida `AS OF SCN`, com o mesmo `SCN` em todas as janelas, e uma mudança feita durante a carga não entra. Isso pede `EXECUTE` em `SYS.DBMS_FLASHBACK` ou `SELECT` em `SYS.V_$DATABASE`, e `FLASHBACK` na tabela de outro dono. Sem esses privilégios a carga segue sem o `SCN` e avisa no log. Uma consulta nunca é lida `AS OF SCN`.
+- Cada chunk vira um `Parquet` local, com filtros e chunk aplicados pelo Oracle. `read.table` é `DONO.TABELA`, `read.query` é uma consulta (pode ter `;` no fim), e as duas aceitam `chunks` e `filters`. Cada filtro é um predicado em SQL do Oracle, ligado aos outros por `AND`, e só os valores do chunk vão como `bind`. `batch_size` (padrão 50 000) é o número de linhas de cada leitura, e vem de `options`. Os nomes das colunas são os do Oracle, em maiúsculas: `chunks: { column: DATA_PEDIDO }`.
+- A tabela é lida `AS OF SCN`, com o mesmo `SCN` em todos os chunks, e uma mudança feita durante a carga não entra. Isso pede `EXECUTE` em `SYS.DBMS_FLASHBACK` ou `SELECT` em `SYS.V_$DATABASE`, e `FLASHBACK` na tabela de outro dono. Sem esses privilégios a carga segue sem o `SCN` e avisa no log. Uma consulta nunca é lida `AS OF SCN`.
 - Um `NUMBER` nunca perde dígitos: até 18 dígitos sem escala é `int64`, com precisão e escala que cabem é `decimal128`, `FLOAT` é `double`, e um `NUMBER` sem precisão chega como texto exato.
 - `DATE` e `TIMESTAMP` chegam sem fuso. `TIMESTAMP WITH TIME ZONE` e `WITH LOCAL TIME ZONE` chegam como o instante em UTC. `CLOB`, `NCLOB`, `NVARCHAR2`, `XMLTYPE`, `INTERVAL` e `ROWID` chegam como texto, e `RAW` e `BLOB` como bytes.
 - Um tipo sem conversão (objeto, `BFILE`, `BOOLEAN`, `JSON`) falha e diz a coluna: converta na consulta.
@@ -95,11 +141,21 @@ Conferido em Postgres, MySQL, SQL Server e Oracle de verdade.
 
 **CouchDB**
 
-- O `CouchDBSource` lê uma base pela API HTTP e grava `Parquet`, como o Oracle. A base é `read.table` (ou `conn.database`, sem ele). Há três leituras: `_all_docs` (padrão), `_find` (`query`, um seletor Mango em JSON) e `_changes` (`since`: `0`, `now` ou o `last_seq` anterior). `read` aceita `table` com `query` ou com `since`, mas não `query` com `since`.
+- O `CouchDBEngine` lê uma base pela API HTTP e grava `Parquet`, como o Oracle. A base é `read.table` (ou `conn.database`, sem ele). Há três leituras: `_all_docs` (padrão), `_find` (`query`, um seletor Mango em JSON) e `_changes` (`since`: `0`, `now` ou o `last_seq` anterior). `read` aceita `table` com `query` ou com `since`, mas não `query` com `since`.
 - As colunas vêm de um `Shape` (`columns` e `row(item)`). O padrão grava `id` e `doc`, que o `DuckDB` lê como `JSON`: `doc->>'$.campo'`. O `BigQuery` lê `doc` como `STRING`: use `PARSE_JSON`.
-- Uma janela corta os ids numéricos com `startkey` e `endkey`. Com `key_width=N`, o corte usa os N primeiros dígitos e serve a ids de larguras mistas. A janela `null` lê o resto, como os ids com letra. Os `_design/` nunca entram.
-- Sem `filters`. `query` e `since` não vão juntos, e cada um é uma janela só.
-- `page_size`, `verify_tls`, `secure`, `path_prefix` e `timeout` vêm do construtor ou das variáveis `COUCHDB_*` da tabela abaixo. `key_width` só vem do construtor ou de `options`. Pelo `get_source`, a fonte recebe `options` do `database` do `prefect.yaml`: `shape` (um caminho `módulo:nome`, como `utils.couchdb:BCADASTRO`) e `key_width`. Qualquer outra chave é um erro. `_all_docs` rendeu cerca de 30 000 documentos por segundo, e `_changes` 13 000: use `_changes` só para cargas incrementais.
+- Um chunk corta os ids numéricos com `startkey` e `endkey`. Com `key_width=N`, o corte usa os N primeiros dígitos e serve a ids de larguras mistas. O chunk `null` lê o resto, como os ids com letra. Os `_design/` nunca entram.
+- Cada filtro é um seletor Mango em JSON, e os filtros se ligam por `$and`. Com filtros, a leitura usa `_find`, e o chunk vira uma faixa de `_id`. Por isso `chunks.column` precisa ser `id`, e os filtros não vão com `query` nem com `since`. `query` e `since` não vão juntos, e cada um é um chunk só.
+- `page_size`, `verify_tls`, `secure`, `path_prefix` e `timeout` vêm do construtor ou das variáveis `COUCHDB_*` da tabela abaixo. `key_width` só vem do construtor ou de `options`. Pelo `get_source`, a fonte recebe `options` do `database` do `prefect.yaml`: `shape` (um caminho `módulo:nome`, como `utils.couchdb:BCADASTRO`), `key_width` e `batch_size` (documentos por página, no lugar de `COUCHDB_PAGE_SIZE`). Qualquer outra chave é um erro. `_all_docs` rendeu cerca de 30 000 documentos por segundo, e `_changes` 13 000: use `_changes` só para cargas incrementais.
+
+**MongoDB**
+
+- O `MongoDBEngine` lê uma coleção com o `PyMongoArrow` (`find_arrow_all`), em páginas de `batch_size` documentos por `_id`, e grava `Parquet`. A coleção é `read.table`, e `read.query` é um filtro `JSON` da coleção.
+- `options.shape` é obrigatório: o caminho `módulo:nome` de um `Schema` do `PyMongoArrow` com o campo `_id`. Sem esquema, as colunas mudariam de um chunk para outro. Um `ObjectId` chega como o texto hexadecimal e um `Decimal128` como texto exato.
+- Cada filtro é um documento de consulta em `JSON`, e os filtros se ligam por `$and`. Um chunk é uma faixa `$gte` e `$lt` de um campo de data ou de número, e o chunk `null` é `{campo: null}`.
+- O `dump` normaliza os nomes das colunas, então o `_id` vira `id`, e um campo `id` do documento vira `id_1`. Se o `_id` não faz falta, deixe-o de fora com `select`, e o campo `id` fica com o nome `id`.
+- `auth_source` e `tls` vão na cadeia de conexão. A senha vai com os caracteres especiais escapados.
+- O MongoDB é um extra do toolkit: `uv add "toolkit[mongodb]"` no pipeline que lê MongoDB. Sem o extra, `load_sources()` não lista `mongodb` e `get_source("mongodb")` levanta `ValueError` com o comando de instalação. O extra decide só o que cada imagem instala, e não a versão do `pyarrow`.
+- O `pymongoarrow` fixa o `pyarrow` numa versão menor (a 1.15 pede `>=25.0,<25.1`), e cada versão dele acompanha um `pyarrow` novo com um atraso de 1 a 7 semanas. O workspace tem um só lock, então todo membro usa o mesmo `pyarrow`, também as imagens sem o extra: o `pyarrow` 26 espera uma versão nova do `pymongoarrow`. Para deixar essas imagens subirem antes, declare os extras em conflito em `[tool.uv] conflicts`, para que o lock guarde uma resolução para cada um. Isso ainda não foi testado.
 
 ## Configuração
 
@@ -169,7 +225,6 @@ Ou, no diretório `packages/toolkit/`, uma ferramenta de cada vez:
 ```sh
 uv run ruff check . && uv run ruff format --check .
 uv run basedpyright
-uv run pyrefly check
 uv run sqlfluff lint toolkit/executor/templates
 uv run vulture toolkit
 uv run pytest

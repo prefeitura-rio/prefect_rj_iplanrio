@@ -565,7 +565,7 @@ Use **Polars** para DataFrames e **DuckDB** para SQL sobre arquivos Parquet ou d
 import polars as pl
 
 
-def batch_to_frame(batch: list[list], columns: list[str]) -> pl.DataFrame:
+def batch_to_dataframe(batch: list[list], columns: list[str]) -> pl.DataFrame:
     """Converta um lote de linhas em um DataFrame, com os nomes das colunas dados."""
     return pl.DataFrame(dict(zip(columns, zip(*batch, strict=True), strict=True)))
 ```
@@ -597,7 +597,7 @@ def normalize_parquet(source: Path, dest: Path) -> None:
 
 async def totals_by_station(source: Path) -> Dataset[StationTotal]:
     """Some os valores de um Parquet com as colunas `station_id` e `mm`, por estação."""
-    async with DuckDBEngine.connect() as engine:
+    async with DuckDBEngine() as engine:
         executor = Executor(engine, Path(__file__).parent / "queries")
         return await executor.query(
             "totals_by_station", {"source": Literal(str(source))}, expect=StationTotal
@@ -802,7 +802,7 @@ Cada variante que exija SQL diferente recebe um arquivo `.sql` próprio em `quer
 
 ### 7.3 Operações comuns já prontas
 
-O toolkit tem funções do `DuckDB` em toda conexão, sem importar nada: `normalize(coluna, separador, minúsculas)`, `clean_text(texto)`, `parse_date(texto)`, `parse_timestamp(texto)`, `ano_particao(texto)`, `mes_particao(texto)`, `data_particao(texto)`, `now_sao_paulo()`, `to_sao_paulo(instante)`, `is_cpf`, `normalize_cpf`, `is_cnpj`, `normalize_cnpj` e `is_phone`. Use-as no SQL, como em `clean_text(nome)` e `normalize(nome, '_', true)`. Os modelos prontos são `extract_window`, `select_source` e `fingerprint`. No `dump_database`, `normalize_values` e `transforms` aplicam essas funções dentro do `COPY` de cada janela. Para os nomes das colunas de uma tabela, use `Executor.normalize_columns(tabela, colunas, separador, minúsculas)`.
+O toolkit tem funções do `DuckDB` em toda conexão, sem importar nada: `normalize(coluna, separador, minúsculas)`, `clean_text(texto)`, `parse_date(texto)`, `parse_timestamp(texto)`, `ano_particao(texto)`, `mes_particao(texto)`, `data_particao(texto)`, `now_sao_paulo()`, `to_sao_paulo(instante)`, `is_cpf`, `normalize_cpf`, `is_cnpj`, `normalize_cnpj` e `is_phone`. Use-as no SQL, como em `clean_text(nome)` e `normalize(nome, '_', true)`. Os modelos prontos são `extract_chunk`, `select_source` e `fingerprint`. No `dump_database`, `normalize_values` e `transforms` aplicam essas funções dentro do `COPY` de cada chunk. Para os nomes das colunas de uma tabela, use `Executor.normalize_columns(tabela, colunas, separador, minúsculas)`.
 
 ### 7.4 O que nunca fazer
 
@@ -1164,7 +1164,7 @@ Rode as verificações com `devenv --profile checks tasks run lint:all test:all`
 | Regra                                                                                                                                    | Verificação                                         |
 | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
 | Estrutura de arquivos, estilo, SQL, tags                                                                                                 | Revisão do PR (ainda não há verificação automática) |
-| Formatação, lint e tipos (`ruff`, `basedpyright`, `pyrefly`), SQL do toolkit (`sqlfluff`), versões só na raiz e workflows (`actionlint`) | `lint:all`                                          |
+| Formatação, lint e tipos (`ruff`, `basedpyright`), SQL do toolkit (`sqlfluff`), versões só na raiz e workflows (`actionlint`) | `lint:all`                                          |
 | Testes unitários                                                                                                                         | `test:all`                                          |
 | Build, deploy dos flows, análise SAST                                                                                                    | CI do GitHub (`.github/workflows/`)                 |
 
