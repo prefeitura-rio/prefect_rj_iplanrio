@@ -33,7 +33,6 @@ DRIVE_ROOT_ID: Final = "1wpZzSMv6dQ5Y50qWIooqRikpkVCh5u2f"
 """The folder "Relatórios de Engajamento" in Drive, by id and not by name, so no other folder gets the files.
 
 It needs Editor access for the service account."""
-DRIVE_FOLDER_MIME: Final = "application/vnd.google-apps.folder"
 DOCX_MIME: Final = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 CSV_SEP: Final = ";"
 CATEGORY_COLUMNS: Final = (

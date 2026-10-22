@@ -67,3 +67,5 @@ BIFROST_FIRST_WAIT_SECONDS: Final = 2.0
 BIFROST_CALIBRATED_BATCH: Final = 50
 BIFROST_CALIBRATED_TOKENS: Final = 8192
 """The batch size for which 8192 output tokens were enough, so the limit scales with the batch."""
+
+DRIVE_FOLDER_MIME: Final = "application/vnd.google-apps.folder"

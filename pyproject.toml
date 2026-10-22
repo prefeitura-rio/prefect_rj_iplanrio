@@ -95,6 +95,15 @@ include = ["src", "tests"]
 reportUnusedCallResult = false # side-effect calls (an upload, a delete) return handles that nobody needs
 
 [[tool.basedpyright.executionEnvironments]]
+root = "tests/test_drive.py"
+extraPaths = ["src"]
+reportMissingTypeStubs = false # the Google API client ships no types
+reportUnknownVariableType = false # the error of that client
+reportUnknownArgumentType = false # the error of that client
+reportUnannotatedClassAttribute = false # small fake classes
+reportUnusedParameter = false # a fake follows the signature of the real API
+
+[[tool.basedpyright.executionEnvironments]]
 root = "tests/parity"
 extraPaths = ["src", "tests/parity"]
 reportMissingTypeStubs = false # pymongoarrow ships no stubs
@@ -142,6 +151,14 @@ reportUnknownMemberType = false # members of those libraries
 reportUnknownVariableType = false # values from those libraries
 reportUnknownArgumentType = false # values from those libraries
 reportAny = false # the speech response
+
+[[tool.basedpyright.executionEnvironments]]
+root = "src/utils/drive.py"
+reportMissingTypeStubs = false # the Google API client ships no types
+reportUnknownMemberType = false # members of that client
+reportUnknownVariableType = false # values from that client
+reportUnknownArgumentType = false # values from that client
+reportAny = false # the answers of the API
 
 [[tool.basedpyright.executionEnvironments]]
 root = "src/utils/utils.py"

@@ -27,9 +27,10 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.constants import (
     SP_TZ,
     STALE_BATCHES_LIMIT,
 )
-from pipelines.rj_crm__relatorio_engajamento_hsm.helpers import bq, drive
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers import bq
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.catalog import Catalog
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.conversations import build_conversations
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.drive import report_exists
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.prompts import (
     fill_prompt,
     first_hsm_text,
@@ -60,6 +61,7 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.types import (
     Report,
 )
 from utils.bifrost import Bifrost, BifrostError, parse_json_list, scale_output_tokens
+from utils.drive import confirm_root, connect, ensure_folder, upload
 from utils.utils import render_query
 
 
@@ -76,7 +78,7 @@ async def read_dispatches_task(reference: date) -> list[Dispatch]:
 @task
 async def report_exists_task(hsm_name: str, reference: date, root_id: str) -> bool:
     """Tell whether the folder of the HSM already has the report of the day, so a repeat adds nothing."""
-    return await to_thread(lambda: drive.report_exists(drive.connect(), root_id, hsm_name, reference))
+    return await to_thread(lambda: report_exists(connect(), root_id, hsm_name, reference))
 
 
 def conversations_sql(hsm_name: str, start: str, sources: str) -> str:
@@ -247,10 +249,10 @@ async def publish_task(report: Report, root_id: str, examples_per_category: int 
         "(" + ", ".join(f"'{source}'" for source in SOURCES) + ")",
     )
     document = build_docx(report, categories, sql, csv_names, datetime.now(SP_TZ))
-    client = await to_thread(drive.connect)
-    await to_thread(drive.confirm_root, client, root_id)
-    folder_id = await to_thread(drive.hsm_folder_id, client, root_id, report.dispatch.hsm_name)
-    await to_thread(drive.upload, client, folder_id, f"{slug}.docx", document, DOCX_MIME)
-    await to_thread(drive.upload, client, folder_id, csv_names[0], categories_csv(categories), "text/csv")
-    await to_thread(drive.upload, client, folder_id, csv_names[1], detail_csv(report.items), "text/csv")
+    client = await to_thread(connect)
+    await to_thread(confirm_root, client, root_id)
+    folder_id = await to_thread(ensure_folder, client, root_id, report.dispatch.hsm_name)
+    await to_thread(upload, client, folder_id, f"{slug}.docx", document, DOCX_MIME)
+    await to_thread(upload, client, folder_id, csv_names[0], categories_csv(categories), "text/csv")
+    await to_thread(upload, client, folder_id, csv_names[1], detail_csv(report.items), "text/csv")
     logger.info("Report published: hsm=%s reference=%s", report.dispatch.hsm_name, report.reference)
