@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Descoberta de categorias (passada 1 de 2) — estabiliza o catálogo com uma amostra
 ALEATÓRIA do disparo antes de qualquer conversa ser classificada de verdade, pra evitar
 viés de ordem: numa classificação direta, quem é classificado cedo ficaria preso ao
@@ -9,12 +8,14 @@ import json
 from pathlib import Path
 
 import pandas as pd
-from toolkit.pipelines_utils.logging import log
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import LOTES_SEM_NOVIDADE_LIMITE, SEED_DESCOBERTA
-from pipelines.rj_crm__relatorio_engajamento_hsm.utils.bifrost import BifrostClient, max_output_tokens_para
-from pipelines.rj_crm__relatorio_engajamento_hsm.utils.catalogo import CatalogoCategorias
-from pipelines.rj_crm__relatorio_engajamento_hsm.utils.texto import strip_code_fence
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.bifrost import BifrostClient, max_output_tokens_para
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.catalogo import CatalogoCategorias
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.texto import strip_code_fence
+
+logger = get_logger("toolkit")
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 _PROMPT_DESCOBERTA = (_PROMPTS_DIR / "descoberta.txt").read_text(encoding="utf-8")
@@ -38,7 +39,7 @@ def _descobre_lote(lote: pd.DataFrame, bifrost: BifrostClient, catalogo: Catalog
         if not isinstance(parsed, list):
             raise ValueError(f"resposta não é uma lista JSON (bruto: {texto[:200]!r})")
     except Exception as exc:
-        log(f"  [FALHA LOTE DESCOBERTA] {len(lote)} conversa(s): {exc}")
+        logger.info(f"  [FALHA LOTE DESCOBERTA] {len(lote)} conversa(s): {exc}")
         return 0, len(lote)
 
     n_novas = n_falhas = 0
@@ -74,11 +75,11 @@ def descobre_categorias(
     for i in range(0, len(amostra), tamanho_lote_descoberta):
         lote = amostra.iloc[i : i + tamanho_lote_descoberta]
         n_novas, n_falhas = _descobre_lote(lote, bifrost, catalogo, max_output_tokens)
-        log(f"[DESCOBERTA] lote {i // tamanho_lote_descoberta + 1}: {n_novas} categoria(s) nova(s), {n_falhas} falha(s). Catálogo com {len(catalogo.como_dict())}.")
+        logger.info(f"[DESCOBERTA] lote {i // tamanho_lote_descoberta + 1}: {n_novas} categoria(s) nova(s), {n_falhas} falha(s). Catálogo com {len(catalogo.como_dict())}.")
         if n_novas == 0:
             lotes_sem_novidade += 1
             if lotes_sem_novidade >= LOTES_SEM_NOVIDADE_LIMITE:
-                log(f"[DESCOBERTA] {lotes_sem_novidade} lote(s) seguido(s) sem novidade — catálogo estável, parando.")
+                logger.info(f"[DESCOBERTA] {lotes_sem_novidade} lote(s) seguido(s) sem novidade — catálogo estável, parando.")
                 break
         else:
             lotes_sem_novidade = 0

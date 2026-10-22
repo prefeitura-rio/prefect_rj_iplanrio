@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Notificação Discord de resumo/falha da pipeline — mesmo padrão de
 pipelines/rj_crm__disparo_template/utils/discord.py (webhook simples via discord.py + aiohttp).

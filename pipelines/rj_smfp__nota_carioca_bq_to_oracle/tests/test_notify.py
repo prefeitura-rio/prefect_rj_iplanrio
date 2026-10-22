@@ -10,12 +10,12 @@ import pytest
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle import flow as flow_module
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle import tasks as tasks_module
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import discord as discord_module
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import slots, sqlldr
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.bigquery import ExportedFile
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import LoadPlan
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord import DiscordStatusMessage
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_embed import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import discord as discord_module
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import slots, sqlldr
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import ExportedFile
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import LoadPlan
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import DiscordStatusMessage
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import (
     COLOR_CANCELLED,
     COLOR_FAILURE,
     COLOR_RUNNING,
@@ -24,15 +24,15 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_embed import (
     RunStatus,
     format_validation_line,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify import LoadNotifier, NotifierConfig, current
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify_view import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify import LoadNotifier, NotifierConfig, current
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify_view import (
     RunState,
     TableState,
     build_view,
     overall_fraction,
     table_fraction,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.stages import Step, TableStep
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.stages import Step, TableStep
 
 NOW = datetime(2026, 10, 9, 15, 0, 0, tzinfo=UTC)
 GIB = 1024**3
@@ -262,7 +262,7 @@ def test_a_bug_in_the_notifier_never_reaches_the_flow(monkeypatch: pytest.Monkey
         raise ZeroDivisionError
 
     notifier = make(Discord())
-    monkeypatch.setattr("pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify.build_view", broken)
+    monkeypatch.setattr("pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify.build_view", broken)
     # When the flow reports progress and finishes
     with notifier.guard():
         notifier.begin()

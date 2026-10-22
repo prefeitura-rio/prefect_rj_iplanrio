@@ -3,17 +3,16 @@ eventos candidatos pra simulação (``extrai_eventos``)."""
 
 import pandas as pd
 from google.cloud import bigquery, bigquery_storage_v1
-from toolkit.pipelines_utils.env import get_bd_credentials_from_env
 from prefect import task
-from prefect_rj_iplanrio.logging import get_logger
-from prefect_rj_iplanrio.sql import load_query
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__modelo_qualidade_telefone import constants
 from pipelines.rj_crm__modelo_qualidade_telefone.constants import FEATURES
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.cobertura import calcula_cobertura
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.features import renderiza_features_sql
+from utils.utils import load_credentials, render_query
 
-logger = get_logger(__name__)
+logger = get_logger("toolkit")
 
 JANELA_RECENTE_DIAS = 30
 # Hoje o pool tem ~107 mil disparos avaliáveis em 30 dias — ver README de
@@ -63,7 +62,7 @@ def extrai_treino(environment: str) -> pd.DataFrame:
         colunas de ``constants.FEATURES``.
     :raises ValueError: Ver :func:`valida_treino`.
     """
-    credentials = get_bd_credentials_from_env(mode=environment)
+    credentials = load_credentials()
     bq = bigquery.Client(credentials=credentials, project=constants.PROJECT_ID)
     bqstorage = bigquery_storage_v1.BigQueryReadClient(credentials=credentials)
 
@@ -87,7 +86,7 @@ def renderiza_eventos_sql(janela_recente_dias: int = JANELA_RECENTE_DIAS) -> str
 
     :param janela_recente_dias: Quantos dias de disparos recentes entram na simulação.
     """
-    return load_query(constants.__file__, "eventos_candidatos", janela_recente_dias=janela_recente_dias)
+    return render_query(constants.__file__, "eventos_candidatos", janela_recente_dias=janela_recente_dias)
 
 
 def valida_eventos(df: pd.DataFrame) -> None:
@@ -114,7 +113,7 @@ def extrai_eventos(environment: str, janela_recente_dias: int = JANELA_RECENTE_D
         as colunas de ``constants.FEATURES``.
     :raises ValueError: Ver :func:`valida_eventos`.
     """
-    credentials = get_bd_credentials_from_env(mode=environment)
+    credentials = load_credentials()
     bq = bigquery.Client(credentials=credentials, project=constants.PROJECT_ID)
     bqstorage = bigquery_storage_v1.BigQueryReadClient(credentials=credentials)
 

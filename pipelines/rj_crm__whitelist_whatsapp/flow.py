@@ -1,24 +1,27 @@
-# -*- coding: utf-8 -*-
 """
 Flow for rj_crm__whitelist_whatsapp pipeline.
 """
+from pathlib import Path
+
 from prefect import flow
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 
 from pipelines.rj_crm__whitelist_whatsapp.constants import WhitelistConstants
+from pipelines.rj_crm__whitelist_whatsapp.helpers.tasks import create_date_partitions
 from pipelines.rj_crm__whitelist_whatsapp.tasks import (
-    get_whitelist_credentials,
     fetch_whitelist_data,
-    transform_whitelist_data,
     generate_backfill_data,
+    get_whitelist_credentials,
+    transform_whitelist_data,
 )
-from pipelines.rj_crm__whitelist_whatsapp.utils.tasks import create_date_partitions
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 
 @flow(log_prints=True)
-def rj_crm__whitelist_whatsapp(
+async def rj_crm__whitelist_whatsapp(
+    *,
+    cloud: Cloud,
     dataset_id: str | None = None,
     billing_project_id: str | None = None,
     table_id: str | None = None,
@@ -37,10 +40,8 @@ def rj_crm__whitelist_whatsapp(
     if backfill:
         flow_name += "_BACKFILL"
 
-    rename_current_flow_run_task(new_name=flow_name)
 
     # 0.1 Inject BD Credentials
-    inject_bd_credentials_task(environment=environment)
 
     # 1. Credentials
     creds = get_whitelist_credentials()
@@ -63,14 +64,16 @@ def rj_crm__whitelist_whatsapp(
             root_folder=f"{WhitelistConstants.ROOT_FOLDER.value}/{table_id}"
         )
 
-        create_table_and_upload_to_gcs_task(
-            data_path=log_path,
-            dataset_id=dataset_id,
-            table_id=table_id,
+        table = Table(dataset_id=dataset_id, table_id=table_id)
+        await upload_files_to_gcs(
+            Path(log_path),
+            table,
+            bucket=cloud["bucket"],
             dump_mode=WhitelistConstants.DUMP_MODE.value,
-            biglake_table=WhitelistConstants.BIGLAKE_TABLE.value,
             source_format=WhitelistConstants.FILE_FORMAT.value,
+            options=capture_options(WhitelistConstants.DUMP_MODE.value),
         )
+        await publish_table_in_bq(table, cloud)
     else:
         print("No data found to ingest.")
 

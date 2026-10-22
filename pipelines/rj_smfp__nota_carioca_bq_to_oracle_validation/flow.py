@@ -4,8 +4,6 @@ from typing import Literal
 
 from prefect import flow
 
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.tasks import (
     list_tables_task,
     log_session_task,
@@ -14,7 +12,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.tasks import (
 )
 
 
-@flow(log_prints=True)
+@flow(log_prints=True, flow_run_name="validacao-{dataset_id}")
 def rj_smfp__nota_carioca_bq_to_oracle_validation(  # noqa: PLR0913
     project: str = "rj-iplanrio-dia",
     dataset_id: str = "nota_carioca_staging",
@@ -26,8 +24,6 @@ def rj_smfp__nota_carioca_bq_to_oracle_validation(  # noqa: PLR0913
     excluded_template_columns: list[str] | None = None,
     raw_text_encoding: Literal["base64", "hex"] = "base64",
 ) -> None:
-    rename_current_flow_run_task(new_name=f"validacao-{dataset_id}")
-    inject_bd_credentials_task(environment="prod")
     log_session_task(infisical_secret_path=infisical_secret_path)
     tables = list_tables_task(project=project, dataset_id=dataset_id, table_ids=table_ids)
 

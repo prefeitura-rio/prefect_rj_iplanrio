@@ -11,12 +11,12 @@ from typing import Literal
 
 import pandas as pd
 from google.cloud import bigquery, bigquery_storage_v1
-from prefect_rj_iplanrio.logging import get_logger
-from prefect_rj_iplanrio.sql import load_query
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__modelo_qualidade_telefone import constants
+from utils.utils import render_query
 
-logger = get_logger(__name__)
+logger = get_logger("toolkit")
 
 ModoFeatures = Literal["treino", "agora"]
 
@@ -51,20 +51,20 @@ def renderiza_features_sql(
             "limiar_high_delivery": limiar_high_delivery,
         }
         fragmentos = {
-            "amostra_ctes": load_query(QUERY_ANCHOR, "amostra_treino", **params),
-            "rotulo_ctes": load_query(QUERY_ANCHOR, "rotulo_treino", **params),
-            "select_final": load_query(QUERY_ANCHOR, "select_treino"),
+            "amostra_ctes": render_query(QUERY_ANCHOR, "amostra_treino", **params),
+            "rotulo_ctes": render_query(QUERY_ANCHOR, "rotulo_treino", **params),
+            "select_final": render_query(QUERY_ANCHOR, "select_treino"),
         }
     elif modo == "agora":
         fragmentos = {
-            "amostra_ctes": load_query(QUERY_ANCHOR, "amostra_agora"),
+            "amostra_ctes": render_query(QUERY_ANCHOR, "amostra_agora"),
             "rotulo_ctes": "",
-            "select_final": load_query(QUERY_ANCHOR, "select_agora"),
+            "select_final": render_query(QUERY_ANCHOR, "select_agora"),
         }
     else:
         raise ValueError(f"modo inválido: {modo!r} (esperado 'treino' ou 'agora')")
 
-    return load_query(QUERY_ANCHOR, "features_telefone", **fragmentos)
+    return render_query(QUERY_ANCHOR, "features_telefone", **fragmentos)
 
 
 def itera_features_agora(

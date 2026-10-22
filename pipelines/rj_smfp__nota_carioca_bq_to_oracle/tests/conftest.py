@@ -1,6 +1,6 @@
 import pytest
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import discord
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import discord
 
 
 def _no_secret_block(name: str) -> str:

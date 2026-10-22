@@ -24,7 +24,7 @@ import numpy as np
 import optuna
 import pandas as pd
 from prefect import task
-from prefect_rj_iplanrio.logging import get_logger
+from prefect.logging import get_logger
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.metrics import f1_score, fbeta_score, precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
@@ -32,7 +32,7 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test
 from pipelines.rj_crm__modelo_qualidade_telefone.constants import FEATURES, RANDOM_STATE
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.calcula_scores import pontua_lote
 
-logger = get_logger(__name__)
+logger = get_logger("toolkit")
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 warnings.filterwarnings("ignore", category=ConvergenceWarning)

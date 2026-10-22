@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Classificação por LLM (Bifrost/Gemini) das sessões do Agentforce.
 

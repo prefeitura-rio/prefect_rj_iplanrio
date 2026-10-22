@@ -24,7 +24,7 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 from prefect import task
-from prefect_rj_iplanrio.logging import get_logger
+from prefect.logging import get_logger
 from scipy import stats
 from statsmodels.stats.proportion import proportions_ztest
 
@@ -36,7 +36,7 @@ from pipelines.rj_crm__modelo_qualidade_telefone.constants import (
     SISTEMAS,
 )
 
-logger = get_logger(__name__)
+logger = get_logger("toolkit")
 
 NOME_MODELO_NOVO = "modelo_novo"
 NOME_MODELO_PRODUCAO = "modelo_producao"

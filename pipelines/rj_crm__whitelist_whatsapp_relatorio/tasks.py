@@ -11,23 +11,23 @@ falhar em vez de morrer na primeira.
 """
 
 from datetime import datetime
+from os import environ
 from typing import TypedDict
 
-from toolkit.pipelines_utils.env import getenv_or_action, inject_bd_credentials
 from prefect import task
 from prefect.runtime import deployment, flow_run
 
-from pipelines.rj_crm__whitelist_whatsapp_relatorio.utils import bigquery, discord, mailman
-from pipelines.rj_crm__whitelist_whatsapp_relatorio.utils import janela as janela_utils
-from pipelines.rj_crm__whitelist_whatsapp_relatorio.utils.configuracao import ler_destinatarios, variaveis_ausentes
-from pipelines.rj_crm__whitelist_whatsapp_relatorio.utils.janela import Janela
-from pipelines.rj_crm__whitelist_whatsapp_relatorio.utils.log import logger_da_pipeline
-from pipelines.rj_crm__whitelist_whatsapp_relatorio.utils.ocorrencias import (
+from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers import bigquery, discord, mailman
+from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers import janela as janela_utils
+from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.configuracao import ler_destinatarios, variaveis_ausentes
+from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.janela import Janela
+from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.log import logger_da_pipeline
+from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.ocorrencias import (
     Ocorrencia,
     ler_ultima_ocorrencia,
     normalizar,
 )
-from prefect_rj_iplanrio.sql import load_query
+from utils.utils import read_env, render_query
 
 logger = logger_da_pipeline(__name__)
 
@@ -85,7 +85,7 @@ def validar_configuracao_task() -> None:
 
     :raises ValueError: Se alguma variável obrigatória estiver ausente ou vazia.
     """
-    lidas = {nome: getenv_or_action(nome, action="ignore") for nome in ENV_OBRIGATORIAS}
+    lidas = {nome: environ.get(nome, None) for nome in ENV_OBRIGATORIAS}
     ausentes = variaveis_ausentes(lidas)
     if ausentes:
         raise ValueError(f"Variáveis de ambiente ausentes: {', '.join(ausentes)}")
@@ -112,7 +112,6 @@ def preparar_credenciais_task() -> None:
         )
         return
 
-    inject_bd_credentials(environment=bigquery.MODE_CREDENCIAIS)
     logger.info("Credenciais do BigQuery injetadas a partir do modo %s", bigquery.MODE_CREDENCIAIS)
 
 
@@ -163,7 +162,7 @@ def buscar_ocorrencias_task(query: QueryParam, janela: Janela) -> list[Ocorrenci
         "start_datetime": janela.inicio_sql,
         "end_datetime": janela.fim_sql,
     }
-    return normalizar(bigquery.baixar(query=load_query(__file__, query["name"], **replacements)))
+    return normalizar(bigquery.baixar(query=render_query(__file__, query["name"], **replacements)))
 
 
 @task
@@ -187,7 +186,7 @@ def buscar_ultima_ocorrencia_task(query: QueryParam, ocorrencias: list[Ocorrenci
         return None
 
     try:
-        dados = bigquery.baixar(query=load_query(__file__, query["name"], **query["replacements"]))
+        dados = bigquery.baixar(query=render_query(__file__, query["name"], **query["replacements"]))
     except Exception:
         logger.warning("Não foi possível consultar a última ocorrência conhecida", exc_info=True)
         return None
@@ -212,11 +211,11 @@ def enviar_email_task(janela: Janela, ocorrencias: list[Ocorrencia]) -> list[str
         logger.info("Sem ocorrências no período: e-mail não será enviado")
         return []
 
-    destinatarios = ler_destinatarios(getenv_or_action(ENV_DATA_RELAY_TO_ADDRESSES))
+    destinatarios = ler_destinatarios(read_env(ENV_DATA_RELAY_TO_ADDRESSES))
     mailman.enviar_relatorio(
         conexao=mailman.ConexaoDataRelay(
-            url=str(getenv_or_action(ENV_DATA_RELAY_URL)),
-            api_key=str(getenv_or_action(ENV_DATA_RELAY_API_KEY)),
+            url=str(read_env(ENV_DATA_RELAY_URL)),
+            api_key=str(read_env(ENV_DATA_RELAY_API_KEY)),
         ),
         destinatarios=destinatarios,
         janela=janela,
@@ -253,4 +252,4 @@ def enviar_discord_task(
         contexto=discord.Contexto(ambiente=ambiente, run_url=flow_run.ui_url or ""),
         ultima_ocorrencia=ultima_ocorrencia,
     )
-    discord.enviar(webhook_url=str(getenv_or_action(ENV_DISCORD_WEBHOOK)), mensagem=mensagem)
+    discord.enviar(webhook_url=str(read_env(ENV_DISCORD_WEBHOOK)), mensagem=mensagem)

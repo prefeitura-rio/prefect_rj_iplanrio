@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Constantes para a pipeline de classificação inicial via LLM das sessões do
 Agentforce (WhatsApp).

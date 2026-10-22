@@ -1,14 +1,16 @@
-# -*- coding: utf-8 -*-
 import asyncio
-from typing import Optional
 from pathlib import Path
+from typing import Optional
 
-import basedosdados as bd
-from toolkit.pipelines_utils.logging import log
+from google.cloud import bigquery
+from google.cloud.exceptions import NotFound
 from prefect import task
+from prefect.logging import get_logger
 
-from pipelines.rj_iplanrio__eai_history import env
+from pipelines.rj_iplanrio__eai_history.helpers import EaiSettings
 from pipelines.rj_iplanrio__eai_history.history import GoogleAgentEngineHistory
+
+logger = get_logger("toolkit")
 
 
 # Epoch timestamp used as the default cursor when the BQ table is empty.
@@ -28,22 +30,21 @@ def get_last_update(
     Esta é uma operação síncrona e bloqueante (I/O de rede/disco).
     """
     if last_update:
-        log(f"'last_update' fornecido via parametro: {last_update}")
+        logger.info(f"'last_update' fornecido via parametro: {last_update}")
         return last_update
 
     if environment == "staging":
-        project_id = env.PROJECT_ID
-        log(f"'environment' staging using project_id: {project_id}")
+        project_id = EaiSettings().EAI__PROJECT_ID
+        logger.info(f"'environment' staging using project_id: {project_id}")
 
     elif environment == "prod":
-        project_id = env.PROJECT_ID_PROD
-        log(f"'environment' prod using project_id: {project_id}")
+        project_id = EaiSettings().EAI__PROJECT_ID_PROD
+        logger.info(f"'environment' prod using project_id: {project_id}")
     else:
         raise (ValueError("environment must be prod or staging"))
 
-    log(f"Buscando último 'last_update' para {dataset_id}.{table_id}")
-    bd.config.billing_project_id = "rj-iplanrio"
-    bd.config.from_file = True
+    logger.info(f"Buscando último 'last_update' para {dataset_id}.{table_id}")
+    client = bigquery.Client(project="rj-iplanrio")
     query = f"""
         SELECT
             max(last_update) AS last_update
@@ -52,27 +53,26 @@ def get_last_update(
         AND last_update IS NOT NULL
         AND last_update != 'None'
     """
-    log(msg=f"Runing query:\n{query}")
+    logger.info(f"Runing query:\n{query}")
 
-    tb = bd.Table(dataset_id=dataset_id, table_id=table_id)
-    tb_exists = tb.table_exists(mode="staging")
-
-    if tb_exists:
-        result = bd.read_sql(query=query)
-    else:
-        log(f"Tabela não existe `{project_id}.{dataset_id}.{table_id}`")
+    try:
+        client.get_table(f"rj-iplanrio.{dataset_id}_staging.{table_id}")
+    except NotFound:
+        logger.info(f"Tabela não existe `{project_id}.{dataset_id}.{table_id}`")
         return _DEFAULT_LAST_UPDATE
 
-    if result is None or result.empty:
-        log("Nenhum 'last_update' encontrado.")
+    result = list(client.query(query).result())
+
+    if not result:
+        logger.info("Nenhum 'last_update' encontrado.")
         return _DEFAULT_LAST_UPDATE
 
-    last_update = result["last_update"][0]
+    last_update = result[0]["last_update"]
     if last_update:
-        log(f"Último 'last_update' encontrado: {last_update}")
+        logger.info(f"Último 'last_update' encontrado: {last_update}")
         return str(last_update)
     else:
-        log("Nenhum 'last_update' encontrado.")
+        logger.info("Nenhum 'last_update' encontrado.")
         return _DEFAULT_LAST_UPDATE
 
 
@@ -92,12 +92,12 @@ def fetch_history_data(
 
     # --- Início da lógica assíncrona interna ---
     async def _main_async_runner() -> Optional[str]:
-        log("Criando instância de GoogleAgentEngineHistory...")
+        logger.info("Criando instância de GoogleAgentEngineHistory...")
         history_instance = await GoogleAgentEngineHistory.create(
             environment=environment
         )
 
-        log(f"Buscando histórico a partir de 'last_update': {last_update}.")
+        logger.info(f"Buscando histórico a partir de 'last_update': {last_update}.")
         data_path = await history_instance.get_history_bulk_from_last_update(
             last_update=last_update,
             session_timeout_seconds=session_timeout_seconds,
@@ -115,13 +115,12 @@ def fetch_history_data(
         final_path = Path(final_data_path)
         files_fond = list(final_path.rglob("*"))
         if not files_fond:
-            log(
+            logger.warning(
                 f"Nenhum arquivo encontrado em {final_data_path}. Retornando None.",
-                level="warning",
             )
             return None
         else:
-            log(
+            logger.info(
                 f"Arquivos encontrados em {final_data_path}: {len(files_fond)}\n{files_fond[:10]}"
             )
 

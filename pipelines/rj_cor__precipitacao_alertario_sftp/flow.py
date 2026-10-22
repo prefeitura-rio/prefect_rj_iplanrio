@@ -1,25 +1,27 @@
 """Flow para coleta de precipitação do AlertaRio via SFTP em landing zone GCS."""
 
+from pathlib import Path
+
 from prefect import flow
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
-from prefect_rj_iplanrio.logging import get_logger
-from toolkit.pipelines_utils.bd import (
-    create_table_and_upload_to_gcs_task,
-)
-from toolkit.pipelines_utils.env import getenv_or_action
+from prefect.logging import get_logger
 from tasks import (
-    get_max_date_from_bigquery_task,
+    download_xml_files_from_list_task,
     get_bucket_files_with_datetime_filter_task,
+    get_max_date_from_bigquery_task,
     process_multiple_xml_files_task,
-    download_xml_files_from_list_task
 )
 
-logger = get_logger(__name__)
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options, read_env
+
+logger = get_logger("toolkit")
 
 
-@flow(log_prints=True, name="rj-cor-precipitacao-alertario-sftp")
-def rj_cor__precipitacao_alertario_sftp(
+@flow(log_prints=True, name="rj-cor-precipitacao-alertario-sftp", flow_run_name="precipitacao-alertario-sftp")
+async def rj_cor__precipitacao_alertario_sftp(
+    *,
+    cloud: Cloud,
     dataset_id_pluviometric: str = 'clima_pluviometro',
     table_id_pluviometric: str = 'taxa_precipitacao_alertario_5min',
     dataset_id_meteorological: str = 'clima_estacao_meteorologica',
@@ -67,11 +69,9 @@ def rj_cor__precipitacao_alertario_sftp(
         None
     """
     # Setup
-    rename_current_flow_run_task(new_name="precipitacao-alertario-sftp")
-    inject_bd_credentials_task(environment="prod")
 
-    bucket_name = getenv_or_action("bucket-nimbus")
-    prefix = getenv_or_action("prefix")
+    bucket_name = read_env("bucket-nimbus")
+    prefix = read_env("prefix")
 
     logger.info("🌧️  Iniciando coleta de dados de precipitação AlertaRio via SFTP")
 
@@ -106,18 +106,26 @@ def rj_cor__precipitacao_alertario_sftp(
 
     if dataset_id_pluviometric is not None and pluviometric_path is not None:
         logger.info("📤 Enviando dados pluviométricos para BigQuery: %s", pluviometric_path)
-        create_table_and_upload_to_gcs_task(
-            data_path=pluviometric_path,
-            dataset_id=dataset_id_pluviometric,
-            table_id=table_id_pluviometric,
+        table = Table(dataset_id=dataset_id_pluviometric, table_id=table_id_pluviometric)
+        await upload_files_to_gcs(
+            Path(pluviometric_path),
+            table,
+            bucket=cloud["bucket"],
             dump_mode=dump_mode,
+            source_format="csv",
+            options=capture_options(dump_mode),
         )
+        await publish_table_in_bq(table, cloud)
 
     if dataset_id_meteorological is not None and meteorological_path is not None:
         logger.info("📤 Enviando dados meteorológicos para BigQuery: %s", meteorological_path)
-        create_table_and_upload_to_gcs_task(
-            data_path=meteorological_path,
-            dataset_id=dataset_id_meteorological,
-            table_id=table_id_meteorological,
-            dump_mode=dump_mode
-    )
+        table = Table(dataset_id=dataset_id_meteorological, table_id=table_id_meteorological)
+        await upload_files_to_gcs(
+            Path(meteorological_path),
+            table,
+            bucket=cloud["bucket"],
+            dump_mode=dump_mode,
+            source_format="csv",
+            options=capture_options(dump_mode),
+        )
+        await publish_table_in_bq(table, cloud)

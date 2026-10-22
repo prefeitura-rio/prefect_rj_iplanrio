@@ -1,4 +1,3 @@
-
 name: rj_crm__agentforce_classificacao_llm
 prefect-version: 3.4.3
 
@@ -26,7 +25,10 @@ pull:
 
 deployments:
   - name: rj-crm--agentforce-classificacao-llm--staging
-    tags: [staging]
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_crm__agentforce_classificacao_llm/flow.py:rj_crm__agentforce_classificacao_llm
     work_pool:
@@ -39,7 +41,10 @@ deployments:
         image_pull_policy: Always
 
   - name: rj-crm--agentforce-classificacao-llm--prod
-    tags: [prod]
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_crm__agentforce_classificacao_llm/flow.py:rj_crm__agentforce_classificacao_llm
     work_pool:

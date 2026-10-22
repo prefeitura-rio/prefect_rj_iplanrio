@@ -6,9 +6,10 @@ from typing import Literal
 from prefect import flow
 from prefect.runtime import flow_run
 
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import DBT_DEPLOYMENT
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.dbt import resolve_dbt_parameters, should_run_dbt
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify import LoadNotifier, NotifierConfig
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.stages import Step, TableStep
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
     create_oracle_indexes_task,
     delete_gcs_files_task,
@@ -31,12 +32,9 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
     validate_row_count_task,
     wait_inmemory_task,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.dbt import resolve_dbt_parameters, should_run_dbt
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify import LoadNotifier, NotifierConfig
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.stages import Step, TableStep
 
 
-@flow(log_prints=True)
+@flow(log_prints=True, flow_run_name="{dataset_id}")
 def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
     project: str = "rj-iplanrio-dia",
     dataset_id: str = "nota_carioca_staging",
@@ -58,8 +56,6 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
     dbt_timeout_minutes: int = 120,
     discord_notifications: bool = True,
 ) -> None:
-    rename_current_flow_run_task(new_name=dataset_id)
-    inject_bd_credentials_task(environment="prod")
     dbt_enabled = should_run_dbt(run_dbt, mode)
     notifier = LoadNotifier.create(
         NotifierConfig(

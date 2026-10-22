@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Constants for the rj_crm__whitelist_whatsapp pipeline.
 """

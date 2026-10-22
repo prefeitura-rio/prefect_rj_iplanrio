@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
 # python3 -m build_prefect_yaml --env prod
-import warnings
-from pathlib import Path
-from ruamel.yaml import YAML
-import os
-from copy import deepcopy
 import argparse
+import os
+import warnings
+from copy import deepcopy
+from pathlib import Path
+
+from ruamel.yaml import YAML
 
 # Ignora warnings do Pydantic/Python 3.14
 warnings.filterwarnings("ignore")

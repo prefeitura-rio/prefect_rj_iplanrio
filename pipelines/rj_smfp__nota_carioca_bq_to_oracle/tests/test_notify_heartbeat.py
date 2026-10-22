@@ -6,13 +6,13 @@ from datetime import UTC, datetime
 
 import pytest
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import discord as discord_module
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import notify as notify_module
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord import DiscordStatusMessage
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_embed import RunStatus, build_payload
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify import LoadNotifier, NotifierConfig
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify_view import RunState, TableState, build_view
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.stages import Step, TableStep
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import discord as discord_module
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import notify as notify_module
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import DiscordStatusMessage
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import RunStatus, build_payload
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify import LoadNotifier, NotifierConfig
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify_view import RunState, TableState, build_view
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.stages import Step, TableStep
 
 NOW = datetime(2026, 10, 9, 15, 0, 0, tzinfo=UTC)
 INTERVAL = 0.05

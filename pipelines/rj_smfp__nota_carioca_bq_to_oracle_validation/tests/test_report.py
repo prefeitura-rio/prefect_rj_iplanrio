@@ -1,8 +1,8 @@
 from decimal import Decimal
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import OracleColumn
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import IndexDefinition, Partitioning, TablePartition
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.utils.report import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import OracleColumn
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import IndexDefinition, Partitioning, TablePartition
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.report import (
     compare_columns,
     compare_grants,
     compare_indexes,

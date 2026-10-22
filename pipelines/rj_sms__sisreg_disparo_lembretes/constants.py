@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Constantes para pipeline SISREG - Disparo de lembretes de agendamentos
 """

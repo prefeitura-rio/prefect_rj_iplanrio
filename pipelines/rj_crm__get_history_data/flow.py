@@ -1,9 +1,7 @@
-# -*- coding: utf-8 -*-
 
 import os
 from typing import Any, Dict, List, Optional
 
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
 from prefect import flow
 
 from pipelines.rj_crm__get_history_data.constants import GetHistoryDataConstants
@@ -62,7 +60,6 @@ def rj_crm__get_history_data(
     tmp_table_id = GetHistoryDataConstants.GCP_SFMC_TMP_TABLE_ID.value
     final_table_id = GetHistoryDataConstants.GCP_SFMC_FINAL_TABLE_ID.value
 
-    inject_bd_credentials_task(environment="prod")
 
     access_token = authenticate_sfmc()
 

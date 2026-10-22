@@ -2,8 +2,6 @@
 Utilidades para geração e envio de alertas de precipitação no Discord.
 """
 
-from prefect.logging import get_logger
-
 import hashlib
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -14,6 +12,7 @@ from typing import Optional, Sequence
 import pandas as pd
 import requests
 from google.cloud import bigquery
+from prefect.logging import get_logger
 
 logger = get_logger("toolkit")
 

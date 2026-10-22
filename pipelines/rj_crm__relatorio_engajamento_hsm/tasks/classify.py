@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Classificação (passada 2 de 2) — só ESCOLHE entre categorias já existentes no
 catálogo (nunca cria; isso é trabalho exclusivo de discovery.py). Roda sempre depois da
 descoberta terminar de estabilizar o catálogo pra esse disparo."""
@@ -9,14 +8,16 @@ from collections import Counter
 from pathlib import Path
 
 import pandas as pd
-from toolkit.pipelines_utils.logging import log
 from prefect import task
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import SENTINELA_SEM_CATEGORIA
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.bifrost import BifrostClient, max_output_tokens_para
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.catalogo import CatalogoCategorias
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.texto import strip_code_fence
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.discovery import descobre_categorias
-from pipelines.rj_crm__relatorio_engajamento_hsm.utils.bifrost import BifrostClient, max_output_tokens_para
-from pipelines.rj_crm__relatorio_engajamento_hsm.utils.catalogo import CatalogoCategorias
-from pipelines.rj_crm__relatorio_engajamento_hsm.utils.texto import strip_code_fence
+
+logger = get_logger("toolkit")
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 _PROMPT_CLASSIFICACAO = (_PROMPTS_DIR / "classificacao.txt").read_text(encoding="utf-8")
@@ -40,7 +41,7 @@ def _classifica_lote(lote: pd.DataFrame, bifrost: BifrostClient, catalogo: Catal
         if not isinstance(parsed, list):
             raise ValueError(f"resposta não é uma lista JSON (bruto: {texto[:200]!r})")
     except Exception as exc:
-        log(f"  [FALHA LOTE] {len(lote)} conversa(s): {exc}")
+        logger.info(f"  [FALHA LOTE] {len(lote)} conversa(s): {exc}")
         return [], Counter({"lote_inteiro_falhou": len(lote)})
 
     por_id = {item.get("id"): item for item in parsed if isinstance(item, dict)}
@@ -88,9 +89,9 @@ def classifica_conversas(
     bifrost = BifrostClient(api_key=bf_key, model=bifrost_model)
     catalogo = CatalogoCategorias()
 
-    log(f"[DESCOBERTA] estabilizando catálogo a partir de {len(df_sessoes)} conversa(s) engajada(s)...")
+    logger.info(f"[DESCOBERTA] estabilizando catálogo a partir de {len(df_sessoes)} conversa(s) engajada(s)...")
     descobre_categorias(df_sessoes, bifrost, catalogo, tamanho_lote_descoberta, teto_amostra_descoberta)
-    log(f"[DESCOBERTA] catálogo com {len(catalogo.como_dict())} categoria(s). Iniciando classificação.")
+    logger.info(f"[DESCOBERTA] catálogo com {len(catalogo.como_dict())} categoria(s). Iniciando classificação.")
 
     max_output_tokens = max_output_tokens_para(tamanho_lote_classificacao)
     resultados_totais: list[dict] = []
@@ -101,10 +102,10 @@ def classifica_conversas(
         resultados, falhas_lote = _classifica_lote(lote, bifrost, catalogo, max_output_tokens)
         resultados_totais.extend(resultados)
         falhas_totais.update(falhas_lote)
-        log(f"[CLASSIFICACAO] lote {n}/{n_lotes}: {len(resultados)} classificada(s), {sum(falhas_lote.values())} falha(s).")
+        logger.info(f"[CLASSIFICACAO] lote {n}/{n_lotes}: {len(resultados)} classificada(s), {sum(falhas_lote.values())} falha(s).")
 
     detalhe_falhas = ", ".join(f"{motivo}={qtd}" for motivo, qtd in falhas_totais.most_common()) or "nenhuma"
-    log(f"[CLASSIFICACAO] {len(resultados_totais)} classificada(s), {sum(falhas_totais.values())} falha(s) [{detalhe_falhas}].")
+    logger.info(f"[CLASSIFICACAO] {len(resultados_totais)} classificada(s), {sum(falhas_totais.values())} falha(s) [{detalhe_falhas}].")
 
     df_classificada = pd.DataFrame(resultados_totais)
     for col in ["juiz_veredito", "juiz_categoria_esperada", "juiz_justificativa"]:

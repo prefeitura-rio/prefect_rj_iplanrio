@@ -25,6 +25,10 @@ pull:
 
 deployments:
   - name: rj-sms--sisreg-disparo-lembretes--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_sms__sisreg_disparo_lembretes/flow.py:rj_sms__sisreg_disparo_lembretes
     work_pool:
@@ -50,7 +54,15 @@ deployments:
       chunk_size: 1000
       infisical_secret_path: /wetalkie
 
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
   - name: rj-sms--sisreg-disparo-lembretes--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_sms__sisreg_disparo_lembretes/flow.py:rj_sms__sisreg_disparo_lembretes
     work_pool:
@@ -75,3 +87,7 @@ deployments:
       cost_center_id: "71"
       chunk_size: 100
       infisical_secret_path: /wetalkie
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake

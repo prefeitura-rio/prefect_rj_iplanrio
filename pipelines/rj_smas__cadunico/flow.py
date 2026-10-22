@@ -1,10 +1,8 @@
-# -*- coding: utf-8 -*-
 # ruff: noqa: PLR0913
 """
 Dump CADUNICO TO BQ..
 """
 
-from toolkit.pipelines_utils.env import inject_bd_credentials
 from prefect import flow
 
 from pipelines.rj_smas__cadunico.tasks import (
@@ -17,10 +15,13 @@ from pipelines.rj_smas__cadunico.tasks import (
     push_models_to_branch_task,
     update_layout_from_storage_and_create_versions_dbt_models_task,
 )
+from utils.types import Cloud
 
 
 @flow(log_prints=True)
 def rj_smas__cadunico(
+    *,
+    cloud: Cloud,
     raw_bucket: str = "rj-smas",
     raw_prefix_area: str = "raw/protecao_social_cadunico/registro_familia",
     staging_bucket: str = "rj-iplanrio",
@@ -42,7 +43,6 @@ def rj_smas__cadunico(
     """
     staging_prefix_area = f"staging/{dataset_id}/{table_id}"
 
-    injected_credential = inject_bd_credentials()
 
     # Verificar o que já existe em staging
     existing_partitions = get_existing_partitions_task(
@@ -50,7 +50,6 @@ def rj_smas__cadunico(
         bucket_name=staging_bucket,
         dataset_id=dataset_id,
         table_id=table_id,
-        wait_for=[injected_credential],
     )
 
     # Identificar arquivos novos para ingerir
@@ -66,6 +65,7 @@ def rj_smas__cadunico(
             bucket_name=raw_bucket,
             dataset_id=dataset_id,
             table_id=table_id,
+            cloud=cloud,
             max_concurrent=max_concurrent,
             wait_for=[need_to_ingest],
         )
@@ -86,6 +86,7 @@ def rj_smas__cadunico(
             staging_bucket=staging_bucket,
             force_create_models=force_create_models,
             repository_path=repository_path,
+            cloud=cloud,
         )
 
         push_sucess = push_models_to_branch_task(

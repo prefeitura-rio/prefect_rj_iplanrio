@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Aplicação das regras de tema/motivo (funções Python já induzidas e validadas no repo
 `clustering`, tabela `taxonomia_regras`) sobre o `resumo` das sessões recém-classificadas.
@@ -33,8 +32,8 @@ from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 from prefect import task
 
+from pipelines.rj_crm__agentforce_classificacao_llm.helpers.bigquery import get_bq_client
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import SCHEMA, _full_table_id
-from pipelines.rj_crm__agentforce_classificacao_llm.utils.bigquery import get_bq_client
 
 # Secretaria usada no catálogo (e no CSV de origem, clustering/data/categorias_taxonomia.csv)
 # pra sessão relevante sem secretaria identificada pela LLM — secretaria_principal vem

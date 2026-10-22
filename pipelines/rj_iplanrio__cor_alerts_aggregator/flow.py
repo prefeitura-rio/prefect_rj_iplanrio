@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Flow para agregacao e envio de alertas COR. v2.
 Executa a cada 2 minutos, busca alertas pendentes, agrupa por localizacao
@@ -12,12 +11,8 @@ import uuid
 from datetime import datetime
 
 import pandas as pd
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.logging import log
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
-from prefect.concurrency.sync import concurrency
+from prefect.concurrency.asyncio import concurrency
 
 from pipelines.rj_iplanrio__cor_alerts_aggregator.constants import (
     CORAlertAggregatorConstants,
@@ -26,6 +21,10 @@ from pipelines.rj_iplanrio__cor_alerts_aggregator.constants import (
 # Mapeamentos para construir payload de log
 ALERT_TYPE_MAPPING = CORAlertAggregatorConstants.ALERT_TYPE_MAPPING.value
 SEVERITY_PRIORITY_MAPPING = CORAlertAggregatorConstants.SEVERITY_PRIORITY_MAPPING.value
+from pathlib import Path
+
+from prefect.logging import get_logger
+
 from pipelines.rj_iplanrio__cor_alerts_aggregator.tasks import (
     build_cluster_dataframe,
     cluster_alerts_by_location,
@@ -36,10 +35,17 @@ from pipelines.rj_iplanrio__cor_alerts_aggregator.tasks import (
     submit_cluster_to_cor_api,
     write_clusters_to_google_sheets,
 )
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
+
+logger = get_logger("toolkit")
 
 
-@flow(log_prints=True)
-def rj_iplanrio__cor_alerts_aggregator(
+@flow(log_prints=True, flow_run_name="cor_alerts_aggregator_{environment}")
+async def rj_iplanrio__cor_alerts_aggregator(
+    *,
+    cloud: Cloud,
     environment: str = "staging",
     radius_meters: int = CORAlertAggregatorConstants.RADIUS_METERS.value,
     time_window_minutes: int = CORAlertAggregatorConstants.TIME_WINDOW_MINUTES.value,
@@ -75,23 +81,19 @@ def rj_iplanrio__cor_alerts_aggregator(
             f"Valores permitidos: {valid_destinations}"
         )
     run_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    rename_current_flow_run_task(
-        new_name=f"cor_alerts_aggregator_{environment}_{run_timestamp}"
-    )
 
-    log(f"=== Iniciando agregacao de alertas COR - {environment} ===")
-    log(f"Destino: {destination}")
-    log(
+    logger.info(f"=== Iniciando agregacao de alertas COR - {environment} ===")
+    logger.info(f"Destino: {destination}")
+    logger.info(
         f"Parametros: raio={radius_meters}m, janela={time_window_minutes}min, limite={immediate_threshold}"
     )
 
     # Adquirir lock de concorrencia (limite 1)
     # Se outra execucao estiver em andamento, esta aguarda
-    with concurrency("cor-alerts-aggregator", occupy=1):
-        log("Lock de concorrencia adquirido")
+    async with concurrency("cor-alerts-aggregator", occupy=1):
+        logger.info("Lock de concorrencia adquirido")
 
         # Injetar credenciais
-        inject_bd_credentials_task(environment="prod")
 
         # 1. Buscar alertas pendentes
         pending_alerts = fetch_pending_alerts(
@@ -99,10 +101,10 @@ def rj_iplanrio__cor_alerts_aggregator(
         )
 
         if pending_alerts.empty:
-            log("Nenhum alerta pendente encontrado")
+            logger.info("Nenhum alerta pendente encontrado")
             return {"alerts_processed": 0, "clusters_sent": 0}
 
-        log(f"Encontrados {len(pending_alerts)} alertas pendentes")
+        logger.info(f"Encontrados {len(pending_alerts)} alertas pendentes")
 
         # 2. Agrupar por tipo e localizacao
         clusters = cluster_alerts_by_location(
@@ -111,7 +113,7 @@ def rj_iplanrio__cor_alerts_aggregator(
         )
 
         if not clusters:
-            log("Nenhum cluster formado (alertas sem coordenadas?)")
+            logger.info("Nenhum cluster formado (alertas sem coordenadas?)")
             return {"alerts_processed": 0, "clusters_sent": 0}
 
         # 3. Processar cada cluster
@@ -127,7 +129,7 @@ def rj_iplanrio__cor_alerts_aggregator(
                 time_window_minutes=time_window_minutes,
             )
 
-            log(
+            logger.info(
                 f"Cluster {cluster.cluster_id} ({cluster.alert_type}): "
                 f"{cluster.alert_count} alertas - {reason}"
             )
@@ -160,9 +162,9 @@ def rj_iplanrio__cor_alerts_aggregator(
                         "Latitude": cluster.centroid_lat,
                         "Longitude": cluster.centroid_lng,
                     }
-                    log(f"[DRY RUN] Simulando envio do cluster {cluster.cluster_id}")
-                    log(f"[DRY RUN] Payload: {json.dumps(dry_run_payload, indent=2)}")
-                    log(f"[DRY RUN] Alert IDs incluidos: {cluster.alert_ids}")
+                    logger.info(f"[DRY RUN] Simulando envio do cluster {cluster.cluster_id}")
+                    logger.info(f"[DRY RUN] Payload: {json.dumps(dry_run_payload, indent=2)}")
+                    logger.info(f"[DRY RUN] Alert IDs incluidos: {cluster.alert_ids}")
                 elif destination == "cor_api":
                     # 4a. Enviar para COR API
                     result = submit_cluster_to_cor_api(
@@ -175,14 +177,14 @@ def rj_iplanrio__cor_alerts_aggregator(
                             alert_ids=result["alert_ids"],
                             aggregation_group_id=result["aggregation_group_id"],
                             environment=environment,
+                            cloud=cloud,
                         )
                         clusters_sent += 1
                         alerts_sent += updated
-                        log(f"Cluster enviado: {updated} alertas marcados como 'sent'")
+                        logger.info(f"Cluster enviado: {updated} alertas marcados como 'sent'")
                     else:
-                        log(
+                        logger.error(
                             f"Falha ao enviar cluster: {result.get('error')}",
-                            level="error",
                         )
                 else:  # google_sheets
                     # 4b. Preparar DataFrame para upload ao BigQuery
@@ -208,14 +210,16 @@ def rj_iplanrio__cor_alerts_aggregator(
                 root_folder=root_folder,
             )
 
-            create_table_and_upload_to_gcs_task(
-                data_path=partitions_path,
-                dataset_id=dataset_id,
-                table_id=table_id,
+            table = Table(dataset_id=dataset_id, table_id=table_id)
+            await upload_files_to_gcs(
+                Path(partitions_path),
+                table,
+                bucket=cloud["bucket"],
                 dump_mode=CORAlertAggregatorConstants.DUMP_MODE.value,
-                biglake_table=CORAlertAggregatorConstants.BIGLAKE_TABLE.value,
                 source_format=CORAlertAggregatorConstants.FILE_FORMAT.value,
+                options=capture_options(CORAlertAggregatorConstants.DUMP_MODE.value),
             )
+            await publish_table_in_bq(table, cloud)
 
             # Escrever no Google Sheets via API (upsert por aggregation_group_id)
             written = write_clusters_to_google_sheets(
@@ -224,7 +228,7 @@ def rj_iplanrio__cor_alerts_aggregator(
                 sheet_tab=CORAlertAggregatorConstants.SHEETS_TAB_NAME.value,
                 sheet_retention_hours=sheet_retention_hours,
             )
-            log(f"Sheets: {written} linhas escritas/atualizadas")
+            logger.info(f"Sheets: {written} linhas escritas/atualizadas")
 
             # Marcar alertas como enviados apos upload bem-sucedido
             for metadata in bq_metadata_list:
@@ -232,17 +236,18 @@ def rj_iplanrio__cor_alerts_aggregator(
                     alert_ids=metadata["alert_ids"],
                     aggregation_group_id=metadata["aggregation_group_id"],
                     environment=environment,
+                    cloud=cloud,
                 )
                 clusters_sent += 1
                 alerts_sent += updated
 
-            log(f"Upload BigQuery concluido: {len(bq_dataframes)} clusters, {len(combined_df)} linhas")
+            logger.info(f"Upload BigQuery concluido: {len(bq_dataframes)} clusters, {len(combined_df)} linhas")
 
-        log(
+        logger.info(
             f"Agregacao concluida: {clusters_sent} clusters enviados, {alerts_sent} alertas processados"
         )
 
-    log("Lock de concorrencia liberado")
+    logger.info("Lock de concorrencia liberado")
 
     return {
         "alerts_processed": alerts_sent,

@@ -16,16 +16,16 @@ matplotlib.use("Agg")  # sem display — só gera a imagem em memória
 import matplotlib.pyplot as plt
 import shap
 from prefect import task
-from prefect_rj_iplanrio.logging import get_logger
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__modelo_qualidade_telefone.constants import FEATURES
+from pipelines.rj_crm__modelo_qualidade_telefone.helpers import drive
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.cobertura import calcula_cobertura
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.avaliar_simulacao import ResultadoSimulacao
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.promover import DecisaoGate
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.treinar import ResultadoTreino
-from pipelines.rj_crm__modelo_qualidade_telefone.utils import drive
 
-logger = get_logger(__name__)
+logger = get_logger("toolkit")
 
 # Slot 1 (azul) de references/palette.md do skill dataviz — validado (CVD/contraste) no
 # tema claro, que é o único que interessa aqui (PNG estático, sem alternância de tema).

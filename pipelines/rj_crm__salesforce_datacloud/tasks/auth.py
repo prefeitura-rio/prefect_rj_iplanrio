@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Autenticação Salesforce Data Cloud (Query API) — OAuth2 Client Credentials.
 
@@ -14,19 +13,19 @@ pros dois); não tem autenticação própria.
 """
 
 import requests
-from toolkit.pipelines_utils.env import getenv_or_action
 from prefect import task
 
-from pipelines.rj_crm__salesforce_datacloud.utils.retry import so_erro_temporario
+from pipelines.rj_crm__salesforce_datacloud.helpers.retry import so_erro_temporario
+from utils.utils import read_env
 
 
 def _get_dc_credentials() -> dict[str, str]:
     """Lê credenciais Salesforce Data Cloud (Client Credentials) das env vars."""
     return {
-        "client_id": getenv_or_action("SF_DC_CLIENT_ID"),
-        "client_secret": getenv_or_action("SF_DC_CLIENT_SECRET"),
-        "instance_url": getenv_or_action("SF_DC_INSTANCE_URL").rstrip("/"),
-        "dataspace": getenv_or_action("SF_DC_DATASPACE") or "default",
+        "client_id": read_env("SF_DC_CLIENT_ID"),
+        "client_secret": read_env("SF_DC_CLIENT_SECRET"),
+        "instance_url": read_env("SF_DC_INSTANCE_URL").rstrip("/"),
+        "dataspace": read_env("SF_DC_DATASPACE") or "default",
     }
 
 

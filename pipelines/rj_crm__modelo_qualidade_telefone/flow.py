@@ -12,16 +12,20 @@ from typing import Literal, get_args
 from zoneinfo import ZoneInfo
 
 from prefect import flow
-from prefect_rj_iplanrio.logging import get_logger
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__modelo_qualidade_telefone import constants
+from pipelines.rj_crm__modelo_qualidade_telefone.helpers.logging_fix import garante_logging_visivel
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.carrega_modelo import (
     carrega_champion_opcional_task,
     carrega_champion_task,
 )
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino import extrair, treinar
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.avaliar_simulacao import avalia_simulacao_task
-from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.promover import avalia_gate_task, promove_se_aprovado_task
+from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.promover import (
+    avalia_gate_task,
+    promove_se_aprovado_task,
+)
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.publicar import (
     monta_tabela_avaliacao_task,
     publica_avaliacao_bq_task,
@@ -29,9 +33,8 @@ from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.publicar import 
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.relatorio import publica_relatorio_task
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.score.pontua_telefones import pontua_telefones_task
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.score.publica_tabela import publica_scores_task
-from pipelines.rj_crm__modelo_qualidade_telefone.utils.logging_fix import garante_logging_visivel
 
-logger = get_logger(__name__)
+logger = get_logger("toolkit")
 
 # Literal (não str solto): o Prefect gera o formulário da UI a partir do schema do tipo —
 # com Literal, "modo" vira um dropdown de 2 opções em vez de campo de texto livre.

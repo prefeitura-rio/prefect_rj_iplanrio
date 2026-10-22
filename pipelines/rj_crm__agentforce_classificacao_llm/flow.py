@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Flow diário — Classificação inicial por LLM das sessões do Agentforce (WhatsApp).
 
@@ -25,7 +24,6 @@ sessões já classificadas precisarem refletir isso — ver tasks/taxonomia.py.
 import os
 
 import pandas as pd
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_crm__agentforce_classificacao_llm.constants import ClassificacaoConstants as C
@@ -53,7 +51,7 @@ from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import (
 )
 
 
-@flow(log_prints=True, on_failure=[notify_falha_flow])
+@flow(log_prints=True, on_failure=[notify_falha_flow], flow_run_name="classificacao_llm_{dest_dataset_id}_{dest_table_id}")
 def rj_crm__agentforce_classificacao_llm(
     project_id: str = C.BQ_PROJECT_ID.value,
     dest_dataset_id: str = C.DEST_DATASET_ID.value,
@@ -84,7 +82,6 @@ def rj_crm__agentforce_classificacao_llm(
     # que já está na tabela destino, reavaliar as regras, e propagar via MERGE parcial pra
     # tabela destino e pras 2 tabelas mart do dbt (ver docstrings em tasks/taxonomia.py).
     if recalcula_taxonomia:
-        rename_current_flow_run_task(new_name=f"recalcula_taxonomia_{dest_dataset_id}_{dest_table_id}")
 
         df_sessoes_relevantes = extrai_sessoes_para_recalculo_taxonomia(
             project_id=project_id, dataset_id=dest_dataset_id, table_id=dest_table_id
@@ -123,7 +120,6 @@ def rj_crm__agentforce_classificacao_llm(
         )
         return
 
-    rename_current_flow_run_task(new_name=f"classificacao_llm_{dest_dataset_id}_{dest_table_id}")
 
     bf_key = os.environ.get("BF_KEY")
     if not bf_key:

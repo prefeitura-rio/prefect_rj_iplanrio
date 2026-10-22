@@ -8,5 +8,5 @@
 -- INTEIRO atrás de cifrão+identificador, inclusive dentro de comentário, e quebra com
 -- KeyError se o nome não for passado a load_query (foi exatamente esse bug, corrigido
 -- 2026-09-24).
-DELETE FROM `$project.$dataset_id.$table_id`
+DELETE FROM `{{ project }}.{{ dataset_id }}.{{ table_id }}`
 WHERE versao = @versao

@@ -22,6 +22,10 @@ pull:
 deployments:
 
   - name: rj-crm--disparo-template-sf--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template_sf
     work_pool:
@@ -40,6 +44,10 @@ deployments:
       filter_dispatched_phones_or_cpfs: cpf
       filter_duplicated_phones: false
       filter_duplicated_cpfs: true
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     schedules:
       - cron: "0 15 * * *"
         timezone: America/Sao_Paulo
@@ -102,8 +110,7 @@ deployments:
           flow_environment: staging
           campaign_name: smtrmultasdetransitov1
           data_extension_filename: whatsapp_smtr_multas_transito
-          de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo",
-            "id_autuacao"]
+          de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo", "id_autuacao"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           filter_duplicated_cpfs: true
@@ -116,13 +123,10 @@ deployments:
         flow_run_name: cvl-pesquisa1746
         parameters:
           flow_environment: staging
-          query_replacements: {"id_hsm_com_solucao_placeholder": 192, "nome_hsm_com_solucao_placeholder": "cvl_pesquisa_1746_prod_v1",
-            "id_hsm_sem_resolucao_placeholder": 291, "nome_hsm_sem_resolucao_placeholder": "cvl_pesquisa_1746_sem_resolucao_prod_v1"}
+          query_replacements: {"id_hsm_com_solucao_placeholder": 192, "nome_hsm_com_solucao_placeholder": "cvl_pesquisa_1746_prod_v1", "id_hsm_sem_resolucao_placeholder": 291, "nome_hsm_sem_resolucao_placeholder": "cvl_pesquisa_1746_sem_resolucao_prod_v1"}
           campaign_name: cvl_pesquisa_1746_prod_v1
           data_extension_filename: whatsapp_cvl_pesquisa_1746
-          de_columns: ["cc_wt_nome_sobrenome", "cc_wt_solicitacao", "cc_wt_canal",
-            "protocolo", "STATUS_DEMANDA", "cpfCnpj", "NOME_ARQUIVO", "cc_wt_id_chamado",
-            "cc_wt_id_subtipo"]
+          de_columns: ["cc_wt_nome_sobrenome", "cc_wt_solicitacao", "cc_wt_canal", "protocolo", "STATUS_DEMANDA", "cpfCnpj", "NOME_ARQUIVO", "cc_wt_id_chamado", "cc_wt_id_subtipo"]
           csv_separator: ","
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
@@ -137,18 +141,14 @@ deployments:
         flow_run_name: pgm-divida-ativa
         parameters:
           flow_environment: staging
-          query_replacements: {"nome_hsm_cobranca_placeholder": "'pgm_divida_ativa_prod_v2', 'pgm_divida_ativa_cobranca_v3', 'pgm_divida_ativa_cobranca_v4'",
-            "id_hsm_legado_cobranca_placeholder": "196, 239", "limit_placeholder": 200}
+          query_replacements: {"nome_hsm_cobranca_placeholder": "'pgm_divida_ativa_prod_v2', 'pgm_divida_ativa_cobranca_v3', 'pgm_divida_ativa_cobranca_v4'", "id_hsm_legado_cobranca_placeholder": "196, 239", "limit_placeholder": 200}
           campaign_name: pgm_divida_ativa_cobranca_v3
           dispatch_interval_days: 150
           data_extension_filename: whatsapp_pgm_divida_ativa_cobranca
           enrich_with_api_name: consulta_debitos
           enrich_with_api_params:
             api_url: "https://services.pref.rio/mcp/consulta_debitos"
-          de_columns: ["cpfCnpj", "nome_sobrenome", "api_resposta_sucesso", "lista_cdas",
-            "lista_guias", "dicionario_itens", "total_itens_pagamento", "mensagem_divida_contribuinte",
-            "guias_quantidade_total", "efs_cdas_quantidade_total", "total_nao_parcelado",
-            "total_parcelado", "debitos_msg", "itens_informados"]
+          de_columns: ["cpfCnpj", "nome_sobrenome", "api_resposta_sucesso", "lista_cdas", "lista_guias", "dicionario_itens", "total_itens_pagamento", "mensagem_divida_contribuinte", "guias_quantidade_total", "efs_cdas_quantidade_total", "total_nao_parcelado", "total_parcelado", "debitos_msg", "itens_informados"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
@@ -162,13 +162,10 @@ deployments:
         flow_run_name: pgm-divida-ativa-lembrete
         parameters:
           flow_environment: staging
-          query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2",
-            "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "id_hsm_legado_cobranca_placeholder": "196,
-              239", "id_hsm_legado_lembrete_placeholder": "227"}
+          query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2", "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "id_hsm_legado_cobranca_placeholder": "196, 239", "id_hsm_legado_lembrete_placeholder": "227"}
           campaign_name: pgmdividaativalembreteprodv1
           data_extension_filename: whatsapp_pgm_divida_ativa_lembrete
-          de_columns: ["nome_sobrenome", "data_vencimento", "numero_guia", "valor_guia",
-            "cod_pix", "cod_boleto"]
+          de_columns: ["nome_sobrenome", "data_vencimento", "numero_guia", "valor_guia", "cod_pix", "cod_boleto"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
@@ -182,10 +179,7 @@ deployments:
         flow_run_name: pgm-divida-ativa-confirma-pgto-prod-v1
         parameters:
           flow_environment: staging
-          query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2",
-            "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "nome_hsm_agradecimento_placeholder": "pgmdividaativaconfirmapgtoprodv1",
-            "id_hsm_legado_cobranca_placeholder": "196, 239", "id_hsm_legado_lembrete_placeholder": "227",
-            "id_hsm_legado_agradecimento_placeholder": "231"}
+          query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2", "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "nome_hsm_agradecimento_placeholder": "pgmdividaativaconfirmapgtoprodv1", "id_hsm_legado_cobranca_placeholder": "196, 239", "id_hsm_legado_lembrete_placeholder": "227", "id_hsm_legado_agradecimento_placeholder": "231"}
           campaign_name: pgmdividaativaconfirmapgtoprodv1
           data_extension_filename: whatsapp_pgm_divida_ativa_agradecimento
           de_columns: ["nome_sobrenome"]
@@ -387,8 +381,7 @@ deployments:
         flow_run_name: cadunico-confirma-agendamento
         parameters:
           flow_environment: staging
-          query_replacements: {"days_ahead_placeholder": 2, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2",
-            "intervalo_filtro_disparados": 1, "id_hsm_legado_placeholder": 101}
+          query_replacements: {"days_ahead_placeholder": 2, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2", "intervalo_filtro_disparados": 1, "id_hsm_legado_placeholder": 101}
           campaign_name: confirma_agendamento_cadunico_prod_v2
           data_extension_filename: whatsapp_cadunico_
           de_columns: ["nome_sobrenome", "unidade_cras", "data", "hora", "endereco"]
@@ -405,8 +398,7 @@ deployments:
         flow_run_name: smas-cartaopic-evento
         parameters:
           flow_environment: staging
-          query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfanciaprodv27",
-            "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 184}
+          query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfanciaprodv27", "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 184}
           campaign_name: smascartaoprimeirainfanciaprodv27
           data_extension_filename: whatsapp_smas_cartaopic_evento
           de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
@@ -426,8 +418,7 @@ deployments:
         flow_run_name: smas-cartaopic-lembrete
         parameters:
           flow_environment: staging
-          query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfancialembreteprodv4",
-            "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 185}
+          query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfancialembreteprodv4", "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 185}
           campaign_name: smascartaoprimeirainfancialembreteprodv4
           data_extension_filename: whatsapp_smas_cartaopic_lembrete
           de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
@@ -438,6 +429,10 @@ deployments:
           query_file: queries/smas_cartaopic_lembrete.sql
 
   - name: rj-crm--disparo-template-sf--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
     version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template_sf
     work_pool:
@@ -456,6 +451,10 @@ deployments:
       filter_dispatched_phones_or_cpfs: cpf
       filter_duplicated_cpfs: true
 
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     schedules:
       - cron: "0 11 * * 1-5"
         timezone: America/Sao_Paulo
@@ -466,8 +465,7 @@ deployments:
           flow_environment: production
           campaign_name: smtrmultasdetransitov1
           data_extension_filename: whatsapp_smtr_multas_transito
-          de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo",
-            "id_autuacao"]
+          de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo", "id_autuacao"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           filter_duplicated_cpfs: true
@@ -479,13 +477,10 @@ deployments:
         flow_run_name: cvl-pesquisa1746
         parameters:
           flow_environment: production
-          query_replacements: {"id_hsm_com_solucao_placeholder": 192, "nome_hsm_com_solucao_placeholder": "cvl_pesquisa_1746_prod_v1",
-            "id_hsm_sem_resolucao_placeholder": 291, "nome_hsm_sem_resolucao_placeholder": "cvl_pesquisa_1746_sem_resolucao_prod_v1"}
+          query_replacements: {"id_hsm_com_solucao_placeholder": 192, "nome_hsm_com_solucao_placeholder": "cvl_pesquisa_1746_prod_v1", "id_hsm_sem_resolucao_placeholder": 291, "nome_hsm_sem_resolucao_placeholder": "cvl_pesquisa_1746_sem_resolucao_prod_v1"}
           campaign_name: cvl_pesquisa_1746_prod_v1
           data_extension_filename: whatsapp_cvl_pesquisa_1746
-          de_columns: ["cc_wt_nome_sobrenome", "cc_wt_solicitacao", "cc_wt_canal",
-            "protocolo", "STATUS_DEMANDA", "cpfCnpj", "NOME_ARQUIVO", "cc_wt_id_chamado",
-            "cc_wt_id_subtipo"]
+          de_columns: ["cc_wt_nome_sobrenome", "cc_wt_solicitacao", "cc_wt_canal", "protocolo", "STATUS_DEMANDA", "cpfCnpj", "NOME_ARQUIVO", "cc_wt_id_chamado", "cc_wt_id_subtipo"]
           csv_separator: ","
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
@@ -500,18 +495,14 @@ deployments:
         flow_run_name: pgm-divida-ativa
         parameters:
           flow_environment: production
-          query_replacements: {"nome_hsm_cobranca_placeholder": "'pgm_divida_ativa_prod_v2', 'pgm_divida_ativa_cobranca_v3', 'pgm_divida_ativa_cobranca_v4'",
-            "id_hsm_legado_cobranca_placeholder": "196, 239", "limit_placeholder": 200}
+          query_replacements: {"nome_hsm_cobranca_placeholder": "'pgm_divida_ativa_prod_v2', 'pgm_divida_ativa_cobranca_v3', 'pgm_divida_ativa_cobranca_v4'", "id_hsm_legado_cobranca_placeholder": "196, 239", "limit_placeholder": 200}
           campaign_name: pgm_divida_ativa_cobranca_v3
           data_extension_filename: whatsapp_pgm_divida_ativa_cobranca
           dispatch_interval_days: 150
           enrich_with_api_name: consulta_debitos
           enrich_with_api_params:
             api_url: "https://services.pref.rio/mcp/consulta_debitos"
-          de_columns: ["cpfCnpj", "nome_sobrenome", "api_resposta_sucesso", "lista_cdas",
-            "lista_guias", "dicionario_itens", "total_itens_pagamento", "mensagem_divida_contribuinte",
-            "guias_quantidade_total", "efs_cdas_quantidade_total", "total_nao_parcelado",
-            "total_parcelado", "debitos_msg", "itens_informados"]
+          de_columns: ["cpfCnpj", "nome_sobrenome", "api_resposta_sucesso", "lista_cdas", "lista_guias", "dicionario_itens", "total_itens_pagamento", "mensagem_divida_contribuinte", "guias_quantidade_total", "efs_cdas_quantidade_total", "total_nao_parcelado", "total_parcelado", "debitos_msg", "itens_informados"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
@@ -525,13 +516,10 @@ deployments:
         flow_run_name: pgm-divida-ativa-lembrete
         parameters:
           flow_environment: production
-          query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2",
-            "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "id_hsm_legado_cobranca_placeholder": "196,
-              239", "id_hsm_legado_lembrete_placeholder": "227"}
+          query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2", "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "id_hsm_legado_cobranca_placeholder": "196, 239", "id_hsm_legado_lembrete_placeholder": "227"}
           campaign_name: pgmdividaativalembreteprodv1
           data_extension_filename: whatsapp_pgm_divida_ativa_lembrete
-          de_columns: ["nome_sobrenome", "data_vencimento", "numero_guia", "valor_guia",
-            "cod_pix", "cod_boleto"]
+          de_columns: ["nome_sobrenome", "data_vencimento", "numero_guia", "valor_guia", "cod_pix", "cod_boleto"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
@@ -545,10 +533,7 @@ deployments:
         flow_run_name: pgm-divida-ativa-confirma-pgto-prod-v1
         parameters:
           flow_environment: production
-          query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2",
-            "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "nome_hsm_agradecimento_placeholder": "pgmdividaativaconfirmapgtoprodv1",
-            "id_hsm_legado_cobranca_placeholder": "196, 239", "id_hsm_legado_lembrete_placeholder": "227",
-            "id_hsm_legado_agradecimento_placeholder": "231"}
+          query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2", "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "nome_hsm_agradecimento_placeholder": "pgmdividaativaconfirmapgtoprodv1", "id_hsm_legado_cobranca_placeholder": "196, 239", "id_hsm_legado_lembrete_placeholder": "227", "id_hsm_legado_agradecimento_placeholder": "231"}
           campaign_name: pgmdividaativaconfirmapgtoprodv1
           data_extension_filename: whatsapp_pgm_divida_ativa_agradecimento
           de_columns: ["nome_sobrenome"]
@@ -750,8 +735,7 @@ deployments:
         flow_run_name: cadunico-confirma-agendamento
         parameters:
           flow_environment: production
-          query_replacements: {"days_ahead_placeholder": 2, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2",
-            "intervalo_filtro_disparados": 1, "id_hsm_legado_placeholder": 101}
+          query_replacements: {"days_ahead_placeholder": 2, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2", "intervalo_filtro_disparados": 1, "id_hsm_legado_placeholder": 101}
           campaign_name: confirma_agendamento_cadunico_prod_v2
           data_extension_filename: whatsapp_cadunico_
           de_columns: ["nome_sobrenome", "unidade_cras", "data", "hora", "endereco"]
@@ -759,7 +743,7 @@ deployments:
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_cpfs: true
-          query_file: queries/cadunico_confirma_agendamento.sql          
+          query_file: queries/cadunico_confirma_agendamento.sql
 
       - cron: "0 12 * * *"
         timezone: America/Sao_Paulo
@@ -768,8 +752,7 @@ deployments:
         flow_run_name: smas-cartaopic-evento
         parameters:
           flow_environment: production
-          query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfanciaprodv27",
-            "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 184}
+          query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfanciaprodv27", "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 184}
           campaign_name: smascartaoprimeirainfanciaprodv27
           data_extension_filename: whatsapp_smas_cartaopic_evento
           de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
@@ -787,8 +770,7 @@ deployments:
         flow_run_name: smas-cartaopic-lembrete
         parameters:
           flow_environment: production
-          query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfancialembreteprodv4",
-            "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 185}
+          query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfancialembreteprodv4", "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 185}
           campaign_name: smascartaoprimeirainfancialembreteprodv4
           data_extension_filename: whatsapp_smas_cartaopic_lembrete
           de_columns: ["nome_sobrenome", "endereco", "data", "horario"]

@@ -1,2 +1,2 @@
-SELECT /*+ PARALLEL($degree) */ COUNT(*)
-FROM "$schema"."$table"
+SELECT /*+ PARALLEL({{ degree }}) */ COUNT(*)
+FROM "{{ schema }}"."{{ table }}"

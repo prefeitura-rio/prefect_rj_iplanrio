@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Flow diário — Relatório de Engajamento por HSM.
 
@@ -107,10 +106,8 @@ import os
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.logging import log
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     BIFROST_MODEL,
@@ -131,6 +128,8 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.report import (
     monta_e_publica_relatorio,
 )
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.trigger import carrega_disparos_pendentes
+
+logger = get_logger("toolkit")
 
 
 def _hoje_brt() -> date:
@@ -189,8 +188,6 @@ def rj_crm__relatorio_engajamento_hsm(
         n_exemplos_por_categoria: Quantos exemplos de conversa aparecem por categoria
             no .docx final — só afeta o relatório, não o custo de LLM.
     """
-    rename_current_flow_run_task(new_name="relatorio_engajamento_hsm")
-    inject_bd_credentials_task(environment="prod")
 
     bf_key = os.environ.get("BF_KEY")
     if not bf_key:
@@ -203,7 +200,7 @@ def rj_crm__relatorio_engajamento_hsm(
 
     disparos = carrega_disparos_pendentes(ref)
     if not disparos:
-        log(f"[FLOW] Nenhum disparo com relatório de engajamento pedido pra {ref}.")
+        logger.info(f"[FLOW] Nenhum disparo com relatório de engajamento pedido pra {ref}.")
         return
 
     for disparo in disparos:
@@ -211,12 +208,12 @@ def rj_crm__relatorio_engajamento_hsm(
         data_disparo = disparo["data_disparo"]
 
         if ja_existe_relatorio(nome_hsm, ref, drive_pasta_raiz_id):
-            log(f"[FLOW] {nome_hsm}: relatório da geração {ref} já existe no Drive — pulando.")
+            logger.info(f"[FLOW] {nome_hsm}: relatório da geração {ref} já existe no Drive — pulando.")
             continue
 
         df_sessoes, total_disparos, total_engajados = extrai_conversas(nome_hsm, data_disparo)
         if df_sessoes.empty:
-            log(f"[FLOW] {nome_hsm}: nenhuma sessão engajada desde {data_disparo} — nada a classificar.")
+            logger.info(f"[FLOW] {nome_hsm}: nenhuma sessão engajada desde {data_disparo} — nada a classificar.")
             continue
 
         df_classificada, catalogo = classifica_conversas(
@@ -228,7 +225,7 @@ def rj_crm__relatorio_engajamento_hsm(
             teto_amostra_descoberta,
         )
         if df_classificada.empty:
-            log(f"[FLOW] {nome_hsm}: nenhuma conversa classificada com sucesso — relatório não gerado.")
+            logger.info(f"[FLOW] {nome_hsm}: nenhuma conversa classificada com sucesso — relatório não gerado.")
             continue
 
         df_julgada = julga_classificacoes(
@@ -252,4 +249,4 @@ def rj_crm__relatorio_engajamento_hsm(
             n_exemplos_por_categoria=n_exemplos_por_categoria,
         )
 
-    log("[FLOW] Concluído.")
+    logger.info("[FLOW] Concluído.")

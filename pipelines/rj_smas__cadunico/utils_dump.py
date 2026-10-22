@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ruff: noqa
 
 import asyncio
@@ -11,23 +10,25 @@ from uuid import uuid4
 from zipfile import ZipFile
 import json
 
-import basedosdados as bd
 import pandas as pd
+from utils.types import Cloud
 from prefect.utilities.asyncutils import run_sync_in_worker_thread
 
-from toolkit.pipelines_utils.logging import log
+from pipelines.rj_smas__cadunico.helpers import (
+    get_gcs_client,
+    list_blobs_with_prefix,
+    read_staging_dates,
+    upload_folder,
+    write_text_parquet,
+)
 from pipelines.rj_smas__cadunico.utils_logging import (
     FileProcessingLogger,
     log_partition_comparison,
     log_ingestion_summary,
 )
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs
-from toolkit.pipelines_utils.gcs import get_gcs_client
-from toolkit.pipelines_utils.logging import log
-from toolkit.pipelines_utils.gcs import (
-    list_blobs_with_prefix,
-    parse_blobs_to_partition_list,
-)
+from prefect.logging import get_logger
+
+logger = get_logger("toolkit")
 
 
 def parse_partition_from_filename(blob_name: str) -> str:
@@ -60,91 +61,7 @@ def parse_txt_first_line(filepath):
     return txt_layout_version, txt_date
 
 
-def create_table_if_not_exists(
-    dataset_id: str,
-    table_id: str,
-    biglake_table: bool = True,
-) -> bool:
-    """
-    Create table using BD+ .
-
-    Args:
-        data_path (str | Path): The path to the data.
-        dataset_id (str): The dataset ID.
-        table_id (str): The table ID.
-        biglake_table (bool): Whether to create a BigLake table.
-    """
-
-    tb = bd.Table(dataset_id=dataset_id, table_id=table_id)
-    st = bd.Storage(dataset_id=dataset_id, table_id=table_id)
-
-    table_exists = tb.table_exists(mode="staging")
-
-    if not table_exists:
-        mock_data_path = Path("/tmp/mock_data/")
-        partition_data_path_file = Path(
-            "versao_layout_particao=XXXX/ano_particao=1970/mes_particao=1/data_particao=1970-01-01/delete_this_data.csv"
-        )
-        mock_data_path_partition_file = mock_data_path / partition_data_path_file
-        mock_data_path_partition_file.parent.mkdir(parents=True, exist_ok=True)
-
-        # create mock data csv
-        data = {"text": ["delete_this_data"]}
-        pd.DataFrame(data).to_csv(mock_data_path_partition_file, index=False)
-
-        # create table
-        tb.create(
-            path=mock_data_path,
-            csv_delimiter="Æ",
-            csv_skip_leading_rows=0,
-            csv_allow_jagged_rows=False,
-            if_storage_data_exists="replace",
-            biglake_table=biglake_table,
-        )
-        log(f"SUCESSFULLY CREATED TABLE: {dataset_id}.{table_id}")
-        # delete data from storage
-        st.delete_file(
-            filename=str(partition_data_path_file),
-            mode="staging",
-        )
-        log(
-            f"SUCESSFULLY DELETED DATA FROM STORAGE: staging/{dataset_id}/{table_id}/{str(partition_data_path_file)}"  # noqa
-        )
-    else:
-        log(f"TABLE ALREADY EXISTS: {dataset_id}.{table_id}")
-
-    return table_exists
-
-
-def append_data_to_storage(
-    data_path: str | Path,
-    dataset_id: str,
-    table_id: str,
-    dump_mode: str,
-    biglake_table: bool = True,
-) -> str:
-    """
-    Upload to GCS.
-
-    Args:
-        data_path (str | Path): The path to the data.
-        dataset_id (str): The dataset ID.
-        table_id (str): The table ID.
-        dump_mode (str): The dump mode.
-        biglake_table (bool): Whether to create a BigLake table.
-    """
-    create_table_and_upload_to_gcs(
-        data_path=data_path,
-        dataset_id=dataset_id,
-        table_id=table_id,
-        dump_mode=dump_mode,
-        biglake_table=biglake_table,
-    )
-
-    return dataset_id
-
-
-def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id: str) -> None:
+def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id: str, cloud: Cloud) -> None:
     """
     Processa um arquivo ZIP: baixa, extrai, divide em chunks, converte para CSV e faz upload.
 
@@ -153,6 +70,7 @@ def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id
         bucket_name (str): Nome do bucket GCS.
         dataset_id (str): ID do dataset de destino.
         table_id (str): ID da tabela de destino.
+        cloud (Cloud): O bucket e o projeto da tabela de destino.
     """
     # Inicializar logger estruturado para este arquivo
     partition = parse_partition_from_filename(blob_name)
@@ -249,44 +167,44 @@ def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id
             csv_files.append(csv_file)
         file_logger.complete_step(True, {"csv_files": len(csv_files)})
 
-        # ETAPA 5: Criação de estrutura de partições
-        file_logger.start_step("Criação de estrutura de partições", 5, 8)
+        # ETAPA 5: Colunas de partição
+        file_logger.start_step("Colunas de partição", 5, 8)
         partition_warning = partition != txt_date
         year, month, _ = partition.split("-")
-        partition_directory = (
-            output_directory_path
-            / f"versao_layout_particao={txt_layout_version}"
-            / f"ano_particao={int(year)}"
-            / f"mes_particao={int(month)}"
-            / f"data_particao={partition}"
-        )
-        partition_directory.mkdir(parents=True, exist_ok=True)
+        constants = {
+            "versao_layout_particao": str(txt_layout_version),
+            "ano_particao": str(int(year)),
+            "mes_particao": str(int(month)),
+            "data_particao": partition,
+        }
         file_logger.complete_step(
             True,
             {"partição": partition, "data_consistente": not partition_warning, "layout_version": txt_layout_version},
         )
 
-        # ETAPA 6: Movimentação de arquivos
-        file_logger.start_step("Movimentação de arquivos para estrutura final", 6, 8)
+        # ETAPA 6: Conversão para Parquet, com as colunas de partição
+        file_logger.start_step("Conversão para Parquet", 6, 8)
         total_csv_size = 0
-        for csv_file in csv_files:
-            csv_size_mb = csv_file.stat().st_size / (1024 * 1024)
-            total_csv_size += csv_size_mb
-            csv_file.rename(partition_directory / csv_file.name)
+        for number, csv_file in enumerate(csv_files):
+            total_csv_size += csv_file.stat().st_size / (1024 * 1024)
+            write_text_parquet(csv_file, output_directory_path / f"{number:04d}.parquet", constants)
+            csv_file.unlink()
         file_logger.complete_step(True, {"csv_files_mb": total_csv_size})
 
-        # ETAPA 7: Criação de tabela
-        file_logger.start_step("Criação de tabela se necessário", 7, 8)
-        create_table_if_not_exists(dataset_id=dataset_id, table_id=table_id)
+        # ETAPA 7: Sem criação de tabela: a tabela Delta nasce no primeiro upload
+        file_logger.start_step("Tabela Delta", 7, 8)
         file_logger.complete_step(True)
 
-        # ETAPA 8: Upload para BigQuery/GCS
+        # ETAPA 8: Upload para GCS e BigQuery, com a data da partição como captura
         file_logger.start_step("Upload para BigQuery/GCS", 8, 8)
-        append_data_to_storage(
-            data_path=output_directory_path,
-            dataset_id=dataset_id,
-            table_id=table_id,
+        upload_folder(
+            output_directory_path,
+            dataset_id,
+            table_id,
+            cloud=cloud,
             dump_mode="append",
+            source_format="parquet",
+            capture=datetime.fromisoformat(partition),
         )
         file_logger.complete_step(True)
 
@@ -323,17 +241,14 @@ def get_existing_partitions(prefix: str, bucket_name: str, dataset_id: str, tabl
         List[str]: Lista de partições no formato `YYYY-MM-DD`.
     """
     # Log consolidado da verificação de staging
-    log(f"🔍 VERIFICANDO STAGING: {bucket_name}/{prefix}", level="info")
-    log(
+    logger.info(f"🔍 VERIFICANDO STAGING: {bucket_name}/{prefix}")
+    logger.info(
         f"   🔗 Console: https://console.cloud.google.com/storage/browser/{bucket_name}/staging/{dataset_id}/{table_id}",
-        level="info",
     )
 
-    staging_blobs = list_blobs_with_prefix(bucket_name=bucket_name, prefix=prefix)
-    staging_partitions = parse_blobs_to_partition_list(staging_blobs)
-    staging_partitions = list(set(staging_partitions))
+    staging_partitions = read_staging_dates(bucket_name=bucket_name, prefix=prefix)
 
-    log(f"   📊 Resultado: {len(staging_blobs)} blobs → {len(staging_partitions)} partições únicas", level="info")
+    logger.info(f"   📊 Resultado: {len(staging_partitions)} partições únicas")
     return staging_partitions
 
 
@@ -350,8 +265,8 @@ def get_files_to_ingest(prefix: str, partitions: List[str], bucket_name: str) ->
         List[str]: Lista de nomes de blobs para ingerir.
     """
     # Log consolidado da verificação de raw
-    log(f"🔍 VERIFICANDO RAW: {bucket_name}/{prefix}", level="info")
-    log(f"   🔗 Console: https://console.cloud.google.com/storage/browser/{bucket_name}/{prefix}", level="info")
+    logger.info(f"🔍 VERIFICANDO RAW: {bucket_name}/{prefix}")
+    logger.info(f"   🔗 Console: https://console.cloud.google.com/storage/browser/{bucket_name}/{prefix}")
 
     raw_blobs = list_blobs_with_prefix(bucket_name=bucket_name, prefix=prefix)
     raw_blobs = [blob for blob in raw_blobs if blob.name and blob.name.lower().endswith(".zip")]
@@ -377,13 +292,12 @@ def get_files_to_ingest(prefix: str, partitions: List[str], bucket_name: str) ->
             files_to_ingest.append(blob.name)
 
     # Log consolidado dos resultados
-    log(
+    logger.info(
         f"   📊 Resultado: {len(raw_blobs)} ZIPs → {len(raw_partitions)} partições válidas → {len(files_to_ingest)} para ingerir",
-        level="info",
     )
 
     if parsing_errors:
-        log(f"   ⚠️  Erros de parsing ({len(parsing_errors)}): {parsing_errors[:3]}", level="warning")
+        logger.warning(f"   ⚠️  Erros de parsing ({len(parsing_errors)}): {parsing_errors[:3]}")
 
     # Usar função de comparação consolidada se há arquivos para ingerir
     if files_to_ingest:
@@ -397,7 +311,7 @@ def need_to_ingest(files_to_ingest: list) -> bool:
     """Verifica se existem arquivos para ingerir com log consolidado"""
     need_ingest = len(files_to_ingest) > 0
     status = "✅ SIM" if need_ingest else "❌ NÃO"
-    log(f"{status} - Necessário ingerir: {len(files_to_ingest)} arquivo(s)", level="info")
+    logger.info(f"{status} - Necessário ingerir: {len(files_to_ingest)} arquivo(s)")
     return need_ingest
 
 
@@ -406,6 +320,7 @@ def ingest_files(
     bucket_name: str,
     dataset_id: str,
     table_id: str,
+    cloud: Cloud,
     max_concurrent: int = 3,
 ) -> None:
     """
@@ -416,18 +331,18 @@ def ingest_files(
         bucket_name (str): Nome do bucket GCS.
         dataset_id (str): ID do dataset de destino.
         table_id (str): ID da tabela de destino.
+        cloud (Cloud): O bucket e o projeto da tabela de destino.
         max_concurrent (int): Número máximo de downloads/processamentos simultâneos.
     """
     if not files_to_ingest:
-        log("❌ Nenhum arquivo para ingerir", level="info")
+        logger.info("❌ Nenhum arquivo para ingerir")
         return
 
     processing_results = []
 
     async def _run_async():
-        log(
+        logger.info(
             f"🚀 INICIANDO INGESTÃO ASSÍNCRONA: {len(files_to_ingest)} arquivo(s) | Concorrência: {max_concurrent}",
-            level="info",
         )
 
         semaphore = asyncio.Semaphore(max_concurrent)
@@ -445,6 +360,7 @@ def ingest_files(
                         bucket_name,
                         dataset_id,
                         table_id,
+                        cloud,
                     )
                 except Exception as e:
                     success = False

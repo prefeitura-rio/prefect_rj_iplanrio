@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # flake8: noqa:E501
 # pylint: disable='line-too-long'
 
@@ -9,24 +8,23 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
-import pandas as pd
 
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
-from toolkit.pipelines_utils.dbt import execute_dbt_task  # pylint: disable=E0611, E0401
-from toolkit.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
+import pandas as pd
 from prefect import flow  # pylint: disable=E0611, E0401
 from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
+from toolkit.dbt import DbtRun
 
 from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
+
 # pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.utils.discord import (
+from pipelines.rj_crm__disparo_template.helpers.discord import (
+    send_discord_notification,
     send_dispatch_no_destinations_found,
     send_dispatch_success_notification,
-    send_discord_notification,
 )
+
 # pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.utils.dispatch import (
+from pipelines.rj_crm__disparo_template.helpers.dispatch import (
     add_contacts_to_whitelist,
     apply_df_enricher,
     check_flow_status,
@@ -37,22 +35,26 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     get_already_dispatched_data,
     get_failed_cpfs,
     get_failed_phones,
-    get_retry_destinations,
     monitor_dispatch_status,
     remove_contacts_from_whitelist,
     save_csv_for_sftp,
     send_to_sftp,
 )
+
 # pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.utils.validators import (  # pylint: disable=E0611, E0401
-    validate_campaign_name,
-    validate_sf_dataframe,
-)
-# pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.utils.tasks import (
+from pipelines.rj_crm__disparo_template.helpers.tasks import (
     create_date_partitions,
     task_download_data_from_bigquery,
 )
+
+# pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.helpers.validators import (  # pylint: disable=E0611, E0401
+    validate_campaign_name,
+    validate_sf_dataframe,
+)
+from utils.tasks import publish_table_in_bq, run_dbt, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 
 def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: State):
@@ -81,8 +83,14 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
     send_discord_notification(webhook_url, message)
 
 # force deploy
-@flow(log_prints=True, on_failure=[send_discord_notification_on_failure])
-def rj_crm__disparo_template_sf(
+@flow(
+    log_prints=True,
+    flow_run_name="crm_disparo_{campaign_name}_{flow_environment}",
+    on_failure=[send_discord_notification_on_failure],
+)
+async def rj_crm__disparo_template_sf(
+    *,
+    cloud: Cloud,
     # Parâmetros opcionais para override manual na UI.
     campaign_name: str | None = None,
     dataset_id: str | None = None,
@@ -195,10 +203,6 @@ def rj_crm__disparo_template_sf(
     billing_project_id = TemplateConstants.BILLING_PROJECT_ID.value
 
     run_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    rename_current_flow_run_task(
-            new_name=f"crm_disparo_{campaign_name}_{flow_environment}_{run_timestamp}"
-        )
-    crd = inject_bd_credentials_task(environment="prod")  # noqa  # pylint: disable=unused-variable
 
     flow_status = check_flow_status(
         flow_environment=flow_environment,
@@ -534,8 +538,7 @@ def rj_crm__disparo_template_sf(
         dispatch_confirmed = False
 
         if monitor_after_sftp:
-            github_token = getenv_or_action("GITHUB_TOKEN")
-            git_repository_path = f"https://{github_token}@github.com/prefeitura-rio/queries-rj-crm-registry.git"
+            git_repository_path = "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
 
             dispatch_confirmed = monitor_dispatch_status(
                 campaign_name=campaign_name,
@@ -562,12 +565,14 @@ def rj_crm__disparo_template_sf(
         elif materialize_after_sftp:
             print(f"⏳ Aguardando {materialization_sleep_minutes if not test_mode else 5} minutos antes de materializar o modelo dbt int_crm_status_disparo...")
             time.sleep(materialization_sleep_minutes * 60) if not test_mode else time.sleep(5 * 60)
-            github_token = getenv_or_action("GITHUB_TOKEN")
-            git_repository_path = f"https://{github_token}@github.com/prefeitura-rio/queries-rj-crm-registry.git"
-            execute_dbt_task(
-                select="+int_crm_status_disparo",
-                target="prod",
-                git_repository_path=git_repository_path,
+            git_repository_path = "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
+            await run_dbt(
+                DbtRun(
+                    repository=git_repository_path,
+                    command="run",
+                    target="prod",
+                    select="+int_crm_status_disparo",
+                )
             )
 
         # ------------------------------------------------------------------
@@ -599,10 +604,13 @@ def rj_crm__disparo_template_sf(
                         files_in_path.extend([os.path.join(root, f) for f in files])
                     print(f"Files in partitions path: {files_in_path}")
 
-                create_table_and_upload_to_gcs_task(
-                    data_path=partitions_path,
-                    dataset_id=dataset_id,
-                    table_id=table_id,
+                table = Table(dataset_id=dataset_id, table_id=table_id)
+                await upload_files_to_gcs(
+                    Path(partitions_path),
+                    table,
+                    bucket=cloud["bucket"],
                     dump_mode=dump_mode,
-                    biglake_table=False,
+                    source_format="csv",
+                    options=capture_options(dump_mode),
                 )
+                await publish_table_in_bq(table, cloud)

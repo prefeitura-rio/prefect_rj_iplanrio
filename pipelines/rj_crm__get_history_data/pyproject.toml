@@ -5,8 +5,6 @@ description = "Pipeline CRM para extração de Data Extensions históricas do Sa
 dependencies = [
     "prefect_rj_iplanrio",
     "requests",
-    "python-dotenv",
-    "prefeitura-rio[actions]",
 ]
 
 [tool.uv.sources]

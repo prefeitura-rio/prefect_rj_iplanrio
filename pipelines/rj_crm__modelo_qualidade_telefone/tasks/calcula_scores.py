@@ -17,12 +17,12 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
-from prefect_rj_iplanrio.logging import get_logger
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__modelo_qualidade_telefone.constants import FEATURES, FEATURES_FLOAT
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.cobertura import AcumuladorCobertura
 
-logger = get_logger(__name__)
+logger = get_logger("toolkit")
 
 QUANTIS_PROB = (0.01, 0.25, 0.50, 0.75, 0.99)
 

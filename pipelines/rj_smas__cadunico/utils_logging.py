@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ruff: noqa
 """
 Utilidades de logging otimizadas para a pipeline CadÚnico.
@@ -7,8 +6,10 @@ Fornece logs estruturados, consolidados e informativos.
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from prefect.logging import get_logger
 
-from toolkit.pipelines_utils.logging import log
+logger = get_logger("toolkit")
+
 
 
 class PipelineLogger:
@@ -31,7 +32,7 @@ class PipelineLogger:
             details_str = self._format_details(details)
             message += f" | {details_str}"
 
-        log(message, level="info")
+        logger.info(message)
 
     def log_progress(self, action: str, metrics: Optional[Dict[str, Any]] = None):
         """Log de progresso dentro da fase atual"""
@@ -44,7 +45,7 @@ class PipelineLogger:
             metrics_str = self._format_details(metrics)
             message += f" | {metrics_str}"
 
-        log(message, level="info")
+        logger.info(message)
 
     def complete_phase(self, success: bool = True, summary: Optional[Dict[str, Any]] = None):
         """Completa a fase atual"""
@@ -57,22 +58,22 @@ class PipelineLogger:
             summary_str = self._format_details(summary)
             message += f" | {summary_str}"
 
-        log(message, level="info" if success else "error")
+        getattr(logger, "info" if success else "error")(message)
 
     def log_warning_summary(self, title: str, warnings: List[str], max_display: int = None):
         """Log consolidado de warnings - mostra TODOS os warnings sem omissão"""
         total = len(warnings)
         if total == 0:
-            log(f"✅ {title}: Nenhum problema encontrado", level="info")
+            logger.info(f"✅ {title}: Nenhum problema encontrado")
             return
 
-        log(f"⚠️  {title}: {total} problema(s) encontrado(s)", level="warning")
+        logger.warning(f"⚠️  {title}: {total} problema(s) encontrado(s)")
 
         # Mostrar TODOS os warnings (sem limitação)
         warning_msg = ""
         for i, warning in enumerate(warnings):
             warning_msg += f"   {i + 1}. {warning}\n"
-        log(msg=warning_msg, level="warning")
+        logger.warning(warning_msg)
 
     def log_validation_summary(self, validation_results: Dict[str, List[str]]):
         """Log consolidado de validação de versões"""
@@ -80,15 +81,13 @@ class PipelineLogger:
         affected_tables = len([table for table, issues in validation_results.items() if issues])
 
         if total_issues == 0:
-            log(
+            logger.info(
                 "✅ VALIDAÇÃO DE VERSÕES: Todas as colunas consistentes entre versões",
-                level="info",
             )
             return
 
-        log(
+        logger.warning(
             f"⚠️  VALIDAÇÃO DE VERSÕES: {total_issues} inconsistências em {affected_tables} tabela(s)",
-            level="warning",
         )
 
         for table, missing_columns in validation_results.items():
@@ -100,7 +99,7 @@ class PipelineLogger:
                 if remaining > 0:
                     columns_str += f" (+{remaining} outras)"
 
-                log(f"   📋 Tabela {table}: {columns_str}", level="warning")
+                logger.warning(f"   📋 Tabela {table}: {columns_str}")
 
     def log_file_processing_summary(self, processed_files: List[Dict[str, Any]]):
         """Log consolidado de processamento de arquivos"""
@@ -108,9 +107,8 @@ class PipelineLogger:
         total_size_mb = sum(f.get("size_mb", 0) for f in processed_files)
         successful = len([f for f in processed_files if f.get("success", False)])
 
-        log(
+        logger.info(
             f"📊 PROCESSAMENTO DE ARQUIVOS: {successful}/{total_files} processados com sucesso | {total_size_mb:.1f} MB total",
-            level="info",
         )
 
         # Log consolidado de arquivos com falha
@@ -119,19 +117,18 @@ class PipelineLogger:
             failed_msg = f"❌ ARQUIVOS COM FALHA ({len(failed_files)}): \n"
             for f in failed_files[:3]:  # Mostrar até 3 falhas
                 failed_msg += f"   • {f.get('name', 'Unknown')}: {f.get('error', 'Erro desconhecido')}\n"
-            log(failed_msg, level="error")
+            logger.error(failed_msg)
 
     def log_model_generation_summary(self, created_models: List[str], tables_dict: Dict[str, str]):
         """Log consolidado de geração de modelos DBT"""
         total_models = len(created_models)
 
         if total_models == 0:
-            log("⚠️  GERAÇÃO DE MODELOS: Nenhum modelo foi criado", level="warning")
+            logger.warning("⚠️  GERAÇÃO DE MODELOS: Nenhum modelo foi criado")
             return
 
-        log(
+        logger.info(
             f"✅ GERAÇÃO DE MODELOS: {total_models} modelo(s) DBT criado(s)",
-            level="info",
         )
 
         # Agrupar por tipo de tabela
@@ -148,7 +145,7 @@ class PipelineLogger:
             types_msg = ""
             for table_name, count in model_types.items():
                 types_msg += f"   📄 {table_name}: {count} arquivo(s)\n"
-            log(types_msg, level="info")
+            logger.info(types_msg)
 
     def log_comparison_table(self, title: str, comparisons: Dict[str, Dict[str, bool]]):
         """Log de tabela de comparação consolidado (ex: raw vs staging)"""
@@ -177,7 +174,7 @@ class PipelineLogger:
 
             comparison_msg += f"   {item}: {status_str} {action_str}\n"
 
-        log(comparison_msg, level="info")
+        logger.info(comparison_msg)
 
     def _format_details(self, details: Dict[str, Any]) -> str:
         """Formata dicionário para exibição em logs"""
@@ -226,9 +223,8 @@ def log_version_comparison(raw_versions: List[str], staging_versions: List[str])
     to_process = len([v for v in all_versions if v in raw_versions and v not in staging_versions])
     already_processed = len([v for v in all_versions if v in staging_versions])
 
-    log(
+    logger.info(
         f"📈 RESUMO: {len(raw_versions)} versões no raw | {already_processed} no staging | {to_process} para processar",
-        level="info",
     )
 
 
@@ -237,20 +233,20 @@ def log_dbt_execution_result(command_result, command_args: List[str]):
     command_str = " ".join(command_args)
 
     if hasattr(command_result, "success") and command_result.success:
-        log(f"✅ DBT EXECUTADO COM SUCESSO: {command_str}", level="info")
+        logger.info(f"✅ DBT EXECUTADO COM SUCESSO: {command_str}")
 
         # Extrair métricas se disponível
         if hasattr(command_result, "result") and command_result.result:
             result_str = str(command_result.result)
             if "models" in result_str.lower():
-                log(f"   📊 Resultado: {result_str[:200]}...", level="info")
+                logger.info(f"   📊 Resultado: {result_str[:200]}...")
     else:
-        log(f"❌ FALHA NA EXECUÇÃO DBT: {command_str}", level="error")
+        logger.error(f"❌ FALHA NA EXECUÇÃO DBT: {command_str}")
 
         # Log do erro se disponível
         if hasattr(command_result, "exception") and command_result.exception:
             error_msg = str(command_result.exception)[:300]
-            log(f"   🔴 Erro: {error_msg}...", level="error")
+            logger.error(f"   🔴 Erro: {error_msg}...")
 
 
 def log_git_operation_result(operation: str, success: bool, details: Optional[Dict[str, Any]] = None):
@@ -262,7 +258,7 @@ def log_git_operation_result(operation: str, success: bool, details: Optional[Di
         details_str = " | ".join([f"{k}: {v}" for k, v in details.items()])
         message += f" | {details_str}"
 
-    log(message, level="info" if success else "error")
+    getattr(logger, "info" if success else "error")(message)
 
 
 class FileProcessingLogger:
@@ -279,9 +275,8 @@ class FileProcessingLogger:
     def start_processing(self, file_size_mb: float):
         """Inicia o processamento do arquivo"""
         elapsed = self._get_elapsed_time()
-        log(
+        logger.info(
             f"🚀 [{elapsed}] [{self.file_id}] INICIANDO: {self.file_name} ({file_size_mb:.1f} MB)",
-            level="info",
         )
 
     def start_step(self, step_name: str, step_number: int, total_steps: int):
@@ -290,9 +285,8 @@ class FileProcessingLogger:
         self.step_start_time = datetime.now()
         elapsed = self._get_elapsed_time()
 
-        log(
+        logger.info(
             f"   ⏳ [{elapsed}] [{self.file_id}] ETAPA {step_number}/{total_steps}: {step_name}",
-            level="info",
         )
 
     def complete_step(self, success: bool = True, metrics: Optional[Dict[str, Any]] = None):
@@ -310,7 +304,7 @@ class FileProcessingLogger:
             metrics_str = self._format_metrics(metrics)
             message += f" | {metrics_str}"
 
-        log(message, level="info" if success else "error")
+        getattr(logger, "info" if success else "error")(message)
 
     def complete_processing(self, success: bool = True, final_metrics: Optional[Dict[str, Any]] = None):
         """Completa o processamento do arquivo"""
@@ -325,23 +319,21 @@ class FileProcessingLogger:
             metrics_str = self._format_metrics(self.metrics)
             message += f" | {metrics_str}"
 
-        log(message, level="info" if success else "error")
+        getattr(logger, "info" if success else "error")(message)
 
     def log_file_analysis(self, txt_files_count: int, txt_files_info: List[Dict[str, Any]]):
         """Log consolidado de análise de arquivos TXT"""
         elapsed = self._get_elapsed_time()
 
-        log(
+        logger.info(
             f"   📊 [{elapsed}] [{self.file_id}] ANÁLISE: {txt_files_count} arquivo(s) TXT encontrado(s)",
-            level="info",
         )
 
         # Log resumido dos arquivos grandes
         large_files = [f for f in txt_files_info if f.get("size_gb", 0) > 1.0]
         if large_files:
-            log(
+            logger.info(
                 f"      🔍 Arquivos grandes (>1GB): {len(large_files)} | Maior: {max(f.get('size_gb', 0) for f in large_files):.2f} GB",
-                level="info",
             )
 
     def _format_metrics(self, metrics: Dict[str, Any]) -> str:
@@ -386,9 +378,8 @@ def log_partition_comparison(staging_partitions: List[str], raw_partitions: List
         },
     )
 
-    log(
+    logger.info(
         f"📈 RESUMO PARTIÇÕES: {total_raw} raw | {total_staging} staging | {to_ingest} para ingerir",
-        level="info",
     )
 
 
@@ -406,13 +397,11 @@ def log_ingestion_summary(
     )
 
     # Log principal
-    log(
+    logger.info(
         f"✅ INGESTÃO COMPLETA: {successful}/{total_files} arquivos processados | {total_size_mb:.1f} MB total | Concorrência: {max_concurrent}",
-        level="info",
     )
-    log(
+    logger.info(
         f"   📊 Performance: {avg_time_per_file:.1f}s médio por arquivo | {total_size_mb / max(1, avg_time_per_file * total_files):.1f} MB/s throughput",
-        level="info",
     )
 
     # Log consolidado de arquivos com falha se houver
@@ -421,14 +410,13 @@ def log_ingestion_summary(
         failed_msg = f"❌ FALHAS ({len(failed_results)}): \n"
         for result in failed_results[:3]:  # Mostrar até 3 falhas
             failed_msg += f"   • {result.get('file_name', 'Unknown')}: {result.get('error', 'Erro desconhecido')}\n"
-        log(failed_msg, level="error")
+        logger.error(failed_msg)
 
     # Estatísticas de partições criadas
     partitions_created = list(set(r.get("partition") for r in processing_results if r.get("partition") is not None))
     if partitions_created:
         # Filtrar valores None antes de ordenar
         valid_partitions = [p for p in partitions_created if p is not None]
-        log(
+        logger.info(
             f"📅 PARTIÇÕES CRIADAS ({len(valid_partitions)}): {', '.join(sorted(valid_partitions))}",
-            level="info",
         )

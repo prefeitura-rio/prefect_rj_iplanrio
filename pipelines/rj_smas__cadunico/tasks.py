@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
 # ruff: noqa
 
 from typing import List, Optional
 
 from prefect import task
+from utils.types import Cloud
 
 from pipelines.rj_smas__cadunico.utils_dbt import (
     download_repository,
@@ -43,6 +43,7 @@ def ingest_files_task(
     bucket_name: str,
     dataset_id: str,
     table_id: str,
+    cloud: Cloud,
     max_concurrent: int = 3,
 ) -> None:
     return ingest_files(
@@ -50,6 +51,7 @@ def ingest_files_task(
         bucket_name=bucket_name,
         dataset_id=dataset_id,
         table_id=table_id,
+        cloud=cloud,
         max_concurrent=max_concurrent,
     )
 
@@ -70,6 +72,7 @@ def update_layout_from_storage_and_create_versions_dbt_models_task(
     staging_bucket: str = "rj-iplanrio",
     force_create_models: bool = True,
     repository_path: str = "/tmp/dbt_repository/",
+    cloud: Cloud | None = None,
 ):
     return update_layout_from_storage_and_create_versions_dbt_models(
         dataset_id=dataset_id,
@@ -80,6 +83,7 @@ def update_layout_from_storage_and_create_versions_dbt_models_task(
         staging_bucket=staging_bucket,
         force_create_models=force_create_models,
         repository_path=repository_path,
+        cloud=cloud,
     )
 
 

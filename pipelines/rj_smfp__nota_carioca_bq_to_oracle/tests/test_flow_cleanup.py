@@ -8,8 +8,8 @@ from types import SimpleNamespace
 import pytest
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle import flow as flow_module
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.bigquery import ExportedFile, TableSnapshot
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.slots import SlotPlan
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import ExportedFile, TableSnapshot
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import SlotPlan
 
 TABLES = ["DET", "EXI"]
 FILES = {name: [ExportedFile(f"p/{name}/part-0.csv.gz", 10)] for name in TABLES}

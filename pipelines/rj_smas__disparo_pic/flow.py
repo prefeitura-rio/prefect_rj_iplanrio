@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # flake8: noqa:E501
 # pylint: disable='line-too-long'
 """
@@ -7,17 +6,19 @@ Flow para o disparo do cartão pic
 import os
 import time
 from math import ceil
+from os import environ
+from pathlib import Path
+
 import pendulum
 
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
-from toolkit.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
-from prefect import flow
+# pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.helpers.discord import (
+    send_dispatch_result_notification,
+    send_dispatch_success_notification,
+)
 
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_pic.constants import PicLembreteConstants
-# pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.utils.dispatch import (
+from pipelines.rj_crm__disparo_template.helpers.dispatch import (
     add_contacts_to_whitelist,
     check_api_status,
     check_flow_status,
@@ -30,24 +31,29 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     remove_duplicate_cpfs,
     remove_duplicate_phones,
 )
+
 # pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.utils.discord import (
-    send_dispatch_result_notification,
-    send_dispatch_success_notification,
-)
-# pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.utils.tasks import (
+from pipelines.rj_crm__disparo_template.helpers.tasks import (
     access_api,
     create_date_partitions,
     printar,
     skip_flow_if_empty,
     task_download_data_from_bigquery,
 )
+from prefect import flow
+
+# pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_pic.constants import PicLembreteConstants
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 
 # forçando deploy do flow
-@flow(log_prints=True)
-def rj_smas__disparo_pic(
+@flow(log_prints=True, flow_run_name="{table_id}_{dataset_id}")
+async def rj_smas__disparo_pic(
+    *,
+    cloud: Cloud,
     # Parâmetros opcionais para override manual na UI.
     id_hsm: int | None = 184,
     campaign_name: str | None = None,
@@ -106,10 +112,8 @@ def rj_smas__disparo_pic(
     print(f"\nQuery citizen:\n{query}")
     print(f"\nQuery dispatch approval:\n{query_dispatch_approved}")
 
-    destinations = getenv_or_action("PIC__DESTINATIONS", action="ignore")
+    destinations = environ.get("PIC__DESTINATIONS", None)
 
-    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
-    crd = inject_bd_credentials_task(environment="prod")  # noqa
 
     flow_status = check_flow_status(
         flow_environment=flow_environment,
@@ -250,13 +254,16 @@ def rj_smas__disparo_pic(
                         files_in_path.extend([os.path.join(root, f) for f in files])
                     print(f"Files in partitions path: {files_in_path}")
 
-                create_table = create_table_and_upload_to_gcs_task(
-                    data_path=partitions_path,
-                    dataset_id=dataset_id,
-                    table_id=table_id,
+                table = Table(dataset_id=dataset_id, table_id=table_id)
+                await upload_files_to_gcs(
+                    Path(partitions_path),
+                    table,
+                    bucket=cloud["bucket"],
                     dump_mode=dump_mode,
-                    biglake_table=False,
+                    source_format="csv",
+                    options=capture_options(dump_mode),
                 )
+                await publish_table_in_bq(table, cloud)
 
             # Wait 15 minutes before querying results
             print("⚠️  Waiting 15 minutes before checking dispatch results...")

@@ -4,35 +4,17 @@ version = "0.1.0"
 description = "Pipeline CRM para geolocalização de endereços residenciais com múltiplas estratégias"
 dependencies = [
     "prefect_rj_iplanrio",
-    # Core Prefect
-
-    # Data processing
     "pandas",
     "numpy",
-
-    # Google Cloud dependencies
     "google-cloud-bigquery",
     "google-cloud-storage",
-    "basedosdados",
-
-    # Geocoding libraries
     "geopy",
     "openlocationcode",
     "unidecode",
-
-    # HTTP and async
     "aiohttp",
     "requests",
-
-    # Time and data utilities
     "pendulum",
     "pytz",
-
-    # toolkit utilities
-    "prefeitura-rio[actions]",
-
-    # Configuration and environment
-    "python-dotenv",
 ]
 
 [project.optional-dependencies]

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tasks do fluxo rj_iplanrio__sisbicho_images."""
 
 import hashlib
@@ -9,17 +8,19 @@ from typing import Iterable
 import cv2
 import numpy as np
 import pandas as pd
-from basedosdados import Base
 from google.cloud import bigquery, storage
 from google.cloud.exceptions import NotFound
-from toolkit.pipelines_utils.logging import log
 from prefect import task
+from prefect.logging import get_logger
 
-from pipelines.rj_iplanrio__sisbicho_images.utils.tasks import (
+from pipelines.rj_iplanrio__sisbicho_images.helpers.tasks import (
     MAGIC_NUMBERS,
     PdfDetectedError,
     detect_and_decode,
 )
+from utils.utils import load_credentials
+
+logger = get_logger("toolkit")
 
 
 def _ensure_staging_dataset(dataset_id: str) -> str:
@@ -88,7 +89,7 @@ def _coerce_to_base64_text(value: object) -> str:
                 "Valor de imagem em bytes não pôde ser decodificado como ASCII/Base64. "
                 "Registro não atende ao formato esperado."
             )
-            log(f"[ERRO CRÍTICO] {msg} Detalhes: {exc}")
+            logger.info(f"[ERRO CRÍTICO] {msg} Detalhes: {exc}")
             raise ValueError(msg) from exc
     return str(value)
 
@@ -127,7 +128,7 @@ def _decode_qrcode_bytes(image_bytes: bytes) -> str | None:
     array = np.frombuffer(image_bytes, dtype=np.uint8)
     image = cv2.imdecode(array, cv2.IMREAD_GRAYSCALE)
     if image is None:
-        log("[ERRO] Não foi possível decodificar bytes do QR Code em imagem.")
+        logger.info("[ERRO] Não foi possível decodificar bytes do QR Code em imagem.")
         return None
 
     detector = cv2.QRCodeDetector()
@@ -206,10 +207,10 @@ def _extract_qrcode_payload(value: str) -> str | None:
     try:
         image_bytes = detect_and_decode(cleaned)
     except PdfDetectedError:
-        log("[QRCode] PDF detectado - registro ignorado")
+        logger.info("[QRCode] PDF detectado - registro ignorado")
         return None
     except ValueError as exc:
-        log(f"[QRCode] Falha ao decodificar: {exc}")
+        logger.info(f"[QRCode] Falha ao decodificar: {exc}")
         return None
 
     payload = _decode_qrcode_bytes(image_bytes)
@@ -275,7 +276,7 @@ def _get_total_count(
             if precise_count is not None:
                 row_count = precise_count
     except NotFound:
-        log(f"Tabela {target_table} não existe. Primeira execução: processando todos os registros.")
+        logger.info(f"Tabela {target_table} não existe. Primeira execução: processando todos os registros.")
         table_exists = False
 
     if table_exists:
@@ -297,12 +298,12 @@ def _get_total_count(
             error_msg = str(exc).lower()
             # Detecta tabela vazia (Hive partition sem arquivos)
             if "cannot query hive partitioned data" in error_msg and "without any associated files" in error_msg:
-                log(f"[INFO] Tabela {target_table} existe mas está vazia. Será deletada e recriada.")
+                logger.info(f"[INFO] Tabela {target_table} existe mas está vazia. Será deletada e recriada.")
                 table_exists = False
                 table_is_empty = True
             else:
                 # Outro tipo de erro - propaga
-                log(f"[ERRO] Falha ao executar query incremental: {exc}")
+                logger.info(f"[ERRO] Falha ao executar query incremental: {exc}")
                 raise
 
     # Query completa (primeira carga ou tabela vazia)
@@ -314,7 +315,7 @@ def _get_total_count(
 
     result = client.query(count_query).result()
     total = next(result).total
-    log(f"Total de registros a processar (primeira carga): {total}")
+    logger.info(f"Total de registros a processar (primeira carga): {total}")
     return total, table_is_empty
 
 
@@ -339,7 +340,7 @@ def fetch_sisbicho_media_task(
     - Nome do campo identificador
     - Total de registros a processar
     """
-    credentials = Base(bucket_name=credential_bucket)._load_credentials(mode="prod")
+    credentials = load_credentials()
     client = bigquery.Client(credentials=credentials, project=billing_project_id)
 
     source_table = f"{billing_project_id}.{source_dataset_id}.{source_table_id}"
@@ -353,19 +354,19 @@ def fetch_sisbicho_media_task(
 
     # Se a tabela está vazia (corrompida), deleta para o basedosdados recriar do zero
     if table_is_empty:
-        log(f"[RECOVERY] Deletando tabela vazia {target_table}...")
+        logger.info(f"[RECOVERY] Deletando tabela vazia {target_table}...")
         try:
             client.delete_table(target_table, not_found_ok=True)
-            log(f"[RECOVERY] Tabela {target_table} deletada com sucesso. Será recriada na primeira gravação.")
+            logger.info(f"[RECOVERY] Tabela {target_table} deletada com sucesso. Será recriada na primeira gravação.")
         except Exception as exc:
-            log(f"[ERRO] Falha ao deletar tabela vazia: {exc}")
+            logger.info(f"[ERRO] Falha ao deletar tabela vazia: {exc}")
             raise
 
     if max_records:
         total_count = min(total_count, max_records)
 
-    log(f"Total de registros a processar: {total_count}")
-    log(f"Tamanho do lote: {batch_size}")
+    logger.info(f"Total de registros a processar: {total_count}")
+    logger.info(f"Tamanho do lote: {batch_size}")
 
     return client, source_table, target_table, identifier_field, total_count
 
@@ -435,7 +436,7 @@ def fetch_batch(
             error_msg = str(exc).lower()
             # Detecta tabela vazia (Hive partition sem arquivos)
             if "cannot query hive partitioned data" in error_msg and "without any associated files" in error_msg:
-                log(f"[INFO] Tabela {target_table} existe mas está vazia. Usando query sem JOIN.")
+                logger.info(f"[INFO] Tabela {target_table} existe mas está vazia. Usando query sem JOIN.")
                 table_exists = False
             else:
                 # Outro tipo de erro - propaga
@@ -528,13 +529,13 @@ def upload_pet_images_task(
         try:
             image_bytes = detect_and_decode(cleaned)
         except PdfDetectedError:
-            log(f"[Foto] PDF detectado para animal {identifier} - registro ignorado")
+            logger.info(f"[Foto] PDF detectado para animal {identifier} - registro ignorado")
             foto_urls.append(None)
             blob_paths.append(None)
             pdf_count += 1
             continue
         except ValueError as exc:
-            log(f"[ERRO] Falha ao decodificar Base64 do animal {identifier}: {exc}")
+            logger.info(f"[ERRO] Falha ao decodificar Base64 do animal {identifier}: {exc}")
             raise ValueError(
                 f"Decode de Base64 falhou para animal {identifier}. "
                 f"Batch abortado para evitar transferência de dados incompletos."
@@ -563,7 +564,7 @@ def upload_pet_images_task(
         foto_urls.append(public_url)
         blob_paths.append(blob_name)
 
-    log(f"[Upload] {uploaded_count} imagens enviadas, {skipped_count} já existiam, {pdf_count} PDFs ignorados")
+    logger.info(f"[Upload] {uploaded_count} imagens enviadas, {skipped_count} já existiam, {pdf_count} PDFs ignorados")
 
     df = dataframe.copy()
     df["foto_url"] = foto_urls
@@ -617,7 +618,7 @@ def process_single_batch(
     batch_df = fetch_batch(client, source_table, target_table, identifier_field, offset, batch_size)
 
     if batch_df.empty:
-        log(f"Lote vazio no offset {offset}. Pulando.")
+        logger.info(f"Lote vazio no offset {offset}. Pulando.")
         return pd.DataFrame()
 
     # Extract QR code payload
@@ -682,13 +683,13 @@ def _upload_batch_images(
         try:
             image_bytes = detect_and_decode(cleaned)
         except PdfDetectedError:
-            log(f"[Foto] PDF detectado para animal {identifier} - registro ignorado")
+            logger.info(f"[Foto] PDF detectado para animal {identifier} - registro ignorado")
             foto_urls.append(None)
             blob_paths.append(None)
             pdf_count += 1
             continue
         except ValueError as exc:
-            log(f"[ERRO] Falha ao decodificar Base64 do animal {identifier}: {exc}")
+            logger.info(f"[ERRO] Falha ao decodificar Base64 do animal {identifier}: {exc}")
             raise ValueError(
                 f"Decode de Base64 falhou para animal {identifier}. "
                 f"Batch abortado para evitar transferência de dados incompletos."
@@ -717,7 +718,7 @@ def _upload_batch_images(
         foto_urls.append(public_url)
         blob_paths.append(blob_name)
 
-    log(f"[Upload] {uploaded_count} imagens enviadas, {skipped_count} já existiam, {pdf_count} PDFs ignorados")
+    logger.info(f"[Upload] {uploaded_count} imagens enviadas, {skipped_count} já existiam, {pdf_count} PDFs ignorados")
 
     df = dataframe.copy()
     df["foto_url"] = foto_urls

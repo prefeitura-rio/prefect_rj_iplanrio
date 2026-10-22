@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 
 from prefect import flow
 from prefect.deployments import run_deployment
+from toolkit.dbt import DbtRun
 
 from pipelines.rj_smas__api_datametrica_agendamentos.constants import (
     DatametricaConstants,
@@ -19,7 +20,6 @@ from pipelines.rj_smas__api_datametrica_agendamentos.tasks import (
     get_datametrica_credentials,
     transform_agendamentos_data,
 )
-from toolkit.dbt import DbtRun
 from utils.tasks import publish_table_in_bq, run_dbt, upload_files_to_gcs
 from utils.types import Cloud, Table
 from utils.utils import capture_options

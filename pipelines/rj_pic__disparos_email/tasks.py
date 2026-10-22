@@ -1,17 +1,16 @@
-# -*- coding: utf-8 -*-
 """
 Task para envio de e-mails em massa com templates HTML.
 """
 
+import ast
+import json
+import os
 from typing import Dict, List, Optional
+
 from google.cloud import bigquery
 from prefect import task
-import json
-import ast
-import os
 
-from pipelines.rj_pic__disparos_email.engine import TemplateEngine
-from pipelines.rj_pic__disparos_email.engine import EmailSender
+from pipelines.rj_pic__disparos_email.engine import EmailSender, TemplateEngine
 from pipelines.rj_pic__disparos_email.env import FILTER_EMAILS
 
 

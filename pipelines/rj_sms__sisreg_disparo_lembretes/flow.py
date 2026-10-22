@@ -1,16 +1,16 @@
-# -*- coding: utf-8 -*-
 """
 SISREG SMS Dispatch Pipeline
 Sends SMS reminders for next day appointments via Wetalkie API
 """
 
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
-from prefect import flow
+from pathlib import Path
 
-from .constants import SisregConstants
-from .tasks import (
+from prefect import flow
+from prefect.logging import get_logger
+
+from pipelines.rj_sms__sisreg_disparo_lembretes.constants import SisregConstants
+from pipelines.rj_sms__sisreg_disparo_lembretes.helpers.tasks import access_api
+from pipelines.rj_sms__sisreg_disparo_lembretes.tasks import (
     check_api_status,
     create_date_partitions,
     create_dispatch_dfr,
@@ -19,11 +19,17 @@ from .tasks import (
     get_destinations,
     remove_duplicate_phones,
 )
-from .utils.tasks import access_api
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
+
+logger = get_logger("toolkit")
 
 
-@flow(log_prints=True)
-def rj_sms__sisreg_disparo_lembretes(
+@flow(log_prints=True, flow_run_name="sisreg_dispatch_{destination_table_id}_{destination_dataset_id}")
+async def rj_sms__sisreg_disparo_lembretes(
+    *,
+    cloud: Cloud,
     # Parameters with defaults from constants
     dataset_id: str | None = None,
     table_id: str | None = None,
@@ -60,12 +66,8 @@ def rj_sms__sisreg_disparo_lembretes(
     chunk_size = chunk_size or SisregConstants.CHUNK_SIZE.value
 
     # Rename flow run for better identification
-    rename_flow_run = rename_current_flow_run_task(
-        new_name=f"sisreg_dispatch_{destination_table_id}_{destination_dataset_id}"
-    )
 
     # Inject BigQuery credentials
-    credentials = inject_bd_credentials_task(environment="prod")
 
     # Access Wetalkie API
     api = access_api(login_route="users/login")
@@ -98,16 +100,18 @@ def rj_sms__sisreg_disparo_lembretes(
         )
 
         # Upload to BigQuery
-        create_table = create_table_and_upload_to_gcs_task(
-            data_path=partitions_path,
-            dataset_id=destination_dataset_id,
-            table_id=destination_table_id,
+        table = Table(dataset_id=destination_dataset_id, table_id=destination_table_id)
+        await upload_files_to_gcs(
+            Path(partitions_path),
+            table,
+            bucket=cloud["bucket"],
             dump_mode=dump_mode,
-            biglake_table=False,
+            source_format="csv",
+            options=capture_options(dump_mode),
         )
+        await publish_table_in_bq(table, cloud)
     elif not api_status:
         raise Exception("Wetalkie API is not accessible")
     else:
-        from toolkit.pipelines_utils.logging import log
 
-        log("No destinations found for dispatch. Skipping flow execution.")
+        logger.info("No destinations found for dispatch. Skipping flow execution.")

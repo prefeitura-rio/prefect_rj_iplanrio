@@ -57,14 +57,14 @@ universo AS (
   FROM aparicoes
   WHERE telefone IS NOT NULL
 ),
-$amostra_ctes
+{{ amostra_ctes }}
 disparo_amostra AS (
   SELECT d.id_interacao, d.telefone, d.cpf, d.status_disparo, d.envio_datahora, am.data_corte
   FROM disparos d
   JOIN amostra am ON d.telefone = am.telefone
 ),
 
-$rotulo_ctes
+{{ rotulo_ctes }}
 -- ---- 2) features do passado: disparos -----------------------------------
 passado AS (
   SELECT
@@ -333,4 +333,4 @@ LEFT JOIN ddd_telefone dt    ON dt.telefone = am.telefone
 LEFT JOIN telefone_meta tm   ON tm.telefone = am.telefone
 )
 
-$select_final
+{{ select_final }}

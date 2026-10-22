@@ -25,6 +25,10 @@ pull:
 
 deployments:
   - name: rj_iplanrio__sisbicho_imagem--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_iplanrio__sisbicho_images/flow.py:rj_iplanrio__sisbicho_images
     work_pool:
@@ -46,7 +50,15 @@ deployments:
       storage_prefix: animal/fotos_staging
       billing_project_id: rj-iplanrio
       storage_project_id: rj-iplanrio-dia
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
   - name: rj_iplanrio__sisbicho_imagem--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__sisbicho_images/flow.py:rj_iplanrio__sisbicho_images
     work_pool:
@@ -68,6 +80,10 @@ deployments:
       storage_prefix: animal/fotos
       billing_project_id: rj-iplanrio
       storage_project_id: rj-iplanrio-dia
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     schedule:
       cron: "0 6 * * *"
       timezone: America/Sao_Paulo

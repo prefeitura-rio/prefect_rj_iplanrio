@@ -1,25 +1,24 @@
-# -*- coding: utf-8 -*-
 import asyncio
 import json
+import traceback
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
-import traceback
 
-from datetime import datetime
 import pandas as pd
-
-from toolkit.pipelines_utils.logging import log
-from toolkit.pipelines_utils.pandas import to_partitions
+from langchain_core.version import VERSION as langchain_version
+from langchain_google_cloud_sql_pg import PostgresEngine, PostgresLoader, PostgresSaver
+from langchain_google_cloud_sql_pg.version import __version__ as gc_sql_pg_version
 
 # from langchain_core.runnables import RunnableConfig
 from langgraph.version import __version__ as langraph_version
-from langchain_google_cloud_sql_pg import PostgresEngine, PostgresLoader, PostgresSaver
-from langchain_google_cloud_sql_pg.version import __version__ as gc_sql_pg_version
-from langchain_core.version import VERSION as langchain_version
+from prefect.logging import get_logger
 
-from pipelines.rj_iplanrio__eai_history import env
+from pipelines.rj_iplanrio__eai_history.helpers import EaiSettings
 from pipelines.rj_iplanrio__eai_history.message_formatter import to_gateway_format
+
+logger = get_logger("toolkit")
 
 
 class GoogleAgentEngineHistory:
@@ -30,20 +29,21 @@ class GoogleAgentEngineHistory:
     @classmethod
     async def create(cls, environment: str) -> "GoogleAgentEngineHistory":
         """Factory method para criar uma instância com checkpointer inicializado"""
+        settings = EaiSettings()
         if environment == "staging":
-            project_id = env.PROJECT_ID or ""
-            region = env.LOCATION or ""
-            instance = env.INSTANCE or ""
-            database = env.DATABASE or ""
-            user = env.DATABASE_USER or ""
-            password = env.DATABASE_PASSWORD or ""
+            project_id = settings.EAI__PROJECT_ID or ""
+            region = settings.EAI__LOCATION or ""
+            instance = settings.EAI__INSTANCE or ""
+            database = settings.EAI__DATABASE or ""
+            user = settings.EAI__DATABASE_USER or ""
+            password = settings.EAI__DATABASE_PASSWORD or ""
         elif environment == "prod":
-            project_id = env.PROJECT_ID_PROD or ""
-            region = env.LOCATION_PROD or ""
-            instance = env.INSTANCE_PROD or ""
-            database = env.DATABASE_PROD or ""
-            user = env.DATABASE_USER_PROD or ""
-            password = env.DATABASE_PASSWORD_PROD or ""
+            project_id = settings.EAI__PROJECT_ID_PROD or ""
+            region = settings.EAI__LOCATION_PROD or ""
+            instance = settings.EAI__INSTANCE_PROD or ""
+            database = settings.EAI__DATABASE_PROD or ""
+            user = settings.EAI__DATABASE_USER_PROD or ""
+            password = settings.EAI__DATABASE_PASSWORD_PROD or ""
         else:
             raise (ValueError("enviromet must be prod or staging"))
 
@@ -57,8 +57,8 @@ class GoogleAgentEngineHistory:
             engine_args={"pool_pre_ping": True, "pool_recycle": 300},
         )
         checkpointer = await PostgresSaver.create(engine=engine)
-        log(f"Checkpointer inicializado para project_id: {environment} | {project_id}")
-        log(
+        logger.info(f"Checkpointer inicializado para project_id: {environment} | {project_id}")
+        logger.info(
             f"Version Control\nlanggraph: {langraph_version}\nlangchain-google-cloud-sql-pg: {gc_sql_pg_version}\nlangchain: {langchain_version}"
         )
         return cls(checkpointer=checkpointer, environment=environment)
@@ -80,7 +80,7 @@ class GoogleAgentEngineHistory:
         """Método auxiliar para processar histórico de um único usuário"""
 
         if user_id in ["", " ", "/"]:
-            log(f"Invalid user_id: {user_id}", level="warning")
+            logger.warning(f"Invalid user_id: {user_id}")
             return
 
         # LangGraph v4: messages blob was fetched in the bulk query and base64-encoded.
@@ -109,12 +109,8 @@ class GoogleAgentEngineHistory:
         dataframe = pd.DataFrame(data=bq_payload)
 
         now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        to_partitions(
-            data=dataframe,
-            partition_columns=["environment", "user_id"],
-            savepath=str(save_path),
-            suffix=now,
-        )
+        Path(save_path).mkdir(parents=True, exist_ok=True)
+        dataframe.to_csv(Path(save_path) / f"{now}_{user_id}.csv", index=False)
 
     async def get_history_bulk_from_last_update(
         self,
@@ -128,7 +124,7 @@ class GoogleAgentEngineHistory:
         Get history bulk for all users updated after last_update (ISO 8601 timestamp).
         """
 
-        log(f"last_update used as filter: '{last_update}'")
+        logger.info(f"last_update used as filter: '{last_update}'")
 
         engine = self._checkpointer._engine
 
@@ -167,16 +163,16 @@ class GoogleAgentEngineHistory:
             for doc in docs
         ]
         if not users_infos:
-            log(msg="No data to save")
+            logger.info("No data to save")
             return None
         else:
-            log(f"Found {len(users_infos)} users to process")
-            log(
+            logger.info(f"Found {len(users_infos)} users to process")
+            logger.info(
                 f"First 3 users: {[d['user_id'] for d in users_infos[:3]]}"
             )
 
         save_path = str(Path(f"/tmp/data/{uuid4()}"))
-        log(f"Data will be saved to: {save_path}")
+        logger.info(f"Data will be saved to: {save_path}")
         batch_size = max_user_save_limit
         user_id_chunks = [
             users_infos[i : i + batch_size]
@@ -185,8 +181,8 @@ class GoogleAgentEngineHistory:
         total_batches = len(user_id_chunks)
         all_results = []
 
-        log(
-            msg=f"Starting processing of {len(users_infos)} users in {total_batches} batches of up to {batch_size} users each."  # noqa
+        logger.info(
+            f"Starting processing of {len(users_infos)} users in {total_batches} batches of up to {batch_size} users each."  # noqa
         )
         for batch_num, user_chunk in enumerate(user_id_chunks, 1):
             tasks_for_this_batch = [
@@ -209,15 +205,14 @@ class GoogleAgentEngineHistory:
             all_results.extend(results_of_batch)
 
             progress = 100 * (batch_num / total_batches)
-            log(f"Processed batch {batch_num} / {total_batches} - {progress}%")
+            logger.info(f"Processed batch {batch_num} / {total_batches} - {progress}%")
 
         errors = [res for res in all_results if isinstance(res, Exception)]
         if errors:
-            log(
-                msg=f"Finished processing with {len(errors)} errors out of {len(users_infos)} users. Logging details for the first 3 errors:",
-                level="warning",
+            logger.warning(
+                f"Finished processing with {len(errors)} errors out of {len(users_infos)} users. Logging details for the first 3 errors:",
             )
-            log(f"First 3 exceptions encountered: {errors[:3]}", level="critical")
+            logger.critical(f"First 3 exceptions encountered: {errors[:3]}")
 
             for i, err in enumerate(errors[:3], 1):
                 # Formata a exceção completa (tipo, mensagem e traceback) em uma string
@@ -226,8 +221,8 @@ class GoogleAgentEngineHistory:
                 )
 
                 # Loga a string formatada
-                log(f"--- Error #{i} Details ---\n{tb_str}", level="critical")
+                logger.critical(f"--- Error #{i} Details ---\n{tb_str}")
         else:
-            log("Finished processing all batches successfully.")
-        log(f"Data fetching and processing complete. Returning save path: {save_path}")
+            logger.info("Finished processing all batches successfully.")
+        logger.info(f"Data fetching and processing complete. Returning save path: {save_path}")
         return str(save_path)

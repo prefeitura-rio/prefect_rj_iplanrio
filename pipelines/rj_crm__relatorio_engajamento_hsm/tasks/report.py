@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Monta o relatório (.docx + 2 csv complementares) e publica no Google Drive.
 Idempotência mora aqui: `ja_existe_relatorio` confere, pelo prefixo determinístico do
 nome de arquivo, se já existe relatório pra esse HSM + data de geração."""
@@ -13,19 +12,21 @@ from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
-from toolkit.pipelines_utils.logging import log
 from prefect import task
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import CHATBOT_DATASET, CHATBOT_TABLE, CSV_SEP, PROJECT_ID
-from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.extract import sql_query_utilizada
-from pipelines.rj_crm__relatorio_engajamento_hsm.utils.drive import (
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.drive import (
     busca_pasta,
     confirma_pasta_raiz,
     get_drive_service,
     pasta_hsm_id,
     upload_bytes,
 )
-from pipelines.rj_crm__relatorio_engajamento_hsm.utils.texto import hsm_sane
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.texto import hsm_sane
+from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.extract import sql_query_utilizada
+
+logger = get_logger("toolkit")
 
 _Z_IC_95 = 1.959963985  # z crítico do intervalo de confiança de 95%
 
@@ -363,4 +364,4 @@ def monta_e_publica_relatorio(
         drive, pasta_id, nome_csv_classificacoes,
         df_detalhe.to_csv(index=False, sep=CSV_SEP).encode("utf-8"), "text/csv",
     )
-    log(f"[FLOW] {nome_hsm}: relatório da geração {data_referencia} publicado no Drive (subpasta '{nome_hsm}').")
+    logger.info(f"[FLOW] {nome_hsm}: relatório da geração {data_referencia} publicado no Drive (subpasta '{nome_hsm}').")

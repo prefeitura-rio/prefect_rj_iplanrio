@@ -1,23 +1,27 @@
-# -*- coding: utf-8 -*-
 # flake8: noqa:E501
 # pylint: disable='line-too-long'
 """
 Dispatch Flow for agendamento cadunico
 """
-from math import ceil
 import os
 import time
+from math import ceil
+from os import environ
+from pathlib import Path
 
 import pendulum
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
-from toolkit.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
-from prefect import flow  # pylint: disable=E0611, E0401
-from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
 
-from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.utils.dispatch import (
+from pipelines.rj_crm__disparo_template.helpers.discord import (
+    send_discord_notification,
+    send_dispatch_no_destinations_found,
+    send_dispatch_result_notification,
+    send_dispatch_success_notification,
+)
+
+# pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.helpers.dispatch import (
+    add_contacts_to_whitelist,
     check_api_status,
     check_flow_status,
     create_dispatch_dfr,
@@ -26,21 +30,22 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     format_query,
     get_destinations,
     remove_duplicate_phones,
-    add_contacts_to_whitelist,
 )
+
 # pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.utils.tasks import (
+from pipelines.rj_crm__disparo_template.helpers.tasks import (
     access_api,
     create_date_partitions,
     skip_flow_if_empty,
 )
-# pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.utils.discord import (
-    send_discord_notification,
-    send_dispatch_no_destinations_found,
-    send_dispatch_result_notification,
-    send_dispatch_success_notification,
-)
+from prefect import flow  # pylint: disable=E0611, E0401
+from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
+
+from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants  # pylint: disable=E0611, E0401
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
+
 
 def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: State):
     """
@@ -66,8 +71,10 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
     send_discord_notification(webhook_url, message)
 
 
-@flow(log_prints=True, on_failure=[send_discord_notification_on_failure])
-def rj_smas__disparo_cadunico(
+@flow(log_prints=True, on_failure=[send_discord_notification_on_failure], flow_run_name="{table_id}_{dataset_id}")
+async def rj_smas__disparo_cadunico(
+    *,
+    cloud: Cloud,
     # Parâmetros opcionais para override manual na UI.
     id_hsm: int | None = None,
     campaign_name: str | None = None,
@@ -100,10 +107,8 @@ def rj_smas__disparo_cadunico(
     )
     billing_project_id = CadunicoConstants.CADUNICO_BILLING_PROJECT_ID.value
 
-    destinations = getenv_or_action("CADUNICO__DESTINATIONS", action="ignore")
+    destinations = environ.get("CADUNICO__DESTINATIONS", None)
 
-    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
-    crd = inject_bd_credentials_task(environment="prod")  # noqa
 
     if test_mode:
         campaign_name = "teste-" + campaign_name
@@ -253,13 +258,16 @@ def rj_smas__disparo_cadunico(
                     files_in_path.extend([os.path.join(root, f) for f in files])
                 print(f"Files in partitions path: {files_in_path}")
 
-            create_table = create_table_and_upload_to_gcs_task(
-                data_path=partitions_path,
-                dataset_id=dataset_id,
-                table_id=table_id,
+            table = Table(dataset_id=dataset_id, table_id=table_id)
+            await upload_files_to_gcs(
+                Path(partitions_path),
+                table,
+                bucket=cloud["bucket"],
                 dump_mode=dump_mode,
-                biglake_table=False,
+                source_format="csv",
+                options=capture_options(dump_mode),
             )
+            await publish_table_in_bq(table, cloud)
 
         # Wait 15 minutes before querying results
         print("⚠️  Waiting 15 minutes before checking dispatch results...")

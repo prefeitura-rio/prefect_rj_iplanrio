@@ -8,10 +8,8 @@ import json
 import pandas as pd
 from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
-from toolkit.pipelines_utils.env import get_bd_credentials_from_env
 from prefect import task
-from prefect_rj_iplanrio.logging import get_logger
-from prefect_rj_iplanrio.sql import load_query
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__modelo_qualidade_telefone import constants
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.avaliar_simulacao import (
@@ -21,8 +19,9 @@ from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.avaliar_simulaca
 )
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.promover import DecisaoGate
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.treinar import ResultadoTreino
+from utils.utils import load_credentials, render_query
 
-logger = get_logger(__name__)
+logger = get_logger("toolkit")
 
 # Cabeçalho das colunas do resumo da simulação (ver avaliar_simulacao.tabela_resumo) pro
 # nome de métrica que vira a tabela longa — snake_case, sem o "%"/"|" do cabeçalho original.
@@ -150,12 +149,12 @@ def publica_avaliacao_bq(
     :param tabela: Saída de :func:`monta_tabela_avaliacao`.
     :param environment: ``"prod"`` ou ``"staging"`` — credenciais do secret do work pool.
     """
-    credentials = get_bd_credentials_from_env(mode=environment)
+    credentials = load_credentials()
     client = bigquery.Client(credentials=credentials, project=constants.PROJECT_ID)
     versao = str(tabela["versao"].iloc[0])
 
     if _tabela_existe(client, dataset_id, table_id):
-        sql = load_query(
+        sql = render_query(
             constants.__file__, "deleta_avaliacao_versao", project=constants.PROJECT_ID,
             dataset_id=dataset_id, table_id=table_id,
         )

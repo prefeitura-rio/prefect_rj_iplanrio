@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Constantes da pipeline Salesforce Data Cloud → BigQuery.
 """

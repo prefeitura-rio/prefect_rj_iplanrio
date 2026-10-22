@@ -1,12 +1,13 @@
-# -*- coding: utf-8 -*-
 # ruff: noqa
 import os
 import shutil
 
 import git
-from toolkit.pipelines_utils.logging import log
 from pipelines.rj_smas__cadunico.utils_logging import log_git_operation_result, log_dbt_execution_result
 from prefect_dbt import PrefectDbtRunner
+from prefect.logging import get_logger
+
+logger = get_logger("toolkit")
 
 
 def get_github_token() -> str:
@@ -47,7 +48,7 @@ def download_repository(git_repository_path: str, branch: str = "master") -> str
             shutil.rmtree(repository_path, ignore_errors=False)
         os.makedirs(repository_path)
 
-        log(f"Repository folder created: {repository_path}", level="info")
+        logger.info(f"Repository folder created: {repository_path}")
 
     except Exception as e:
         raise Exception(f"Error when creating repository folder: {e}")
@@ -55,18 +56,17 @@ def download_repository(git_repository_path: str, branch: str = "master") -> str
     # Download repository from specific branch
     try:
         repo = git.Repo.clone_from(git_repository_path, repository_path, branch=branch)
-        log(
+        logger.info(
             f"Repository downloaded successfully (branch: {branch})",
-            level="info",
         )
-        log(f"Current branch: {repo.active_branch.name}", level="info")
+        logger.info(f"Current branch: {repo.active_branch.name}")
     except git.GitCommandError as e:
         raise Exception(f"Error when downloading repository from branch '{branch}': {e}")
 
     # check for 'queries' folder
     queries_path = os.path.join(repository_path, "queries")
     if os.path.isdir(queries_path):
-        log(f"'queries' folder found at: {queries_path}", level="info")
+        logger.info(f"'queries' folder found at: {queries_path}")
         return queries_path
 
     return str(repository_path)
@@ -93,7 +93,7 @@ def push_models_to_branch(
         bool: True se o push foi bem-sucedido
     """
     if not github_token:
-        log("GitHub token is required for push operations", level="error")
+        logger.error("GitHub token is required for push operations")
         return False
     try:
         # Encontrar o diretório raiz do repositório
@@ -111,11 +111,11 @@ def push_models_to_branch(
                 git_config.set_value("user", "name", author_name)
                 git_config.set_value("user", "email", author_email)
         except Exception:
-            log("Could not set git config, using existing config", level="warning")
+            logger.warning("Could not set git config, using existing config")
 
         # Verificar branch ativa
         current_branch = repo.active_branch.name
-        log(f"Current branch: {current_branch}", level="info")
+        logger.info(f"Current branch: {current_branch}")
 
         # Verificar se há mudanças
         if repo.is_dirty() or repo.untracked_files:
@@ -185,10 +185,10 @@ def push_models_to_branch(
             return True
 
     except git.GitCommandError as e:
-        log(f"Git command error: {e}", level="error")
+        logger.error(f"Git command error: {e}")
         return False
     except Exception as e:
-        log(f"Error pushing models: {e}", level="error")
+        logger.error(f"Error pushing models: {e}")
         return False
 
 

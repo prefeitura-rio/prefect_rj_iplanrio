@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tasks for geolocation pipeline migrated to Prefect 3.x
 """
@@ -8,13 +7,11 @@ from time import sleep, time
 from uuid import uuid4
 
 import pandas as pd
-from basedosdados import Base
 from google.cloud import bigquery
-from toolkit.pipelines_utils.env import getenv_or_action
-from toolkit.pipelines_utils.logging import log
 from prefect import task
+from prefect.logging import get_logger
 
-from pipelines.rj_crm__geolocalizacao_residencia.utils.async_utils import (
+from pipelines.rj_crm__geolocalizacao_residencia.helpers.async_utils import (
     run_geoapify_batch_geocoding_async,
     run_geocode_geocodexyz_async,
     run_geocode_locationiq_async,
@@ -23,9 +20,12 @@ from pipelines.rj_crm__geolocalizacao_residencia.utils.async_utils import (
     run_geocode_opencage_async,
     run_geocode_waze_async,
 )
-from pipelines.rj_crm__geolocalizacao_residencia.utils.geo_utils import (
+from pipelines.rj_crm__geolocalizacao_residencia.helpers.geo_utils import (
     coordinates_to_pluscode,
 )
+from utils.utils import read_env
+
+logger = get_logger("toolkit")
 
 
 @task
@@ -39,23 +39,22 @@ def download_data_from_bigquery(
         import re
 
         query = re.sub(r"LIMIT \d+", f"LIMIT {limit}", query)
-        log(f"Querying batch of addresses from BigQuery (max {limit} records)")
+        logger.info(f"Querying batch of addresses from BigQuery (max {limit} records)")
     else:
-        log("Querying batch of addresses from BigQuery")
+        logger.info("Querying batch of addresses from BigQuery")
 
     bq_client = bigquery.Client(
-        credentials=Base(bucket_name=bucket_name)._load_credentials(mode="prod"),
         project=billing_project_id,
     )
     job = bq_client.query(query)
     while not job.done():
         sleep(1)
-    log("Getting result from query")
+    logger.info("Getting result from query")
     results = job.result()
-    log("Converting result to pandas dataframe")
+    logger.info("Converting result to pandas dataframe")
     dfr = results.to_dataframe()
-    log(f"Downloaded {len(dfr)} addresses for geocoding batch")
-    log("End download data from bigquery")
+    logger.info(f"Downloaded {len(dfr)} addresses for geocoding batch")
+    logger.info("End download data from bigquery")
 
     return dfr
 
@@ -88,7 +87,7 @@ def async_geocoding_dataframe(
     Returns:
         DataFrame with geocoded addresses
     """
-    log("Start async georeferencing dataframe using Nominatim only")
+    logger.info("Start async georeferencing dataframe using Nominatim only")
     start_time = time()
 
     # Prepare dataframe
@@ -96,11 +95,11 @@ def async_geocoding_dataframe(
     dataframe = dataframe.reset_index(drop=True)
     total_addresses = len(dataframe)
 
-    log(f"Processing {total_addresses} addresses in one batch")
+    logger.info(f"Processing {total_addresses} addresses in one batch")
 
-    log("Geocoding with Nominatim")
-    user_agent = getenv_or_action("NOMINATIM")
-    domain = getenv_or_action("NOMINATIM_DOMAIN")
+    logger.info("Geocoding with Nominatim")
+    user_agent = read_env("NOMINATIM")
+    domain = read_env("NOMINATIM_DOMAIN")
 
     final_dataframe = run_geocode_nominatim_async(
         dataframe=dataframe,
@@ -117,18 +116,18 @@ def async_geocoding_dataframe(
     final_dataframe = final_dataframe.dropna(subset=["latitude", "longitude"])
 
     success_count = len(final_dataframe)
-    log(f"Successfully geocoded {success_count}/{total_addresses} addresses")
+    logger.info(f"Successfully geocoded {success_count}/{total_addresses} addresses")
 
     # Ensure string types for all columns, replacing None with empty string
     if not final_dataframe.empty:
         final_dataframe = final_dataframe.astype("str")
         final_dataframe = final_dataframe.replace({"nan": "", "None": "", "<NA>": ""})
         final_dataframe = final_dataframe.fillna("")
-        log(f"Final result preview: \n{final_dataframe.iloc[0]}")
+        logger.info(f"Final result preview: \n{final_dataframe.iloc[0]}")
 
     total_time = time() - start_time
     final_success_rate = (len(final_dataframe) / total_addresses) * 100 if total_addresses > 0 else 0
-    log(
+    logger.info(
         f"Async geocoding completed in {total_time: .2f}s - Final success "
         f"{len(final_dataframe)}/{total_addresses} ({final_success_rate: .1f}%)"
     )
@@ -152,7 +151,7 @@ def async_geocoding_dataframe_with_fallback(
     Returns:
         DataFrame with geocoded addresses from all successful geocoders
     """
-    log("Start async georeferencing dataframe with sequential fallback")
+    logger.info("Start async georeferencing dataframe with sequential fallback")
     start_time = time()
 
     # Prepare dataframe
@@ -160,7 +159,7 @@ def async_geocoding_dataframe_with_fallback(
     dataframe = dataframe.reset_index(drop=True)
     total_addresses = len(dataframe)
 
-    log(f"Processing {total_addresses} addresses with sequential fallback")
+    logger.info(f"Processing {total_addresses} addresses with sequential fallback")
 
     # Track geocoder rate limit status
     geocoder_status = {
@@ -221,21 +220,21 @@ def async_geocoding_dataframe_with_fallback(
 
     for step, config in enumerate(geocoder_configs, 1):
         if remaining_failures.empty:
-            log("No more failed addresses to process")
+            logger.info("No more failed addresses to process")
             break
 
         if geocoder_status[config["name"]]["rate_limited"]:
-            log(f"Skipping {config['display_name']} - previously rate limited")
+            logger.info(f"Skipping {config['display_name']} - previously rate limited")
             continue
 
-        log(f"Step {step}: Proc. {len(remaining_failures)} addresses w. {config['display_name']}")
+        logger.info(f"Step {step}: Proc. {len(remaining_failures)} addresses w. {config['display_name']}")
 
         try:
             # Get API key if required
             if config["secret_key"]:
-                log(f"Getting API key: {config['secret_key']}")
-                api_key = getenv_or_action(config["secret_key"])
-                log(f"PD FOR {config['display_name']}: {api_key}")
+                logger.info(f"Getting API key: {config['secret_key']}")
+                api_key = read_env(config["secret_key"])
+                logger.info(f"PD FOR {config['display_name']}: {api_key}")
 
                 # Process failed addresses with current geocoder (with API key)
                 geocoder_result = config["function"](
@@ -258,7 +257,7 @@ def async_geocoding_dataframe_with_fallback(
             all_empty = geocoder_result["latitude"].isna().all() and geocoder_result["longitude"].isna().all()
 
             if all_empty and len(remaining_failures) > 0:
-                log(f"{config['display_name']} appears to be rate limited - skipping")
+                logger.info(f"{config['display_name']} appears to be rate limited - skipping")
                 geocoder_status[config["name"]]["rate_limited"] = True
                 continue
 
@@ -273,10 +272,10 @@ def async_geocoding_dataframe_with_fallback(
                 successful_results = pd.concat([successful_results, new_successes], ignore_index=True)
 
             geocoder_success = len(new_successes)
-            log(f"{config['display_name']} geocoded {geocoder_success} additional addresses")
+            logger.info(f"{config['display_name']} geocoded {geocoder_success} additional addresses")
 
         except Exception as e:
-            log(f"Error processing with {config['display_name']}: {e}")
+            logger.info(f"Error processing with {config['display_name']}: {e}")
             # Mark as rate limited if error suggests quota issues
             if any(term in str(e).lower() for term in ["402", "quota", "limit", "credits", "balance"]):
                 geocoder_status[config["name"]]["rate_limited"] = True
@@ -293,11 +292,11 @@ def async_geocoding_dataframe_with_fallback(
     if not successful_results.empty:
         successful_results = successful_results.fillna("")
         successful_results[successful_results.columns] = successful_results[successful_results.columns].astype("str")
-        log(f"Final result preview: \n{successful_results.iloc[0]}")
+        logger.info(f"Final result preview: \n{successful_results.iloc[0]}")
 
     total_time = time() - start_time
     final_success_rate = (final_success_count / total_addresses) * 100 if total_addresses > 0 else 0
-    log(
+    logger.info(
         f"Sequential fallback geocoding completed in {total_time: .2f}s - Final success "
         f"{final_success_count}/{total_addresses} ({final_success_rate: .1f}%)"
     )
@@ -326,7 +325,7 @@ def geoapify_batch_geocoding_task(
     Returns:
         DataFrame with geocoded addresses
     """
-    log("Starting Geoapify batch geocoding task")
+    logger.info("Starting Geoapify batch geocoding task")
     start_time = time()
 
     # Prepare dataframe
@@ -335,17 +334,17 @@ def geoapify_batch_geocoding_task(
     total_addresses = len(dataframe)
 
     if total_addresses == 0:
-        log("No addresses to geocode")
+        logger.info("No addresses to geocode")
         return dataframe
 
-    log(f"Processing {total_addresses} addresses with Geoapify batch API")
+    logger.info(f"Processing {total_addresses} addresses with Geoapify batch API")
 
     # Get API key from secrets
-    api_key = getenv_or_action("GEOAPIFY_API_TOKEN")
-    log(f"Token: {api_key[:5] if api_key else 'None'}")
+    api_key = read_env("GEOAPIFY_API_TOKEN")
+    logger.info(f"Token: {api_key[:5] if api_key else 'None'}")
 
     if not api_key:
-        log("No Geoapify API token found - returning empty results")
+        logger.info("No Geoapify API token found - returning empty results")
         return pd.DataFrame()
 
     # Use the working implementation from async_utils
@@ -357,17 +356,17 @@ def geoapify_batch_geocoding_task(
     )
 
     success_count = len(final_dataframe)
-    log(f"Successfully geocoded {success_count}/{total_addresses} addresses")
+    logger.info(f"Successfully geocoded {success_count}/{total_addresses} addresses")
 
     # Ensure string types for all columns, replacing None with empty string
     if not final_dataframe.empty:
         final_dataframe = final_dataframe.fillna("")
         final_dataframe[final_dataframe.columns] = final_dataframe[final_dataframe.columns].astype("str")
-        log(f"Task result preview: \n{final_dataframe.iloc[0]}")
+        logger.info(f"Task result preview: \n{final_dataframe.iloc[0]}")
 
     total_time = time() - start_time
     final_success_rate = (success_count / total_addresses) * 100 if total_addresses > 0 else 0
-    log(
+    logger.info(
         f"Geoapify batch geocoding task completed in {total_time: .2f}s - Success "
         f"{success_count}/{total_addresses} ({final_success_rate: .1f}%)"
     )
@@ -408,8 +407,8 @@ def dataframe_to_file(
     elif file_format == "parquet":
         dataframe.to_parquet(file_path, index=False)
 
-    log(f"\nDataframe saved on {file_folder_path}. Full path to file {file_path}\n")
-    log(dataframe)
+    logger.info(f"\nDataframe saved on {file_folder_path}. Full path to file {file_path}\n")
+    logger.info(dataframe)
 
     return file_folder_path
 
@@ -444,18 +443,18 @@ def merge_and_deduplicate_geocoding_results(dataframes: list) -> pd.DataFrame:
     Returns:
         pd.DataFrame: Combined dataframe with duplicates removed
     """
-    log("Starting merge and deduplication of geocoding results")
+    logger.info("Starting merge and deduplication of geocoding results")
 
     # Filter out empty dataframes
     valid_dataframes = [df for df in dataframes if not df.empty]
 
     if not valid_dataframes:
-        log("No valid dataframes to merge")
+        logger.info("No valid dataframes to merge")
         return pd.DataFrame()
 
     # Concatenate all dataframes
     combined_df = pd.concat(valid_dataframes, ignore_index=True)
-    log(f"Combined {len(valid_dataframes)} dataframes into {len(combined_df)} total rows")
+    logger.info(f"Combined {len(valid_dataframes)} dataframes into {len(combined_df)} total rows")
 
     # Remove duplicates based on address fields
     # Use logradouro_tratado, numero_porta, and bairro as the key for deduplication
@@ -467,14 +466,14 @@ def merge_and_deduplicate_geocoding_results(dataframes: list) -> pd.DataFrame:
         combined_df = combined_df.drop_duplicates(subset=duplicate_cols, keep="first")
         deduplicated_count = len(combined_df)
         removed_count = original_count - deduplicated_count
-        log(f"rm {removed_count} duplicate addresses, keeping {deduplicated_count} unique adds")
+        logger.info(f"rm {removed_count} duplicate addresses, keeping {deduplicated_count} unique adds")
     else:
-        log("Deduplication columns not found, keeping all rows")
+        logger.info("Deduplication columns not found, keeping all rows")
 
     # Ensure string types for all columns, replacing None with empty string
     if not combined_df.empty:
         combined_df = combined_df.fillna("")
         combined_df[combined_df.columns] = combined_df[combined_df.columns].astype("str")
-        log(f"Final merged result preview: \n{combined_df.iloc[0]}")
+        logger.info(f"Final merged result preview: \n{combined_df.iloc[0]}")
 
     return combined_df

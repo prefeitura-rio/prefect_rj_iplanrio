@@ -1,6 +1,5 @@
 """Flow for rj_crm__whitelist_whatsapp_relatorio."""
 
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.tasks import (
@@ -17,7 +16,7 @@ from pipelines.rj_crm__whitelist_whatsapp_relatorio.tasks import (
 )
 
 
-@flow(log_prints=True)
+@flow(log_prints=True, flow_run_name="whitelist_whatsapp_relatorio--{environment}")
 def rj_crm__whitelist_whatsapp_relatorio(
     environment: str = "prod",
     start_datetime: str | None = None,
@@ -42,7 +41,6 @@ def rj_crm__whitelist_whatsapp_relatorio(
     :param query_ultima_ocorrencia: Query de diagnóstico, no mesmo formato.
     :raises RuntimeError: Se o relatório foi publicado no Discord mas o e-mail falhou.
     """
-    rename_current_flow_run_task(new_name=f"whitelist_whatsapp_relatorio--{environment}")
     validar_configuracao_task()
     preparar_credenciais_task()
 

@@ -1,15 +1,16 @@
-# -*- coding: utf-8 -*-
 """Decide QUAIS HSMs processar hoje — olha disparos_ativos, não toca em rmi_conversas."""
 
 from datetime import date
 from pathlib import Path
 
 from google.cloud import bigquery
-from toolkit.pipelines_utils.logging import log
 from prefect import task
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import DISPAROS_TABLE
-from pipelines.rj_crm__relatorio_engajamento_hsm.utils.bigquery import get_bq_client
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.bigquery import get_bq_client
+
+logger = get_logger("toolkit")
 
 _QUERIES_DIR = Path(__file__).resolve().parent.parent / "queries"
 
@@ -30,5 +31,5 @@ def carrega_disparos_pendentes(data_referencia: date) -> list[dict]:
         {"nome_hsm": row.nome_campanha, "data_disparo": row.relatorio_engajamento_data_disparo}
         for row in client.query(sql, job_config=job_config).result()
     ]
-    log(f"[TRIGGER] {len(linhas)} disparo(s) com relatório de engajamento pedido pra {data_referencia}.")
+    logger.info(f"[TRIGGER] {len(linhas)} disparo(s) com relatório de engajamento pedido pra {data_referencia}.")
     return linhas

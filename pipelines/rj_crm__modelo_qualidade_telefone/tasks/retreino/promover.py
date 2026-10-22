@@ -27,21 +27,21 @@ from dataclasses import dataclass
 
 import numpy as np
 from google.cloud import storage
-from toolkit.pipelines_utils.env import get_bd_credentials_from_env
 from prefect import task
-from prefect_rj_iplanrio.logging import get_logger
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__modelo_qualidade_telefone import constants
 from pipelines.rj_crm__modelo_qualidade_telefone.constants import FEATURES
+from pipelines.rj_crm__modelo_qualidade_telefone.helpers import modelo_store
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.avaliar_simulacao import (
     NOME_MODELO_NOVO,
     NOME_MODELO_PRODUCAO,
     ResultadoSimulacao,
 )
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.treinar import ResultadoTreino
-from pipelines.rj_crm__modelo_qualidade_telefone.utils import modelo_store
+from utils.utils import load_credentials
 
-logger = get_logger(__name__)
+logger = get_logger("toolkit")
 
 P_VALOR_MAXIMO = 0.05
 # Na escala do score bruto (log-odds, base excluída — ver verifica_probabilidade_nao_degenerada).
@@ -187,6 +187,6 @@ def promove_se_aprovado_task(
     promocao_automatica: bool = True,
 ) -> None:
     """Task-wrapper de :func:`promove_se_aprovado` — autentica no GCS com o secret do work pool."""
-    credentials = get_bd_credentials_from_env(mode=environment)
+    credentials = load_credentials()
     client = storage.Client(credentials=credentials, project=constants.PROJECT_ID)
     promove_se_aprovado(resultado_treino, decisao, raiz_modelos, versao, client, promocao_automatica)

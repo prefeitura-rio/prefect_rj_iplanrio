@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Julgamento (LLM as a judge) — audita a classificação feita por classify.py.
 Amostragem por categoria: categoria pequena (< LIMIAR_JULGA_TUDO) julga 100% dela
 (amostrar uma fração de pouca gente só deixaria a margem de erro enorme à toa);
@@ -10,16 +9,18 @@ import math
 from pathlib import Path
 
 import pandas as pd
-from toolkit.pipelines_utils.logging import log
 from prefect import task
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     MAX_OUTPUT_TOKENS_LOTE,
     SEED_AMOSTRA_JUIZ,
     VEREDITOS_VALIDOS,
 )
-from pipelines.rj_crm__relatorio_engajamento_hsm.utils.bifrost import BifrostClient
-from pipelines.rj_crm__relatorio_engajamento_hsm.utils.texto import strip_code_fence
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.bifrost import BifrostClient
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.texto import strip_code_fence
+
+logger = get_logger("toolkit")
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 _PROMPT_JUIZ = (_PROMPTS_DIR / "juiz.txt").read_text(encoding="utf-8")
@@ -52,7 +53,7 @@ def _julga_lote(lote: pd.DataFrame, bifrost: BifrostClient, catalogo_texto: str)
         if not isinstance(parsed, list):
             raise ValueError(f"resposta não é uma lista JSON (bruto: {texto[:200]!r})")
     except Exception as exc:
-        log(f"  [FALHA LOTE JUIZ] {len(lote)} conversa(s): {exc}")
+        logger.info(f"  [FALHA LOTE JUIZ] {len(lote)} conversa(s): {exc}")
         return {}, len(lote)
 
     por_id = {item.get("id"): item for item in parsed if isinstance(item, dict)}
@@ -102,11 +103,11 @@ def julga_classificacoes(
         a_julgar.append(grupo.sample(n=min(alvo, len(grupo)), random_state=SEED_AMOSTRA_JUIZ))
 
     if not a_julgar:
-        log("[JUIZ] nada a julgar.")
+        logger.info("[JUIZ] nada a julgar.")
         return df.reset_index(drop=True)
 
     df_a_julgar = pd.concat(a_julgar)
-    log(f"[JUIZ] {len(df_a_julgar)} conversa(s) selecionada(s) pra julgamento (categoria < {limiar_julga_tudo}: 100%; senão {pct_amostra_categoria_grande:.0f}%).")
+    logger.info(f"[JUIZ] {len(df_a_julgar)} conversa(s) selecionada(s) pra julgamento (categoria < {limiar_julga_tudo}: 100%; senão {pct_amostra_categoria_grande:.0f}%).")
 
     total_julgadas = total_falhas = 0
     for i in range(0, len(df_a_julgar), tamanho_lote_juiz):
@@ -118,5 +119,5 @@ def julga_classificacoes(
         total_julgadas += len(resultados)
         total_falhas += n_falhas
 
-    log(f"[JUIZ] {total_julgadas} julgada(s), {total_falhas} falha(s).")
+    logger.info(f"[JUIZ] {total_julgadas} julgada(s), {total_falhas} falha(s).")
     return df.reset_index(drop=True)

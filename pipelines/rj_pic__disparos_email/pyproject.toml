@@ -4,8 +4,12 @@ version = "0.1.0"
 description = "Pipeline disparos_email da secretaria pic"
 requires-python = ">=3.13"
 dependencies = [
+    "prefect_rj_iplanrio",
     "jinja2",
     "python-dotenv",
     "google-cloud-bigquery",
     "requests",
 ]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

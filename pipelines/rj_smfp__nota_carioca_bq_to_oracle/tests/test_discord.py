@@ -7,15 +7,15 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import discord as discord_module
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import discord as discord_module
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import (
     DiscordStatusMessage,
     never_raises,
     resolve_webhook,
     webhook_from_env,
     webhook_from_secret_block,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_embed import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import (
     COLOR_CANCELLED,
     COLOR_FAILURE,
     COLOR_RUNNING,
@@ -32,7 +32,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_embed import (
     build_payload,
     format_validation_line,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_format import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_format import (
     flow_run_url,
     format_short_duration,
     progress_bar,
@@ -68,20 +68,20 @@ def view(status: RunStatus = RunStatus.RUNNING, **overrides: object) -> RunView:
     return replace(base, **overrides)
 
 
-def embed_of(payload: dict[str, object]) -> dict[str, object]:
+def parse_embed(payload: dict[str, object]) -> dict[str, object]:
     embeds = payload["embeds"]
     assert isinstance(embeds, list)
     return embeds[0]
 
 
-def fields_of(embed: dict[str, object]) -> list[dict[str, str]]:
+def list_fields(embed: dict[str, object]) -> list[dict[str, str]]:
     fields = embed["fields"]
     assert isinstance(fields, list)
     return fields
 
 
 def total_chars(embed: dict[str, object]) -> int:
-    fields = fields_of(embed)
+    fields = list_fields(embed)
     footer = embed["footer"]
     assert isinstance(footer, dict)
     return (
@@ -107,7 +107,7 @@ def test_running_payload_has_state_color_link_fields_and_brt_footer() -> None:
     # Given a running view at 12:30:05 BRT
     # When the payload is built
     payload = build_payload(view())
-    embed = embed_of(payload)
+    embed = parse_embed(payload)
     # Then color, title, url, status line, bar and the BRT footer are there, and nobody is mentioned
     assert embed["color"] == COLOR_RUNNING
     assert embed["title"] == "Oracle → BigQuery · brutos_nota_fiscal"
@@ -117,10 +117,10 @@ def test_running_payload_has_state_color_link_fields_and_brt_footer() -> None:
     assert f"`{progress_bar(0.42)}` 42,0%" in description
     assert "**DPS** · Extração" in description
     assert embed["footer"] == {"text": "atualizado em 09/10/2026 12:30:05 · brutos_nota_fiscal"}
-    names = [field["name"] for field in fields_of(embed)]
+    names = [field["name"] for field in list_fields(embed)]
     assert names[:3] == ["⏱️ Decorrido", "🏁 Previsão de término", "🧭 Etapa atual"]
     assert "Etapas" in names
-    eta = next(field for field in fields_of(embed) if field["name"] == "🏁 Previsão de término")
+    eta = next(field for field in list_fields(embed) if field["name"] == "🏁 Previsão de término")
     assert eta["value"] == "~12:40 (BRT)"
     assert payload["allowed_mentions"] == {"parse": []}
     json.dumps(payload)
@@ -128,21 +128,21 @@ def test_running_payload_has_state_color_link_fields_and_brt_footer() -> None:
 
 def test_embed_without_url_or_eta_omits_them() -> None:
     # Given a view with no link and no ETA
-    embed = embed_of(build_payload(view(url=None, eta_seconds=None)))
+    embed = parse_embed(build_payload(view(url=None, eta_seconds=None)))
     # Then neither the url key nor the forecast field exist
     assert "url" not in embed
-    assert "🏁 Previsão de término" not in [field["name"] for field in fields_of(embed)]
+    assert "🏁 Previsão de término" not in [field["name"] for field in list_fields(embed)]
 
 
 def test_success_payload_is_green_with_one_summary_line_per_table() -> None:
     # Given a finished view
-    embed = embed_of(build_payload(view(RunStatus.SUCCESS, fraction=1.0, eta_seconds=None)))
+    embed = parse_embed(build_payload(view(RunStatus.SUCCESS, fraction=1.0, eta_seconds=None)))
     # Then it is green, says CONCLUÍDO and summarizes each table in one line
     assert embed["color"] == COLOR_SUCCESS
     description = str(embed["description"])
     assert "✅ **CONCLUÍDO**" in description
     assert "✅ **PESSOAS** — 40.000 linhas · 3min 02s" in description
-    assert "🏁 Previsão de término" not in [field["name"] for field in fields_of(embed)]
+    assert "🏁 Previsão de término" not in [field["name"] for field in list_fields(embed)]
 
 
 def test_failure_payload_is_red_with_stage_and_truncated_error() -> None:
@@ -150,11 +150,11 @@ def test_failure_payload_is_red_with_stage_and_truncated_error() -> None:
     error = "ORA-00001: " + "x" * 5000
     failed = view(RunStatus.FAILED, failed_stage="Extração", error=error)
     # When the payload is built
-    embed = embed_of(build_payload(failed))
+    embed = parse_embed(build_payload(failed))
     # Then it is red, names the stage, and every Discord limit holds
     assert embed["color"] == COLOR_FAILURE
     assert "❌ **FALHOU**" in str(embed["description"])
-    fields = {field["name"]: field["value"] for field in fields_of(embed)}
+    fields = {field["name"]: field["value"] for field in list_fields(embed)}
     assert fields["🧭 Etapa atual"] == "Falhou em Extração"
     assert str(fields["❌ Erro"]).startswith("```\nORA-00001")
     assert all(len(value) <= 1024 for value in fields.values())
@@ -164,11 +164,11 @@ def test_failure_payload_is_red_with_stage_and_truncated_error() -> None:
 
 def test_cancelled_payload_is_gray() -> None:
     # Given a cancelled view
-    embed = embed_of(build_payload(view(RunStatus.CANCELLED, failed_stage="Carga")))
+    embed = parse_embed(build_payload(view(RunStatus.CANCELLED, failed_stage="Carga")))
     # Then it is gray and says CANCELADO, not FALHOU
     assert embed["color"] == COLOR_CANCELLED
     assert "⚪ **CANCELADO**" in str(embed["description"])
-    stage = next(field for field in fields_of(embed) if field["name"] == "🧭 Etapa atual")
+    stage = next(field for field in list_fields(embed) if field["name"] == "🧭 Etapa atual")
     assert stage["value"] == "Cancelado em Carga"
 
 
@@ -177,11 +177,11 @@ def test_oversized_views_are_cut_to_the_discord_limits() -> None:
     tables = tuple(TableView(f"TABELA_{n}", "Extração", ItemStatus.RUNNING, 0.5, "d" * 400, 10) for n in range(60))
     facts = tuple(Fact(f"fato {n}", "v" * 900) for n in range(30))
     # When the payload is built
-    embed = embed_of(build_payload(view(tables=tables, facts=facts, error="e" * 3000, status=RunStatus.FAILED)))
+    embed = parse_embed(build_payload(view(tables=tables, facts=facts, error="e" * 3000, status=RunStatus.FAILED)))
     # Then description, fields and the total stay inside the limits
     assert len(str(embed["description"])) <= 4096
-    assert len(fields_of(embed)) <= 25
-    assert all(len(field["value"]) <= 1024 for field in fields_of(embed))
+    assert len(list_fields(embed)) <= 25
+    assert all(len(field["value"]) <= 1024 for field in list_fields(embed))
     assert total_chars(embed) <= 6000
 
 
@@ -467,12 +467,12 @@ def test_a_missing_side_is_a_dash_and_never_valid_and_no_counts_at_all_is_pendin
 
 def test_validation_field_is_in_the_final_embed_only_when_there_are_lines() -> None:
     # Given a success view with one validation line, and one without
-    with_lines = embed_of(build_payload(view(RunStatus.SUCCESS, validation=(equal_line(),))))
-    without = embed_of(build_payload(view(RunStatus.SUCCESS)))
+    with_lines = parse_embed(build_payload(view(RunStatus.SUCCESS, validation=(equal_line(),))))
+    without = parse_embed(build_payload(view(RunStatus.SUCCESS)))
     # Then the section is a field named 🔎 Validação with the line, and absent otherwise
-    values = {field["name"]: field["value"] for field in fields_of(with_lines)}
+    values = {field["name"]: field["value"] for field in list_fields(with_lines)}
     assert values["🔎 Validação"] == format_validation_line(equal_line())
-    assert "🔎 Validação" not in [field["name"] for field in fields_of(without)]
+    assert "🔎 Validação" not in [field["name"] for field in list_fields(without)]
 
 
 def test_announcement_summarizes_how_many_tables_were_validated() -> None:
@@ -495,10 +495,10 @@ def test_many_long_validation_lines_stay_inside_the_discord_limits() -> None:
     sides = (CountSide("Oracle (SCN)", 1), CountSide("BigQuery", 1))
     lines = tuple(ValidationLine("T" * 200, sides, "n" * 400) for _ in range(40))
     # When the final payload is built
-    embed = embed_of(build_payload(view(RunStatus.SUCCESS, validation=lines)))
+    embed = parse_embed(build_payload(view(RunStatus.SUCCESS, validation=lines)))
     # Then every line, field and the total respect the limits
     assert all(len(format_validation_line(line)) <= 300 for line in lines)
-    assert all(len(field["value"]) <= 1024 for field in fields_of(embed))
+    assert all(len(field["value"]) <= 1024 for field in list_fields(embed))
     assert len(str(embed["description"])) <= 4096
     assert total_chars(embed) <= 6000
 

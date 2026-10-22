@@ -1,1 +1,1 @@
-TRUNCATE TABLE "$schema"."$table"
+TRUNCATE TABLE "{{ schema }}"."{{ table }}"

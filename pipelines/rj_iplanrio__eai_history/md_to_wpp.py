@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 i am working in a markdon to whatsapp converter it is
 almost perfect, only need to work in the break lines lost

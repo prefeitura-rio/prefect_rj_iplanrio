@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Criação e carga da tabela de classificação no BigQuery.
 
@@ -15,7 +14,7 @@ from google.api_core.exceptions import Forbidden, NotFound
 from google.cloud import bigquery
 from prefect import task
 
-from pipelines.rj_crm__agentforce_classificacao_llm.utils.bigquery import get_bq_client
+from pipelines.rj_crm__agentforce_classificacao_llm.helpers.bigquery import get_bq_client
 
 _TIMESTAMP = bigquery.enums.SqlTypeNames.TIMESTAMP
 _STRING = bigquery.enums.SqlTypeNames.STRING

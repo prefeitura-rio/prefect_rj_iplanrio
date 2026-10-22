@@ -1,17 +1,18 @@
-# -*- coding: utf-8 -*-
 """
 Tasks for rj_crm__whitelist_whatsapp pipeline.
 """
-import requests
-import pandas as pd
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List
 
+import pandas as pd
+import requests
 from prefect import task
-from toolkit.pipelines_utils.logging import log
-from toolkit.pipelines_utils.env import getenv_or_action
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__whitelist_whatsapp.constants import WhitelistConstants
+from utils.utils import read_env
+
+logger = get_logger("toolkit")
 
 
 @task
@@ -19,13 +20,13 @@ def get_whitelist_credentials() -> Dict[str, str]:
     """
     Retrieves credentials from environment variables (synced from Infisical).
     """
-    log("Recuperando credenciais do ambiente (via Infisical)")
+    logger.info("Recuperando credenciais do ambiente (via Infisical)")
 
     return {
-        "auth_url": getenv_or_action("RMI_AUTH_URL"),
-        "client_id": getenv_or_action("RMI_CLIENT_ID"),
-        "client_secret": getenv_or_action("RMI_CLIENT_SECRET"),
-        "whitelist_url": getenv_or_action("RMI_WHITELIST_API_URL"),
+        "auth_url": read_env("RMI_AUTH_URL"),
+        "client_id": read_env("RMI_CLIENT_ID"),
+        "client_secret": read_env("RMI_CLIENT_SECRET"),
+        "whitelist_url": read_env("RMI_WHITELIST_API_URL"),
     }
 
 
@@ -34,10 +35,10 @@ def fetch_whitelist_data(creds: Dict[str, str]) -> List[Dict[str, Any]]:
     """
     Authenticates and fetches all records from the Whitelist API using parallel requests.
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from concurrent.futures import ThreadPoolExecutor
 
     # 1. Get Access Token
-    log("Obtendo Access Token (API 1)")
+    logger.info("Obtendo Access Token (API 1)")
     auth_payload = {
         "grant_type": "client_credentials",
         "client_id": creds["client_id"],
@@ -54,14 +55,14 @@ def fetch_whitelist_data(creds: Dict[str, str]) -> List[Dict[str, Any]]:
         auth_resp.raise_for_status()
         access_token = auth_resp.json().get("access_token")
     except Exception as e:
-        log(f"Erro na autenticação: {e}")
+        logger.info(f"Erro na autenticação: {e}")
         raise
 
     if not access_token:
         raise ValueError("Access token not found in response")
 
     # 2. Fetch Data with Parallelism
-    log("Iniciando coleta de dados paralela (API 2 - Whitelist)")
+    logger.info("Iniciando coleta de dados paralela (API 2 - Whitelist)")
     all_records = []
     headers = {"Authorization": f"Bearer {access_token}"}
 
@@ -72,8 +73,8 @@ def fetch_whitelist_data(creds: Dict[str, str]) -> List[Dict[str, Any]]:
     finished = False
 
     def fetch_page(p):
-        import time
         import random
+        import time
         max_page_retries = 10 # Increased to 10
         base_wait = 20 # Base wait in seconds
 
@@ -124,11 +125,11 @@ def fetch_whitelist_data(creds: Dict[str, str]) -> List[Dict[str, Any]]:
                         batch_has_data = True
                     else:
                         # Found an empty page, this is the end
-                        log(f"Fim da paginação detectado na página {page_num}")
+                        logger.info(f"Fim da paginação detectado na página {page_num}")
                         finished = True
                         break
                 except Exception as e:
-                    log(f"Erro ao buscar página {page_num}: {e}")
+                    logger.info(f"Erro ao buscar página {page_num}: {e}")
                     raise
 
             if not batch_has_data:
@@ -136,7 +137,7 @@ def fetch_whitelist_data(creds: Dict[str, str]) -> List[Dict[str, Any]]:
                 finished = True
 
             current_page += page_batch_size
-            log(f"Total acumulado: {len(all_records)} registros coletados.")
+            logger.info(f"Total acumulado: {len(all_records)} registros coletados.")
 
     return all_records
 
@@ -148,7 +149,7 @@ def transform_whitelist_data(raw_data: List[Dict[str, Any]]) -> pd.DataFrame:
     For standard runs (non-backfill).
     """
     if not raw_data:
-        log("Nenhum dado para transformar")
+        logger.info("Nenhum dado para transformar")
         return pd.DataFrame()
 
     df = pd.DataFrame(raw_data)
@@ -178,7 +179,7 @@ def generate_backfill_data(raw_data: List[Dict[str, Any]]) -> pd.DataFrame:
     with records where added_at <= D.
     """
     if not raw_data:
-        log("Nenhum dado para o backfill")
+        logger.info("Nenhum dado para o backfill")
         return pd.DataFrame()
 
     df_base = pd.DataFrame(raw_data)
@@ -192,7 +193,7 @@ def generate_backfill_data(raw_data: List[Dict[str, Any]]) -> pd.DataFrame:
 
     all_dates = pd.date_range(start=min_date, end=max_date, freq="D").date
 
-    log(f"Iniciando backfill de {len(all_dates)} dias (de {min_date} até {max_date})")
+    logger.info(f"Iniciando backfill de {len(all_dates)} dias (de {min_date} até {max_date})")
 
     backfill_dfs = []
 
@@ -221,5 +222,5 @@ def generate_backfill_data(raw_data: List[Dict[str, Any]]) -> pd.DataFrame:
         if col != "data_particao":
             df_final[col] = df_final[col].astype(str)
 
-    log(f"Backfill gerado: {len(df_final)} registros totais em {len(all_dates)} partições...")
+    logger.info(f"Backfill gerado: {len(df_final)} registros totais em {len(all_dates)} partições...")
     return df_final

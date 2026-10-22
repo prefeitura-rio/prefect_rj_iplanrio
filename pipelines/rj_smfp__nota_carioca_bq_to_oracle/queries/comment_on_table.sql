@@ -1,1 +1,1 @@
-COMMENT ON TABLE "$schema"."$table" IS '$comment'
+COMMENT ON TABLE "{{ schema }}"."{{ table }}" IS '{{ comment }}'

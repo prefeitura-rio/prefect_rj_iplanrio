@@ -1,21 +1,18 @@
-# -*- coding: utf-8 -*-
 """
 Flow para envio de e-mails em massa com templates HTML..
 """
-from prefect import flow
-from toolkit.pipelines_utils.env import (
-    inject_bd_credentials_task,
-)
 import logging
 
+from prefect import flow
+
 from pipelines.rj_pic__disparos_email.env import (
-    BIGQUERY_PROJECT_ID,
     BIGQUERY_DATASET_ID,
+    BIGQUERY_PROJECT_ID,
     BIGQUERY_TABLE_ID,
 )
 from pipelines.rj_pic__disparos_email.tasks import (
-    read_bigquery_task,
     process_email_task,
+    read_bigquery_task,
 )
 
 logging.basicConfig(
@@ -37,7 +34,6 @@ def rj_pic__disparos_email(
         email_subject: Assunto do e-mail
     """
     # Injetar credenciais do BD
-    inject_bd_credentials_task(environment="prod")
 
     try:
         # Lê dados do BigQuery

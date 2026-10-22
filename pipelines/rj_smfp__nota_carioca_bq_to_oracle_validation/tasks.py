@@ -1,18 +1,20 @@
 """Tasks da validação das tabelas carregadas no Oracle pela rj_smfp__nota_carioca_bq_to_oracle."""
 
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import list_tables
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import RawTextEncoding
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import read_oracle_config, validate_identifier
 from prefect import task
 from prefect.cache_policies import NO_CACHE
+from prefect.logging import get_logger
 
-from toolkit.pipelines_utils.logging import log
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.bigquery import list_tables
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import RawTextEncoding
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import read_oracle_config, validate_identifier
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.utils.inspect import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.inspect import (
     ValidationRequest,
     describe_session,
     validate_table,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.utils.report import format_text_table
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.report import format_text_table
+
+logger = get_logger("toolkit")
 
 
 @task
@@ -24,7 +26,7 @@ def list_tables_task(project: str, dataset_id: str, table_ids: list[str] | None)
 @task(cache_policy=NO_CACHE)
 def log_session_task(infisical_secret_path: str) -> None:
     """Registra no log com qual usuário, banco e versão a validação está conectada."""
-    log("Sessão no Oracle\n" + describe_session(read_oracle_config(infisical_secret_path)))
+    logger.info("Sessão no Oracle\n" + describe_session(read_oracle_config(infisical_secret_path)))
 
 
 @task(cache_policy=NO_CACHE)
@@ -51,9 +53,9 @@ def validate_table_task(  # noqa: PLR0913
     )
     report = validate_table(config=config, request=request)
     status = "OK" if report.divergences == 0 else f"{report.divergences} DIVERGÊNCIA(S)"
-    log(f"Validação de {report.target}: {status}")
+    logger.info(f"Validação de {report.target}: {status}")
     for section in report.sections:
-        log(section, level="info" if report.divergences == 0 else "warning")
+        getattr(logger, "info" if report.divergences == 0 else "warning")(section)
     return {"source": report.source, "target": report.target, "divergences": report.divergences}
 
 
@@ -69,7 +71,7 @@ def summarize_task(results: list[dict[str, object]], fail_on_divergence: bool) -
         for result in results
     ]
     total = sum(int(result["divergences"]) for result in results)
-    log(
+    logger.info(
         f"Resumo: {len(results)} tabela(s), {total} divergência(s)\n"
         + format_text_table(["Origem", "Destino", "Status"], rows)
     )

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Flow migrado do Prefect 1.4 para 3.0 - CRM Geolocalização Residência
 
@@ -11,9 +10,8 @@ Flow migrado do Prefect 1.4 para 3.0 - CRM Geolocalização Residência
 - case (conditional execution): Substituído por if/else padrão
 """
 
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
+from pathlib import Path
+
 from prefect import flow
 
 from pipelines.rj_crm__geolocalizacao_residencia.constants import GeolocalizacaoConstants
@@ -26,10 +24,15 @@ from pipelines.rj_crm__geolocalizacao_residencia.tasks import (
     download_data_from_bigquery,
     geoapify_batch_geocoding_task,
 )
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 
-@flow(log_prints=True)
-def rj_crm__geolocalizacao_residencia(
+@flow(log_prints=True, flow_run_name="geo_{provider_strategy}_{table_id}_{dataset_id}")
+async def rj_crm__geolocalizacao_residencia(
+    *,
+    cloud: Cloud,
     # Strategy parameter to choose geocoding approach
     provider_strategy: str = GeolocalizacaoConstants.DEFAULT_STRATEGY.value,
     # Query override
@@ -97,10 +100,8 @@ def rj_crm__geolocalizacao_residencia(
     address_column = GeolocalizacaoConstants.ADDRESS_COLUMN.value
 
     # Renomear flow run para melhor identificação
-    rename_flow_run = rename_current_flow_run_task(new_name=f"geo_{provider_strategy}_{table_id}_{dataset_id}")
 
     # Injetar credenciais do BD
-    crd = inject_bd_credentials_task(environment="prod")
 
     # Download addresses from BigQuery
     dataframe = download_data_from_bigquery(
@@ -157,14 +158,16 @@ def rj_crm__geolocalizacao_residencia(
                 dataframe=georeferenced_table, file_folder=file_folder, file_format=file_format
             )
 
-            create_table_and_upload_to_gcs_task(
-                data_path=base_path,
-                dataset_id=dataset_id,
-                table_id=table_id,
+            table = Table(dataset_id=dataset_id, table_id=table_id)
+            await upload_files_to_gcs(
+                Path(base_path),
+                table,
+                bucket=cloud["bucket"],
                 dump_mode=dump_mode,
-                biglake_table=biglake_table,
                 source_format=source_format,
+                options=capture_options(dump_mode),
             )
+            await publish_table_in_bq(table, cloud)
         else:
             print(f"No geocoded results from strategy '{provider_strategy}' - skipping upload")
     else:

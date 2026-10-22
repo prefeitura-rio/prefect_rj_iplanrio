@@ -25,6 +25,10 @@ pull:
 
 deployments:
   - name: rj-crm--get-history-data--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_crm__get_history_data/flow.py:rj_crm__get_history_data
     work_pool:
@@ -37,6 +41,10 @@ deployments:
         image_pull_policy: Always
 
   - name: rj-crm--get-history-data--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_crm__get_history_data/flow.py:rj_crm__get_history_data
     concurrency_limit:

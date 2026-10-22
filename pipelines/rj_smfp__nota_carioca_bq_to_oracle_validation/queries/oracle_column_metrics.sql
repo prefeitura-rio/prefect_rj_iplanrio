@@ -1,3 +1,3 @@
 SELECT
-$expressions
-FROM "$schema"."$table"
+{{ expressions }}
+FROM "{{ schema }}"."{{ table }}"

@@ -25,6 +25,10 @@ pull:
 
 deployments:
   - name: rj-crm--geolocalizacao-residencia--nominatim--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
     work_pool:
@@ -37,7 +41,7 @@ deployments:
         image_pull_policy: Always
     parameters:
       provider_strategy: "nominatim"
-      query_override: null
+      query_override:
       dataset_id: "brutos_dados_enriquecidos"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
@@ -51,7 +55,15 @@ deployments:
       return_original_cols: true
       infisical_secret_path: "/geocoding"
 
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
   - name: rj-crm--geolocalizacao-residencia--nominatim--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
     work_pool:
@@ -64,7 +76,7 @@ deployments:
         image_pull_policy: Always
     parameters:
       provider_strategy: "nominatim"
-      query_override: null
+      query_override:
       dataset_id: "brutos_dados_enriquecidos"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
@@ -77,6 +89,10 @@ deployments:
       max_concurrent_nominatim: 100
       return_original_cols: true
       infisical_secret_path: "/geocoding"
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     schedules:
       - interval: 180
         anchor_date: "2021-01-01T00:06:00"
@@ -84,6 +100,10 @@ deployments:
         slug: geocoding_every_3min
 
   - name: rj-crm--geolocalizacao-residencia--fallback--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
     work_pool:
@@ -96,7 +116,7 @@ deployments:
         image_pull_policy: Always
     parameters:
       provider_strategy: "fallback"
-      query_override: null
+      query_override:
       dataset_id: "brutos_dados_enriquecidos"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
@@ -110,7 +130,15 @@ deployments:
       return_original_cols: true
       infisical_secret_path: "/geocoding"
 
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
   - name: rj-crm--geolocalizacao-residencia--fallback--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
     work_pool:
@@ -123,7 +151,7 @@ deployments:
         image_pull_policy: Always
     parameters:
       provider_strategy: "fallback"
-      query_override: null
+      query_override:
       dataset_id: "brutos_dados_enriquecidos"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
@@ -136,6 +164,10 @@ deployments:
       max_concurrent_nominatim: 100
       return_original_cols: true
       infisical_secret_path: "/geocoding"
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     schedules:
       - interval: 3600
         anchor_date: "2021-01-01T00:00:00"
@@ -143,6 +175,10 @@ deployments:
         slug: fallback_geocoding_hourly
 
   - name: rj-crm--geolocalizacao-residencia--geoapify--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
     work_pool:
@@ -155,7 +191,7 @@ deployments:
         image_pull_policy: Always
     parameters:
       provider_strategy: "geoapify_batch"
-      query_override: null
+      query_override:
       dataset_id: "brutos_dados_enriquecidos"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
@@ -169,7 +205,15 @@ deployments:
       return_original_cols: true
       infisical_secret_path: "/geocoding"
 
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
   - name: rj-crm--geolocalizacao-residencia--geoapify--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
     work_pool:
@@ -182,7 +226,7 @@ deployments:
         image_pull_policy: Always
     parameters:
       provider_strategy: "geoapify_batch"
-      query_override: null
+      query_override:
       dataset_id: "brutos_dados_enriquecidos"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
@@ -195,6 +239,10 @@ deployments:
       max_concurrent_nominatim: 100
       return_original_cols: true
       infisical_secret_path: "/geocoding"
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     schedules:
       - interval: 1800
         anchor_date: "2021-01-01T00:00:00"

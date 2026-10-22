@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
 """Configurações do sistema de envio de e-mails."""
 import os
 from os import getenv
+
 from dotenv import load_dotenv
 
 # this folder path

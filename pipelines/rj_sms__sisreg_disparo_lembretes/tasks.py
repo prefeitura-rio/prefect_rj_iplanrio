@@ -1,20 +1,23 @@
-# -*- coding: utf-8 -*-
 """
 Tasks for SISREG SMS dispatch pipeline
 Adapted from disparo template for Prefect 3.x
 """
 
 import json
+import os
+import uuid
 from datetime import datetime
-from typing import Dict, List, Union
+from typing import Dict, List, Literal, Union
 
 import pandas as pd
-from toolkit.pipelines_utils.logging import log
 from numpy import ceil
 from prefect import task
+from prefect.logging import get_logger
 from pytz import timezone
 
-from .utils.tasks import download_data_from_bigquery
+from pipelines.rj_sms__sisreg_disparo_lembretes.helpers.tasks import download_data_from_bigquery
+
+logger = get_logger("toolkit")
 
 
 @task
@@ -46,17 +49,17 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int) -> st
         dispatch_payload["destinations"] = batch
         dispatch_payload["campaignName"] = f"{campaign_name}-{dispatch_date[:10]}-lote{i}"
 
-        log(f"Disparando lote {i} de {int(ceil(total / chunk))} com {len(batch)} destinos")
+        logger.info(f"Disparando lote {i} de {int(ceil(total / chunk))} com {len(batch)} destinos")
 
         response = api.post(path=f"/callcenter/hsm/send/{id_hsm}", json=dispatch_payload)
 
         if response.status_code != 201:
-            log(f"Falha no disparo do lote {i}: {response.text}")
+            logger.info(f"Falha no disparo do lote {i}: {response.text}")
             raise Exception(f"Dispatch failed for batch {i}: {response.text}")
 
-        log(f"Disparo do lote {i} realizado com sucesso!")
+        logger.info(f"Disparo do lote {i} realizado com sucesso!")
 
-    log("Disparo realizado com sucesso!")
+    logger.info("Disparo realizado com sucesso!")
     return dispatch_date
 
 
@@ -90,7 +93,7 @@ def create_dispatch_dfr(id_hsm: int, dispatch_payload: dict, dispatch_date: str)
             "vars",
         ]
     ]
-    log(f"Created dispatch DataFrame with {len(dfr)} rows")
+    logger.info(f"Created dispatch DataFrame with {len(dfr)} rows")
     return dfr
 
 
@@ -102,13 +105,13 @@ def check_api_status(api: object) -> bool:
     try:
         response = api.get("/")
         if response.status_code == 200:
-            log("API está funcionando corretamente.")
+            logger.info("API está funcionando corretamente.")
             return True
 
-        log(f"API retornou status {response.status_code}.")
+        logger.info(f"API retornou status {response.status_code}.")
         return False
     except Exception as error:
-        log(f"Erro ao acessar a API: {error}")
+        logger.info(f"Erro ao acessar a API: {error}")
         return False
 
 
@@ -120,15 +123,15 @@ def get_destinations(
     Get destinations from BigQuery query or from parameter
     """
     if query:
-        log("Query was found")
+        logger.info("Query was found")
         destinations_df = download_data_from_bigquery(
             query=query,
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id,
         )
-        log(f"Response from query: {len(destinations_df)} rows")
+        logger.info(f"Response from query: {len(destinations_df)} rows")
         destinations = destinations_df.iloc[:, 0].tolist()
-        log(f"First 3 destinations: {destinations[:3] if destinations else 'None'}")
+        logger.info(f"First 3 destinations: {destinations[:3] if destinations else 'None'}")
         destinations = [json.loads(str(item).replace("celular_disparo", "to")) for item in destinations]
     elif isinstance(destinations, str):
         destinations = json.loads(destinations)
@@ -143,7 +146,7 @@ def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
     Keeps only the first occurrence of each phone number.
     """
     if not destinations:
-        log("No destinations to process")
+        logger.info("No destinations to process")
         return destinations
 
     seen_phones = set()
@@ -158,30 +161,41 @@ def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
         elif phone in seen_phones:
             duplicates_count += 1
 
-    log(f"Removed {duplicates_count} duplicate phone numbers")
-    log(f"Total unique destinations: {len(unique_destinations)}")
+    logger.info(f"Removed {duplicates_count} duplicate phone numbers")
+    logger.info(f"Total unique destinations: {len(unique_destinations)}")
 
     return unique_destinations
 
 
 @task
 def create_date_partitions(
-    dataframe: pd.DataFrame, partition_column: str, file_format: str = "csv", root_folder: str = "./data_dispatch/"
-) -> str:
-    """
-    Create date partitions for data storage
-    """
-    import os
-    import uuid
+    dataframe,
+    partition_column: str | None = None,
+    file_format: Literal["csv", "parquet"] = "csv",
+    root_folder="./data/",
+):
+    """Save a DataFrame in one file, with the columns `ano_particao`, `mes_particao` and `data_particao`."""
+    if partition_column is None:
+        partition_column = "data_particao"
+        dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
+    else:
+        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column], errors="coerce")
+        dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
+        if dataframe["data_particao"].isnull().any():
+            raise ValueError("Some dates in the partition column could not be parsed.")
+
+    dataframe["ano_particao"] = dataframe["data_particao"].str[:4]
+    dataframe["mes_particao"] = dataframe["data_particao"].str[5:7]
+    columns = [c for c in dataframe.columns if c not in ("ano_particao", "mes_particao", "data_particao")]
+    dataframe = dataframe[[*columns, "ano_particao", "mes_particao", "data_particao"]]
 
     os.makedirs(root_folder, exist_ok=True)
-    filename = f"{uuid.uuid4()}.{file_format}"
-    file_path = os.path.join(root_folder, filename)
+    file_path = os.path.join(root_folder, f"{uuid.uuid4()}.{file_format}")
 
     if file_format == "csv":
         dataframe.to_csv(file_path, index=False)
     else:
-        raise ValueError(f"Unsupported file format: {file_format}")
+        dataframe.to_parquet(file_path, index=False)
 
-    log(f"Created partition file: {file_path}")
-    return file_path
+    logger.info("Files saved on %s", root_folder)
+    return root_folder

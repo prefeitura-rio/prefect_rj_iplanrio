@@ -1,1 +1,1 @@
-ALTER INDEX "$schema"."$index" NOPARALLEL
+ALTER INDEX "{{ schema }}"."{{ index }}" NOPARALLEL

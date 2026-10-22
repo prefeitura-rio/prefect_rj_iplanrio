@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Flow orquestrador — Salesforce Data Cloud → BigQuery.
 
@@ -28,11 +27,13 @@ passadas de escreverem na mesma tabela ao mesmo tempo.
 import time
 from datetime import date
 
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_crm__salesforce_datacloud.constants import DataCloudConstants
+from pipelines.rj_crm__salesforce_datacloud.helpers.janela import fmt_janela, janela_utc, janelas_do_run
+from pipelines.rj_crm__salesforce_datacloud.helpers.queries import ler_query
+from pipelines.rj_crm__salesforce_datacloud.helpers.tabelas import TABELAS, NomeTabela, Tabela
+from pipelines.rj_crm__salesforce_datacloud.helpers.transform import transform_dataframe
 from pipelines.rj_crm__salesforce_datacloud.tasks.auth import get_data_cloud_session
 from pipelines.rj_crm__salesforce_datacloud.tasks.bigquery import (
     ensure_bq_tables,
@@ -48,10 +49,6 @@ from pipelines.rj_crm__salesforce_datacloud.tasks.notify import (
     notify_falha_tabela,
     notify_resumo,
 )
-from pipelines.rj_crm__salesforce_datacloud.utils.janela import fmt_janela, janela_utc, janelas_do_run
-from pipelines.rj_crm__salesforce_datacloud.utils.queries import ler_query
-from pipelines.rj_crm__salesforce_datacloud.utils.tabelas import TABELAS, NomeTabela, Tabela
-from pipelines.rj_crm__salesforce_datacloud.utils.transform import transform_dataframe
 
 
 def processar_tabela(
@@ -187,13 +184,8 @@ def salesforce_datacloud(
 
     if reprocessar:
         rotulo = f"reprocessamento {janelas[0][2]} a {janelas[-1][2]} ({len(janelas)} dia(s))"
-        rename_current_flow_run_task(
-            new_name=f"salesforce-datacloud-reprocesso-{janelas[0][2]}_{janelas[-1][2]}"
-        )
     else:
         rotulo = f"modo='{modo}'"
-        rename_current_flow_run_task(new_name="salesforce-datacloud")
-    inject_bd_credentials_task(environment=environment)
 
     ensure_bq_tables(project_id=project_id, dataset_id=dataset_id)
 

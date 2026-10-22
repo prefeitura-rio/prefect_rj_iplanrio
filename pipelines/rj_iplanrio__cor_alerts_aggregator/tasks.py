@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tasks para pipeline de agregacao de alertas COR
 
@@ -8,21 +7,26 @@ Inclui: fetch, clustering espacial, decisao de envio, submissao API
 import os
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+from pathlib import Path
+from time import sleep
 from typing import Any, Dict, List, Literal, Tuple
 from zoneinfo import ZoneInfo
-from time import sleep
 
 import pandas as pd
-from basedosdados import Base
 from google.cloud import bigquery
 from prefect import task
-
-from toolkit.pipelines_utils.logging import log
+from prefect.logging import get_logger
+from prefect.utilities.asyncutils import run_coro_as_sync
 
 from pipelines.rj_iplanrio__cor_alerts_aggregator.constants import (
     CORAlertAggregatorConstants,
 )
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
+
+logger = get_logger("toolkit")
 
 
 def validate_environment(environment: str) -> str:
@@ -81,8 +85,7 @@ def _format_numbered_multiline(values: List[str], empty_placeholder: str = "") -
 
 def get_bigquery_client(billing_project_id: str, bucket_name: str) -> bigquery.Client:
     """Obtem cliente BigQuery com credenciais"""
-    credentials = Base(bucket_name=bucket_name)._load_credentials(mode="prod")
-    return bigquery.Client(credentials=credentials, project=billing_project_id)
+    return bigquery.Client(project=billing_project_id)
 
 
 def _table_exists(table_ref: str, billing_project_id: str) -> bool:
@@ -99,14 +102,14 @@ def query_bigquery(
     query: str, billing_project_id: str, bucket_name: str
 ) -> pd.DataFrame:
     """Executa query no BigQuery e retorna DataFrame"""
-    log(f"Executando query: {query[:100]}...")
+    logger.info(f"Executando query: {query[:100]}...")
     client = get_bigquery_client(billing_project_id, bucket_name)
     job = client.query(query)
     while not job.done():
         sleep(1)
     results = job.result()
     df = results.to_dataframe(create_bqstorage_client=False)
-    log(f"Query retornou {len(df)} linhas")
+    logger.info(f"Query retornou {len(df)} linhas")
     return df
 
 
@@ -142,7 +145,7 @@ def fetch_pending_alerts(
     END
     """
 
-    log(f"Buscando alertas em {billing_project}.{dataset}.{history_table}")
+    logger.info(f"Buscando alertas em {billing_project}.{dataset}.{history_table}")
 
     # Verifica se tabela de controle (cor_alerts_sent) existe
     sent_table_ref = f"{billing_project}.{dataset}.{sent_table}"
@@ -164,7 +167,7 @@ def fetch_pending_alerts(
             )
         """
     else:
-        log(f"Tabela {sent_table_ref} nao existe ainda - buscando todos os alertas pendentes")
+        logger.info(f"Tabela {sent_table_ref} nao existe ainda - buscando todos os alertas pendentes")
         from_clause = f"""
         FROM `{billing_project}.{dataset}.{history_table}` q
         """
@@ -207,7 +210,7 @@ def fetch_pending_alerts(
     eligible_alerts = query_bigquery(query, billing_project, billing_project)
 
     filtered_alerts = max(total_alertas - len(eligible_alerts), 0)
-    log(
+    logger.info(
         f"Filtro de bairros ({allowed_neighborhoods_label}): "
         f"total={total_alertas}, elegiveis={len(eligible_alerts)}, filtrados={filtered_alerts}"
     )
@@ -231,7 +234,7 @@ def cluster_alerts_by_location(
         Lista de clusters de alertas
     """
     if alerts_df.empty:
-        log("Nenhum alerta pendente para clusterizar")
+        logger.info("Nenhum alerta pendente para clusterizar")
         return []
 
     billing_project = CORAlertAggregatorConstants.BILLING_PROJECT_ID.value
@@ -334,7 +337,7 @@ def cluster_alerts_by_location(
             )
         )
 
-    log(f"Encontrados {len(clusters)} clusters de alertas")
+    logger.info(f"Encontrados {len(clusters)} clusters de alertas")
     return clusters
 
 
@@ -410,7 +413,7 @@ def submit_cluster_to_cor_api(
     Returns:
         Resultado da submissao
     """
-    from pipelines.rj_iplanrio__cor_alerts_aggregator.utils.cor_api import (
+    from pipelines.rj_iplanrio__cor_alerts_aggregator.helpers.cor_api import (
         COROnCallClient,
     )
 
@@ -435,7 +438,7 @@ def submit_cluster_to_cor_api(
             alert_ids=cluster.alert_ids,
         )
 
-        log(f"Cluster {cluster.cluster_id} enviado para COR: {result}")
+        logger.info(f"Cluster {cluster.cluster_id} enviado para COR: {result}")
         return {
             "success": True,
             "aggregation_group_id": aggregation_group_id,
@@ -444,7 +447,7 @@ def submit_cluster_to_cor_api(
         }
 
     except Exception as e:
-        log(f"Erro ao enviar cluster {cluster.cluster_id}: {e}", level="error")
+        logger.error(f"Erro ao enviar cluster {cluster.cluster_id}: {e}")
         return {
             "success": False,
             "aggregation_group_id": aggregation_group_id,
@@ -528,7 +531,7 @@ def build_cluster_dataframe(
         "alert_ids": cluster.alert_ids,
     }
 
-    log(
+    logger.info(
         f"Cluster {cluster.cluster_id} preparado para BigQuery: "
         f"{cluster.alert_count} alertas, aggregation_group_id={aggregation_group_id}"
     )
@@ -538,56 +541,35 @@ def build_cluster_dataframe(
 
 @task
 def create_date_partitions(
-    dataframe: pd.DataFrame,
-    partition_column: str = "data_particao",
+    dataframe,
+    partition_column: str | None = None,
     file_format: Literal["csv", "parquet"] = "csv",
-    root_folder: str = "./data/",
-) -> str:
-    """
-    Cria particoes por data e salva em disco.
-
-    Args:
-        dataframe: DataFrame com dados a particionar
-        partition_column: Coluna de particao
-        file_format: Formato do arquivo (csv ou parquet)
-        root_folder: Diretorio raiz para salvar
-
-    Returns:
-        Caminho do diretorio raiz
-    """
-    if dataframe.empty:
-        log("DataFrame vazio, nenhuma particao sera criada.")
-        return root_folder
-
-    df = dataframe.copy()
-
-    if partition_column not in df.columns:
-        df["data_particao"] = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime(
-            "%Y-%m-%d"
-        )
+    root_folder="./data/",
+):
+    """Save a DataFrame in one file, with the columns `ano_particao`, `mes_particao` and `data_particao`."""
+    if partition_column is None:
+        partition_column = "data_particao"
+        dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
     else:
-        df["data_particao"] = pd.to_datetime(
-            df[partition_column], errors="coerce"
-        ).dt.strftime("%Y-%m-%d")
-        df = df.dropna(subset=["data_particao"])
+        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column], errors="coerce")
+        dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
+        if dataframe["data_particao"].isnull().any():
+            raise ValueError("Some dates in the partition column could not be parsed.")
 
-    for date in df["data_particao"].unique():
-        partition_df = df[df["data_particao"] == date].drop(columns=["data_particao"])
+    dataframe["ano_particao"] = dataframe["data_particao"].str[:4]
+    dataframe["mes_particao"] = dataframe["data_particao"].str[5:7]
+    columns = [c for c in dataframe.columns if c not in ("ano_particao", "mes_particao", "data_particao")]
+    dataframe = dataframe[[*columns, "ano_particao", "mes_particao", "data_particao"]]
 
-        partition_folder = os.path.join(
-            root_folder,
-            f"ano_particao={date[:4]}/mes_particao={date[5:7]}/data_particao={date}",
-        )
-        os.makedirs(partition_folder, exist_ok=True)
+    os.makedirs(root_folder, exist_ok=True)
+    file_path = os.path.join(root_folder, f"{uuid.uuid4()}.{file_format}")
 
-        file_path = os.path.join(partition_folder, f"{uuid.uuid4()}.{file_format}")
+    if file_format == "csv":
+        dataframe.to_csv(file_path, index=False)
+    else:
+        dataframe.to_parquet(file_path, index=False)
 
-        if file_format == "csv":
-            partition_df.to_csv(file_path, index=False)
-        elif file_format == "parquet":
-            partition_df.to_parquet(file_path, index=False)
-
-    log(f"Arquivos salvos em {root_folder}")
+    logger.info("Files saved on %s", root_folder)
     return root_folder
 
 
@@ -613,15 +595,15 @@ def write_clusters_to_google_sheets(
     Returns:
         Numero de linhas escritas (inseridas + atualizadas)
     """
-    import gspread
     import google.auth
+    import gspread
 
     if dataframe.empty:
-        log("DataFrame vazio, nada a escrever no Sheet.")
+        logger.info("DataFrame vazio, nada a escrever no Sheet.")
         return 0
 
     if not spreadsheet_id:
-        log("spreadsheet_id nao fornecido, pulando escrita no Sheet.", level="warning")
+        logger.warning("spreadsheet_id nao fornecido, pulando escrita no Sheet.")
         return 0
 
     SCOPES = [
@@ -676,7 +658,7 @@ def write_clusters_to_google_sheets(
             for _, row in dataframe.iterrows()
         ]
         worksheet.append_rows(rows_to_append, value_input_option="RAW")
-        log(f"Sheet vazio: escrito header + {len(rows_to_append)} linhas")
+        logger.info(f"Sheet vazio: escrito header + {len(rows_to_append)} linhas")
         return len(rows_to_append)
 
     header = existing_values[0]
@@ -688,7 +670,7 @@ def write_clusters_to_google_sheets(
             for _, row in dataframe.iterrows()
         ]
         worksheet.append_rows(rows_to_append, value_input_option="RAW")
-        log(f"Header incompativel, Sheet recriado: {len(rows_to_append)} linhas")
+        logger.info(f"Header incompativel, Sheet recriado: {len(rows_to_append)} linhas")
         return len(rows_to_append)
     id_col_idx = header.index("id_grupo")
 
@@ -709,7 +691,7 @@ def write_clusters_to_google_sheets(
     if stale_rows:
         for sheet_row in sorted(stale_rows, reverse=True):
             worksheet.delete_rows(sheet_row)
-        log(f"Removidas {len(stale_rows)} linhas com mais de {sheet_retention_hours}h do Sheet")
+        logger.info(f"Removidas {len(stale_rows)} linhas com mais de {sheet_retention_hours}h do Sheet")
         existing_values = worksheet.get_all_values()
 
     # Mapa: aggregation_group_id -> indice de linha no Sheet (1-based, skip header)
@@ -740,12 +722,12 @@ def write_clusters_to_google_sheets(
     if updates:
         worksheet.batch_update(updates, value_input_option="RAW")
         written += len(updates)
-        log(f"Atualizadas {len(updates)} linhas existentes no Sheet")
+        logger.info(f"Atualizadas {len(updates)} linhas existentes no Sheet")
 
     if appends:
         worksheet.append_rows(appends, value_input_option="RAW")
         written += len(appends)
-        log(f"Inseridas {len(appends)} novas linhas no Sheet")
+        logger.info(f"Inseridas {len(appends)} novas linhas no Sheet")
 
     return written
 
@@ -755,6 +737,7 @@ def mark_alerts_as_sent(
     alert_ids: List[str],
     aggregation_group_id: str,
     environment: str,
+    cloud: Cloud,
 ) -> int:
     """
     Registra alertas como enviados na tabela de controle (cor_alerts_sent).
@@ -771,7 +754,6 @@ def mark_alerts_as_sent(
     Returns:
         Numero de alertas registrados
     """
-    from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs
 
     env_validated = validate_environment(environment)
 
@@ -801,28 +783,30 @@ def mark_alerts_as_sent(
 
     df_copy = df.copy()
     date_str = now_sp.strftime("%Y-%m-%d")
-    partition_folder = os.path.join(
-        root_folder,
-        f"ano_particao={date_str[:4]}/mes_particao={date_str[5:7]}/data_particao={date_str}",
-    )
-    os.makedirs(partition_folder, exist_ok=True)
+    os.makedirs(root_folder, exist_ok=True)
 
-    file_path = os.path.join(partition_folder, f"{uuid.uuid4()}.{file_format}")
-    df_copy.drop(columns=[partition_column], errors="ignore").to_csv(
-        file_path, index=False
-    )
+    df_copy["ano_particao"] = date_str[:4]
+    df_copy["mes_particao"] = date_str[5:7]
+    df_copy["data_particao"] = date_str
+    file_path = os.path.join(root_folder, f"{uuid.uuid4()}.{file_format}")
+    df_copy.to_csv(file_path, index=False)
 
     # Upload para BigQuery
-    create_table_and_upload_to_gcs(
-        data_path=root_folder,
-        dataset_id=dataset_id,
-        table_id=table_id,
-        dump_mode=CORAlertAggregatorConstants.DUMP_MODE.value,
-        biglake_table=CORAlertAggregatorConstants.BIGLAKE_TABLE.value,
-        source_format=file_format,
+    table = Table(dataset_id=dataset_id, table_id=table_id)
+    dump_mode = CORAlertAggregatorConstants.DUMP_MODE.value
+    run_coro_as_sync(
+        upload_files_to_gcs.fn(
+            Path(root_folder),
+            table,
+            bucket=cloud["bucket"],
+            dump_mode=dump_mode,
+            source_format=file_format,
+            options=capture_options(dump_mode),
+        )
     )
+    run_coro_as_sync(publish_table_in_bq.fn(table, cloud))
 
-    log(
+    logger.info(
         f"{len(alert_ids)} alertas registrados como enviados em {dataset_id}.{table_id} "
         f"(aggregation_group_id={aggregation_group_id})"
     )

@@ -8,16 +8,16 @@ autentica e liga as duas pontas.
 from pathlib import Path
 
 from google.cloud import bigquery, bigquery_storage_v1
-from toolkit.pipelines_utils.env import get_bd_credentials_from_env
 from prefect import task
-from prefect_rj_iplanrio.logging import get_logger
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__modelo_qualidade_telefone import constants
+from pipelines.rj_crm__modelo_qualidade_telefone.helpers.modelo_store import ModeloCarregado
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.calcula_scores import EstatisticasScores, gera_parquet_scores
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.features import itera_features_agora
-from pipelines.rj_crm__modelo_qualidade_telefone.utils.modelo_store import ModeloCarregado
+from utils.utils import load_credentials
 
-logger = get_logger(__name__)
+logger = get_logger("toolkit")
 
 CAMINHO_PARQUET = Path("/tmp/rj_crm__modelo_qualidade_telefone/scores.parquet")
 
@@ -37,7 +37,7 @@ def pontua_telefones(
     :returns: O caminho do parquet e as estatísticas da rodada.
     :raises ValueError: Se algum lote for inválido, ou não houver telefone a pontuar.
     """
-    credentials = get_bd_credentials_from_env(mode=environment)
+    credentials = load_credentials()
     bq = bigquery.Client(credentials=credentials, project=constants.PROJECT_ID)
     bqstorage = bigquery_storage_v1.BigQueryReadClient(credentials=credentials)
 

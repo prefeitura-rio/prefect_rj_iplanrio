@@ -4,21 +4,17 @@ Encapsula operações do Prefect relacionadas a download, processamento
 e ingestão de dados de precipitação AlertaRio no BigQuery.
 """
 
-import os
 import re
 from datetime import datetime
-from pathlib import Path
 
-from google.cloud import bigquery
-from google.cloud import storage
-from google.oauth2 import service_account
+from google.cloud import bigquery, storage
 from prefect import task
-from prefect_rj_iplanrio.logging import get_logger
-from prefect_rj_iplanrio.sql import load_query
+from prefect.logging import get_logger
 
-from pipelines.rj_cor__precipitacao_alertario_sftp import utils
+from pipelines.rj_cor__precipitacao_alertario_sftp import helpers
+from utils.utils import render_query
 
-logger = get_logger(__name__)
+logger = get_logger("toolkit")
 
 
 
@@ -50,7 +46,7 @@ def get_max_date_from_bigquery_task(
     )
 
     try:
-        query = load_query(
+        query = render_query(
             __file__,
             "get_max_update",
             project_id=project_id,
@@ -204,7 +200,7 @@ def download_xml_files_from_list_task(
     :returns: Lista com conteúdos XML como strings.
     :raises Exception: Se houver erro ao baixar qualquer arquivo.
     """
-    return utils.download_xml_files_from_gcs(
+    return helpers.download_xml_files_from_gcs(
         bucket_name=bucket_name,
         file_names=file_names,
     )
@@ -224,7 +220,7 @@ def process_multiple_xml_files_task(
     :returns: Tupla (lista de caminhos pluviométricos, lista de caminhos meteorológicos) como strings.
     :raises Exception: Se houver erro no processamento de qualquer XML.
     """
-    pluviometric_path, meteorological_path = utils.process_multiple_xml_files(
+    pluviometric_path, meteorological_path = helpers.process_multiple_xml_files(
         xml_contents=xml_contents,
     )
 

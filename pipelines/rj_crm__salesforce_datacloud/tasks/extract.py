@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Extração da Salesforce — as duas tasks de extração do pipeline:
   - extract_from_data_cloud : Data Cloud (DMOs/DLLs), SQL — source='data_cloud'
@@ -64,7 +63,7 @@ import pandas as pd
 import requests
 from prefect import task
 
-from pipelines.rj_crm__salesforce_datacloud.utils.retry import so_erro_temporario
+from pipelines.rj_crm__salesforce_datacloud.helpers.retry import so_erro_temporario
 
 _QUERY_ENDPOINT = "/services/data/v67.0/ssot/query-sql"
 _WORKLOAD = "BatchQuery"

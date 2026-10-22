@@ -1,20 +1,19 @@
-# -*- coding: utf-8 -*-
 """Módulo de envio de e-mails via Data Relay API."""
-from pathlib import Path
+import logging
+import time
 from datetime import datetime
+from pathlib import Path
+from typing import List, Optional
 
 import requests
-import time
-import logging
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
-from typing import Optional, List
 
 from pipelines.rj_pic__disparos_email.env import (
-    DATA_RELAY_URL,
     DATA_RELAY_API_KEY,
     DATA_RELAY_FROM_ADDRESS,
-    DATA_RELAY_USE_GMAIL_API,
     DATA_RELAY_IS_HTML_BODY,
+    DATA_RELAY_URL,
+    DATA_RELAY_USE_GMAIL_API,
     MAX_RETRIES,
     RETRY_DELAY,
     THROTTLE_DELAY,

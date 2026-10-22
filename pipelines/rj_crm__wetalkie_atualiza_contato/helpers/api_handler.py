@@ -3,11 +3,10 @@ API Handler for managing authenticated API requests with automatic token managem
 Reutilizado do pipeline rj_crm__api_wetalkie
 """
 
-from prefect.logging import get_logger
-
 from typing import Any, Dict, Optional
 
 import requests
+from prefect.logging import get_logger
 
 logger = get_logger("toolkit")
 

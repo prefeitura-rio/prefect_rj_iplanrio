@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Extrai e reconstrói as conversas de 1 disparo de HSM já identificado pelo trigger."""
 
 from datetime import date
@@ -6,8 +5,8 @@ from pathlib import Path
 
 import pandas as pd
 from google.cloud import bigquery
-from toolkit.pipelines_utils.logging import log
 from prefect import task
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     CHATBOT_DATASET,
@@ -16,7 +15,9 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     PROJECT_ID,
     ROTULO_FONTE,
 )
-from pipelines.rj_crm__relatorio_engajamento_hsm.utils.bigquery import get_bq_client
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.bigquery import get_bq_client
+
+logger = get_logger("toolkit")
 
 _QUERIES_DIR = Path(__file__).resolve().parent.parent / "queries"
 _SQL_TEMPLATE = (_QUERIES_DIR / "extrai_conversas.sql").read_text(encoding="utf-8")
@@ -101,9 +102,9 @@ def _monta_conversas(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, int, int]:
 @task
 def extrai_conversas(nome_hsm: str, data_disparo: date) -> tuple[pd.DataFrame, int, int]:
     client = get_bq_client()
-    log(f"[EXTRACAO] {nome_hsm}: buscando mensagens desde {data_disparo}...")
+    logger.info(f"[EXTRACAO] {nome_hsm}: buscando mensagens desde {data_disparo}...")
     df_raw = _busca_mensagens(client, nome_hsm, data_disparo)
     df_sessoes, total_disparos, total_engajados = _monta_conversas(df_raw)
     taxa = 100 * total_engajados / total_disparos if total_disparos else 0.0
-    log(f"[EXTRACAO] {nome_hsm}: {total_disparos} disparo(s), {total_engajados} sessão(ões) engajada(s) ({taxa:.1f}%).")
+    logger.info(f"[EXTRACAO] {nome_hsm}: {total_disparos} disparo(s), {total_engajados} sessão(ões) engajada(s) ({taxa:.1f}%).")
     return df_sessoes, total_disparos, total_engajados

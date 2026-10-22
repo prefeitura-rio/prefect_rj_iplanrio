@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Notificações no Discord da pipeline Salesforce Data Cloud → BigQuery.
 
@@ -20,7 +19,7 @@ import requests
 from prefect import task
 from prefect.client.schemas.objects import Flow, FlowRun, State
 
-from pipelines.rj_crm__salesforce_datacloud.utils.discord import (
+from pipelines.rj_crm__salesforce_datacloud.helpers.discord import (
     mensagem_falha_flow,
     mensagem_falha_tabela,
     mensagem_resumo,

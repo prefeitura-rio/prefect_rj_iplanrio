@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ruff: noqa
 
 import json
@@ -8,18 +7,17 @@ import textwrap
 from pathlib import Path
 from typing import List
 
-import basedosdados as bd
 import numpy as np
 import pandas as pd
 import ruamel.yaml as ryaml
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs
-from toolkit.pipelines_utils.gcs import (
-    list_blobs_with_prefix,
-)
-from toolkit.pipelines_utils.logging import log
+from google.cloud import bigquery
+from pipelines.rj_smas__cadunico.helpers import list_blobs_with_prefix, read_staging_versions, upload_folder
 from pipelines.rj_smas__cadunico.utils_logging import PipelineLogger
-from toolkit.pipelines_utils.pandas import to_partitions
+from utils.types import Cloud
 from unidecode import unidecode
+from prefect.logging import get_logger
+
+logger = get_logger("toolkit")
 
 
 def get_tables_names_dict() -> dict:
@@ -137,7 +135,7 @@ def parse_tables_from_xlsx(xlsx_input, csv_output, target_pattern, filter_versio
     version_info = (
         f"PARSED VERSIONS: {found_versions}\nFiltered versions: {filter_versions}"
     )
-    log(version_info)
+    logger.info(version_info)
 
     df_final = df_final[df_final["version"].isin(filter_versions)]
 
@@ -171,7 +169,7 @@ def parse_tables_from_xlsx(xlsx_input, csv_output, target_pattern, filter_versio
     df_final = df_final.reset_index(drop=True)
 
     output_filepath = Path(csv_output)
-    log(f"Parsed csv file: {output_filepath}")
+    logger.info(f"Parsed csv file: {output_filepath}")
     df_final.to_csv(output_filepath, index=False)
 
     return df_final
@@ -199,6 +197,10 @@ def parse_xlsx_files_and_save_partition(
             target_pattern="LEIAUTE VERSÃO",
             filter_versions=[version_float],
         )
+        layout = pd.read_csv(csv_output / csv_name, dtype=str)
+        layout["versao_layout_particao"] = version
+        layout.to_csv(Path(output_path) / csv_name, index=False)
+        shutil.rmtree(csv_output)
 
     return str(output_path)
 
@@ -218,25 +220,8 @@ def get_existing_partitions(
     """
     # List blobs in staging area
 
-    # Log consolidado de staging blobs
-    staging_info = f"Listing blobs in staging area with prefix {bucket_name}/{prefix}\n"
-    staging_info += f"https://console.cloud.google.com/storage/browser/{bucket_name}/staging/{dataset_id}/{table_id}"
-    log(staging_info)
-
-    staging_blobs = list_blobs_with_prefix(bucket_name=bucket_name, prefix=prefix)
-    log(f"Found {len(staging_blobs)} blobs in staging area")
-
-    # Extract partition information from blobs
-    staging_partitions = []
-    for blob in staging_blobs:
-        for folder in blob.name.split("/"):
-            if "=" in folder:
-                key = folder.split("=")[0]
-                value = folder.split("=")[1]
-                if key == "versao_layout_particao":
-                    staging_partitions.append(value)
-    staging_partitions = list(set(staging_partitions))
-    log(f"Staging partitions {len(staging_partitions)}: {staging_partitions}")
+    staging_partitions = read_staging_versions(project_id=bucket_name, dataset_id=dataset_id, table_id=table_id)
+    logger.info(f"Staging partitions {len(staging_partitions)}: {staging_partitions}")
     return staging_partitions
 
 
@@ -250,7 +235,7 @@ def download_files_from_storage_raw(
     # Log consolidado de raw blobs
     raw_info = f"https://console.cloud.google.com/storage/browser/{raw_bucket}/{raw_prefix_area}\n"
     raw_info += f"Found {len(raw_blobs)} blobs in raw area"
-    log(raw_info)
+    logger.info(raw_info)
 
     raw_blobs_files = []
     for blob in raw_blobs:
@@ -271,9 +256,9 @@ def download_files_from_storage_raw(
             blob.download_to_filename(download_file_path)
             raw_filespaths_to_ingest.append(download_file_path)
             raw_versions_to_ingest.append(version)
-            log(f"Downloaded file: {download_file_path}")
+            logger.info(f"Downloaded file: {download_file_path}")
 
-    log(f"Raw partitions {len(raw_versions)}: {raw_versions}")
+    logger.info(f"Raw partitions {len(raw_versions)}: {raw_versions}")
 
     # 📊 COMPARAÇÃO DETALHADA DE VERSÕES
     all_versions = sorted(set(raw_versions + staging_partitions_list))
@@ -304,9 +289,9 @@ def download_files_from_storage_raw(
         comparison_msg += (
             f"   {version}: staging={staging_status} raw={raw_status} {action}\n"
         )
-    log(comparison_msg)
+    logger.info(comparison_msg)
 
-    log(
+    logger.info(
         f"📈 RESUMO: {len(raw_versions)} versões no raw, {len(staging_partitions_list)} no staging, {len(raw_filespaths_to_ingest)} para ingerir"
     )
 
@@ -345,9 +330,9 @@ def get_layout_table_from_staging(
 
     # Log consolidado de validação de colunas
     validation_info = f"VALIDATE COLUMN NAMES\n\nColumns Validation Query:\n{query}"
-    log(validation_info)
-    df_validation = bd.read_sql(
-        query=query, billing_project_id=project_id, from_file=True
+    logger.info(validation_info)
+    df_validation = (
+        bigquery.Client(project=project_id).query(query).result().to_dataframe(create_bqstorage_client=False)
     )
 
     if df_validation is not None:
@@ -373,8 +358,8 @@ def get_layout_table_from_staging(
     """
     # Log consolidado de layout consolidado
     layout_info = f"GET CONSOLIDATE LAYOUT TO CREATE: `{project_id}.{dataset_id}_staging.layout_columns_version_control`\nUsing project_id: {project_id}\n\n{query}"
-    log(layout_info)
-    dataframe = bd.read_sql(query=query, billing_project_id=project_id, from_file=True)
+    logger.info(layout_info)
+    dataframe = bigquery.Client(project=project_id).query(query).result().to_dataframe(create_bqstorage_client=False)
 
     versions = get_existing_partitions(
         bucket_name=project_id,
@@ -396,7 +381,7 @@ def get_layout_table_from_staging(
 
             raise ValueError(raise_msg)
 
-        log(
+        logger.info(
             f"Dataframe will be filtered using versions from {project_id}.{dataset_id}_staging.{registo_familia_table_id}: {versions}"  # noqa
         )
 
@@ -463,7 +448,7 @@ def columns_version_control_diff(dataframe: pd.DataFrame):
 
 
 def parse_columns_version_control(dataframe: pd.DataFrame):
-    log("ASCENDING SEARCH")
+    logger.info("ASCENDING SEARCH")
     df_ascending = columns_version_control_diff(
         dataframe=dataframe.sort_values(["reg", "versao_layout_particao"])
     )
@@ -485,7 +470,7 @@ def parse_columns_version_control(dataframe: pd.DataFrame):
     df_final = pd.concat([df_ascending, df_new])
     df_final = df_final.sort_values(["reg", "versao_layout_particao"])
 
-    log("DESCENDING SEARCH")
+    logger.info("DESCENDING SEARCH")
     df_descending = columns_version_control_diff(
         dataframe=dataframe.sort_values(
             ["reg", "versao_layout_particao"], ascending=False
@@ -535,7 +520,7 @@ def dump_dict_to_dbt_yaml(schema, schema_yaml_path):
                     + f"Column: {col_name}\n"
                     + f"Description lenght:{col_description_lenght}"
                 )
-                log(log_msg, level="warning")
+                logger.warning(log_msg)
     # log(f"Dumping schema to {schema_yaml_path}")
     ruamel.dump(
         schema,
@@ -557,9 +542,9 @@ def convert_string_to_json(s, context=None):
         return json.loads(str(s))
     except Exception as e:
         context_msg = f" | Context: {context}" if context else ""
-        log(f"ERROR converting to JSON{context_msg}")
-        log(f"Value: {s}")
-        log(f"Type: {type(s)}")
+        logger.info(f"ERROR converting to JSON{context_msg}")
+        logger.info(f"Value: {s}")
+        logger.info(f"Type: {type(s)}")
         raise BaseException(f"JSON parse error{context_msg}: {e}")
 
 
@@ -598,7 +583,7 @@ def create_cadunico_dbt_consolidated_models(
             return convert_string_to_json(value, context=context)
         except Exception as e:
             error_msg = f"ERROR in convert_with_context: {e}\nRow: {row.to_dict()}"
-            log(error_msg)
+            logger.info(error_msg)
             raise
 
     df["dicionario_atributos"] = df.apply(convert_with_context, axis=1)
@@ -610,7 +595,7 @@ def create_cadunico_dbt_consolidated_models(
     log_created_models = []
 
     last_version = max(df["version"])
-    log(f"Schema.yml will use the last version of the layout: {last_version}")
+    logger.info(f"Schema.yml will use the last version of the layout: {last_version}")
 
     for table_number in df["reg"].unique():
         schema = {"version": 2, "models": []}
@@ -688,7 +673,7 @@ def create_cadunico_dbt_consolidated_models(
                         f"  Value: {dicionario_atributos}\n"
                         f"  This indicates the JSON conversion did not work properly."
                     )
-                    log(error_msg)
+                    logger.info(error_msg)
                     raise TypeError(error_msg)
 
                 if dicionario_atributos is not None and isinstance(
@@ -769,7 +754,7 @@ def create_cadunico_dbt_consolidated_models(
                                 f"  Type: {type(dicionario_atributos)}\n"
                                 f"  Value: {dicionario_atributos}"
                             )
-                            log(error_msg)
+                            logger.info(error_msg)
                             raise AttributeError(error_msg)
 
                         col_expression = (
@@ -874,11 +859,11 @@ def create_cadunico_dbt_consolidated_models(
         schema_filepath = model_path / f"{model_name_prefix}__{model_name}.yml"
         dump_dict_to_dbt_yaml(schema=schema, schema_yaml_path=schema_filepath)
     json_log = json.dumps(log_created_models, indent=4)
-    log(f"created {len(log_created_models)} prod models : {json_log}")
+    logger.info(f"created {len(log_created_models)} prod models : {json_log}")
 
 
 def create_layout_column_cross_version_control_bq_table(
-    dataframe, dataset_id, table_id
+    dataframe, dataset_id, table_id, cloud: Cloud
 ):
     new_dataframe = parse_columns_version_control(dataframe=dataframe)
 
@@ -886,21 +871,17 @@ def create_layout_column_cross_version_control_bq_table(
     shutil.rmtree(output_path, ignore_errors=True)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    to_partitions(
-        data=new_dataframe,
-        partition_columns=["versao_layout_particao"],
-        savepath=str(output_path),
-    )
+    new_dataframe.to_csv(output_path / "data.csv", index=False)
     table_id = table_id + "_columns_version_control"
-    create_table_and_upload_to_gcs(
-        data_path=output_path,
-        dataset_id=dataset_id,
-        table_id=table_id,
+    upload_folder(
+        output_path,
+        dataset_id,
+        table_id,
+        cloud=cloud,
         dump_mode="overwrite",
-        biglake_table=True,
-        only_staging_dataset=True,
+        source_format="csv",
     )
-    log(f"Table {dataset_id}.{table_id} created in STAGING")
+    logger.info(f"Table {dataset_id}.{table_id} created in STAGING")
 
     return new_dataframe
 
@@ -914,6 +895,7 @@ def update_layout_from_storage_and_create_versions_dbt_models(
     staging_bucket: str = "rj-iplanrio",
     force_create_models: bool = True,
     repository_path: str = "/tmp/dbt_repository/",
+    cloud: Cloud | None = None,
 ):
     logger = PipelineLogger("Materialização CadÚnico")
 
@@ -943,6 +925,15 @@ def update_layout_from_storage_and_create_versions_dbt_models(
         output_path_str="/tmp/cadunico/raw/layout",
     )
 
+    if raw_filespaths_to_ingest:
+        # A new version replaces the layout table, so every version is parsed again.
+        raw_filespaths_to_ingest = download_files_from_storage_raw(
+            raw_bucket=raw_bucket,
+            raw_prefix_area="raw/protecao_social_cadunico/layout",
+            staging_partitions_list=[],
+            output_path_str="/tmp/cadunico/raw/layout",
+        )
+
     files_to_process = len(raw_filespaths_to_ingest) if raw_filespaths_to_ingest else 0
 
     if raw_filespaths_to_ingest:
@@ -951,15 +942,15 @@ def update_layout_from_storage_and_create_versions_dbt_models(
             output_path="/tmp/cadunico/staging/layout",
             raw_filespaths_to_ingest=raw_filespaths_to_ingest,
         )
-        log(f"CRIANDO TABELA DE LAYOUT: {raw_bucket}.{dataset_id}.{layout_table_id}")
-        output_path_result = create_table_and_upload_to_gcs(
-            data_path=str(output_path),
-            dump_mode="append",
-            dataset_id=dataset_id,
-            table_id=layout_table_id,
-            only_staging_dataset=True,
+        logger.info(f"CRIANDO TABELA DE LAYOUT: {raw_bucket}.{dataset_id}.{layout_table_id}")
+        upload_folder(
+            Path(output_path),
+            dataset_id,
+            layout_table_id,
+            cloud=cloud,
+            dump_mode="overwrite",
+            source_format="csv",
         )
-        output_path = str(output_path_result)
         logger.complete_phase(True, {"layouts_processados": files_to_process})
     else:
         logger.complete_phase(
@@ -983,7 +974,7 @@ def update_layout_from_storage_and_create_versions_dbt_models(
 
         logger.log_progress("CRIANDO CONTROLE DE VERSÕES CROSS-LAYOUT")
         df_final = create_layout_column_cross_version_control_bq_table(
-            dataframe=dataframe, dataset_id=dataset_id, table_id=layout_table_id
+            dataframe=dataframe, dataset_id=dataset_id, table_id=layout_table_id, cloud=cloud
         )
 
         logger.log_progress("GERANDO MODELOS DBT CONSOLIDADOS")

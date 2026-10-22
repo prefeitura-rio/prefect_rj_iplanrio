@@ -1,24 +1,28 @@
-# -*- coding: utf-8 -*-
 """
 Upload eai messages history to BQ..
 """
 
+from pathlib import Path
 from typing import Optional
 
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.dbt import execute_dbt_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
+from toolkit.dbt import DbtRun
 
 from pipelines.rj_iplanrio__eai_history.tasks import (
     fetch_history_data,
     get_last_update,
 )
+from utils.tasks import publish_table_in_bq, run_dbt, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
+
+DBT_REPOSITORY = "https://github.com/prefeitura-rio/queries-rj-iplanrio"
 
 
-@flow(log_prints=True)
-def rj_iplanrio__eai_history(  # noqa
+@flow(log_prints=True, flow_run_name="{environment}")
+async def rj_iplanrio__eai_history(
+    *,
+    cloud: Cloud,  # noqa
     last_update: Optional[str] = None,
     session_timeout_seconds: Optional[int] = 3600,
     use_whatsapp_format: bool = False,
@@ -27,13 +31,8 @@ def rj_iplanrio__eai_history(  # noqa
     max_user_save_limit: int = 100,
     environment: str = "staging",
     dbt_select: str = "raw_eai_logs_history",
-    skip_bd_credentials: bool = False,
     sql_limit: Optional[int] = None,
 ):
-    rename_current_flow_run_task(new_name=environment)
-    if not skip_bd_credentials:
-        inject_bd_credentials_task()
-
     last_update_task = get_last_update(
         dataset_id=dataset_id,
         table_id=table_id,
@@ -51,14 +50,17 @@ def rj_iplanrio__eai_history(  # noqa
     )
 
     if data_path:
-        create_table_and_upload_to_gcs_task(
-            data_path=data_path,
-            dataset_id=dataset_id,
-            table_id=table_id,
-            biglake_table=True,
+        table = Table(dataset_id=dataset_id, table_id=table_id)
+        await upload_files_to_gcs(
+            Path(data_path),
+            table,
+            bucket=cloud["bucket"],
             dump_mode="append",
+            source_format="csv",
+            options=capture_options("append"),
         )
-        execute_dbt_task(select=dbt_select, target="prod")
+        await publish_table_in_bq(table, cloud)
+        await run_dbt(DbtRun(repository=DBT_REPOSITORY, command="run", target="prod", select=dbt_select))
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ Flow migrado do Prefect 1.4 para 3.0 - CRM Wetalkie Atualiza Contato
 from pathlib import Path
 
 from prefect import flow
+from toolkit.dbt import DbtRun
 
 from pipelines.rj_crm__wetalkie_atualiza_contato.constants import (
     WetalkieAtualizaContatoConstants,
@@ -18,7 +19,6 @@ from pipelines.rj_crm__wetalkie_atualiza_contato.tasks import (
     get_contacts,
     safe_export_df_to_parquet,
 )
-from toolkit.dbt import DbtRun
 from utils.tasks import publish_table_in_bq, run_dbt, upload_files_to_gcs
 from utils.types import Cloud, Table
 from utils.utils import capture_options

@@ -1,1 +1,1 @@
-CREATE OR REPLACE SYNONYM "$owner"."$synonym" FOR "$schema"."$table"
+CREATE OR REPLACE SYNONYM "{{ owner }}"."{{ synonym }}" FOR "{{ schema }}"."{{ table }}"

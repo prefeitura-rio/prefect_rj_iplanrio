@@ -1,14 +1,9 @@
 [project]
 name = "rj_smfp__nota_carioca_oracle_to_bq"
 version = "1.0.0"
-description = "Copies the Nota Carioca DFEN tables from the on-prem Oracle database to BigQuery as a fast full refresh through Parquet files in GCS, replacing the slow Airbyte sync."
+description = "Copies the Nota Carioca DFEN tables from the on-prem Oracle database to BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",
-    "google-cloud-bigquery",
-    "google-cloud-storage",
-    "numpy",
-    "oracledb",
-    "pyarrow",
 ]
 
 [tool.uv.sources]

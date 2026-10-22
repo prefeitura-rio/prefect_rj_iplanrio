@@ -3,11 +3,10 @@ API Handler for managing authenticated API requests with automatic token managem
 Migrated from pipelines_rj_crm_registry for prefect_rj_iplanrio
 """
 
-from prefect.logging import get_logger
-
 from typing import Any, Dict, Optional
 
 import requests
+from prefect.logging import get_logger
 
 logger = get_logger("toolkit")
 

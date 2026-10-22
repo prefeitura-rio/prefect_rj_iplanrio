@@ -9,14 +9,14 @@ from pathlib import Path
 
 from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
-from toolkit.pipelines_utils.env import get_bd_credentials_from_env
 from prefect import task
-from prefect_rj_iplanrio.logging import get_logger
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__modelo_qualidade_telefone import constants
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.calcula_scores import EstatisticasScores
+from utils.utils import load_credentials
 
-logger = get_logger(__name__)
+logger = get_logger("toolkit")
 
 # Quanto o volume de linhas pode variar (pra mais ou pra menos) em relação à rodada
 # anterior antes de recusar publicar — protege contra uma fonte quebrada silenciosamente
@@ -96,7 +96,7 @@ def publica_scores_task(
 
     :raises ValueError: Ver :func:`valida_scores`.
     """
-    credentials = get_bd_credentials_from_env(mode=environment)
+    credentials = load_credentials()
     client = bigquery.Client(credentials=credentials, project=constants.PROJECT_ID)
 
     n_linhas_anterior = linhas_da_tabela_atual(client, dataset_id, table_id)

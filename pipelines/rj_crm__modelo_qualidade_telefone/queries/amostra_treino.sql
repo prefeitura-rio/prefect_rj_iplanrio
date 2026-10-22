@@ -4,7 +4,7 @@
 periodo AS (
   SELECT
     MIN(envio_datahora) AS inicio_dataset,
-    TIMESTAMP_SUB(MAX(envio_datahora), INTERVAL $janela_futuro_dias DAY) AS fim_sorteio
+    TIMESTAMP_SUB(MAX(envio_datahora), INTERVAL {{ janela_futuro_dias }} DAY) AS fim_sorteio
   FROM disparos
 ),
 amostra AS (
@@ -14,7 +14,7 @@ amostra AS (
     TIMESTAMP_ADD(
       p.inicio_dataset,
       INTERVAL MOD(
-        ABS(FARM_FINGERPRINT(CONCAT(u.telefone, '_', CAST($random_state AS STRING)))),
+        ABS(FARM_FINGERPRINT(CONCAT(u.telefone, '_', CAST({{ random_state }} AS STRING)))),
         DATE_DIFF(DATE(p.fim_sorteio), DATE(p.inicio_dataset), DAY) + 1
       ) DAY
     ) AS data_corte

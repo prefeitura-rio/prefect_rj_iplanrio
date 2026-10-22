@@ -7,8 +7,8 @@ import pytest
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle import flow as flow_module
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import DBT_DEPLOYMENT, default_dbt_parameters
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.dbt import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import bigquery
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.dbt import (
     DbtRunError,
     RunStatus,
     RunWaiter,

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Constantes da pipeline de relatório de engajamento por HSM."""
 
 PROJECT_ID = "rj-crm-registry"

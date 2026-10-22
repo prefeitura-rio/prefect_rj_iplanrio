@@ -1,13 +1,13 @@
 import pytest
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import (
     LoaderField,
     OracleColumn,
     build_load_plan,
     loader_spec,
     oracle_column,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import (
     CROSS_SCHEMA_PRIVILEGES,
     MANAGED_TABLE_MARKER,
     QUERIES_ANCHOR,
@@ -24,10 +24,10 @@ import io
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery, slots
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.bigquery import changed_tables, quiet_wait_seconds
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.inmemory import InMemoryStatus
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.slots import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import bigquery, slots
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import changed_tables, quiet_wait_seconds
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.inmemory import InMemoryStatus
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import (
     CONSUMER_GRANTS,
     SlotPlan,
     SynonymTarget,
@@ -37,7 +37,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.slots import (
     synonym_owners,
     synonyms_to_realign,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import (
     IndexDefinition,
     IndexExpression,
     Partitioning,
@@ -53,9 +53,9 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     slot_indexes,
     storage_clause,
 )
-from prefect_rj_iplanrio.sql import load_query
+from utils.utils import render_query
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.sqlldr import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr import (
     CountingReader,
     ProgressSnapshot,
     SessionProgress,
@@ -221,11 +221,11 @@ def test_missing_privileges_lists_what_other_users_lack():
 
 
 def test_grant_and_synonym_statements_for_the_physical_table():
-    assert load_query(
+    assert render_query(
         QUERIES_ANCHOR, "grant_on_table", privileges="SELECT, ALTER, DELETE", schema="DFEN", table="BQLOAD_X_A",
         grantee="NFSE_OWNER",
     ) == 'GRANT SELECT, ALTER, DELETE ON "DFEN"."BQLOAD_X_A" TO "NFSE_OWNER"\n'
-    assert load_query(
+    assert render_query(
         QUERIES_ANCHOR, "create_synonym", owner="NFSE_SIGA", synonym="BQLOAD_X", schema="DFEN", table="BQLOAD_X_B"
     ) == 'CREATE OR REPLACE SYNONYM "NFSE_SIGA"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_B"\n'
     assert CONSUMER_GRANTS == (
@@ -238,8 +238,8 @@ def test_grant_and_synonym_statements_for_the_physical_table():
 
 
 def test_inmemory_queries_keep_the_dollar_of_the_views():
-    assert "gv$inmemory_area" in load_query(QUERIES_ANCHOR, "get_inmemory_area")
-    assert "gv$im_segments" in load_query(QUERIES_ANCHOR, "get_inmemory_segments")
+    assert "gv$inmemory_area" in render_query(QUERIES_ANCHOR, "get_inmemory_area")
+    assert "gv$im_segments" in render_query(QUERIES_ANCHOR, "get_inmemory_segments")
 
 
 def syn(owner, table_name, table_owner="DFEN"):
@@ -736,7 +736,7 @@ def fake_database(monkeypatch, objects, comments, synonyms=()):
 
 
 def slots_config():
-    from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import OracleConfig
+    from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import OracleConfig
 
     return OracleConfig("DFEN", "x", "h", "1521", "S", "DFEN")
 
@@ -981,7 +981,7 @@ def test_index_statement_emits_expressions_verbatim_with_local_and_parallel():
         'CASE  WHEN "STATUS_NOTA"<>0 THEN "NOTA_NACIONAL" END ',
         "options": "LOCAL PARALLEL 4",
     }
-    statement = load_query(
+    statement = render_query(
         QUERIES_ANCHOR,
         "create_index",
         schema="DFEN",
@@ -1051,13 +1051,13 @@ def test_build_load_plan_propagates_raw_text_encoding_to_pessoa_columns_only():
 
 
 def test_count_rows_query_runs_parallel_with_the_requested_degree():
-    sql = load_query(QUERIES_ANCHOR, "count_rows", schema="DFEN", table="BQLOAD_X_A", degree=4)
+    sql = render_query(QUERIES_ANCHOR, "count_rows", schema="DFEN", table="BQLOAD_X_A", degree=4)
     assert sql == 'SELECT /*+ PARALLEL(4) */ COUNT(*)\nFROM "DFEN"."BQLOAD_X_A"\n'
 
 
 @pytest.mark.parametrize(("requested", "hinted"), [(4, 4), (1, 1), (0, 1), (-3, 1)])
 def test_count_rows_sends_the_parallel_hint_to_oracle(monkeypatch, requested, hinted):
-    from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import oracle
+    from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import oracle
 
     executed = []
 

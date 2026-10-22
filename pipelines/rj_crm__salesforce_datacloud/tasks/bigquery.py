@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tasks de BigQuery da pipeline: criação das tabelas (ensure_bq_tables),
 carga (staging + MERGE).
@@ -23,9 +22,8 @@ import pandas as pd
 from google.cloud import bigquery
 from prefect import task
 
-from pipelines.rj_crm__salesforce_datacloud.utils.queries import ler_query
-from pipelines.rj_crm__salesforce_datacloud.utils.schemas import PARTITIONED_TABLES, SCHEMAS
-
+from pipelines.rj_crm__salesforce_datacloud.helpers.queries import ler_query
+from pipelines.rj_crm__salesforce_datacloud.helpers.schemas import PARTITIONED_TABLES, SCHEMAS
 
 # ---------------------------------------------------------------------------
 # Helpers

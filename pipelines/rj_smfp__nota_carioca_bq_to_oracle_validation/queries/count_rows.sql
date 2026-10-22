@@ -1,2 +1,2 @@
 SELECT COUNT(*)
-FROM "$schema"."$table"
+FROM "{{ schema }}"."{{ table }}"

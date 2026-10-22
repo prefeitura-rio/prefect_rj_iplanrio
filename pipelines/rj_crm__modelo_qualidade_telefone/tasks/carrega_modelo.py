@@ -2,14 +2,14 @@
 (exige um champion) e retreino (tolera não haver nenhum ainda, na 1ª execução)."""
 
 from google.cloud import storage
-from toolkit.pipelines_utils.env import get_bd_credentials_from_env
 from prefect import task
-from prefect_rj_iplanrio.logging import get_logger
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__modelo_qualidade_telefone import constants
-from pipelines.rj_crm__modelo_qualidade_telefone.utils import modelo_store
+from pipelines.rj_crm__modelo_qualidade_telefone.helpers import modelo_store
+from utils.utils import load_credentials
 
-logger = get_logger(__name__)
+logger = get_logger("toolkit")
 
 
 def carrega_champion_opcional(
@@ -23,7 +23,7 @@ def carrega_champion_opcional(
     :returns: O champion, ou ``None`` se ainda não houver ``champion.json`` (1ª execução
         do retreino, antes de qualquer versão ter sido promovida).
     """
-    credentials = get_bd_credentials_from_env(mode=environment)
+    credentials = load_credentials()
     client = storage.Client(credentials=credentials, project=constants.PROJECT_ID)
     champion = modelo_store.carrega_champion(raiz, client=client)
     if champion:

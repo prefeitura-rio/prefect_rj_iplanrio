@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Extração incremental das sessões do Agentforce ainda não classificadas + enriquecimento
 com o catálogo de HSM.
@@ -17,7 +16,7 @@ from pathlib import Path
 import pandas as pd
 from prefect import task
 
-from pipelines.rj_crm__agentforce_classificacao_llm.utils.bigquery import get_bq_client
+from pipelines.rj_crm__agentforce_classificacao_llm.helpers.bigquery import get_bq_client
 
 _QUERIES_DIR = Path(__file__).resolve().parent.parent / "queries"
 

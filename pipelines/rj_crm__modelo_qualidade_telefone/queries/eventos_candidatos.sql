@@ -65,7 +65,7 @@ aparicoes AS (
 
 -- ---- 1) disparos recentes elegíveis pra avaliação -----------------------
 periodo_recente AS (
-  SELECT TIMESTAMP_SUB(MAX(envio_datahora), INTERVAL $janela_recente_dias DAY) AS data_min_avaliacao
+  SELECT TIMESTAMP_SUB(MAX(envio_datahora), INTERVAL {{ janela_recente_dias }} DAY) AS data_min_avaliacao
   FROM disparos
 ),
 disparos_avaliar AS (
