@@ -17,6 +17,12 @@ DISCORD_LIMIT: Final = 2000
 DOCUMENT_STORES: Final = frozenset({"couchdb", "mongodb"})
 """The database types that store documents, and read a selector instead of SQL."""
 
+CREDENTIAL_SCOPES: Final = (
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/cloud-platform",
+)
+"""The scopes of the credentials that a pipeline gives to a Google client, by default."""
+
 DBT_FAILED: Final = ("error", "fail", "runtime error")
 """The statuses of a dbt node that mean the node failed."""
 

@@ -134,11 +134,15 @@ async def dump_db_to_gcs(
     """
     chosen = options or {}
     source_options: dict[str, JsonValue] = {**database.get("options", {})}
+
     if "batch_size" in chosen:
         source_options["batch_size"] = chosen["batch_size"]
+
     if "concurrency" in chosen:
         source_options["concurrency"] = chosen["concurrency"]
+
     credentials = DatabaseSettings()
+
     conn = DBConn(
         database["host"],
         database["port"],
@@ -146,6 +150,7 @@ async def dump_db_to_gcs(
         credentials.DB_USERNAME,
         credentials.DB_PASSWORD.get_secret_value(),
     )
+
     await load_to_delta(
         get_source(database["type"])(
             conn=conn, origin=read_request(database["type"], read, "chunks" in chosen), **source_options

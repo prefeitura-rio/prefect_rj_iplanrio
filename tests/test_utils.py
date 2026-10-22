@@ -21,7 +21,7 @@ from pyarrow.parquet import write_table
 from toolkit import gcs
 from toolkit.constants import BATCH_COLUMN
 from toolkit.dbt import DbtRun
-from toolkit.executor.requests import Changes, Files, Query
+from toolkit.executor.requests import Aggregate, Changes, Files, Query
 from toolkit.executor.requests import Table as TableOrigin
 from toolkit.executor.sources.backends.files import FilesSource
 from toolkit.types import Chunks
@@ -41,6 +41,7 @@ from utils.utils import (
     extract_records,
     failure_message,
     files_glob,
+    hash_config,
     is_transient,
     load_records_schema,
     load_to_delta,
@@ -608,6 +609,13 @@ async def test_a_delta_table_without_a_connection_is_refused():
             Query('{"a": 1}', "mongodb", "p"),
             id="a_mongodb_selector",
         ),
+        pytest.param(
+            "mongodb",
+            {"table": "p", "pipeline": ['{"$project": {"a": 1}}', '{"$limit": 5}']},
+            True,
+            Aggregate('[{"$project": {"a": 1}},{"$limit": 5}]', "p"),
+            id="a_mongodb_pipeline_over_a_collection",
+        ),
     ],
 )
 def test_a_read_names_the_origin_that_the_database_reads(db_type, read, batched, expected):
@@ -624,6 +632,16 @@ def test_a_read_names_the_origin_that_the_database_reads(db_type, read, batched,
         pytest.param("couchdb", {}, False, "Give a table", id="a_database_with_nothing"),
         pytest.param("couchdb", {"query": "{}", "since": "0"}, False, "not both", id="query_and_since"),
         pytest.param("mongodb", {"table": "c", "since": "0"}, False, "only CouchDB", id="mongodb_has_no_changes"),
+        pytest.param("postgres", {"table": "a.b", "pipeline": ["{}"]}, False, "only MongoDB", id="a_pipeline_on_sql"),
+        pytest.param("mongodb", {"pipeline": ["{}"]}, False, "needs a table", id="a_pipeline_without_a_collection"),
+        pytest.param(
+            "mongodb",
+            {"table": "c", "query": "{}", "pipeline": ["{}"]},
+            False,
+            "takes no query",
+            id="pipeline_and_query",
+        ),
+        pytest.param("mongodb", {"table": "c", "pipeline": ["[1]"]}, False, "JSON object", id="a_stage_that_is_a_list"),
     ],
 )
 def test_a_read_that_does_not_fit_is_refused(db_type, read, batched, message):
@@ -1166,3 +1184,13 @@ def test_only_the_nodes_that_failed_or_warned_are_read_from_a_dbt_result(dbt_nod
 def test_a_dbt_result_with_no_nodes_has_none_to_read():
     """Give an empty list for a command such as `debug`."""
     assert read_nodes(SimpleNamespace(success=True)) == []
+
+
+def test_the_stages_of_a_pipeline_change_the_hash_of_the_config():
+    """Reload the chunks when the stages change, and keep them when the stages are the same."""
+    first = Aggregate('[{"$project": {"a": 1}}]', "c")
+    same = Aggregate('[{"$project": {"a": 1}}]', "c")
+    other = Aggregate('[{"$project": {"a": 1, "b": 1}}]', "c")
+
+    assert hash_config(first, {}) == hash_config(same, {})
+    assert hash_config(first, {}) != hash_config(other, {})

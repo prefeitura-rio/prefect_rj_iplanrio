@@ -3,7 +3,7 @@
 from asyncio import to_thread
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from http import HTTPStatus
 from importlib import import_module
 from json import dumps
@@ -15,6 +15,8 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from deltalake import DeltaTable
+from google.auth import default
+from google.auth.credentials import Credentials
 from httpx2 import AsyncClient, HTTPStatusError, TransportError
 from obstore.store import ObjectStore
 from polars import DataFrame, concat
@@ -43,17 +45,18 @@ from toolkit.delta import (
 from toolkit.executor.engines.base import Engine, require_origin
 from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.executor import Executor
-from toolkit.executor.requests import Changes, Query, Table
+from toolkit.executor.render import render_template
+from toolkit.executor.requests import Aggregate, Changes, Query, Table
 from toolkit.executor.sources.backends.bigquery import BigQuerySource
 from toolkit.executor.sources.protocols import Source
 from toolkit.executor.types import Origin
 from toolkit.functions.native import now_sao_paulo
 from toolkit.gcs import create_store, delete_keys, list_keys, list_prefixes, upload
 from toolkit.telemetry import logger
-from toolkit.types import Columns
+from toolkit.types import Columns, TemplateValue
 from toolkit.utils import select_columns
 
-from .constants import DBT_FAILED, DBT_WARNED, DISCORD_LIMIT, DOCUMENT_STORES, STAGING_PREFIX
+from .constants import CREDENTIAL_SCOPES, DBT_FAILED, DBT_WARNED, DISCORD_LIMIT, DOCUMENT_STORES, STAGING_PREFIX
 from .types import DbtNode, DbtOutcome, DumpMode, DumpOptions, FileFormat, Maintenance, Read
 
 
@@ -348,6 +351,28 @@ def bigquery_source(project: str, origin: Origin) -> Source:
     return BigQuerySource(project=project, origin=origin)
 
 
+def build_aggregate(db_type: str, read: Read) -> Aggregate:
+    """Return the aggregation of a `read` that has a `pipeline`.
+
+    Raise `ValueError` for a database that is not MongoDB, for a read with no `table` or
+    with a `query` or a `since`, and for a stage that is not a JSON object.
+    """
+    table = read.get("table")
+
+    if db_type != "mongodb":
+        raise ValueError(f"{db_type} has no pipeline: only MongoDB aggregates")
+    if table is None or "query" in read or "since" in read:
+        raise ValueError("A pipeline needs a table, and takes no query or since")
+
+    stages = f"[{','.join(read.get('pipeline', []))}]"
+    try:
+        TypeAdapter(list[dict[str, JsonValue]]).validate_json(stages)
+    except ValidationError:
+        raise ValueError("Each stage of a pipeline is a JSON object") from None
+
+    return Aggregate(stages, table)
+
+
 def read_request(db_type: str, read: Read, batched: bool) -> Origin:
     """Return the origin that a `read` of a database names.
 
@@ -356,9 +381,13 @@ def read_request(db_type: str, read: Read, batched: bool) -> Origin:
     which applies the filters and the chunks itself. A document store (CouchDB and
     MongoDB) takes a `table` (the database or the collection), a `query` (a selector)
     and, for CouchDB, a `since` (a sequence of `_changes`), with no more than one of
-    `query` and `since`. Raise `ValueError` for a read that does not fit.
+    `query` and `since`. MongoDB also takes a `pipeline` of aggregation stages over a
+    `table`. Raise `ValueError` for a read that does not fit.
     """
     table, query, since = read.get("table"), read.get("query"), read.get("since")
+
+    if "pipeline" in read:
+        return build_aggregate(db_type, read)
 
     if db_type in DOCUMENT_STORES:
         if query is not None and since is not None:
@@ -535,6 +564,31 @@ def validate_records(records: Sequence[Mapping[str, JsonValue]], schema: type) -
                 for problem in error.errors()
             )
             raise ValueError(f"record {index}: {problems}") from None
+
+
+def render_query(anchor: str, name: str, **values: TemplateValue | float | date | None) -> str:
+    """Render `queries/<name>.sql`, next to the file `anchor`, as a strict Jinja template.
+
+    A value that is a float, a date or `None` is written as its text. Raise
+    `UndefinedError` for a variable that `values` lacks.
+
+    ```python
+    render_query(__file__, "last_update", table="p.d.t")  # SELECT max(x) FROM p.d.t
+    ```
+    """
+    plain: dict[str, TemplateValue] = {
+        key: str(value) if isinstance(value, float | date | None) else value for key, value in values.items()
+    }
+
+    return render_template(name, plain, roots=(Path(anchor).parent / "queries",))
+
+
+def load_credentials(scopes: Sequence[str] = CREDENTIAL_SCOPES) -> Credentials:
+    """Return the ADC credentials (workload identity) for the scopes.
+
+    Raise `DefaultCredentialsError` if the environment has no credentials.
+    """
+    return cast("Credentials", default(scopes=list(scopes))[0])
 
 
 def read_env(name: str) -> str:
