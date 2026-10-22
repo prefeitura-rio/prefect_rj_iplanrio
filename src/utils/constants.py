@@ -45,3 +45,9 @@ PLACEHOLDER_NAME: Final = r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)*"
 
 TOKEN_KEYS: Final = ("token", "access_token", "authToken", "jwt")
 """The places of a login response where an API puts its token, in the order to look."""
+
+AUDIO_EXTENSIONS: Final = ("mp3", "wav", "ogg", "oga", "opus")
+"""The extensions of the audio files that a transcription accepts."""
+
+NO_SPEECH: Final = "Áudio sem conteúdo reconhecível"
+"""The text of an audio that the transcription found no speech in."""

@@ -3760,7 +3760,9 @@ name = "prefect-rj-iplanrio"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "google-cloud-speech" },
     { name = "idna" },
+    { name = "mutagen" },
     { name = "pandas" },
     { name = "prefect" },
     { name = "prefect-docker" },
@@ -3778,7 +3780,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "google-cloud-speech" },
     { name = "idna", specifier = ">=3.10" },
+    { name = "mutagen" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "prefect", specifier = "==3.8.8" },
     { name = "prefect-docker", specifier = ">=0.7.4" },
