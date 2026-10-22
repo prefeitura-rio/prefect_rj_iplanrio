@@ -1,58 +1,45 @@
-"""
-Constantes para pipeline de agregacao de alertas COR
-"""
+"""Constants of rj_iplanrio__cor_alerts_aggregator."""
 
-from enum import Enum
+from typing import Final
+from zoneinfo import ZoneInfo
 
-
-class CORAlertAggregatorConstants(Enum):
-    """Constantes para o agregador de alertas COR"""
-
-    # BigQuery
-    DATASET_ID = "brutos_eai_logs"
-    QUEUE_TABLE_ID = "cor_alerts_queue"
-    HISTORY_TABLE_ID = "cor_alerts"
-    BILLING_PROJECT_ID = "rj-iplanrio"
-
-    # Agregacao
-    RADIUS_METERS = 500  # Raio de agregacao em metros
-    TIME_WINDOW_MINUTES = 7  # Janela de tempo em minutos
-    IMMEDIATE_THRESHOLD = 5  # Limite para disparo imediato
-
-    # Tipos de alerta validos
-    VALID_ALERT_TYPES = ["enchente", "alagamento", "bolsao"]
-    ALLOWED_NEIGHBORHOODS = ["acari", "jardim america", "guaratiba"]
-    ALLOWED_NEIGHBORHOODS_LABEL = "Acari, Jardim América e Guaratiba"
-
-    # Ambientes validos (whitelist para prevenir SQL injection)
-    VALID_ENVIRONMENTS = ["staging", "prod"]
-
-    # Tabela de alertas agregados (Connected Sheets)
-    AGGREGATED_TABLE_ID = "cor_alerts_aggregated"
-
-    # Tabela de controle de alertas ja enviados
-    SENT_TABLE_ID = "cor_alerts_sent"
-
-    # Destinos validos para envio de alertas
-    VALID_DESTINATIONS = ["cor_api", "google_sheets"]
-
-    # Mapeamentos de tipo de alerta e severidade para payload
-    ALERT_TYPE_MAPPING = {
-        "alagamento": "ALAGAMENTO",
-        "enchente": "ENCHENTE",
-        "bolsao": "BOLSAO_DAGUA",
-    }
-    SEVERITY_PRIORITY_MAPPING = {
-        "alta": "02",
-        "critica": "01",
-    }
-
-    # Google Sheets (escrita direta via API)
-    SHEETS_TAB_NAME = "alertas_agregados"
-
-    # Arquivos temporarios
-    ROOT_FOLDER = "./data_cor_alerts/"
-    FILE_FORMAT = "csv"
-    BIGLAKE_TABLE = False
-    PARTITION_COLUMN = "data_particao"
-    DUMP_MODE = "append"
+SP_TZ: Final = ZoneInfo("America/Sao_Paulo")
+DATASET_ID: Final = "brutos_eai_logs"
+HISTORY_TABLE_ID: Final = "cor_alerts"
+AGGREGATED_TABLE_ID: Final = "cor_alerts_aggregated"
+SENT_TABLE_ID: Final = "cor_alerts_sent"
+DEFAULT_RADIUS_METERS: Final = 500
+DEFAULT_WINDOW_MINUTES: Final = 7
+DEFAULT_IMMEDIATE_THRESHOLD: Final = 5
+"""The number of alerts in a cluster that sends it before the window ends."""
+DEFAULT_RETENTION_HOURS: Final = 24
+EARTH_RADIUS_METERS: Final = 6371008.8
+ALLOWED_NEIGHBORHOODS: Final = ("acari", "jardim america", "guaratiba")
+ALERT_TYPE_CODES: Final = {"alagamento": "ALAGAMENTO", "enchente": "ENCHENTE", "bolsao": "BOLSAO_DAGUA"}
+"""The code of each alert type in the COR events."""
+PRIORITIES: Final = {"alta": "02", "critica": "01"}
+"""The COR priority of each severity."""
+DEFAULT_PRIORITY: Final = "02"
+TEST_PREFIX: Final = "[TESTE] "
+"""The prefix of the type of the events that go to the COR API, until the COR confirms them."""
+EVENT_TYPE_LIMIT: Final = 500
+SHEET_TAB: Final = "alertas_agregados"
+SHEET_COLUMNS: Final = {
+    "created_date": "data_criacao",
+    "alert_type": "tipo_alerta",
+    "bairro": "bairro",
+    "location": "localizacao",
+    "agency_event_type_code": "descricao_evento",
+    "enderecos_ocorrencias": "enderecos_ocorrencias",
+    "telefones_ocorrencias": "telefones_ocorrencias",
+    "latitude": "latitude",
+    "longitude": "longitude",
+    "aggregation_group_id": "id_grupo",
+    "event_id": "id_evento",
+    "alert_ids": "ids_alertas",
+}
+"""The columns of the sheet, with the name of each in the aggregated table, in the order of the sheet."""
+SHEET_TIME_FORMAT: Final = "%d/%m/%Y %H:%M:%S"
+CONCURRENCY_LIMIT: Final = "cor-alerts-aggregator"
+REPORTS_SHOWN: Final = 5
+"""The most reports that the type of an event lists."""

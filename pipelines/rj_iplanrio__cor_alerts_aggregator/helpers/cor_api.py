@@ -1,156 +1,51 @@
-"""
-Cliente para COR OnCall API (versao para Prefect)
-"""
+"""Client of the COR events API."""
 
-from datetime import datetime
-from typing import Any, Dict, List
+from collections.abc import Mapping
 
-import httpx
-from prefect.logging import get_logger
+from httpx2 import AsyncClient
+from pydantic import JsonValue
+from toolkit.telemetry import logger
 
-from pipelines.rj_iplanrio__cor_alerts_aggregator.constants import (
-    CORAlertAggregatorConstants,
-)
-from pipelines.rj_iplanrio__cor_alerts_aggregator.settings import Settings
+from utils.utils import dig, read_json
 
-logger = get_logger("toolkit")
-
-ALERT_TYPE_MAPPING = CORAlertAggregatorConstants.ALERT_TYPE_MAPPING.value
-SEVERITY_PRIORITY_MAPPING = CORAlertAggregatorConstants.SEVERITY_PRIORITY_MAPPING.value
+HTTP_UNAUTHORIZED = 401
 
 
-class COROnCallClient:
-    """Cliente para COR OnCall API"""
+async def login(client: AsyncClient, base_url: str, username: str, password: str) -> str:
+    """Log in to the COR API and return the access token.
 
-    def __init__(self, environment: str = "staging"):
-        self.environment = environment
+    Raise `ValueError` if the API answers with an error or without a token.
+    """
+    response = await client.post(
+        f"{base_url}/hxgnEvents/api/Events/Login", json={"Username": username, "Password": password}
+    )
+    response.raise_for_status()
+    body = read_json(response)
 
-        settings = Settings()
-        self.base_url = settings.COR_EVENTS_BASE_URL
-        self.username = settings.COR_EVENTS_USERNAME
-        self.password = settings.COR_EVENTS_PASSWORD.get_secret_value()
+    if error := dig(body, "Error"):
+        raise ValueError(f"The COR API refused the login: {error}")
 
-        self._access_token = None
+    token = dig(body, "AccessToken")
 
-    def _authenticate(self) -> str:
-        """Obtem token de acesso da API COR"""
-        if not self.base_url:
-            raise ValueError("COR_EVENTS_BASE_URL nao configurado")
+    if not isinstance(token, str) or not token:
+        raise ValueError("The COR API login has no access token")
 
-        login_url = f"{self.base_url}/hxgnEvents/api/Events/Login"
+    return token
 
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(
-                login_url,
-                json={"Username": self.username, "Password": self.password},
-            )
 
-            if response.status_code != 200:
-                raise Exception(f"Autenticacao falhou: {response.status_code}")
+async def open_event(base_url: str, username: str, password: str, event: Mapping[str, JsonValue]) -> None:
+    """Open an event in the COR API, and log in again once if the token has expired.
 
-            data = response.json()
-            if data.get("Error"):
-                raise Exception(f"Erro de autenticacao: {data['Error']}")
+    Raise `ValueError` if the login fails, and `HTTPStatusError` if the API refuses the event.
+    """
+    async with AsyncClient(timeout=30) as client:
+        token = await login(client, base_url, username, password)
+        url = f"{base_url}/hxgnEvents/api/Events/OpenedEvents"
+        response = await client.post(url, json={**event, "Token": token})
 
-            return data["AccessToken"]
+        if response.status_code == HTTP_UNAUTHORIZED:
+            logger.info("The token expired, logging in again")
+            token = await login(client, base_url, username, password)
+            response = await client.post(url, json={**event, "Token": token})
 
-    def submit_aggregated_alert(
-        self,
-        aggregation_group_id: str,
-        alert_type: str,
-        severity: str,
-        descriptions: List[str],
-        addresses: List[str],
-        address: str,
-        latitude: float,
-        longitude: float,
-        alert_count: int,
-        alert_ids: List[str],
-    ) -> Dict[str, Any]:
-        """
-        Envia alerta agregado para COR API.
-
-        Args:
-            aggregation_group_id: ID unico do grupo de agregacao
-            alert_type: Tipo do alerta
-            severity: Severidade (alta, critica)
-            descriptions: Lista de descricoes/relatos dos usuarios
-            addresses: Lista de enderecos individuais de cada relato
-            address: Endereco representativo (usado no campo Location)
-            latitude: Latitude do centroide
-            longitude: Longitude do centroide
-            alert_count: Numero de alertas no grupo (usado internamente)
-            alert_ids: Lista de IDs originais (usado internamente)
-
-        Returns:
-            Resultado da API
-        """
-        if not self.base_url:
-            logger.info("COR API nao configurada - simulando envio")
-            return {"success": True, "simulated": True}
-
-        # Obtem token
-        if not self._access_token:
-            self._access_token = self._authenticate()
-
-        # Construir AgencyEventTypeCode com tipo + relatos + enderecos
-        # TODO: Remover [TESTE] apos validacao em producao
-        type_code = "[TESTE] " + ALERT_TYPE_MAPPING.get(alert_type, alert_type.upper())
-
-        if len(descriptions) == 1:
-            # Alerta unico: "ALAGAMENTO: <relato> [<endereco>]"
-            addr = addresses[0][:80] if addresses else ""
-            agency_event_type = f"{type_code}: {descriptions[0][:150]} [{addr}]"
-        else:
-            # Alerta agregado: "ALAGAMENTO: (1) <relato> [<endereco>] | (2) ..."
-            relatos_formatados = " | ".join(
-                f"({i+1}) {desc[:60]} [{addresses[i][:40] if i < len(addresses) else ''}]"
-                for i, desc in enumerate(descriptions[:5])
-            )
-            if len(descriptions) > 5:
-                relatos_formatados += f" | (+{len(descriptions) - 5} relatos)"
-            agency_event_type = f"{type_code}: {relatos_formatados}"
-
-        # Limitar tamanho total (API pode ter limite)
-        agency_event_type = agency_event_type[:500]
-
-        # Monta payload (apenas campos aceitos pela API COR)
-        payload = {
-            "EventId": aggregation_group_id,
-            "Location": address,
-            "Priority": SEVERITY_PRIORITY_MAPPING.get(severity, "02"),
-            "AgencyEventTypeCode": agency_event_type,
-            "CreatedDate": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "Latitude": latitude,
-            "Longitude": longitude,
-        }
-
-        events_url = f"{self.base_url}/hxgnEvents/api/Events/OpenedEvents"
-
-        def _send_request(token: str) -> httpx.Response:
-            """Envia requisicao com o token fornecido."""
-            # Adicionar token no body do payload
-            payload_with_token = {**payload, "Token": token}
-
-            with httpx.Client(timeout=30.0) as client:
-                return client.post(
-                    events_url,
-                    json=payload_with_token,
-                )
-
-        response = _send_request(self._access_token)
-
-        if response.status_code == 401:
-            # Token expirado, renova e tenta novamente com novo cliente
-            logger.info("Token expirado, renovando...")
-            self._access_token = self._authenticate()
-            response = _send_request(self._access_token)
-
-        if response.status_code != 200:
-            raise Exception(f"Erro ao enviar alerta: {response.status_code} - {response.text}")
-
-        return {
-            "success": True,
-            "status_code": response.status_code,
-            "response": response.json() if response.text else None,
-        }
+        response.raise_for_status()

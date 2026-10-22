@@ -1,814 +1,147 @@
-"""
-Tasks para pipeline de agregacao de alertas COR
+"""Tasks of rj_iplanrio__cor_alerts_aggregator."""
 
-Inclui: fetch, clustering espacial, decisao de envio, submissao API
-"""
-
-import os
-import uuid
-from dataclasses import dataclass
+from asyncio import to_thread
 from datetime import datetime, timedelta
 from pathlib import Path
-from time import sleep
-from typing import Any, Dict, List, Literal, Tuple
-from zoneinfo import ZoneInfo
+from tempfile import TemporaryDirectory
+from uuid import uuid4
 
-import pandas as pd
-from google.cloud import bigquery
+import gspread
+from google.api_core.exceptions import NotFound
+from gspread.utils import ValueInputOption
+from httpx2 import HTTPError
 from prefect import task
-from prefect.logging import get_logger
-from prefect.utilities.asyncutils import run_coro_as_sync
+from toolkit.telemetry import logger
 
 from pipelines.rj_iplanrio__cor_alerts_aggregator.constants import (
-    CORAlertAggregatorConstants,
+    ALLOWED_NEIGHBORHOODS,
+    DATASET_ID,
+    DEFAULT_RETENTION_HOURS,
+    HISTORY_TABLE_ID,
+    SENT_TABLE_ID,
+    SHEET_COLUMNS,
+    SHEET_TAB,
+    SP_TZ,
+    TEST_PREFIX,
 )
-from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from pipelines.rj_iplanrio__cor_alerts_aggregator.helpers.clusters import build_event, read_alerts
+from pipelines.rj_iplanrio__cor_alerts_aggregator.helpers.cor_api import open_event
+from pipelines.rj_iplanrio__cor_alerts_aggregator.helpers.rows import plan_sheet_update
+from pipelines.rj_iplanrio__cor_alerts_aggregator.settings import Settings
+from pipelines.rj_iplanrio__cor_alerts_aggregator.types import Alert, Cluster, Row, Sheet
+from utils.tasks import publish_table_in_bq, read_bq, upload_files_to_gcs, write_records
 from utils.types import Cloud, Table
-from utils.utils import capture_options
+from utils.utils import capture_options, load_credentials, render_query
 
-logger = get_logger("toolkit")
+SHEET_SCOPES = ("https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.readonly")
 
 
-def validate_environment(environment: str) -> str:
+@task(retries=2, retry_delay_seconds=10)
+async def fetch_alerts_task(project: str, window_minutes: int) -> list[Alert]:
+    """Read the alerts of the last minutes that no group has sent, from the allowed neighborhoods.
+
+    The sent table is the one of this pipeline. Before its first run the table does not
+    exist, and every alert in the window is pending.
     """
-    Valida environment contra whitelist para prevenir SQL injection.
-
-    Args:
-        environment: Ambiente a validar
-
-    Returns:
-        Environment validado (lowercase)
-
-    Raises:
-        ValueError: Se environment nao estiver na whitelist
-    """
-    valid_environments = CORAlertAggregatorConstants.VALID_ENVIRONMENTS.value
-    env_lower = environment.strip().lower()
-
-    if env_lower not in valid_environments:
-        raise ValueError(
-            f"Environment '{environment}' invalido. "
-            f"Valores permitidos: {valid_environments}"
-        )
-
-    return env_lower
-
-
-@dataclass
-class AlertCluster:
-    """Representa um cluster de alertas agregados"""
-
-    cluster_id: int
-    alert_type: str
-    alert_ids: List[str]
-    alert_count: int
-    oldest_alert: datetime
-    centroid_lat: float
-    centroid_lng: float
-    addresses: List[str]
-    descriptions: List[str]
-    user_ids: List[str]
-    cluster_neighborhood: str
-    severity: str  # Maior severidade do cluster
-
-
-def _format_numbered_multiline(values: List[str], empty_placeholder: str = "") -> str:
-    """Format a list as a numbered multiline string preserving item order."""
-    lines = []
-    for index, value in enumerate(values, start=1):
-        text = str(value).strip() if value is not None else ""
-        if not text:
-            text = empty_placeholder
-        lines.append(f"{index}. {text}".rstrip())
-    return "\n".join(lines)
-
-
-def get_bigquery_client(billing_project_id: str, bucket_name: str) -> bigquery.Client:
-    """Obtem cliente BigQuery com credenciais"""
-    return bigquery.Client(project=billing_project_id)
-
-
-def _table_exists(table_ref: str, billing_project_id: str) -> bool:
-    """Verifica se uma tabela existe no BigQuery"""
-    client = get_bigquery_client(billing_project_id, billing_project_id)
-    try:
-        client.get_table(table_ref)
-        return True
-    except Exception:
-        return False
-
-
-def query_bigquery(
-    query: str, billing_project_id: str, bucket_name: str
-) -> pd.DataFrame:
-    """Executa query no BigQuery e retorna DataFrame"""
-    logger.info(f"Executando query: {query[:100]}...")
-    client = get_bigquery_client(billing_project_id, bucket_name)
-    job = client.query(query)
-    while not job.done():
-        sleep(1)
-    results = job.result()
-    df = results.to_dataframe(create_bqstorage_client=False)
-    logger.info(f"Query retornou {len(df)} linhas")
-    return df
-
-
-
-@task
-def fetch_pending_alerts(
-    time_window_minutes: int = CORAlertAggregatorConstants.TIME_WINDOW_MINUTES.value,
-) -> pd.DataFrame:
-    """
-    Busca alertas pendentes no BigQuery.
-
-    Args:
-        time_window_minutes: Janela de tempo em minutos
-
-    Returns:
-        DataFrame com alertas pendentes
-    """
-    billing_project = CORAlertAggregatorConstants.BILLING_PROJECT_ID.value
-    dataset = CORAlertAggregatorConstants.DATASET_ID.value
-    history_table = CORAlertAggregatorConstants.HISTORY_TABLE_ID.value
-    sent_table = CORAlertAggregatorConstants.SENT_TABLE_ID.value
-    allowed_neighborhoods = CORAlertAggregatorConstants.ALLOWED_NEIGHBORHOODS.value
-    allowed_neighborhoods_sql = ", ".join(f"'{bairro}'" for bairro in allowed_neighborhoods)
-    allowed_neighborhoods_label = (
-        CORAlertAggregatorConstants.ALLOWED_NEIGHBORHOODS_LABEL.value
-    )
-    neighborhood_from_address_expr = """
-    CASE
-        WHEN REGEXP_CONTAINS(LOWER(q.address), r'\\bacari\\b') THEN 'acari'
-        WHEN REGEXP_CONTAINS(LOWER(q.address), r'\\b(jardim\\s+am[eé]rica|jd\\s+am[eé]rica)\\b') THEN 'jardim america'
-        WHEN REGEXP_CONTAINS(LOWER(q.address), r'\\bguaratiba\\b') THEN 'guaratiba'
-        ELSE ''
-    END
-    """
-
-    logger.info(f"Buscando alertas em {billing_project}.{dataset}.{history_table}")
-
-    # Verifica se tabela de controle (cor_alerts_sent) existe
-    sent_table_ref = f"{billing_project}.{dataset}.{sent_table}"
-    sent_table_exists = _table_exists(sent_table_ref, billing_project)
-
-    if sent_table_exists:
-        from_clause = f"""
-        FROM `{billing_project}.{dataset}.{history_table}` q
-        LEFT JOIN `{sent_table_ref}` s
-            ON q.alert_id = s.alert_id
-        """
-        where_clause = f"""
-        WHERE s.alert_id IS NULL
-            AND q.latitude IS NOT NULL
-            AND q.longitude IS NOT NULL
-            AND CAST(q.created_at AS DATETIME) >= DATETIME_SUB(
-                CURRENT_DATETIME('America/Sao_Paulo'),
-                INTERVAL {time_window_minutes + 3} MINUTE
-            )
-        """
-    else:
-        logger.info(f"Tabela {sent_table_ref} nao existe ainda - buscando todos os alertas pendentes")
-        from_clause = f"""
-        FROM `{billing_project}.{dataset}.{history_table}` q
-        """
-        where_clause = f"""
-        WHERE q.latitude IS NOT NULL
-            AND q.longitude IS NOT NULL
-            AND CAST(q.created_at AS DATETIME) >= DATETIME_SUB(
-                CURRENT_DATETIME('America/Sao_Paulo'),
-                INTERVAL {time_window_minutes + 3} MINUTE
-            )
-        """
-
-    total_query = f"""
-    SELECT COUNT(1) AS total_alertas
-    {from_clause}
-    {where_clause}
-    """
-    total_df = query_bigquery(total_query, billing_project, billing_project)
-    total_alertas = int(total_df.iloc[0]["total_alertas"]) if not total_df.empty else 0
-
-    query = f"""
-    SELECT
-        q.alert_id,
-        q.user_id,
-        q.alert_type,
-        q.severity,
-        q.description,
-        q.address,
-        q.latitude,
-        q.longitude,
-        COALESCE(NULLIF(q.bairro_raw, ''), ({neighborhood_from_address_expr})) AS bairro_raw,
-        COALESCE(NULLIF(q.bairro_normalizado, ''), ({neighborhood_from_address_expr})) AS bairro_normalizado,
-        CAST(q.created_at AS DATETIME) as created_at,
-        q.environment
-    {from_clause}
-    {where_clause}
-        AND COALESCE(NULLIF(q.bairro_normalizado, ''), ({neighborhood_from_address_expr})) IN ({allowed_neighborhoods_sql})
-    ORDER BY created_at ASC
-    """
-    eligible_alerts = query_bigquery(query, billing_project, billing_project)
-
-    filtered_alerts = max(total_alertas - len(eligible_alerts), 0)
-    logger.info(
-        f"Filtro de bairros ({allowed_neighborhoods_label}): "
-        f"total={total_alertas}, elegiveis={len(eligible_alerts)}, filtrados={filtered_alerts}"
-    )
-
-    return eligible_alerts
-
-
-@task
-def cluster_alerts_by_location(
-    alerts_df: pd.DataFrame,
-    radius_meters: int = CORAlertAggregatorConstants.RADIUS_METERS.value,
-) -> List[AlertCluster]:
-    """
-    Agrupa alertas por tipo e localizacao usando DBSCAN espacial.
-
-    Args:
-        alerts_df: DataFrame com alertas pendentes
-        radius_meters: Raio de agregacao em metros
-
-    Returns:
-        Lista de clusters de alertas
-    """
-    if alerts_df.empty:
-        logger.info("Nenhum alerta pendente para clusterizar")
-        return []
-
-    billing_project = CORAlertAggregatorConstants.BILLING_PROJECT_ID.value
-
-    # Build the STRUCT array for the query
-    # Só incluir campos necessários para clustering (alert_type, lat/lng, alert_id)
-    struct_parts = []
-    for _, row in alerts_df.iterrows():
-        alert_id = str(row.alert_id).replace("'", "''")
-        alert_type = str(row.alert_type).replace("'", "''")
-
-        # Formatar created_at
-        if isinstance(row.created_at, str):
-            created_at_str = row.created_at
-        else:
-            created_at_str = row.created_at.strftime('%Y-%m-%d %H:%M:%S')
-
-        lat = float(row.latitude)
-        lng = float(row.longitude)
-
-        # STRUCT simplificado - só o necessário para clustering
-        struct = f"STRUCT('{alert_id}' AS alert_id, '{alert_type}' AS alert_type, {lat} AS latitude, {lng} AS longitude, DATETIME('{created_at_str}') AS created_at)"
-        struct_parts.append(struct)
-
-    structs_str = ", ".join(struct_parts)
-
-    query = f"""
-    WITH alerts AS (
-        SELECT *
-        FROM UNNEST([
-            {structs_str}
-        ])
-    ),
-
-    clustered AS (
-        SELECT
-            *,
-            ST_CLUSTERDBSCAN(
-                ST_GEOGPOINT(longitude, latitude),
-                {radius_meters},
-                1
-            ) OVER (PARTITION BY alert_type) as cluster_id
-        FROM alerts
-    )
-
-    SELECT
-        alert_type,
-        cluster_id,
-        ARRAY_AGG(alert_id) as alert_ids,
-        COUNT(*) as alert_count,
-        MIN(created_at) as oldest_alert,
-        AVG(latitude) as centroid_lat,
-        AVG(longitude) as centroid_lng
-    FROM clustered
-    WHERE cluster_id IS NOT NULL
-    GROUP BY alert_type, cluster_id
-    ORDER BY alert_type, oldest_alert
-    """
-
-    result_df = query_bigquery(query, billing_project, billing_project)
-
-    clusters = []
-    for _, row in result_df.iterrows():
-        alert_ids = row["alert_ids"]
-
-        # Buscar metadados do DataFrame original usando alert_ids
-        cluster_alerts = alerts_df[alerts_df["alert_id"].isin(alert_ids)].copy()
-        cluster_alerts = cluster_alerts.sort_values(
-            by=["created_at", "alert_id"], ascending=True, kind="stable"
-        )
-
-        addresses = cluster_alerts["address"].fillna("").astype(str).tolist()
-        descriptions = cluster_alerts["description"].fillna("").astype(str).tolist()
-        severities = cluster_alerts["severity"].fillna("").astype(str).str.lower().tolist()
-        user_ids = cluster_alerts["user_id"].fillna("").astype(str).tolist()
-        neighborhoods = (
-            cluster_alerts["bairro_normalizado"].fillna("").astype(str).tolist()
-            if "bairro_normalizado" in cluster_alerts.columns
-            else []
-        )
-        cluster_neighborhood = next((bairro for bairro in neighborhoods if bairro), "")
-
-        # Determina severidade maxima do cluster
-        max_severity = "critica" if "critica" in severities else "alta"
-
-        clusters.append(
-            AlertCluster(
-                cluster_id=row["cluster_id"],
-                alert_type=row["alert_type"],
-                alert_ids=alert_ids,
-                alert_count=row["alert_count"],
-                oldest_alert=row["oldest_alert"],
-                centroid_lat=row["centroid_lat"],
-                centroid_lng=row["centroid_lng"],
-                addresses=addresses,
-                descriptions=descriptions,
-                user_ids=user_ids,
-                cluster_neighborhood=cluster_neighborhood,
-                severity=max_severity,
-            )
-        )
-
-    logger.info(f"Encontrados {len(clusters)} clusters de alertas")
-    return clusters
-
-
-@task
-def should_send_cluster(
-    cluster: AlertCluster,
-    immediate_threshold: int = CORAlertAggregatorConstants.IMMEDIATE_THRESHOLD.value,
-    time_window_minutes: int = CORAlertAggregatorConstants.TIME_WINDOW_MINUTES.value,
-) -> Tuple[bool, str]:
-    """
-    Determina se um cluster deve ser enviado para COR API.
-
-    Regras (SEMPRE espera 7 min OU 5 relatos, o que vier primeiro):
-    - 5+ alertas: envia imediatamente (limite atingido)
-    - 1-4 alertas + janela expirou: envia (agregado ou nao)
-    - 1-4 alertas + janela ativa: aguarda
-
-    Args:
-        cluster: Cluster de alertas
-        immediate_threshold: Limite para disparo imediato (default: 5)
-        time_window_minutes: Janela de tempo em minutos (default: 7)
-
-    Returns:
-        (should_send, reason)
-    """
-    # Usa timezone de Sao Paulo para consistencia com BigQuery
-    # (CURRENT_DATETIME('America/Sao_Paulo'))
-    tz_saopaulo = ZoneInfo("America/Sao_Paulo")
-    now = datetime.now(tz_saopaulo)
-
-    # Handle timezone-aware comparison
-    oldest_alert = cluster.oldest_alert
-    if oldest_alert.tzinfo is None:
-        # BigQuery retorna em America/Sao_Paulo quando nao especificado
-        oldest_alert = oldest_alert.replace(tzinfo=tz_saopaulo)
-
-    oldest_age_minutes = (now - oldest_alert).total_seconds() / 60
-
-    # Regra 1: 5+ alertas - envia imediatamente (limite atingido)
-    if cluster.alert_count >= immediate_threshold:
-        return (
-            True,
-            f"Limite atingido ({cluster.alert_count}/{immediate_threshold}) - enviando imediatamente",
-        )
-
-    # Regra 2: 1-4 alertas - verifica se janela de 7 min expirou
-    if oldest_age_minutes >= time_window_minutes:
-        return (
-            True,
-            f"Janela expirada ({oldest_age_minutes:.1f} min) - enviando {cluster.alert_count} alerta(s)",
-        )
-
-    # Regra 3: 1-4 alertas + janela ativa - aguarda
-    remaining = time_window_minutes - oldest_age_minutes
-    return (
-        False,
-        f"Aguardando: {cluster.alert_count} alerta(s), {remaining:.1f} min restantes para janela expirar",
-    )
-
-
-@task
-def submit_cluster_to_cor_api(
-    cluster: AlertCluster,
-    environment: str,
-) -> Dict[str, Any]:
-    """
-    Envia cluster agregado para COR OnCall API.
-
-    Args:
-        cluster: Cluster de alertas a enviar
-        environment: staging ou prod
-
-    Returns:
-        Resultado da submissao
-    """
-    from pipelines.rj_iplanrio__cor_alerts_aggregator.helpers.cor_api import (
-        COROnCallClient,
-    )
-
-    # Gera ID do grupo de agregacao
-    aggregation_group_id = str(uuid.uuid4())
-
-    # Monta endereco representativo (primeiro ou mais frequente)
-    representative_address = cluster.addresses[0] if cluster.addresses else ""
+    values = {
+        "history_table": f"{project}.{DATASET_ID}.{HISTORY_TABLE_ID}",
+        "window_minutes": window_minutes,
+        "neighborhoods": list(ALLOWED_NEIGHBORHOODS),
+    }
+    sent_table = f"{project}.{DATASET_ID}.{SENT_TABLE_ID}"
 
     try:
-        client = COROnCallClient(environment=environment)
-        result = client.submit_aggregated_alert(
-            aggregation_group_id=aggregation_group_id,
-            alert_type=cluster.alert_type,
-            severity=cluster.severity,
-            descriptions=cluster.descriptions,
-            addresses=cluster.addresses,
-            address=representative_address,
-            latitude=cluster.centroid_lat,
-            longitude=cluster.centroid_lng,
-            alert_count=cluster.alert_count,
-            alert_ids=cluster.alert_ids,
+        frame = await read_bq(
+            render_query(__file__, "pending_alerts", sent_table=sent_table, **values), project=project
         )
+    except NotFound:
+        logger.info("The sent table does not exist yet: table=%s", sent_table)
+        frame = await read_bq(render_query(__file__, "pending_alerts", sent_table="", **values), project=project)
 
-        logger.info(f"Cluster {cluster.cluster_id} enviado para COR: {result}")
-        return {
-            "success": True,
-            "aggregation_group_id": aggregation_group_id,
-            "alert_ids": cluster.alert_ids,
-            "result": result,
-        }
+    alerts = read_alerts(frame.to_dicts())
+    logger.info("Pending alerts read: count=%d", len(alerts))
 
-    except Exception as e:
-        logger.error(f"Erro ao enviar cluster {cluster.cluster_id}: {e}")
-        return {
-            "success": False,
-            "aggregation_group_id": aggregation_group_id,
-            "alert_ids": cluster.alert_ids,
-            "error": str(e),
-        }
+    return alerts
 
 
 @task
-def build_cluster_dataframe(
-    cluster: AlertCluster,
-    environment: str,
-) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+async def open_event_task(cluster: Cluster) -> str | None:
+    """Send a cluster to the COR API as an event, and return its group id, or nothing if the COR refuses it.
+
+    The event type starts with `[TESTE]` until the COR confirms the events.
     """
-    Constroi DataFrame com dados do cluster para upload ao BigQuery.
+    settings = Settings()
+    group_id = str(uuid4())
+    event = build_event(cluster, group_id, datetime.now(SP_TZ), TEST_PREFIX)
 
-    Args:
-        cluster: Cluster de alertas a enviar
-        environment: staging ou prod
-
-    Returns:
-        Tupla (DataFrame com linha do cluster, metadata com aggregation_group_id e alert_ids)
-    """
-    env_validated = validate_environment(environment)
-
-    aggregation_group_id = str(uuid.uuid4())
-
-    alert_type_mapping = CORAlertAggregatorConstants.ALERT_TYPE_MAPPING.value
-    severity_priority_mapping = CORAlertAggregatorConstants.SEVERITY_PRIORITY_MAPPING.value
-
-    type_code = alert_type_mapping.get(cluster.alert_type, cluster.alert_type.upper())
-    priority = severity_priority_mapping.get(cluster.severity, "02")
-
-    representative_address = cluster.addresses[0] if cluster.addresses else ""
-
-    # Construir AgencyEventTypeCode com relatos + enderecos
-    if len(cluster.descriptions) == 1:
-        addr = cluster.addresses[0][:80] if cluster.addresses else ""
-        agency_event_type = f"{type_code}: {cluster.descriptions[0][:150]} [{addr}]"
-    else:
-        relatos = " | ".join(
-            f"({i+1}) {d[:60]} [{cluster.addresses[i][:40] if i < len(cluster.addresses) else ''}]"
-            for i, d in enumerate(cluster.descriptions[:5])
+    try:
+        await open_event(
+            settings.COR_EVENTS_BASE_URL,
+            settings.COR_EVENTS_USERNAME,
+            settings.COR_EVENTS_PASSWORD.get_secret_value(),
+            event,
         )
-        if len(cluster.descriptions) > 5:
-            relatos += f" | (+{len(cluster.descriptions) - 5} relatos)"
-        agency_event_type = f"{type_code}: {relatos}"
+    except (HTTPError, ValueError) as error:
+        logger.error("The COR API refused the cluster: cluster=%d error=%s", cluster.cluster_id, error)
+        return None
 
-    now_sp = datetime.now(ZoneInfo("America/Sao_Paulo"))
-    formatted_addresses = _format_numbered_multiline(
-        cluster.addresses, empty_placeholder="endereco nao informado"
-    )
-    formatted_user_ids = _format_numbered_multiline(
-        cluster.user_ids, empty_placeholder="telefone nao informado"
-    )
+    logger.info("Cluster sent to the COR: cluster=%d group=%s", cluster.cluster_id, group_id)
 
-    row = {
-        "aggregation_group_id": aggregation_group_id,
-        "event_id": str(uuid.uuid4()),
-        "bairro": cluster.cluster_neighborhood,
-        "location": representative_address,
-        "priority": priority,
-        "agency_event_type_code": agency_event_type[:500],
-        "enderecos_ocorrencias": formatted_addresses,
-        "telefones_ocorrencias": formatted_user_ids,
-        "created_date": now_sp.strftime("%d/%m/%Y %H:%M:%S"),
-        "latitude": cluster.centroid_lat,
-        "longitude": cluster.centroid_lng,
-        "alert_ids": ",".join(cluster.alert_ids),
-        "alert_count": cluster.alert_count,
-        "alert_type": cluster.alert_type,
-        "severity": cluster.severity,
-        "environment": env_validated,
-        "data_particao": now_sp.strftime("%Y-%m-%d"),
-    }
-
-    df = pd.DataFrame([row])
-
-    metadata = {
-        "aggregation_group_id": aggregation_group_id,
-        "alert_ids": cluster.alert_ids,
-    }
-
-    logger.info(
-        f"Cluster {cluster.cluster_id} preparado para BigQuery: "
-        f"{cluster.alert_count} alertas, aggregation_group_id={aggregation_group_id}"
-    )
-
-    return df, metadata
+    return group_id
 
 
 @task
-def create_date_partitions(
-    dataframe,
-    partition_column: str | None = None,
-    file_format: Literal["csv", "parquet"] = "csv",
-    root_folder="./data/",
-):
-    """Save a DataFrame in one file, with the columns `ano_particao`, `mes_particao` and `data_particao`."""
-    if partition_column is None:
-        partition_column = "data_particao"
-        dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
-    else:
-        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column], errors="coerce")
-        dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
-        if dataframe["data_particao"].isnull().any():
-            raise ValueError("Some dates in the partition column could not be parsed.")
+async def load_rows_task(rows: list[Row], table_id: str, cloud: Cloud) -> None:
+    """Add rows to a table of the dataset of the pipeline in BigQuery."""
+    table = Table(dataset_id=DATASET_ID, table_id=table_id)
 
-    dataframe["ano_particao"] = dataframe["data_particao"].str[:4]
-    dataframe["mes_particao"] = dataframe["data_particao"].str[5:7]
-    columns = [c for c in dataframe.columns if c not in ("ano_particao", "mes_particao", "data_particao")]
-    dataframe = dataframe[[*columns, "ano_particao", "mes_particao", "data_particao"]]
-
-    os.makedirs(root_folder, exist_ok=True)
-    file_path = os.path.join(root_folder, f"{uuid.uuid4()}.{file_format}")
-
-    if file_format == "csv":
-        dataframe.to_csv(file_path, index=False)
-    else:
-        dataframe.to_parquet(file_path, index=False)
-
-    logger.info("Files saved on %s", root_folder)
-    return root_folder
-
-
-@task
-def write_clusters_to_google_sheets(
-    dataframe: pd.DataFrame,
-    spreadsheet_id: str,
-    sheet_tab: str = CORAlertAggregatorConstants.SHEETS_TAB_NAME.value,
-    sheet_retention_hours: int = 24,
-) -> int:
-    """
-    Escreve clusters no Google Sheet via API, com upsert por id_grupo.
-
-    - Se id_grupo ja existe no Sheet: atualiza a linha
-    - Se nao existe: appenda nova linha
-
-    As colunas são escritas em português e apenas as colunas relevantes são
-    incluídas (remove colunas técnicas: priority, alert_count, severity, environment).
-
-    Reutiliza credenciais SA ja injetadas no ambiente (inject_bd_credentials_task).
-    A SA precisa ter permissao de Editor no Sheet.
-
-    Returns:
-        Numero de linhas escritas (inseridas + atualizadas)
-    """
-    import google.auth
-    import gspread
-
-    if dataframe.empty:
-        logger.info("DataFrame vazio, nada a escrever no Sheet.")
-        return 0
-
-    if not spreadsheet_id:
-        logger.warning("spreadsheet_id nao fornecido, pulando escrita no Sheet.")
-        return 0
-
-    SCOPES = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive.readonly",
-    ]
-
-    creds, _ = google.auth.default(scopes=SCOPES)
-    gc = gspread.authorize(creds)
-    worksheet = gc.open_by_key(spreadsheet_id).worksheet(sheet_tab)
-
-    # Mapeamento: nome no DataFrame -> nome no Sheet (português)
-    # Remove colunas técnicas: priority, alert_count, severity, environment
-    COLUMN_MAPPING = {
-        "created_date": "data_criacao",
-        "alert_type": "tipo_alerta",
-        "bairro": "bairro",
-        "location": "localizacao",
-        "agency_event_type_code": "descricao_evento",
-        "enderecos_ocorrencias": "enderecos_ocorrencias",
-        "telefones_ocorrencias": "telefones_ocorrencias",
-        "latitude": "latitude",
-        "longitude": "longitude",
-        "aggregation_group_id": "id_grupo",
-        "event_id": "id_evento",
-        "alert_ids": "ids_alertas",
-    }
-
-    # Colunas a incluir no Google Sheets (em português)
-    # Ordem: data/tipo/local primeiro, depois coordenadas e IDs
-    COLUMNS = [
-        "data_criacao",
-        "tipo_alerta",
-        "bairro",
-        "localizacao",
-        "descricao_evento",
-        "enderecos_ocorrencias",
-        "telefones_ocorrencias",
-        "latitude",
-        "longitude",
-        "id_grupo",
-        "id_evento",
-        "ids_alertas",
-    ]
-
-    existing_values = worksheet.get_all_values()
-
-    if not existing_values:
-        worksheet.append_row(COLUMNS)
-        rows_to_append = [
-            [str(row.get(col_en, "")) for col_en in COLUMN_MAPPING.keys()]
-            for _, row in dataframe.iterrows()
-        ]
-        worksheet.append_rows(rows_to_append, value_input_option="RAW")
-        logger.info(f"Sheet vazio: escrito header + {len(rows_to_append)} linhas")
-        return len(rows_to_append)
-
-    header = existing_values[0]
-    if header != COLUMNS:
-        worksheet.clear()
-        worksheet.append_row(COLUMNS)
-        rows_to_append = [
-            [str(row.get(col_en, "")) for col_en in COLUMN_MAPPING.keys()]
-            for _, row in dataframe.iterrows()
-        ]
-        worksheet.append_rows(rows_to_append, value_input_option="RAW")
-        logger.info(f"Header incompativel, Sheet recriado: {len(rows_to_append)} linhas")
-        return len(rows_to_append)
-    id_col_idx = header.index("id_grupo")
-
-    # Remover linhas mais antigas que sheet_retention_hours
-    cutoff = datetime.now(ZoneInfo("America/Sao_Paulo")) - timedelta(hours=sheet_retention_hours)
-    date_col_idx = COLUMNS.index("data_criacao")
-    stale_rows = []
-    for i in range(1, len(existing_values)):
-        row = existing_values[i]
-        if len(row) > date_col_idx:
-            try:
-                row_dt = datetime.strptime(row[date_col_idx], "%d/%m/%Y %H:%M:%S")
-                row_dt = row_dt.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
-                if row_dt < cutoff:
-                    stale_rows.append(i + 1)  # 1-based sheet row
-            except ValueError:
-                pass
-    if stale_rows:
-        for sheet_row in sorted(stale_rows, reverse=True):
-            worksheet.delete_rows(sheet_row)
-        logger.info(f"Removidas {len(stale_rows)} linhas com mais de {sheet_retention_hours}h do Sheet")
-        existing_values = worksheet.get_all_values()
-
-    # Mapa: aggregation_group_id -> indice de linha no Sheet (1-based, skip header)
-    existing_map = {
-        existing_values[i][id_col_idx]: i + 1
-        for i in range(1, len(existing_values))
-        if len(existing_values[i]) > id_col_idx
-    }
-
-    updates = []
-    appends = []
-
-    for _, row in dataframe.iterrows():
-        row_values = [str(row.get(col_en, "")) for col_en in COLUMN_MAPPING.keys()]
-        agg_id = str(row.get("aggregation_group_id", ""))
-
-        if agg_id in existing_map:
-            sheet_row_num = existing_map[agg_id]
-            cell_range = f"A{sheet_row_num}"
-            updates.append({
-                "range": cell_range,
-                "values": [row_values],
-            })
-        else:
-            appends.append(row_values)
-
-    written = 0
-    if updates:
-        worksheet.batch_update(updates, value_input_option="RAW")
-        written += len(updates)
-        logger.info(f"Atualizadas {len(updates)} linhas existentes no Sheet")
-
-    if appends:
-        worksheet.append_rows(appends, value_input_option="RAW")
-        written += len(appends)
-        logger.info(f"Inseridas {len(appends)} novas linhas no Sheet")
-
-    return written
-
-
-@task
-def mark_alerts_as_sent(
-    alert_ids: List[str],
-    aggregation_group_id: str,
-    environment: str,
-    cloud: Cloud,
-) -> int:
-    """
-    Registra alertas como enviados na tabela de controle (cor_alerts_sent).
-
-    Grava os alert_ids na tabela de controle via GCS upload.
-    A tabela cor_alerts_queue (externa/GCS) nao suporta DML UPDATE,
-    entao o controle de "ja enviado" e feito por tabela separada.
-
-    Args:
-        alert_ids: Lista de IDs de alertas
-        aggregation_group_id: ID do grupo de agregacao
-        environment: staging ou prod
-
-    Returns:
-        Numero de alertas registrados
-    """
-
-    env_validated = validate_environment(environment)
-
-    now_sp = datetime.now(ZoneInfo("America/Sao_Paulo"))
-    sent_at = now_sp.strftime("%Y-%m-%d %H:%M:%S")
-
-    rows = [
-        {
-            "alert_id": alert_id,
-            "aggregation_group_id": aggregation_group_id,
-            "sent_at": sent_at,
-            "environment": env_validated,
-            "data_particao": now_sp.strftime("%Y-%m-%d"),
-        }
-        for alert_id in alert_ids
-    ]
-
-    df = pd.DataFrame(rows)
-
-    dataset_id = CORAlertAggregatorConstants.DATASET_ID.value
-    table_id = CORAlertAggregatorConstants.SENT_TABLE_ID.value
-    root_folder = f"{CORAlertAggregatorConstants.ROOT_FOLDER.value}{table_id}"
-
-    # Salvar particoes em disco
-    partition_column = CORAlertAggregatorConstants.PARTITION_COLUMN.value
-    file_format = CORAlertAggregatorConstants.FILE_FORMAT.value
-
-    df_copy = df.copy()
-    date_str = now_sp.strftime("%Y-%m-%d")
-    os.makedirs(root_folder, exist_ok=True)
-
-    df_copy["ano_particao"] = date_str[:4]
-    df_copy["mes_particao"] = date_str[5:7]
-    df_copy["data_particao"] = date_str
-    file_path = os.path.join(root_folder, f"{uuid.uuid4()}.{file_format}")
-    df_copy.to_csv(file_path, index=False)
-
-    # Upload para BigQuery
-    table = Table(dataset_id=dataset_id, table_id=table_id)
-    dump_mode = CORAlertAggregatorConstants.DUMP_MODE.value
-    run_coro_as_sync(
-        upload_files_to_gcs.fn(
-            Path(root_folder),
+    with TemporaryDirectory() as directory:
+        folder = await write_records.fn(rows, Path(directory))
+        await upload_files_to_gcs.fn(
+            folder,
             table,
             bucket=cloud["bucket"],
-            dump_mode=dump_mode,
-            source_format=file_format,
-            options=capture_options(dump_mode),
+            dump_mode="append",
+            source_format="json",
+            options=capture_options("append"),
         )
-    )
-    run_coro_as_sync(publish_table_in_bq.fn(table, cloud))
 
-    logger.info(
-        f"{len(alert_ids)} alertas registrados como enviados em {dataset_id}.{table_id} "
-        f"(aggregation_group_id={aggregation_group_id})"
-    )
+    await publish_table_in_bq.fn(table, cloud)
+    logger.info("Rows added: table=%s count=%d", table_id, len(rows))
 
-    return len(alert_ids)
+
+def update_sheet(rows: list[Row], sheet: Sheet) -> int:
+    """Bring the sheet up to date with the rows, and return how many rows it wrote."""
+    client = gspread.authorize(load_credentials(SHEET_SCOPES))
+    worksheet = client.open_by_key(sheet["spreadsheet_id"]).worksheet(SHEET_TAB)
+    cutoff = datetime.now(SP_TZ) - timedelta(hours=sheet.get("retention_hours", DEFAULT_RETENTION_HOURS))
+    plan = plan_sheet_update(worksheet.get_all_values(), rows, cutoff)
+
+    if plan.clear:
+        worksheet.clear()
+
+    if plan.header:
+        worksheet.append_row(list(SHEET_COLUMNS.values()))
+
+    for number in sorted(plan.stale_rows, reverse=True):
+        worksheet.delete_rows(number)
+
+    if plan.updates:
+        worksheet.batch_update(
+            [{"range": f"A{number}", "values": [line]} for number, line in plan.updates.items()],
+            value_input_option=ValueInputOption.raw,
+        )
+
+    if plan.appends:
+        worksheet.append_rows(plan.appends, value_input_option=ValueInputOption.raw)
+
+    return len(plan.updates) + len(plan.appends)
+
+
+@task
+async def write_sheet_task(rows: list[Row], sheet: Sheet) -> int:
+    """Upsert the rows of the clusters in the Google Sheet by group id, and drop the stale rows."""
+    written = await to_thread(update_sheet, rows, sheet)
+    logger.info("Sheet written: rows=%d", written)
+
+    return written

@@ -5300,19 +5300,13 @@ name = "rj-iplanrio-cor-alerts-aggregator"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__cor_alerts_aggregator" }
 dependencies = [
-    { name = "google-cloud-bigquery" },
     { name = "gspread" },
-    { name = "httpx" },
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "google-cloud-bigquery" },
     { name = "gspread" },
-    { name = "httpx" },
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio", editable = "." },
 ]
 

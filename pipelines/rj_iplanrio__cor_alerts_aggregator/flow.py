@@ -1,257 +1,102 @@
-"""
-Flow para agregacao e envio de alertas COR. v2.
-Executa a cada 2 minutos, busca alertas pendentes, agrupa por localizacao
-e envia para COR OnCall API conforme regras de agregacao.
+"""Flow for rj_iplanrio__cor_alerts_aggregator."""
 
-Regras: clustering 500m, janela 7min, threshold 5 alertas
-"""
-
-import json
-import uuid
 from datetime import datetime
+from json import dumps
+from uuid import uuid4
 
-import pandas as pd
 from prefect import flow
 from prefect.concurrency.asyncio import concurrency
+from toolkit.telemetry import logger
 
 from pipelines.rj_iplanrio__cor_alerts_aggregator.constants import (
-    CORAlertAggregatorConstants,
+    AGGREGATED_TABLE_ID,
+    CONCURRENCY_LIMIT,
+    DEFAULT_IMMEDIATE_THRESHOLD,
+    DEFAULT_RADIUS_METERS,
+    DEFAULT_WINDOW_MINUTES,
+    SENT_TABLE_ID,
+    SP_TZ,
 )
-
-# Mapeamentos para construir payload de log
-ALERT_TYPE_MAPPING = CORAlertAggregatorConstants.ALERT_TYPE_MAPPING.value
-SEVERITY_PRIORITY_MAPPING = CORAlertAggregatorConstants.SEVERITY_PRIORITY_MAPPING.value
-from pathlib import Path
-
-from prefect.logging import get_logger
-
+from pipelines.rj_iplanrio__cor_alerts_aggregator.helpers.clusters import build_event, group_alerts, should_send_cluster
+from pipelines.rj_iplanrio__cor_alerts_aggregator.helpers.rows import build_cluster_row, build_sent_rows
 from pipelines.rj_iplanrio__cor_alerts_aggregator.tasks import (
-    build_cluster_dataframe,
-    cluster_alerts_by_location,
-    create_date_partitions,
-    fetch_pending_alerts,
-    mark_alerts_as_sent,
-    should_send_cluster,
-    submit_cluster_to_cor_api,
-    write_clusters_to_google_sheets,
+    fetch_alerts_task,
+    load_rows_task,
+    open_event_task,
+    write_sheet_task,
 )
-from utils.tasks import publish_table_in_bq, upload_files_to_gcs
-from utils.types import Cloud, Table
-from utils.utils import capture_options
-
-logger = get_logger("toolkit")
+from pipelines.rj_iplanrio__cor_alerts_aggregator.types import Destination, Environment, Row, Rules, Sheet
+from utils.hooks import notify_failure
+from utils.types import Cloud
 
 
-@flow(log_prints=True, flow_run_name="cor_alerts_aggregator_{environment}")
+@flow(log_prints=True, flow_run_name="cor-alerts-aggregator-{environment}", on_failure=[notify_failure])
 async def rj_iplanrio__cor_alerts_aggregator(
     *,
     cloud: Cloud,
-    environment: str = "staging",
-    radius_meters: int = CORAlertAggregatorConstants.RADIUS_METERS.value,
-    time_window_minutes: int = CORAlertAggregatorConstants.TIME_WINDOW_MINUTES.value,
-    immediate_threshold: int = CORAlertAggregatorConstants.IMMEDIATE_THRESHOLD.value,
-    dry_run: bool = False,
-    destination: str = "google_sheets",
-    spreadsheet_id: str = "",
-    sheet_retention_hours: int = 24,
-):
+    environment: Environment = "staging",
+    destination: Destination = "google_sheets",
+    rules: Rules | None = None,
+    sheet: Sheet | None = None,
+) -> None:
+    """Group the pending COR alerts by place, and send each group that is ready.
+
+    The alerts of one type within the radius of each other (500 meters) form a cluster. A cluster
+    goes out when it has 5 alerts, or when its oldest alert is 7 minutes old, and waits until then.
+    `destination` is `cor_api` (an event in the COR API), `google_sheets` (a row in the aggregated
+    table and in the sheet) or `dry_run` (only a log). Each sent alert enters the sent table, so
+    no alert goes out twice. Only one run works at a time.
     """
-    Agrega alertas COR pendentes e envia para API do COR ou BigQuery.
+    rules = rules or {}
+    threshold = rules.get("immediate_threshold", DEFAULT_IMMEDIATE_THRESHOLD)
+    window = rules.get("window_minutes", DEFAULT_WINDOW_MINUTES)
 
-    Regras de agregacao:
-    - Agrupa alertas por tipo (enchente, alagamento, bolsao) em raio de 500m
-    - 5+ alertas em cluster: envia imediatamente (limite atingido)
-    - 1-4 alertas + janela 7 min expirou: envia
-    - 1-4 alertas + janela ativa: aguarda mais relatos
-
-    Args:
-        environment: Ambiente (staging ou prod)
-        radius_meters: Raio de agregacao em metros (default: 500)
-        time_window_minutes: Janela de tempo em minutos (default: 7)
-        immediate_threshold: Limite para disparo imediato (default: 5)
-        dry_run: Se True, nao envia para destino (apenas simula)
-        destination: Destino dos alertas ("cor_api" ou "google_sheets")
-        spreadsheet_id: ID do Google Sheet para escrita direta via API (destination=google_sheets)
-        sheet_retention_hours: Horas de retencao de linhas no Sheet (default: 24)
-    """
-    valid_destinations = CORAlertAggregatorConstants.VALID_DESTINATIONS.value
-    if destination not in valid_destinations:
-        raise ValueError(
-            f"Destination '{destination}' invalido. "
-            f"Valores permitidos: {valid_destinations}"
-        )
-    run_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    logger.info(f"=== Iniciando agregacao de alertas COR - {environment} ===")
-    logger.info(f"Destino: {destination}")
-    logger.info(
-        f"Parametros: raio={radius_meters}m, janela={time_window_minutes}min, limite={immediate_threshold}"
-    )
-
-    # Adquirir lock de concorrencia (limite 1)
-    # Se outra execucao estiver em andamento, esta aguarda
-    async with concurrency("cor-alerts-aggregator", occupy=1):
-        logger.info("Lock de concorrencia adquirido")
-
-        # Injetar credenciais
-
-        # 1. Buscar alertas pendentes
-        pending_alerts = fetch_pending_alerts(
-            time_window_minutes=time_window_minutes,
-        )
-
-        if pending_alerts.empty:
-            logger.info("Nenhum alerta pendente encontrado")
-            return {"alerts_processed": 0, "clusters_sent": 0}
-
-        logger.info(f"Encontrados {len(pending_alerts)} alertas pendentes")
-
-        # 2. Agrupar por tipo e localizacao
-        clusters = cluster_alerts_by_location(
-            alerts_df=pending_alerts,
-            radius_meters=radius_meters,
-        )
-
-        if not clusters:
-            logger.info("Nenhum cluster formado (alertas sem coordenadas?)")
-            return {"alerts_processed": 0, "clusters_sent": 0}
-
-        # 3. Processar cada cluster
-        clusters_sent = 0
-        alerts_sent = 0
-        bq_dataframes = []
-        bq_metadata_list = []
+    async with concurrency(CONCURRENCY_LIMIT, occupy=1):
+        alerts = await fetch_alerts_task(cloud["project"], window)
+        clusters = group_alerts(alerts, rules.get("radius_meters", DEFAULT_RADIUS_METERS))
+        now = datetime.now(SP_TZ)
+        ready = []
 
         for cluster in clusters:
-            send_decision, reason = should_send_cluster(
-                cluster=cluster,
-                immediate_threshold=immediate_threshold,
-                time_window_minutes=time_window_minutes,
-            )
-
+            send, reason = should_send_cluster(cluster, threshold, window, now)
             logger.info(
-                f"Cluster {cluster.cluster_id} ({cluster.alert_type}): "
-                f"{cluster.alert_count} alertas - {reason}"
+                "Cluster %d (%s): %d alerts, %s", cluster.cluster_id, cluster.alert_type, cluster.alert_count, reason
             )
 
-            if send_decision:
-                if dry_run:
-                    # Construir AgencyEventTypeCode com relatos + enderecos (igual cor_api.py)
-                    type_code = ALERT_TYPE_MAPPING.get(
-                        cluster.alert_type, cluster.alert_type.upper()
-                    )
-                    if len(cluster.descriptions) == 1:
-                        addr = cluster.addresses[0][:80] if cluster.addresses else ""
-                        agency_event_type = f"{type_code}: {cluster.descriptions[0][:150]} [{addr}]"
-                    else:
-                        relatos = " | ".join(
-                            f"({i+1}) {d[:60]} [{cluster.addresses[i][:40] if i < len(cluster.addresses) else ''}]"
-                            for i, d in enumerate(cluster.descriptions[:5])
-                        )
-                        if len(cluster.descriptions) > 5:
-                            relatos += f" | (+{len(cluster.descriptions) - 5} relatos)"
-                        agency_event_type = f"{type_code}: {relatos}"
+            if send:
+                ready.append(cluster)
 
-                    # Construir payload para log
-                    dry_run_payload = {
-                        "EventId": str(uuid.uuid4()),
-                        "Location": cluster.addresses[0] if cluster.addresses else "",
-                        "Priority": SEVERITY_PRIORITY_MAPPING.get(cluster.severity, "02"),
-                        "AgencyEventTypeCode": agency_event_type[:500],
-                        "CreatedDate": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "Latitude": cluster.centroid_lat,
-                        "Longitude": cluster.centroid_lng,
-                    }
-                    logger.info(f"[DRY RUN] Simulando envio do cluster {cluster.cluster_id}")
-                    logger.info(f"[DRY RUN] Payload: {json.dumps(dry_run_payload, indent=2)}")
-                    logger.info(f"[DRY RUN] Alert IDs incluidos: {cluster.alert_ids}")
-                elif destination == "cor_api":
-                    # 4a. Enviar para COR API
-                    result = submit_cluster_to_cor_api(
-                        cluster=cluster,
-                        environment=environment,
-                    )
+        sent: list[Row] = []
+        cluster_rows: list[Row] = []
 
-                    if result["success"]:
-                        updated = mark_alerts_as_sent(
-                            alert_ids=result["alert_ids"],
-                            aggregation_group_id=result["aggregation_group_id"],
-                            environment=environment,
-                            cloud=cloud,
-                        )
-                        clusters_sent += 1
-                        alerts_sent += updated
-                        logger.info(f"Cluster enviado: {updated} alertas marcados como 'sent'")
-                    else:
-                        logger.error(
-                            f"Falha ao enviar cluster: {result.get('error')}",
-                        )
-                else:  # google_sheets
-                    # 4b. Preparar DataFrame para upload ao BigQuery
-                    df, metadata = build_cluster_dataframe(
-                        cluster=cluster,
-                        environment=environment,
-                    )
-                    bq_dataframes.append(df)
-                    bq_metadata_list.append(metadata)
-
-        # 5. Upload para BigQuery (google_sheets) - uma unica operacao
-        if destination == "google_sheets" and bq_dataframes and not dry_run:
-            combined_df = pd.concat(bq_dataframes, ignore_index=True)
-
-            dataset_id = CORAlertAggregatorConstants.DATASET_ID.value
-            table_id = CORAlertAggregatorConstants.AGGREGATED_TABLE_ID.value
-            root_folder = f"{CORAlertAggregatorConstants.ROOT_FOLDER.value}{table_id}"
-
-            partitions_path = create_date_partitions(
-                dataframe=combined_df,
-                partition_column=CORAlertAggregatorConstants.PARTITION_COLUMN.value,
-                file_format=CORAlertAggregatorConstants.FILE_FORMAT.value,
-                root_folder=root_folder,
-            )
-
-            table = Table(dataset_id=dataset_id, table_id=table_id)
-            await upload_files_to_gcs(
-                Path(partitions_path),
-                table,
-                bucket=cloud["bucket"],
-                dump_mode=CORAlertAggregatorConstants.DUMP_MODE.value,
-                source_format=CORAlertAggregatorConstants.FILE_FORMAT.value,
-                options=capture_options(CORAlertAggregatorConstants.DUMP_MODE.value),
-            )
-            await publish_table_in_bq(table, cloud)
-
-            # Escrever no Google Sheets via API (upsert por aggregation_group_id)
-            written = write_clusters_to_google_sheets(
-                dataframe=combined_df,
-                spreadsheet_id=spreadsheet_id,
-                sheet_tab=CORAlertAggregatorConstants.SHEETS_TAB_NAME.value,
-                sheet_retention_hours=sheet_retention_hours,
-            )
-            logger.info(f"Sheets: {written} linhas escritas/atualizadas")
-
-            # Marcar alertas como enviados apos upload bem-sucedido
-            for metadata in bq_metadata_list:
-                updated = mark_alerts_as_sent(
-                    alert_ids=metadata["alert_ids"],
-                    aggregation_group_id=metadata["aggregation_group_id"],
-                    environment=environment,
-                    cloud=cloud,
+        for cluster in ready:
+            if destination == "dry_run":
+                logger.info(
+                    "Dry run: event=%s alerts=%s", dumps(build_event(cluster, str(uuid4()), now)), cluster.alert_ids
                 )
-                clusters_sent += 1
-                alerts_sent += updated
+            elif destination == "cor_api":
+                group_id = await open_event_task(cluster)
 
-            logger.info(f"Upload BigQuery concluido: {len(bq_dataframes)} clusters, {len(combined_df)} linhas")
+                if group_id:
+                    sent += build_sent_rows(cluster.alert_ids, group_id=group_id, environment=environment, now=now)
+            else:
+                group_id = str(uuid4())
+                cluster_rows.append(
+                    build_cluster_row(
+                        cluster, group_id=group_id, event_id=str(uuid4()), environment=environment, now=now
+                    )
+                )
+                sent += build_sent_rows(cluster.alert_ids, group_id=group_id, environment=environment, now=now)
+
+        if cluster_rows:
+            await load_rows_task(cluster_rows, AGGREGATED_TABLE_ID, cloud)
+
+            if sheet:
+                await write_sheet_task(cluster_rows, sheet)
+
+        if sent:
+            await load_rows_task(sent, SENT_TABLE_ID, cloud)
 
         logger.info(
-            f"Agregacao concluida: {clusters_sent} clusters enviados, {alerts_sent} alertas processados"
+            "Done: pending=%d clusters=%d ready=%d sent_alerts=%d", len(alerts), len(clusters), len(ready), len(sent)
         )
-
-    logger.info("Lock de concorrencia liberado")
-
-    return {
-        "alerts_processed": alerts_sent,
-        "clusters_sent": clusters_sent,
-        "total_pending": len(pending_alerts),
-        "total_clusters": len(clusters),
-    }

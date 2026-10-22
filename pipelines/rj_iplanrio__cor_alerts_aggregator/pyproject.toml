@@ -4,9 +4,6 @@ version = "0.1.0"
 description = "Pipeline para agregacao e envio de alertas COR"
 dependencies = [
     "prefect_rj_iplanrio",
-    "httpx",
-    "pandas",
-    "google-cloud-bigquery",
     "gspread",
 ]
 
