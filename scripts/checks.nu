@@ -18,7 +18,7 @@ def main []: nothing -> nothing {
 
 # Install the root project and the toolkit with their development tools.
 def 'main sync' []: nothing -> nothing {
-    ^uv sync --frozen
+    ^uv sync --frozen --all-packages
     ^uv sync --frozen --package toolkit --inexact
 }
 
