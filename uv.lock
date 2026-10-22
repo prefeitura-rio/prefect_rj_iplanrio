@@ -1221,15 +1221,6 @@ wheels = [
 ]
 
 [[package]]
-name = "distlib"
-version = "0.4.4"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/68/bc/d36966de7304047a1001a7559fbf266c464bb5d8cc85464536ef8c9bcc32/distlib-0.4.4.tar.gz", hash = "sha256:ca4175b4ac7f71223cc30ed7248c45d2b38c2439d8ee6e498ab67ed63cf3508d", size = 621304, upload-time = "2026-10-16T13:56:34.203Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c1/2b/238f02a4927fa2e27aa995371d240a468b52e42eae44a678434aff736b38/distlib-0.4.4-py2.py3-none-any.whl", hash = "sha256:cf09d55b1e85a89576b036aeb71550bfd68320f3f21761ca329eadadad918638", size = 472099, upload-time = "2026-10-16T13:56:32.053Z" },
-]
-
-[[package]]
 name = "distro"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3525,23 +3516,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pandas-read-xml"
-version = "0.3.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "distlib" },
-    { name = "pandas" },
-    { name = "pyarrow" },
-    { name = "requests" },
-    { name = "urllib3" },
-    { name = "xmltodict" },
-    { name = "zipfile36" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/dd/67/033ecb058eb44bfabc1f1b4f92e4a80f59c9b423c442255a56e1826776b5/pandas_read_xml-0.3.1-py3-none-any.whl", hash = "sha256:76b0047e9c81c6ba47bc2e788b866280d862f0eea52f0aac0f1d65ba9ff72e3c", size = 6258, upload-time = "2021-04-08T13:32:41.817Z" },
-]
-
-[[package]]
 name = "parsedatetime"
 version = "2.6"
 source = { registry = "https://pypi.org/simple" }
@@ -4887,17 +4861,11 @@ name = "rj-cor-precipitacao-websirene"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_cor__precipitacao_websirene" }
 dependencies = [
-    { name = "pandas-read-xml" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "pandas-read-xml" },
-    { name = "pendulum" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-crm-agentforce-classificacao-llm"
@@ -7097,15 +7065,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/7e/c2/e06e5f177d818d0fc34fcbe2f98c175af2cba63b7d90f4bfcb6fe360d343/zeep-4.3.3.tar.gz", hash = "sha256:99d5059f92f721020998695fd9c85289ccb03ec5a2398ad49c6dbe43f19cfb94", size = 167372, upload-time = "2026-06-18T17:17:58.994Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b5/87/5c1d29f52fc32da98b75dc8a681cd0de78c9cfd5c10493cd7fb730e1d4b0/zeep-4.3.3-py3-none-any.whl", hash = "sha256:5adfae35582848819f8bb97b6ea9f1a34a2d4851a539f830e14dbab09961dd18", size = 102054, upload-time = "2026-06-18T17:17:57.223Z" },
-]
-
-[[package]]
-name = "zipfile36"
-version = "0.1.3"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/7d/5e/22f712e45898d12ad896d54875b736ef90dcfc22590ec118b1fc94fa52a4/zipfile36-0.1.3.tar.gz", hash = "sha256:a78a8dddf4fa114f7fe73df76ffcce7538e23433b7a6a96c1c904023f122aead", size = 61882, upload-time = "2016-10-16T13:09:03.325Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/fd/8a/3b7da0b0bd87d1ef05b74207827c72d348b56a0d6d83242582be18a81e02/zipfile36-0.1.3-py3-none-any.whl", hash = "sha256:f7e48adf627f75cd74cdb50e7d850623b465f4cf5de913809196e8f3aa57dc4b", size = 20841, upload-time = "2016-10-16T13:08:59.547Z" },
 ]
 
 [[package]]

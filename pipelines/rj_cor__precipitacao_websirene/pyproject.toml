@@ -5,8 +5,6 @@ description = "Pipeline precipitacao_websirene da rj_cor"
 
 dependencies = [
     "prefect_rj_iplanrio",
-    "pandas-read-xml",
-    "pendulum",
 ]
 
 [tool.uv.sources]

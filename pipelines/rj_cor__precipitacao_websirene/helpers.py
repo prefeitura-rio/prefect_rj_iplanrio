@@ -1,46 +1,44 @@
-# -*- coding: utf-8 -*-
-"""
-Funções utilitárias para processamento de dados de precipitação.
-"""
+"""Helpers of rj_cor__precipitacao_websirene."""
 
-from typing import List, Tuple
+from datetime import UTC, datetime
+from xml.etree.ElementTree import Element, fromstring
 
-import pandas as pd
+from pipelines.rj_cor__precipitacao_websirene.constants import RAIN_COLUMNS, SP_TZ
 
 
-def parse_date_columns(
-    dataframe: pd.DataFrame,
-    partition_column: str,
-) -> Tuple[pd.DataFrame, List[str]]:
-    """
-    Converte coluna de data em colunas separadas de particionamento.
+def read_number(text: str | None) -> float | None:
+    """Return an attribute as a number, or nothing if it is missing or is not a number."""
+    try:
+        return float(text) if text is not None else None
+    except ValueError:
+        return None
 
-    Extrai ano, mês e dia de uma coluna datetime e cria colunas de particionamento
-    no formato esperado pelo BigQuery (data=YYYY-MM-DD).
 
-    Args:
-        dataframe: DataFrame com os dados
-        partition_column: Nome da coluna de data para particionar
+def read_time(text: str) -> str:
+    """Return a time of the XML in São Paulo as `YYYY-MM-DD HH:MM:SS`. A time without a zone is UTC."""
+    parsed = datetime.fromisoformat(text)
+    parsed = parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
-    Returns:
-        Tupla contendo:
-            - DataFrame com coluna de data convertida para string
-            - Lista com nomes das colunas de particionamento
+    return parsed.astimezone(SP_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
-    Examples:
-        >>> df = pd.DataFrame({'data_medicao': [pd.Timestamp('2026-05-25')]})
-        >>> df_result, partitions = parse_date_columns(df, 'data_medicao')
-        >>> partitions
-        ['data_medicao']
-    """
-    # Garantir que a coluna está em formato datetime
-    if not pd.api.types.is_datetime64_any_dtype(dataframe[partition_column]):
-        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column])
 
-    # Converter para string no formato YYYY-MM-DD para particionamento
-    dataframe[partition_column] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
+def build_rows(xml: str | bytes) -> list[dict[str, str | float | None]]:
+    """Return one row for each station of the XML that has a rain reading, with the time in São Paulo."""
+    root: Element = fromstring(xml)  # the page is the public one of the city
+    rows: list[dict[str, str | float | None]] = []
 
-    partitions = [partition_column]
+    for station in root.iter("estacao"):
+        rain = station.find("chuvas")
 
-    return dataframe, partitions
+        if rain is None or "hora" not in rain.attrib:
+            continue
 
+        rows.append(
+            {
+                "id_estacao": station.get("id"),
+                "data_medicao": read_time(rain.attrib["hora"]),
+                **{name: read_number(rain.get(attribute)) for attribute, name in RAIN_COLUMNS.items()},
+            }
+        )
+
+    return rows
