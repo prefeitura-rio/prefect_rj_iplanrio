@@ -5668,33 +5668,11 @@ name = "rj-sms-sisreg-disparo-lembretes"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_sms__sisreg_disparo_lembretes" }
 dependencies = [
-    { name = "dbt-bigquery" },
-    { name = "dbt-core" },
-    { name = "google-cloud-bigquery" },
-    { name = "google-cloud-storage" },
-    { name = "numpy" },
-    { name = "pandas" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "pytz" },
-    { name = "requests" },
-    { name = "simplejson" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "dbt-bigquery" },
-    { name = "dbt-core" },
-    { name = "google-cloud-bigquery" },
-    { name = "google-cloud-storage" },
-    { name = "numpy" },
-    { name = "pandas" },
-    { name = "pendulum" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "pytz" },
-    { name = "requests" },
-    { name = "simplejson" },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-ssm-run-dbt"

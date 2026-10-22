@@ -42,17 +42,16 @@ deployments:
           INFISICAL_ENVIRONMENT: prod
           INFISICAL_SECRET_PATH: /wetalkie
     parameters:
-      dataset_id: disparos
-      table_id: disparos_efetuados
-      destination_dataset_id: disparos
-      destination_table_id: disparos_efetuados
-      billing_project_id: rj-crm-registry
+      table:
+        dataset_id: disparos
+        table_id: disparos_efetuados
+      dispatch:
+        billing_project_id: rj-crm-registry
+        id_hsm: 18
+        campaign_name: SISREG_AGENDAMENTOS
+        cost_center_id: 71
+        chunk_size: 1000
       dump_mode: append
-      id_hsm: 18
-      campaign_name: SISREG_AGENDAMENTOS
-      cost_center_id: "71"
-      chunk_size: 1000
-
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio
@@ -75,16 +74,16 @@ deployments:
           INFISICAL_ENVIRONMENT: staging
           INFISICAL_SECRET_PATH: /wetalkie
     parameters:
-      dataset_id: disparos
-      table_id: disparos_efetuados_staging
-      destination_dataset_id: disparos
-      destination_table_id: disparos_efetuados_staging
-      billing_project_id: rj-crm-registry-dev
+      table:
+        dataset_id: disparos
+        table_id: disparos_efetuados_staging
+      dispatch:
+        billing_project_id: rj-crm-registry-dev
+        id_hsm: 18
+        campaign_name: SISREG_AGENDAMENTOS_STAGING
+        cost_center_id: 71
+        chunk_size: 100
       dump_mode: append
-      id_hsm: 18
-      campaign_name: SISREG_AGENDAMENTOS_STAGING
-      cost_center_id: "71"
-      chunk_size: 100
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio

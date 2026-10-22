@@ -1,201 +1,49 @@
-"""
-Tasks for SISREG SMS dispatch pipeline
-Adapted from disparo template for Prefect 3.x
-"""
+"""Tasks of rj_sms__sisreg_disparo_lembretes."""
 
-import json
-import os
-import uuid
 from datetime import datetime
-from typing import Dict, List, Literal, Union
+from zoneinfo import ZoneInfo
 
-import pandas as pd
-from numpy import ceil
 from prefect import task
-from prefect.logging import get_logger
-from pytz import timezone
+from pydantic import TypeAdapter
+from toolkit.telemetry import logger
 
-from pipelines.rj_sms__sisreg_disparo_lembretes.helpers.tasks import download_data_from_bigquery
+from pipelines.rj_sms__sisreg_disparo_lembretes.constants import LOGIN_ROUTE
+from pipelines.rj_sms__sisreg_disparo_lembretes.helpers import (
+    drop_duplicate_phones,
+    parse_destinations,
+    send_batches,
+)
+from pipelines.rj_sms__sisreg_disparo_lembretes.types import Destination, Dispatch, Sent
+from utils.tasks import read_bq
+from utils.utils import render_query
+from utils.wetalkie import WetalkieApi
 
-logger = get_logger("toolkit")
-
-
-@task
-def create_dispatch_payload(campaign_name: str, cost_center_id: int, destinations: Union[List, pd.DataFrame]) -> Dict:
-    """
-    Create payload for dispatch
-    """
-    return {
-        "campaignName": campaign_name,
-        "costCenterId": cost_center_id,
-        "destinations": destinations,
-    }
+TIMEZONE = "America/Sao_Paulo"
+TEXTS = TypeAdapter(list[str])
 
 
 @task
-def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int) -> str:
+async def read_destinations_task(dispatch: Dispatch, given: list[Destination] | None) -> list[Destination]:
+    """Return the phones to message, once each.
+
+    With `given`, those are the destinations. Without it, the query of the appointments for tomorrow gives them.
     """
-    Dispatch messages in chunks via Wetalkie API
-    """
-    destinations = dispatch_payload["destinations"]
-    total = len(destinations)
-    campaign_name = dispatch_payload["campaignName"]
+    if given is not None:
+        return drop_duplicate_phones(given)
 
-    dispatch_date = datetime.now(timezone("America/Sao_Paulo")).strftime("%Y-%m-%d %H:%M:%S")
+    frame = await read_bq.fn(render_query(__file__, "appointments"), project=dispatch.billing_project_id)
+    texts = TEXTS.validate_python(frame.get_column(frame.columns[0]).cast(str).to_list()) if frame.height else []
+    logger.info("Appointments read: rows=%d", len(texts))
 
-    for i, start in enumerate(range(0, total, chunk), 1):
-        end = start + chunk
-        batch = destinations[start:end]
-        dispatch_payload["destinations"] = batch
-        dispatch_payload["campaignName"] = f"{campaign_name}-{dispatch_date[:10]}-lote{i}"
-
-        logger.info(f"Disparando lote {i} de {int(ceil(total / chunk))} com {len(batch)} destinos")
-
-        response = api.post(path=f"/callcenter/hsm/send/{id_hsm}", json=dispatch_payload)
-
-        if response.status_code != 201:
-            logger.info(f"Falha no disparo do lote {i}: {response.text}")
-            raise Exception(f"Dispatch failed for batch {i}: {response.text}")
-
-        logger.info(f"Disparo do lote {i} realizado com sucesso!")
-
-    logger.info("Disparo realizado com sucesso!")
-    return dispatch_date
+    return drop_duplicate_phones(parse_destinations(texts))
 
 
 @task
-def create_dispatch_dfr(id_hsm: int, dispatch_payload: dict, dispatch_date: str) -> pd.DataFrame:
+async def send_batches_task(dispatch: Dispatch, destinations: list[Destination]) -> Sent:
+    """Send the destinations to the Wetalkie API, one batch at a time, and record each batch that went out.
+
+    Raise `RuntimeError` if the API does not answer. A batch that fails stops the run, and the result keeps
+    the batches that went out before it and the reason.
     """
-    Create DataFrame with dispatch information for storage
-    """
-    data = []
-    for destination in dispatch_payload["destinations"]:
-        row = {
-            "id_hsm": id_hsm,
-            "dispatch_date": dispatch_date,
-            "campaignName": dispatch_payload["campaignName"],
-            "costCenterId": dispatch_payload["costCenterId"],
-            "to": destination["to"],
-            "externalId": destination.get("externalId", None),
-            "vars": destination.get("vars", None),
-        }
-        data.append(row)
-
-    dfr = pd.DataFrame(data)
-    dfr = dfr[
-        [
-            "id_hsm",
-            "dispatch_date",
-            "campaignName",
-            "costCenterId",
-            "to",
-            "externalId",
-            "vars",
-        ]
-    ]
-    logger.info(f"Created dispatch DataFrame with {len(dfr)} rows")
-    return dfr
-
-
-@task
-def check_api_status(api: object) -> bool:
-    """
-    Check if the Wetalkie API is working by returning status 200
-    """
-    try:
-        response = api.get("/")
-        if response.status_code == 200:
-            logger.info("API está funcionando corretamente.")
-            return True
-
-        logger.info(f"API retornou status {response.status_code}.")
-        return False
-    except Exception as error:
-        logger.info(f"Erro ao acessar a API: {error}")
-        return False
-
-
-@task
-def get_destinations(
-    destinations: Union[None, List[str]], query: str, billing_project_id: str = "rj-crm-registry"
-) -> List[Dict]:
-    """
-    Get destinations from BigQuery query or from parameter
-    """
-    if query:
-        logger.info("Query was found")
-        destinations_df = download_data_from_bigquery(
-            query=query,
-            billing_project_id=billing_project_id,
-            bucket_name=billing_project_id,
-        )
-        logger.info(f"Response from query: {len(destinations_df)} rows")
-        destinations = destinations_df.iloc[:, 0].tolist()
-        logger.info(f"First 3 destinations: {destinations[:3] if destinations else 'None'}")
-        destinations = [json.loads(str(item).replace("celular_disparo", "to")) for item in destinations]
-    elif isinstance(destinations, str):
-        destinations = json.loads(destinations)
-
-    return destinations if destinations else []
-
-
-@task
-def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
-    """
-    Remove duplicate phone numbers from destinations list.
-    Keeps only the first occurrence of each phone number.
-    """
-    if not destinations:
-        logger.info("No destinations to process")
-        return destinations
-
-    seen_phones = set()
-    unique_destinations = []
-    duplicates_count = 0
-
-    for destination in destinations:
-        phone = destination.get("to")
-        if phone and phone not in seen_phones:
-            seen_phones.add(phone)
-            unique_destinations.append(destination)
-        elif phone in seen_phones:
-            duplicates_count += 1
-
-    logger.info(f"Removed {duplicates_count} duplicate phone numbers")
-    logger.info(f"Total unique destinations: {len(unique_destinations)}")
-
-    return unique_destinations
-
-
-@task
-def create_date_partitions(
-    dataframe,
-    partition_column: str | None = None,
-    file_format: Literal["csv", "parquet"] = "csv",
-    root_folder="./data/",
-):
-    """Save a DataFrame in one file, with the columns `ano_particao`, `mes_particao` and `data_particao`."""
-    if partition_column is None:
-        partition_column = "data_particao"
-        dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
-    else:
-        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column], errors="coerce")
-        dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
-        if dataframe["data_particao"].isnull().any():
-            raise ValueError("Some dates in the partition column could not be parsed.")
-
-    dataframe["ano_particao"] = dataframe["data_particao"].str[:4]
-    dataframe["mes_particao"] = dataframe["data_particao"].str[5:7]
-    columns = [c for c in dataframe.columns if c not in ("ano_particao", "mes_particao", "data_particao")]
-    dataframe = dataframe[[*columns, "ano_particao", "mes_particao", "data_particao"]]
-
-    os.makedirs(root_folder, exist_ok=True)
-    file_path = os.path.join(root_folder, f"{uuid.uuid4()}.{file_format}")
-
-    if file_format == "csv":
-        dataframe.to_csv(file_path, index=False)
-    else:
-        dataframe.to_parquet(file_path, index=False)
-
-    logger.info("Files saved on %s", root_folder)
-    return root_folder
+    async with WetalkieApi.connect(LOGIN_ROUTE) as api:
+        return await send_batches(api, dispatch, destinations, datetime.now(ZoneInfo(TIMEZONE)))
