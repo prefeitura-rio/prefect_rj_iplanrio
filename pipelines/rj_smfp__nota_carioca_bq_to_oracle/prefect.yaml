@@ -53,27 +53,30 @@ deployments:
       limit: 1
       collision_strategy: ENQUEUE
     parameters:
-      dataset_id: nota_carioca
-      run_dbt: true
-      table_ids:
-        - MVT_NOTAS_NACIONAIS_EXIGIVEIS
-        - MVT_NOTAS_NACIONAIS_EXIGIVEIS_DETALHES
-        - MVT_NOTAS_NACIONAIS_DETALHES
-      dbt_parameters:
-        command: build
-        select: >-
-          mart_nota_carioca__notas_nacionais_exigiveis
-          mart_nota_carioca__notas_nacionais_exigiveis_detalhes
-          mart_nota_carioca__notas_nacionais_detalhes
-        send_discord_report: false
-        github_repo: https://github.com/prefeitura-rio/queries-rj-iplanrio.git
-        bigquery_project: rj-iplanrio
-        target: prod
-        gcs_buckets:
-          prod: rj-iplanrio_dbt
-          dev: rj-iplanrio-dev_dbt
-      sqlldr_sessions: 4
-      index_parallel_degree: 8
+      source:
+        dataset_id: nota_carioca
+        table_ids:
+          - MVT_NOTAS_NACIONAIS_EXIGIVEIS
+          - MVT_NOTAS_NACIONAIS_EXIGIVEIS_DETALHES
+          - MVT_NOTAS_NACIONAIS_DETALHES
+      load:
+        sessions: 4
+        index_parallel_degree: 8
+      dbt:
+        enabled: true
+        parameters:
+          command: build
+          select: >-
+            mart_nota_carioca__notas_nacionais_exigiveis
+            mart_nota_carioca__notas_nacionais_exigiveis_detalhes
+            mart_nota_carioca__notas_nacionais_detalhes
+          send_discord_report: false
+          github_repo: https://github.com/prefeitura-rio/queries-rj-iplanrio.git
+          bigquery_project: rj-iplanrio
+          target: prod
+          gcs_buckets:
+            prod: rj-iplanrio_dbt
+            dev: rj-iplanrio-dev_dbt
     work_pool:
       name: onprem-pool
       work_queue_name: default

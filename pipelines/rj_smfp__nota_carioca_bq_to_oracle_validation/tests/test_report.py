@@ -22,7 +22,15 @@ def field(name: str, type_: str, mode: str = "NULLABLE") -> dict[str, str]:
     return {"name": name, "type": type_, "mode": mode}
 
 
-def ora(name: str, data_type: str, length=None, char_used=None, precision=None, scale=None, nullable=False):
+def ora(
+    name: str,
+    data_type: str,
+    length: int | None = None,
+    char_used: str | None = None,
+    precision: int | None = None,
+    scale: int | None = None,
+    nullable: bool = False,
+) -> OracleColumn:
     return OracleColumn(name, data_type, length, char_used, precision, scale, nullable)
 
 
@@ -93,7 +101,7 @@ def test_metric_specs_only_loaded_columns_and_convert_text_dates():
         ("valor", "maximo_num"),
     ]
     assert specs[1].bigquery_expression == (
-        "FORMAT_DATETIME('%Y-%m-%d %H:%M:%S', MIN(SAFE_CAST(REPLACE(SUBSTR(`data_competencia_municipio`, 1, 19), "
+        "FORMAT_DATETIME('%Y-%m-%d %H:%M:%S', MIN(SAFE_CAST(REPLACE(SUBSTR(`data_competencia_municipio`, 1, 19), " +
         "'T', ' ') AS DATETIME)))"
     )
     assert specs[1].oracle_expression == "TO_CHAR(MIN(\"DATA_COMPETENCIA_MUNICIPIO\"), 'YYYY-MM-DD HH24:MI:SS')"
@@ -174,7 +182,7 @@ def test_compare_partitions_flags_unpartitioned_missing_and_extra_partitions():
     assert compare_partitions(None, None) == [["-", "(particionamento)", "sem partição", "sem partição", "OK"]]
 
 
-def index(name, degree="1", status="N/A", columns=("A", "B")):
+def index(name: str, degree: str = "1", status: str = "N/A", columns: tuple[str, ...] = ("A", "B")) -> IndexDefinition:
     return IndexDefinition(name, "NORMAL", False, columns, "LOCAL", "DFEN_BIG_IDX", degree=degree, status=status)
 
 

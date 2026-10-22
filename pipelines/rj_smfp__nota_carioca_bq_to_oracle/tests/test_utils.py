@@ -1,5 +1,14 @@
-import pytest
+import io
+from collections.abc import Sequence
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+from typing import final
 
+import pytest
+from google.cloud import storage
+
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import bigquery, oracle, slots
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import changed_tables, quiet_wait_seconds
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import (
     LoaderField,
     OracleColumn,
@@ -7,10 +16,12 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import (
     loader_spec,
     oracle_column,
 )
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.inmemory import InMemoryStatus
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import (
     CROSS_SCHEMA_PRIVILEGES,
     MANAGED_TABLE_MARKER,
     QUERIES_ANCHOR,
+    OracleConfig,
     assert_managed_table,
     column_definitions,
     definition_differences,
@@ -19,13 +30,6 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import (
     oracle_table_name,
     validate_identifier,
 )
-import io
-from dataclasses import replace
-from datetime import UTC, datetime, timedelta
-
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import bigquery, slots
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import changed_tables, quiet_wait_seconds
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.inmemory import InMemoryStatus
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import (
     CONSUMER_GRANTS,
     SlotPlan,
@@ -35,6 +39,18 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import (
     parse_load_comment,
     synonym_owners,
     synonyms_to_realign,
+)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr import (
+    CountingReader,
+    ProgressSnapshot,
+    SessionProgress,
+    build_control_file,
+    format_count,
+    format_duration,
+    format_progress,
+    format_size,
+    progress_percent,
+    split_round_robin,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import (
     IndexDefinition,
@@ -54,25 +70,20 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import (
 )
 from utils.utils import render_query
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr import (
-    CountingReader,
-    ProgressSnapshot,
-    SessionProgress,
-    build_control_file,
-    format_count,
-    format_duration,
-    format_progress,
-    format_size,
-    progress_percent,
-    split_round_robin,
-)
-
 
 def field(name: str, type_: str, mode: str = "NULLABLE") -> dict[str, str]:
     return {"name": name, "type": type_, "mode": mode}
 
 
-def ora(name: str, data_type: str, length=None, char_used=None, precision=None, scale=None, nullable=False):
+def ora(
+    name: str,
+    data_type: str,
+    length: int | None = None,
+    char_used: str | None = None,
+    precision: int | None = None,
+    scale: int | None = None,
+    nullable: bool = False,
+) -> OracleColumn:
     return OracleColumn(name, data_type, length, char_used, precision, scale, nullable)
 
 
@@ -98,7 +109,7 @@ def test_ddl_matches_original_column_definitions():
 
 
 def test_oracle_column_parses_dictionary_row():
-    row = {
+    row: dict[str, object] = {
         "column_name": "NOTA_FISCAL",
         "data_type": "NUMBER",
         "data_length": 22,
@@ -167,7 +178,7 @@ def test_build_load_plan_excludes_requested_columns_and_ignores_them_if_in_bigqu
         (ora("TEXTO", "CLOB", 4000), "STRING"),
     ],
 )
-def test_loader_spec_rejects_unsupported_combinations(column, bq_type):
+def test_loader_spec_rejects_unsupported_combinations(column: OracleColumn, bq_type: str) -> None:
     with pytest.raises(NotImplementedError):
         loader_spec(column, bq_type)
 
@@ -220,13 +231,23 @@ def test_missing_privileges_lists_what_other_users_lack():
 
 
 def test_grant_and_synonym_statements_for_the_physical_table():
-    assert render_query(
-        QUERIES_ANCHOR, "grant_on_table", privileges="SELECT, ALTER, DELETE", schema="DFEN", table="BQLOAD_X_A",
-        grantee="NFSE_OWNER",
-    ) == 'GRANT SELECT, ALTER, DELETE ON "DFEN"."BQLOAD_X_A" TO "NFSE_OWNER"\n'
-    assert render_query(
-        QUERIES_ANCHOR, "create_synonym", owner="NFSE_SIGA", synonym="BQLOAD_X", schema="DFEN", table="BQLOAD_X_B"
-    ) == 'CREATE OR REPLACE SYNONYM "NFSE_SIGA"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_B"\n'
+    assert (
+        render_query(
+            QUERIES_ANCHOR,
+            "grant_on_table",
+            privileges="SELECT, ALTER, DELETE",
+            schema="DFEN",
+            table="BQLOAD_X_A",
+            grantee="NFSE_OWNER",
+        )
+        == 'GRANT SELECT, ALTER, DELETE ON "DFEN"."BQLOAD_X_A" TO "NFSE_OWNER"\n'
+    )
+    assert (
+        render_query(
+            QUERIES_ANCHOR, "create_synonym", owner="NFSE_SIGA", synonym="BQLOAD_X", schema="DFEN", table="BQLOAD_X_B"
+        )
+        == 'CREATE OR REPLACE SYNONYM "NFSE_SIGA"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_B"\n'
+    )
     assert CONSUMER_GRANTS == (
         ("RL_NFSE", "SELECT"),
         ("RL_NFSE_SIGA", "SELECT"),
@@ -241,7 +262,7 @@ def test_inmemory_queries_keep_the_dollar_of_the_views():
     assert "gv$im_segments" in render_query(QUERIES_ANCHOR, "get_inmemory_segments")
 
 
-def syn(owner, table_name, table_owner="DFEN"):
+def syn(owner: str, table_name: str, table_owner: str = "DFEN") -> SynonymTarget:
     return SynonymTarget(owner, table_owner, table_name)
 
 
@@ -285,7 +306,7 @@ def test_load_comment_round_trip_keeps_pipeline_marker():
     comment = load_comment("rj-iplanrio-dia.nota_carioca.T", snapshot, loaded_at)
     assert comment == (
         f"{MANAGED_TABLE_MARKER}: carga a partir de rj-iplanrio-dia.nota_carioca.T; "
-        "snapshot do BigQuery de 2026-10-01 01:50:47 UTC; carregada em 2026-10-01 03:04:05 UTC"
+        + "snapshot do BigQuery de 2026-10-01 01:50:47 UTC; carregada em 2026-10-01 03:04:05 UTC"
     )
     assert parse_load_comment(comment) == ("2026-10-01 01:50:47", "2026-10-01 03:04:05")
     assert parse_load_comment(f"{MANAGED_TABLE_MARKER}: carga a partir de x") is None
@@ -310,60 +331,119 @@ def test_quiet_wait_and_changed_tables():
     assert changed_tables({"A": T0, "B": T0}, {"A": T0, "B": T0 + timedelta(seconds=1)}) == ["B"]
 
 
-def snapshot_request(**extra):
+def snapshot_request(max_wait_seconds: float = 3600, max_attempts: int = 3) -> bigquery.SnapshotRequest:
     return bigquery.SnapshotRequest(
-        project="p", dataset_id="d", table_ids=["DET", "EXI"], bucket="b", prefix="d/run", quiet_seconds=300, **extra
+        project="p",
+        dataset_id="d",
+        table_ids=["DET", "EXI"],
+        bucket="b",
+        prefix="d/run",
+        quiet_seconds=300,
+        max_wait_seconds=max_wait_seconds,
+        max_attempts=max_attempts,
     )
 
 
-def fake_bigquery(monkeypatch, modified_reads):
+@final
+class FrozenDatetime:
+    """Replaces `datetime` in the BigQuery helper, so that `now` is always `T0`."""
+
+    @staticmethod
+    def now(tz: object) -> datetime:
+        del tz
+
+        return T0
+
+
+def ignore_message(message: str) -> None:
+    del message
+
+
+def ignore_seconds(seconds: float) -> None:
+    del seconds
+
+
+def fake_bigquery(
+    monkeypatch: pytest.MonkeyPatch, modified_reads: list[dict[str, datetime]]
+) -> tuple[list[str], list[str]]:
     reads = iter(modified_reads)
-    extracted, deleted = [], []
-    monkeypatch.setattr(bigquery, "get_last_modified", lambda project, dataset_id, table_id: next(reads)[table_id])
-    monkeypatch.setattr(
-        bigquery, "get_table_schema", lambda project, dataset_id, table_id: {"fields": [], "num_rows": 1}
-    )
+    extracted: list[str] = []
+    deleted: list[str] = []
 
-    def extract(project, dataset_id, table_id, bucket, prefix):
+    def last_modified(project: str, dataset_id: str, table_id: str) -> datetime:
+        del project, dataset_id
+
+        return next(reads)[table_id]
+
+    def schema(project: str, dataset_id: str, table_id: str) -> bigquery.TableSchema:
+        del project, dataset_id, table_id
+
+        return bigquery.TableSchema(fields=[], num_rows=1)
+
+    def extract(project: str, dataset_id: str, table_id: str, bucket: str, prefix: str) -> list[bigquery.ExportedFile]:
+        del project, dataset_id, table_id, bucket
         extracted.append(prefix)
+
         return [bigquery.ExportedFile(name=f"{prefix}/part-0.csv.gz", size=1)]
 
+    def delete(project: str, bucket: str, blob_names: list[str]) -> None:
+        del project, bucket
+        deleted.extend(blob_names)
+
+    monkeypatch.setattr(bigquery, "get_last_modified", last_modified)
+    monkeypatch.setattr(bigquery, "get_table_schema", schema)
     monkeypatch.setattr(bigquery, "extract_table_to_gcs", extract)
-    monkeypatch.setattr(bigquery, "delete_blobs", lambda project, bucket, blob_names: deleted.extend(blob_names))
-    monkeypatch.setattr(bigquery, "datetime", type("FrozenDatetime", (), {"now": staticmethod(lambda tz: T0)}))
+    monkeypatch.setattr(bigquery, "delete_blobs", delete)
+    monkeypatch.setattr(bigquery, "datetime", FrozenDatetime)
+
     return extracted, deleted
 
 
-def test_export_consistent_snapshot_waits_for_quiet_period_and_retries_on_change(monkeypatch):
+def test_export_consistent_snapshot_waits_for_quiet_period_and_retries_on_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     old, recent, newer = T0 - timedelta(hours=1), T0 - timedelta(minutes=1), T0 - timedelta(seconds=30)
     reads = [
-        {"DET": recent}, {"EXI": old},
-        {"DET": old}, {"EXI": old}, {"DET": old}, {"EXI": newer},
-        {"DET": old}, {"EXI": old}, {"DET": old}, {"EXI": old},
+        {"DET": recent},
+        {"EXI": old},
+        {"DET": old},
+        {"EXI": old},
+        {"DET": old},
+        {"EXI": newer},
+        {"DET": old},
+        {"EXI": old},
+        {"DET": old},
+        {"EXI": old},
     ]
-    waits, messages = [], []
+    waits: list[float] = []
+    messages: list[str] = []
     extracted, deleted = fake_bigquery(monkeypatch, reads)
     snapshot = bigquery.export_consistent_snapshot(snapshot_request(), report=messages.append, sleep=waits.append)
     assert waits == [240]
-    assert extracted == ["d/run/tentativa-1/DET", "d/run/tentativa-1/EXI", "d/run/tentativa-2/DET", "d/run/tentativa-2/EXI"]
+    assert extracted == [
+        "d/run/tentativa-1/DET",
+        "d/run/tentativa-1/EXI",
+        "d/run/tentativa-2/DET",
+        "d/run/tentativa-2/EXI",
+    ]
     assert deleted == ["d/run/tentativa-1/DET/part-0.csv.gz", "d/run/tentativa-1/EXI/part-0.csv.gz"]
     assert "mudou durante o extract em ['EXI']" in messages[1]
     assert snapshot["DET"].last_modified == old
     assert snapshot["EXI"].files == [bigquery.ExportedFile("d/run/tentativa-2/EXI/part-0.csv.gz", 1)]
 
 
-def test_export_consistent_snapshot_gives_up(monkeypatch):
+def test_export_consistent_snapshot_gives_up(monkeypatch: pytest.MonkeyPatch) -> None:
     recent = T0 - timedelta(seconds=10)
     fake_bigquery(monkeypatch, [{"DET": recent}, {"EXI": recent}])
     with pytest.raises(RuntimeError, match="sem alterações"):
         bigquery.export_consistent_snapshot(
-            snapshot_request(max_wait_seconds=60), report=lambda message: None, sleep=lambda seconds: None
+            snapshot_request(max_wait_seconds=60), report=ignore_message, sleep=ignore_seconds
         )
     old = T0 - timedelta(hours=1)
     fake_bigquery(monkeypatch, [{"DET": old}, {"EXI": old}, {"DET": T0}, {"EXI": old}])
     with pytest.raises(RuntimeError, match="1 extracts seguidos"):
         bigquery.export_consistent_snapshot(
-            snapshot_request(max_attempts=1), report=lambda message: None, sleep=lambda seconds: None
+            snapshot_request(max_attempts=1), report=ignore_message, sleep=ignore_seconds
         )
 
 
@@ -397,7 +477,13 @@ def test_build_control_file_handles_embedded_newlines_and_blanks():
         "DESTINO", "BQLOAD_X", [LoaderField("ID", "CHAR(32)"), LoaderField("_EXTRA", "FILLER CHAR(4000)")]
     )
     lines = control.splitlines()
-    assert lines[:5] == ["LOAD DATA", "CHARACTERSET AL32UTF8", "APPEND", "PRESERVE BLANKS", 'INTO TABLE "DESTINO"."BQLOAD_X"']
+    assert lines[:5] == [
+        "LOAD DATA",
+        "CHARACTERSET AL32UTF8",
+        "APPEND",
+        "PRESERVE BLANKS",
+        'INTO TABLE "DESTINO"."BQLOAD_X"',
+    ]
     assert "FIELDS CSV WITH EMBEDDED TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"'" in lines
     assert '  "ID" CHAR(32),' in lines
     assert '  "_EXTRA" FILLER CHAR(4000)' in lines
@@ -457,8 +543,16 @@ RANGE_BY_MONTH = Partitioning(
 )
 
 
-def index(name, columns, locality="LOCAL", index_type="NORMAL", unique=False, tablespace="DFEN_BIG_IDX", **extra):
-    return IndexDefinition(name, index_type, unique, tuple(columns), locality, tablespace, **extra)
+def index(
+    name: str,
+    columns: Sequence[str],
+    locality: str | None = "LOCAL",
+    index_type: str = "NORMAL",
+    unique: bool = False,
+    tablespace: str | None = "DFEN_BIG_IDX",
+    owner: str = "",
+) -> IndexDefinition:
+    return IndexDefinition(name, index_type, unique, tuple(columns), locality, tablespace, owner=owner)
 
 
 def test_partitioning_from_dictionary_keeps_only_declared_partitions():
@@ -466,7 +560,12 @@ def test_partitioning_from_dictionary_keeps_only_declared_partitions():
         {"partitioning_type": "RANGE", "subpartitioning_type": "NONE", "interval": "NUMTOYMINTERVAL(1, 'MONTH') "},
         ["DATA_COMPETENCIA_MUNICIPIO"],
         [
-            {"partition_name": "P_INITIAL", "high_value": f" {JAN} ", "tablespace_name": "DFEN_BIG_DATA", "interval": "NO"},
+            {
+                "partition_name": "P_INITIAL",
+                "high_value": f" {JAN} ",
+                "tablespace_name": "DFEN_BIG_DATA",
+                "interval": "NO",
+            },
             {"partition_name": "SYS_P101", "high_value": FEB, "tablespace_name": "DFEN_BIG_DATA", "interval": "YES"},
         ],
     )
@@ -483,7 +582,7 @@ def test_partitioning_from_dictionary_keeps_only_declared_partitions():
 
 
 def test_index_from_dictionary_ignores_degree_and_status_in_comparison():
-    row = {
+    row: dict[str, object] = {
         "owner": "DFEN",
         "index_name": "IX",
         "index_type": "NORMAL",
@@ -521,14 +620,17 @@ def test_plan_structure_renames_indexes_and_skips_materialized_view_snapshot_ind
     ("template", "error"),
     [
         (TableLayout(None, None, (index("IX", ["A"], locality="GLOBAL"),)), NotImplementedError),
-        (TableLayout(None, None, (index("IX", ["SYS_NC1$"], index_type="FUNCTION-BASED NORMAL"),)), NotImplementedError),
+        (
+            TableLayout(None, None, (index("IX", ["SYS_NC1$"], index_type="FUNCTION-BASED NORMAL"),)),
+            NotImplementedError,
+        ),
         (TableLayout(None, Partitioning("HASH", ("A",), None, ()), ()), NotImplementedError),
         (TableLayout(None, None, (index("IX", ["NN_ROWID"]),)), ValueError),
         (TableLayout(None, Partitioning("RANGE", ("NN_ROWID",), None, ()), ()), ValueError),
         (TableLayout(None, None, (index("I" * 124, ["A"]),)), ValueError),
     ],
 )
-def test_plan_structure_rejects_what_the_load_cannot_replicate(template, error):
+def test_plan_structure_rejects_what_the_load_cannot_replicate(template: TableLayout, error: type[Exception]) -> None:
     with pytest.raises(error):
         plan_structure(template, ["A"], "BQLOAD_")
 
@@ -536,16 +638,16 @@ def test_plan_structure_rejects_what_the_load_cannot_replicate(template, error):
 def test_storage_clause_copies_tablespace_and_partitions_without_inmemory():
     assert storage_clause(TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH)) == (
         'TABLESPACE "DFEN_BIG_DATA"\n'
-        "NO INMEMORY\n"
-        'PARTITION BY RANGE ("DATA_COMPETENCIA_MUNICIPIO") (\n'
-        f'  PARTITION "P_INITIAL" VALUES LESS THAN ({JAN}) TABLESPACE "DFEN_BIG_DATA",\n'
-        f'  PARTITION "P_202601" VALUES LESS THAN ({FEB}) TABLESPACE "DFEN_BIG_DATA"\n'
-        ")"
+        + "NO INMEMORY\n"
+        + 'PARTITION BY RANGE ("DATA_COMPETENCIA_MUNICIPIO") (\n'
+        + f'  PARTITION "P_INITIAL" VALUES LESS THAN ({JAN}) TABLESPACE "DFEN_BIG_DATA",\n'
+        + f'  PARTITION "P_202601" VALUES LESS THAN ({FEB}) TABLESPACE "DFEN_BIG_DATA"\n'
+        + ")"
     )
     interval = Partitioning("RANGE", ("D",), "NUMTOYMINTERVAL(1, 'MONTH')", (TablePartition("P", JAN, None),))
     assert storage_clause(TableLayout(None, interval)) == (
-        f"NO INMEMORY\nPARTITION BY RANGE (\"D\") INTERVAL (NUMTOYMINTERVAL(1, 'MONTH')) (\n"
-        f'  PARTITION "P" VALUES LESS THAN ({JAN})\n)'
+        "NO INMEMORY\nPARTITION BY RANGE (\"D\") INTERVAL (NUMTOYMINTERVAL(1, 'MONTH')) (\n"
+        + f'  PARTITION "P" VALUES LESS THAN ({JAN})\n)'
     )
     listed = Partitioning("LIST", ("UF",), None, (TablePartition("P_RJ", "'RJ'", None),))
     assert "PARTITION \"P_RJ\" VALUES ('RJ')" in storage_clause(TableLayout(None, listed))
@@ -555,7 +657,13 @@ def test_storage_clause_copies_tablespace_and_partitions_without_inmemory():
 INMEMORY_HIGH = "INMEMORY PRIORITY HIGH MEMCOMPRESS FOR QUERY HIGH DISTRIBUTE AUTO NO DUPLICATE"
 
 
-def inmemory_row(inmemory="ENABLED", priority="HIGH", compression="FOR QUERY HIGH", distribute="AUTO", duplicate="NO DUPLICATE"):
+def inmemory_row(
+    inmemory: str | None = "ENABLED",
+    priority: str | None = "HIGH",
+    compression: str | None = "FOR QUERY HIGH",
+    distribute: str | None = "AUTO",
+    duplicate: str | None = "NO DUPLICATE",
+) -> dict[str, object]:
     return {
         "inmemory": inmemory,
         "inmemory_priority": priority,
@@ -584,7 +692,7 @@ def inmemory_row(inmemory="ENABLED", priority="HIGH", compression="FOR QUERY HIG
         pytest.param(inmemory_row(inmemory=None), None, id="no_value"),
     ],
 )
-def test_inmemory_from_dictionary_builds_the_create_table_clause(row, expected):
+def test_inmemory_from_dictionary_builds_the_create_table_clause(row: dict[str, object], expected: str | None) -> None:
     assert inmemory_from_dictionary(row) == expected
 
 
@@ -597,7 +705,7 @@ def test_inmemory_from_dictionary_builds_the_create_table_clause(row, expected):
         pytest.param(inmemory_row(duplicate="TRIPLICATE"), id="duplicate"),
     ],
 )
-def test_inmemory_from_dictionary_rejects_unknown_values(row):
+def test_inmemory_from_dictionary_rejects_unknown_values(row: dict[str, object]) -> None:
     with pytest.raises(NotImplementedError, match="INMEMORY"):
         inmemory_from_dictionary(row)
 
@@ -610,7 +718,7 @@ def test_inmemory_from_dictionary_rejects_unknown_values(row):
         pytest.param("INMEMORY PRIORITY LOW MEMCOMPRESS FOR DML", id="original_with_other_options"),
     ],
 )
-def test_plan_structure_puts_every_loaded_table_in_memory(original_inmemory):
+def test_plan_structure_puts_every_loaded_table_in_memory(original_inmemory: str | None) -> None:
     template = TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH, inmemory=original_inmemory)
     assert plan_structure(template, ["DATA_COMPETENCIA_MUNICIPIO"], "BQLOAD_").layout.inmemory == INMEMORY_HIGH
 
@@ -651,17 +759,21 @@ def test_layout_differences_detect_missing_partitioning_and_changed_partitions()
     assert layout_differences(TableLayout("DFEN_BIG_DATA", fewer), expected) == [
         f"partição ausente: P_202601 ({FEB}) em DFEN_BIG_DATA"
     ]
-    with_interval = Partitioning("RANGE", ("DATA_COMPETENCIA_MUNICIPIO",), "NUMTOYMINTERVAL(1, 'MONTH')", RANGE_BY_MONTH.partitions)
+    with_interval = Partitioning(
+        "RANGE", ("DATA_COMPETENCIA_MUNICIPIO",), "NUMTOYMINTERVAL(1, 'MONTH')", RANGE_BY_MONTH.partitions
+    )
     assert layout_differences(TableLayout("DFEN_BIG_DATA", with_interval), expected) == [
         "particionamento: RANGE (DATA_COMPETENCIA_MUNICIPIO) INTERVAL NUMTOYMINTERVAL(1, 'MONTH') → "
-        "RANGE (DATA_COMPETENCIA_MUNICIPIO)"
+        + "RANGE (DATA_COMPETENCIA_MUNICIPIO)"
     ]
 
 
 def test_foreign_indexes_protects_indexes_the_pipeline_did_not_create():
     ours = index("BQLOAD_IX", ["A"], owner="DFEN")
     assert foreign_indexes([ours], "DFEN") == []
-    assert foreign_indexes([ours, index("IX_MANUAL", ["A"], owner="DFEN"), index("BQLOAD_X", ["A"], owner="OUTRO")], "DFEN") == [
+    assert foreign_indexes(
+        [ours, index("IX_MANUAL", ["A"], owner="DFEN"), index("BQLOAD_X", ["A"], owner="OUTRO")], "DFEN"
+    ) == [
         "DFEN.IX_MANUAL",
         "OUTRO.BQLOAD_X",
     ]
@@ -670,26 +782,39 @@ def test_foreign_indexes_protects_indexes_the_pipeline_did_not_create():
 MARKED = f"{MANAGED_TABLE_MARKER}: carga a partir de x"
 
 
+type DbRow = tuple[object, ...]
+
+
+@final
 class FakeCursor:
     """Responde às consultas de dicionário usadas na troca e registra os comandos DDL."""
 
-    def __init__(self, objects, comments, synonyms=()):
-        self.objects, self.comments, self.synonyms = objects, comments, synonyms
-        self.ddl, self.rows, self.description = [], [], []
+    def __init__(
+        self,
+        objects: dict[str, list[str]],
+        comments: dict[str, str | None],
+        synonyms: Sequence[tuple[str, str, str]] = (),
+    ) -> None:
+        self.objects = objects
+        self.comments = comments
+        self.synonyms = synonyms
+        self.ddl: list[str] = []
+        self.rows: list[DbRow] = []
+        self.description: list[tuple[str]] = []
 
-    def __enter__(self):
+    def __enter__(self) -> "FakeCursor":
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *args: object) -> bool:
         return False
 
-    def execute(self, sql, binds=None):
+    def execute(self, sql: str, binds: dict[str, str] | None = None) -> None:
         binds = binds or {}
         if "FROM all_objects" in sql:
             self.answer(["object_type"], [(kind,) for kind in self.objects.get(binds["object_name"], [])])
         elif "FROM all_tables t" in sql and "all_tab_comments" in sql:
             name = binds["table_name"]
-            found = [(name, self.comments[name])] if name in self.comments else []
+            found: list[DbRow] = [(name, self.comments[name])] if name in self.comments else []
             self.answer(["table_name", "comments"], found)
         elif "session_privs" in sql:
             self.answer(["session_user", "privilege"], [("DFEN", "CREATE ANY SYNONYM")])
@@ -698,48 +823,58 @@ class FakeCursor:
         else:
             self.ddl.append(" ".join(sql.split()))
 
-    def answer(self, names, rows):
+    def answer(self, names: list[str], rows: Sequence[DbRow]) -> None:
         self.description = [(name,) for name in names]
-        self.rows = rows
+        self.rows = list(rows)
 
-    def fetchone(self):
+    def fetchone(self) -> DbRow | None:
         return self.rows[0] if self.rows else None
 
-    def fetchall(self):
+    def fetchall(self) -> list[DbRow]:
         return self.rows
 
 
+@final
 class FakeConnection:
-    def __init__(self, cursor):
+    def __init__(self, cursor: FakeCursor) -> None:
         self.fake_cursor = cursor
 
-    def __enter__(self):
+    def __enter__(self) -> "FakeConnection":
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *args: object) -> bool:
         return False
 
-    def cursor(self):
+    def cursor(self) -> FakeCursor:
         return self.fake_cursor
 
 
-
-def fake_database(monkeypatch, objects, comments, synonyms=()):
+def fake_database(
+    monkeypatch: pytest.MonkeyPatch,
+    objects: dict[str, list[str]],
+    comments: dict[str, str | None],
+    synonyms: Sequence[tuple[str, str, str]] = (),
+) -> FakeCursor:
     cursor = FakeCursor(objects, comments, synonyms)
-    monkeypatch.setattr(slots, "connect", lambda config: FakeConnection(cursor))
+
+    def connect(config: object) -> FakeConnection:
+        del config
+
+        return FakeConnection(cursor)
+
+    monkeypatch.setattr(slots, "connect", connect)
+
     return cursor
 
 
-def slots_config():
-    from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import OracleConfig
-
+def slots_config() -> OracleConfig:
     return OracleConfig("DFEN", "x", "h", "1521", "S", "DFEN")
 
 
 PLAN_A = SlotPlan("BQLOAD_X", None, "BQLOAD_X_A")
 
 
-def test_swap_migrates_partitioned_legacy_table_after_repointing_consumers(monkeypatch):
+def test_swap_migrates_partitioned_legacy_table_after_repointing_consumers(monkeypatch: pytest.MonkeyPatch) -> None:
     cursor = fake_database(
         monkeypatch,
         objects={"BQLOAD_X": ["TABLE", "TABLE PARTITION"]},
@@ -755,7 +890,7 @@ def test_swap_migrates_partitioned_legacy_table_after_repointing_consumers(monke
     ]
 
 
-def test_swap_after_migration_only_repoints_synonyms(monkeypatch):
+def test_swap_after_migration_only_repoints_synonyms(monkeypatch: pytest.MonkeyPatch) -> None:
     cursor = fake_database(monkeypatch, objects={"BQLOAD_X": ["SYNONYM"]}, comments={"BQLOAD_X_B": MARKED})
     slots.swap_synonyms(slots_config(), SlotPlan("BQLOAD_X", "BQLOAD_X_A", "BQLOAD_X_B"))
     assert [statement.split()[4] for statement in cursor.ddl] == [
@@ -773,14 +908,16 @@ def test_swap_after_migration_only_repoints_synonyms(monkeypatch):
         ({"BQLOAD_X": ["VIEW"]}, {"BQLOAD_X_A": MARKED}, "impede criar o sinônimo"),
     ],
 )
-def test_swap_changes_nothing_when_the_name_cannot_become_a_synonym(monkeypatch, objects, comments, message):
+def test_swap_changes_nothing_when_the_name_cannot_become_a_synonym(
+    monkeypatch: pytest.MonkeyPatch, objects: dict[str, list[str]], comments: dict[str, str | None], message: str
+) -> None:
     cursor = fake_database(monkeypatch, objects=objects, comments=comments)
     with pytest.raises(PermissionError, match=message):
         slots.swap_synonyms(slots_config(), PLAN_A)
     assert cursor.ddl == []
 
 
-def test_resolve_slots_stops_before_loading_when_legacy_table_is_not_managed(monkeypatch):
+def test_resolve_slots_stops_before_loading_when_legacy_table_is_not_managed(monkeypatch: pytest.MonkeyPatch) -> None:
     cursor = fake_database(
         monkeypatch,
         objects={"BQLOAD_X": ["TABLE"]},
@@ -792,7 +929,7 @@ def test_resolve_slots_stops_before_loading_when_legacy_table_is_not_managed(mon
     assert cursor.ddl == []
 
 
-def test_refresh_synonyms_points_every_owner_to_the_active_table(monkeypatch):
+def test_refresh_synonyms_points_every_owner_to_the_active_table(monkeypatch: pytest.MonkeyPatch) -> None:
     cursor = fake_database(
         monkeypatch,
         objects={"BQLOAD_X": ["SYNONYM"]},
@@ -817,7 +954,13 @@ def test_refresh_synonyms_points_every_owner_to_the_active_table(monkeypatch):
         ({"BQLOAD_X": ["TABLE"]}, {"BQLOAD_X": MARKED}, [("NFSE_SIGA", "DFEN", "BQLOAD_X")], PermissionError),
     ],
 )
-def test_refresh_synonyms_changes_nothing_without_an_active_a_b_table(monkeypatch, objects, comments, synonyms, error):
+def test_refresh_synonyms_changes_nothing_without_an_active_a_b_table(
+    monkeypatch: pytest.MonkeyPatch,
+    objects: dict[str, list[str]],
+    comments: dict[str, str | None],
+    synonyms: list[tuple[str, str, str]],
+    error: type[Exception],
+) -> None:
     cursor = fake_database(monkeypatch, objects=objects, comments=comments, synonyms=synonyms)
     with pytest.raises(error):
         slots.refresh_synonyms(slots_config(), "BQLOAD_X")
@@ -860,8 +1003,10 @@ STATUS_EXPRESSIONS = (
 )
 
 
-def function_based_index(columns=STATUS_EXPRESSIONS, **extra):
-    return index("IX_MVT_NN_CANC_COMP_NN", columns, index_type="FUNCTION-BASED NORMAL", tablespace=None, **extra)
+def function_based_index(columns: Sequence[str] = STATUS_EXPRESSIONS, locality: str | None = "LOCAL") -> IndexDefinition:
+    return index(
+        "IX_MVT_NN_CANC_COMP_NN", columns, locality=locality, index_type="FUNCTION-BASED NORMAL", tablespace=None
+    )
 
 
 def test_raw_ddl_type_and_definition():
@@ -873,7 +1018,7 @@ def test_raw_ddl_type_and_definition():
 def test_raw_loader_spec_decodes_base64_text():
     assert loader_spec(ora("PESSOA_EMITENTE", "RAW", 16), "STRING") == (
         'CHAR(64) "CASE WHEN :PESSOA_EMITENTE IS NOT NULL THEN '
-        'UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(:PESSOA_EMITENTE)) END"'
+        + 'UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(:PESSOA_EMITENTE)) END"'
     )
     assert loader_spec(ora("BLOB_GRANDE", "RAW", 2000), "STRING").startswith("CHAR(2668) ")
 
@@ -882,7 +1027,7 @@ def test_raw_loader_spec_decodes_base64_text():
     ("column", "bq_type"),
     [(ora("PESSOA", "RAW", 16), "BYTES"), (ora("PESSOA", "RAW", 16), "INTEGER"), (ora("_PESSOA", "RAW", 16), "STRING")],
 )
-def test_raw_loader_spec_rejects_other_sources_and_quoted_names(column, bq_type):
+def test_raw_loader_spec_rejects_other_sources_and_quoted_names(column: OracleColumn, bq_type: str) -> None:
     with pytest.raises(NotImplementedError):
         loader_spec(column, bq_type)
 
@@ -894,7 +1039,7 @@ def test_build_load_plan_for_notas_nacionais_detalhes_excludes_rowids_and_decode
     specs = {loader.name: loader.spec for loader in plan.fields}
     assert specs["PESSOA_INTERMEDIARIO"] == (
         'CHAR(64) "CASE WHEN :PESSOA_INTERMEDIARIO IS NOT NULL THEN '
-        'UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(:PESSOA_INTERMEDIARIO)) END"'
+        + 'UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(:PESSOA_INTERMEDIARIO)) END"'
     )
     assert specs["DATA_VALIDACAO"] == 'DATE "YYYY-MM-DD\\"T\\"HH24:MI:SS"'
     assert specs["STATUS_NOTA"] == "CHAR(64)"
@@ -907,7 +1052,11 @@ def test_build_load_plan_for_notas_nacionais_detalhes_excludes_rowids_and_decode
 
 def test_index_key_reads_column_expression_and_descending_columns():
     assert index_key({"column_name": "A", "descend": "ASC", "column_expression": None}) == "A"
-    row = {"column_name": "SYS_NC1$", "descend": "ASC", "column_expression": ' CASE WHEN "A"=1 THEN 1 END'}
+    row: dict[str, object] = {
+        "column_name": "SYS_NC1$",
+        "descend": "ASC",
+        "column_expression": ' CASE WHEN "A"=1 THEN 1 END',
+    }
     expression = index_key(row)
     assert isinstance(expression, IndexExpression)
     assert expression == 'CASE WHEN "A"=1 THEN 1 END'
@@ -917,7 +1066,7 @@ def test_index_key_reads_column_expression_and_descending_columns():
 
 
 def test_index_from_dictionary_keeps_expressions_of_function_based_index():
-    row = {
+    row: dict[str, object] = {
         "owner": "DFEN",
         "index_name": "IX_MVT_NN_CANC_COMP_NN",
         "index_type": "FUNCTION-BASED NORMAL",
@@ -963,7 +1112,7 @@ def test_plan_structure_rejects_function_based_index_on_column_that_is_not_loade
         function_based_index(columns=("SYS_NC00001$",)),
     ],
 )
-def test_plan_structure_still_rejects_other_function_based_and_unknown_indexes(unsupported):
+def test_plan_structure_still_rejects_other_function_based_and_unknown_indexes(unsupported: IndexDefinition) -> None:
     with pytest.raises(NotImplementedError):
         plan_structure(TableLayout(None, None, (unsupported,)), LOADED, "BQLOAD_")
 
@@ -973,7 +1122,7 @@ def test_index_statement_emits_expressions_verbatim_with_local_and_parallel():
     assert parts == {
         "kind": "",
         "columns": 'CASE  WHEN "STATUS_NOTA"<>0 THEN "DATA_COMPETENCIA_MUNICIPIO" END , '
-        'CASE  WHEN "STATUS_NOTA"<>0 THEN "NOTA_NACIONAL" END ',
+        + 'CASE  WHEN "STATUS_NOTA"<>0 THEN "NOTA_NACIONAL" END ',
         "options": "LOCAL PARALLEL 4",
     }
     statement = render_query(
@@ -986,8 +1135,8 @@ def test_index_statement_emits_expressions_verbatim_with_local_and_parallel():
     )
     assert statement.startswith(
         'CREATE  INDEX "DFEN"."BQLOAD_IX_MVT_NN_CANC_COMP_NN_A" ON "DFEN"."BQLOAD_MVT_NOTAS_NACIONAIS_DETALHES_A" '
-        '(CASE  WHEN "STATUS_NOTA"<>0 THEN "DATA_COMPETENCIA_MUNICIPIO" END , '
-        'CASE  WHEN "STATUS_NOTA"<>0 THEN "NOTA_NACIONAL" END )'
+        + '(CASE  WHEN "STATUS_NOTA"<>0 THEN "DATA_COMPETENCIA_MUNICIPIO" END , '
+        + 'CASE  WHEN "STATUS_NOTA"<>0 THEN "NOTA_NACIONAL" END )'
     )
     assert statement.rstrip().endswith("LOCAL PARALLEL 4")
 
@@ -1007,7 +1156,7 @@ def test_function_based_index_description_shows_expressions():
         (ora("NACIONAL", "NVARCHAR2", 20, "C"), "CHAR(80)"),
     ],
 )
-def test_text_loader_spec_is_sized_from_the_column_with_utf8_headroom(column, expected):
+def test_text_loader_spec_is_sized_from_the_column_with_utf8_headroom(column: OracleColumn, expected: str) -> None:
     assert loader_spec(column, "STRING") == expected
     assert loader_spec(column, "JSON") == expected
 
@@ -1024,7 +1173,7 @@ def test_date_loader_spec_is_native_without_sql_expression():
 
 
 @pytest.mark.parametrize(("length", "chars"), [(16, 32), (8, 16), (2000, 4000)])
-def test_raw_hex_loader_spec_is_a_plain_char_field_sized_by_two_chars_per_byte(length, chars):
+def test_raw_hex_loader_spec_is_a_plain_char_field_sized_by_two_chars_per_byte(length: int, chars: int) -> None:
     spec = loader_spec(ora("PESSOA", "RAW", length), "STRING", "hex")
     assert spec == f"CHAR({chars})"
 
@@ -1050,72 +1199,124 @@ def test_count_rows_query_runs_parallel_with_the_requested_degree():
     assert sql == 'SELECT /*+ PARALLEL(4) */ COUNT(*)\nFROM "DFEN"."BQLOAD_X_A"\n'
 
 
+@final
+class CountCursor:
+    """A cursor that records the SQL and answers a count of 7."""
+
+    def __init__(self, executed: list[str]) -> None:
+        self.executed = executed
+
+    def __enter__(self) -> "CountCursor":
+        return self
+
+    def __exit__(self, *args: object) -> bool:
+        return False
+
+    def execute(self, sql: str) -> None:
+        self.executed.append(sql)
+
+    def fetchone(self) -> tuple[int]:
+        return (7,)
+
+
+@final
+class CountConnection:
+    """A connection with the cursor of `CountCursor`."""
+
+    def __init__(self, executed: list[str]) -> None:
+        self.executed = executed
+
+    def __enter__(self) -> "CountConnection":
+        return self
+
+    def __exit__(self, *args: object) -> bool:
+        return False
+
+    def cursor(self) -> CountCursor:
+        return CountCursor(self.executed)
+
+
 @pytest.mark.parametrize(("requested", "hinted"), [(4, 4), (1, 1), (0, 1), (-3, 1)])
-def test_count_rows_sends_the_parallel_hint_to_oracle(monkeypatch, requested, hinted):
-    from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import oracle
+def test_count_rows_sends_the_parallel_hint_to_oracle(
+    monkeypatch: pytest.MonkeyPatch, requested: int, hinted: int
+) -> None:
+    executed: list[str] = []
 
-    executed = []
+    def connect(config: object) -> CountConnection:
+        del config
 
-    class Cursor:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_):
-            return False
-
-        def execute(self, sql):
-            executed.append(sql)
-
-        def fetchone(self):
-            return (7,)
-
-    class Connection(Cursor):
-        def cursor(self):
-            return Cursor()
+        return CountConnection(executed)
 
     config = oracle.OracleConfig("DFEN", "p", "h", "1", "s", "DFEN")
-    monkeypatch.setattr(oracle, "connect", lambda _config: Connection())
+    monkeypatch.setattr(oracle, "connect", connect)
     assert oracle.count_rows(config, "BQLOAD_X_A", parallel_degree=requested) == 7
     assert executed == [f'SELECT /*+ PARALLEL({hinted}) */ COUNT(*)\nFROM "DFEN"."BQLOAD_X_A"\n']
 
 
+@final
 class FakeBatch:
-    def __init__(self, log):
+    def __init__(self, log: list[str]) -> None:
         self.log = log
 
-    def __enter__(self):
+    def __enter__(self) -> "FakeBatch":
         self.log.append("batch-open")
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, *exc: object) -> bool:
         self.log.append("batch-close")
         return False
 
 
-class FakeStorageClient:
-    def __init__(self, log):
+@final
+class FakeBlob:
+    def __init__(self, log: list[str], name: str) -> None:
+        self.log = log
+        self.name = name
+
+    def delete(self) -> None:
+        self.log.append(self.name)
+
+
+@final
+class FakeBucket:
+    def __init__(self, log: list[str]) -> None:
         self.log = log
 
-    def batch(self, raise_exception=True):
+    def blob(self, blob_name: str) -> FakeBlob:
+        return FakeBlob(self.log, blob_name)
+
+
+@final
+class FakeStorageClient:
+    def __init__(self, log: list[str]) -> None:
+        self.log = log
+
+    def batch(self, raise_exception: bool = True) -> FakeBatch:
         assert raise_exception is True
         return FakeBatch(self.log)
 
-    def bucket(self, name):
-        log = self.log
+    def bucket(self, name: str) -> FakeBucket:
+        del name
 
-        class Bucket:
-            def blob(self, blob_name):
-                return type("Blob", (), {"delete": staticmethod(lambda: log.append(blob_name))})()
-
-        return Bucket()
+        return FakeBucket(self.log)
 
 
-def test_delete_blobs_removes_every_object_in_batches_of_at_most_100(monkeypatch):
-    log = []
-    monkeypatch.setattr(bigquery.storage, "Client", lambda project: FakeStorageClient(log))
+def fake_storage(monkeypatch: pytest.MonkeyPatch, log: list[str]) -> None:
+    def client(project: str) -> FakeStorageClient:
+        del project
+
+        return FakeStorageClient(log)
+
+    monkeypatch.setattr(storage, "Client", client)
+
+
+def test_delete_blobs_removes_every_object_in_batches_of_at_most_100(monkeypatch: pytest.MonkeyPatch) -> None:
+    log: list[str] = []
+    fake_storage(monkeypatch, log)
     names = [f"p/part-{n}.csv.gz" for n in range(250)]
     bigquery.delete_blobs("proj", "bucket", names)
-    batches, current = [], None
+    batches: list[list[str]] = []
+    current: list[str] = []
     for item in log:
         if item == "batch-open":
             current = []
@@ -1127,8 +1328,8 @@ def test_delete_blobs_removes_every_object_in_batches_of_at_most_100(monkeypatch
     assert [name for batch in batches for name in batch] == names
 
 
-def test_delete_blobs_with_no_objects_makes_no_request(monkeypatch):
-    log = []
-    monkeypatch.setattr(bigquery.storage, "Client", lambda project: FakeStorageClient(log))
+def test_delete_blobs_with_no_objects_makes_no_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    log: list[str] = []
+    fake_storage(monkeypatch, log)
     bigquery.delete_blobs("proj", "bucket", [])
     assert log == []

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Literal, Protocol
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import default_dbt_parameters
+from utils.runs import RunStatus
 
 COMPLETED = "COMPLETED"
 FINAL_STATE_TYPES = frozenset({COMPLETED, "FAILED", "CRASHED", "CANCELLED"})
@@ -14,22 +15,6 @@ FINAL_STATE_TYPES = frozenset({COMPLETED, "FAILED", "CRASHED", "CANCELLED"})
 
 class DbtRunError(RuntimeError):
     """O run de dbt não terminou com sucesso."""
-
-
-@dataclass(frozen=True)
-class RunStatus:
-    """Estado de um flow run do Prefect.
-
-    :param state_type: Tipo do estado (``COMPLETED``, ``FAILED``, ``RUNNING``...).
-    :param state_name: Nome do estado, como aparece na UI.
-    :param message: Mensagem do estado, se houver.
-    :param end_time: Fim do run, em UTC, quando já terminou.
-    """
-
-    state_type: str
-    state_name: str
-    message: str | None
-    end_time: datetime | None
 
 
 class RunClient(Protocol):
@@ -107,13 +92,13 @@ class RunWaiter:
         """
         started = self.monotonic()
         try:
-            status = self._poll(run_id, started)
+            status = self.poll(run_id, started)
         except BaseException:
-            self._cancel(run_id, "espera interrompida; cancelando o run de dbt")
+            self.cancel_run(run_id, "espera interrompida; cancelando o run de dbt")
             raise
         elapsed = self.monotonic() - started
         if status is None:
-            self._cancel(
+            self.cancel_run(
                 run_id, f"tempo limite de {self.timeout_seconds / 60:.0f} min excedido; cancelando o run de dbt"
             )
             raise DbtRunError(f"O dbt não terminou em {self.timeout_seconds / 60:.0f} min; o run foi cancelado.")
@@ -122,7 +107,7 @@ class RunWaiter:
             raise DbtRunError(f"O dbt terminou em {status.state_name} após {elapsed / 60:.1f} min{detail}")
         return status.end_time or datetime.now(UTC)
 
-    def _poll(self, run_id: str, started: float) -> RunStatus | None:
+    def poll(self, run_id: str, started: float) -> RunStatus | None:
         while True:
             status = self.runs.read_status(run_id)
             elapsed = self.monotonic() - started
@@ -133,6 +118,6 @@ class RunWaiter:
                 return None
             self.sleep(min(self.poll_seconds, self.timeout_seconds - elapsed))
 
-    def _cancel(self, run_id: str, message: str) -> None:
+    def cancel_run(self, run_id: str, message: str) -> None:
         self.report(message)
         self.runs.cancel(run_id)

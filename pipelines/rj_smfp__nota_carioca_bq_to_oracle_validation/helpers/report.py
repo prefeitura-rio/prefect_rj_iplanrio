@@ -353,7 +353,8 @@ def format_text_table(headers: list[str], rows: list[list[str]]) -> str:
     :param rows: Linhas, com o mesmo número de colunas dos cabeçalhos.
     :returns: Tabela pronta para o log.
     """
-    widths = [max(len(str(value)) for value in column) for column in zip(headers, *rows, strict=False)]
+    table = [headers, *rows]
+    widths = [max(len(str(row[index])) for row in table) for index in range(len(headers))]
 
     def line(values: list[str]) -> str:
         return " | ".join(str(value).ljust(width) for value, width in zip(values, widths, strict=True)).rstrip()

@@ -109,7 +109,7 @@ def choose_slots(base: str, schema: str, synonyms: list[SynonymTarget]) -> SlotP
         if synonym.table_owner != schema or (synonym.table_name not in slot_tables and synonym.table_name != base):
             raise PermissionError(
                 f"O sinônimo {synonym.owner}.{base} aponta para {synonym.table_owner}.{synonym.table_name}, "
-                "que a pipeline não gerencia. Nada foi alterado."
+                + "que a pipeline não gerencia. Nada foi alterado."
             )
     by_owner = {synonym.owner: synonym.table_name for synonym in ours}
     active = next((by_owner[owner] for owner in owners if by_owner.get(owner) in slot_tables), None)
@@ -157,7 +157,9 @@ def create_synonym(cursor: oracledb.Cursor, owner: str, base: str, schema: str, 
     :param schema: Schema da tabela física.
     :param table: Tabela física.
     """
-    cursor.execute(render_query(QUERIES_ANCHOR, "create_synonym", owner=owner, synonym=base, schema=schema, table=table))
+    cursor.execute(
+        render_query(QUERIES_ANCHOR, "create_synonym", owner=owner, synonym=base, schema=schema, table=table)
+    )
 
 
 def assert_replaceable_legacy_table(cursor: oracledb.Cursor, schema: str, base: str) -> bool:
@@ -247,8 +249,8 @@ def load_comment(source: str, snapshot_modified: datetime, loaded_at: datetime) 
     """
     return (
         f"{MANAGED_TABLE_MARKER}: carga a partir de {source}; "
-        f"snapshot do BigQuery de {snapshot_modified.astimezone(UTC):{TIMESTAMP_FORMAT}} UTC; "
-        f"carregada em {loaded_at.astimezone(UTC):{TIMESTAMP_FORMAT}} UTC"
+        + f"snapshot do BigQuery de {snapshot_modified.astimezone(UTC):{TIMESTAMP_FORMAT}} UTC; "
+        + f"carregada em {loaded_at.astimezone(UTC):{TIMESTAMP_FORMAT}} UTC"
     )
 
 
@@ -339,7 +341,7 @@ def refresh_synonyms(config: OracleConfig, base: str) -> list[str]:
         if assert_replaceable_legacy_table(cursor, config.schema, base):
             raise PermissionError(
                 f"{config.schema}.{base} ainda é a tabela única antiga; rode a carga completa (mode=full) "
-                "para terminar a migração para A/B. Nada foi alterado."
+                + "para terminar a migração para A/B. Nada foi alterado."
             )
         plan = choose_slots(base, config.schema, read_synonyms(cursor, config.schema, base))
         if plan.active is None:

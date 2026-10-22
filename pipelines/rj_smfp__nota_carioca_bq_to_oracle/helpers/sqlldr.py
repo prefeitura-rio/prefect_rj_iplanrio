@@ -10,17 +10,16 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from io import UnsupportedOperation
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Protocol, cast, final
 
 from google.cloud import storage
-from prefect.logging import get_logger
+from toolkit.telemetry import logger
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import ExportedFile
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import LoaderField
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import OracleConfig
-
-logger = get_logger("toolkit")
 
 SQLLDR_BIN = "sqlldr"
 COPY_BUFFER_BYTES = 1024 * 1024
@@ -117,6 +116,15 @@ class SessionProgress:
             self.files_done += 1
 
 
+class Readable(Protocol):
+    """A file that gives bytes."""
+
+    def read(self, size: int = -1, /) -> bytes:
+        """Read up to `size` bytes, or all of them with a negative size."""
+        ...
+
+
+@final
 class CountingReader:
     """Leitor que repassa os bytes de outro arquivo e contabiliza o que foi lido.
 
@@ -124,15 +132,19 @@ class CountingReader:
     :param progress: Contadores da sessão.
     """
 
-    def __init__(self, raw: BinaryIO, progress: SessionProgress) -> None:
+    def __init__(self, raw: Readable, progress: SessionProgress) -> None:
         self.raw = raw
         self.progress = progress
 
-    def read(self, size: int = -1) -> bytes:
+    def read(self, size: int = -1, /) -> bytes:
         """Lê do arquivo de origem e soma o tamanho lido ao progresso."""
         data = self.raw.read(size)
         self.progress.add_bytes(len(data))
         return data
+
+    def seek(self, offset: int, /) -> int:
+        """Refuse to seek: the stream goes forward only. `GzipFile` only asks for it to rewind."""
+        raise UnsupportedOperation(f"The GCS stream cannot seek to {offset}")
 
 
 def format_count(value: int) -> str:
@@ -195,8 +207,8 @@ def format_progress(table: str, snapshot: ProgressSnapshot) -> str:
     percent_text = f"{percent:.1f}".replace(".", ",")
     return (
         f"Carga de {table}: {snapshot.files_done}/{snapshot.files_total} arquivos, "
-        f"{format_size(snapshot.bytes_done)} de {format_size(snapshot.bytes_total)} ({percent_text}%), "
-        f"{format_duration(snapshot.elapsed_seconds)} decorridos, {estimate}"
+        + f"{format_size(snapshot.bytes_done)} de {format_size(snapshot.bytes_total)} ({percent_text}%), "
+        + f"{format_duration(snapshot.elapsed_seconds)} decorridos, {estimate}"
     )
 
 
@@ -216,13 +228,13 @@ def build_control_file(schema: str, table: str, fields: list[LoaderField]) -> st
     field_lines = ",\n".join(f'  "{field.name}" {field.spec}' for field in fields)
     return (
         "LOAD DATA\n"
-        "CHARACTERSET AL32UTF8\n"
-        "APPEND\n"
-        "PRESERVE BLANKS\n"
-        f'INTO TABLE "{schema}"."{table}"\n'
-        "FIELDS CSV WITH EMBEDDED TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"'\n"
-        "TRAILING NULLCOLS\n"
-        f"(\n{field_lines}\n)\n"
+        + "CHARACTERSET AL32UTF8\n"
+        + "APPEND\n"
+        + "PRESERVE BLANKS\n"
+        + f'INTO TABLE "{schema}"."{table}"\n'
+        + "FIELDS CSV WITH EMBEDDED TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"'\n"
+        + "TRAILING NULLCOLS\n"
+        + f"(\n{field_lines}\n)\n"
     )
 
 
@@ -255,7 +267,7 @@ def stream_blobs(
     try:
         for exported in files:
             with bucket.blob(exported.name).open("rb") as raw:
-                with gzip.GzipFile(fileobj=CountingReader(raw, progress)) as unzipped:
+                with gzip.GzipFile(fileobj=CountingReader(cast("Readable", raw), progress)) as unzipped:
                     shutil.copyfileobj(unzipped, target, COPY_BUFFER_BYTES)
             progress.add_file()
     except BaseException as error:
@@ -355,7 +367,7 @@ def load_from_gcs(
             stderr = process.stderr.read().decode(errors="replace") if process.stderr else ""
             return_code = process.wait()
             log_text = log_file.read_text(errors="replace") if log_file.exists() else ""
-            session_rows = sum(int(count) for count in LOADED_PATTERN.findall(log_text))
+            session_rows = sum(int(match.group(1)) for match in LOADED_PATTERN.finditer(log_text))
             results.append(SessionResult(index=index, files=len(group), rows=session_rows))
             logger.info("Sessão %d: %d arquivos, %d linhas, código %d", index, len(group), session_rows, return_code)
             if return_code != 0 or errors:

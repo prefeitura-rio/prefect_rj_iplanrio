@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass
+from decimal import Decimal
 from math import ceil
 from typing import Literal
 
@@ -101,6 +102,17 @@ class LoadPlan:
     excluded: list[str]
 
 
+def read_int(value: object) -> int | None:
+    """Return a number that the database gave as an integer, or nothing for a null. Raise `TypeError` for others."""
+    if value is None:
+        return None
+
+    if isinstance(value, int | float | Decimal | str):
+        return int(value)
+
+    raise TypeError(f"Valor não numérico: {value!r}")
+
+
 def oracle_column(row: dict[str, object]) -> OracleColumn:
     """Converte uma linha de ``all_tab_columns`` em :class:`OracleColumn`.
 
@@ -111,10 +123,10 @@ def oracle_column(row: dict[str, object]) -> OracleColumn:
     return OracleColumn(
         name=str(row["column_name"]),
         data_type=str(row["data_type"]),
-        data_length=None if row["data_length"] is None else int(row["data_length"]),
+        data_length=read_int(row["data_length"]),
         char_used=None if row["char_used"] is None else str(row["char_used"]),
-        precision=None if row["data_precision"] is None else int(row["data_precision"]),
-        scale=None if row["data_scale"] is None else int(row["data_scale"]),
+        precision=read_int(row["data_precision"]),
+        scale=read_int(row["data_scale"]),
         nullable=row["nullable"] == "Y",
     )
 
@@ -211,7 +223,7 @@ def build_load_plan(
     if missing:
         raise ValueError(
             f"Colunas da tabela original ausentes no BigQuery: {missing}. "
-            "Se não forem dados de negócio, informe-as no parâmetro excluded_template_columns."
+            + "Se não forem dados de negócio, informe-as no parâmetro excluded_template_columns."
         )
 
     by_name = {column.name: column for column in columns}

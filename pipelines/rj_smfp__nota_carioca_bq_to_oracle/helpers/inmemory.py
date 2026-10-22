@@ -59,7 +59,7 @@ class InMemoryStatus:
         pending = self.bytes_not_populated / 1024**3
         return (
             f"{self.table}: {self.populated_segments}/{self.expected_segments} segmento(s) no In-Memory, "
-            f"{pending:.2f} GB por popular".replace(".", ",")
+            + f"{pending:.2f} GB por popular".replace(".", ",")
         )
 
 
@@ -87,7 +87,9 @@ def start_population(config: OracleConfig, table: str, partitioned: bool) -> lis
             segments = [None]
         for partition in segments:
             try:
-                cursor.execute(render_query(QUERIES_ANCHOR, "populate_inmemory"), {**binds, "partition_name": partition})
+                cursor.execute(
+                    render_query(QUERIES_ANCHOR, "populate_inmemory"), {**binds, "partition_name": partition}
+                )
             except oracledb.DatabaseError as error:
                 errors.append(f"{partition or table}: {oracle_message(error)}")
     return errors

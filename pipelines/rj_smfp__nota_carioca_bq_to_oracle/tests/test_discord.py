@@ -1,10 +1,11 @@
 # ruff: noqa: PLR2004
+from typing import final
 import json
 import math
 from dataclasses import replace
 from datetime import UTC, datetime
 
-import httpx
+import httpx2
 import pytest
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import discord as discord_module
@@ -13,7 +14,6 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import (
     never_raises,
     resolve_webhook,
     webhook_from_env,
-    webhook_from_secret_block,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import (
     COLOR_CANCELLED,
@@ -194,11 +194,11 @@ def test_announcement_lines() -> None:
     cancelled = build_announcement(view(RunStatus.CANCELLED, elapsed_seconds=30, failed_stage="Carga", url=None))
     # Then each is a one-line summary with the right icon, stage, duration and link
     assert done == (
-        "✅ **Oracle → BigQuery** (`brutos_nota_fiscal`) concluído em 41min · 2 tabelas · "
+        "✅ **Oracle → BigQuery** (`brutos_nota_fiscal`) concluído em 41min · 2 tabelas · " +
         "<https://prefect.example/runs/flow-run/abc>"
     )
     assert failed == (
-        "❌ **Oracle → BigQuery** (`brutos_nota_fiscal`) falhou na etapa **Extração** após 12min: "
+        "❌ **Oracle → BigQuery** (`brutos_nota_fiscal`) falhou na etapa **Extração** após 12min: " +
         "`boom 'x' linha 2` · <https://prefect.example/runs/flow-run/abc>"
     )
     assert (
@@ -229,22 +229,24 @@ def test_short_duration() -> None:
     ]
 
 
+@final
 class Server:
     """Discord falso: responde com a fila de respostas e guarda as requisições."""
 
-    def __init__(self, *responses: httpx.Response | Exception) -> None:
+    def __init__(self, *responses: httpx2.Response | Exception) -> None:
         self.responses = list(responses)
-        self.requests: list[httpx.Request] = []
-        self.transport = httpx.MockTransport(self.handle)
+        self.requests: list[httpx2.Request] = []
+        self.transport = httpx2.MockTransport(self.handle)
 
-    def handle(self, request: httpx.Request) -> httpx.Response:
+    def handle(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(request)
-        reply = self.responses.pop(0) if self.responses else httpx.Response(200, json={"id": "m1"})
+        reply = self.responses.pop(0) if self.responses else httpx2.Response(200, json={"id": "m1"})
         if isinstance(reply, Exception):
             raise reply
         return reply
 
 
+@final
 class Clock:
     def __init__(self) -> None:
         self.now = 1000.0
@@ -264,7 +266,6 @@ def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
 def warnings(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     captured: list[str] = []
     monkeypatch.setattr(discord_module, "warn", captured.append)
-    monkeypatch.setattr(discord_module, "info", lambda _: None)
     return captured
 
 
@@ -295,7 +296,7 @@ def test_missing_or_empty_webhook_disables_the_client_without_requests(
 
 def test_first_publish_posts_with_wait_and_the_next_patches_the_same_message(clock: Clock) -> None:
     # Given a server that returns the message id
-    server = Server(httpx.Response(200, json={"id": "777"}), httpx.Response(200, json={"id": "777"}))
+    server = Server(httpx2.Response(200, json={"id": "777"}), httpx2.Response(200, json={"id": "777"}))
     message = client(server)
     # When publishing twice, the second time after the interval
     message.publish({"embeds": ["first"]})
@@ -330,7 +331,7 @@ def test_edits_are_throttled_and_force_bypasses_the_interval(clock: Clock) -> No
 def test_deleted_message_is_recreated_on_the_next_publish(warnings: list[str]) -> None:
     # Given a message that someone deleted (404 on edit)
     server = Server(
-        httpx.Response(200, json={"id": "1"}), httpx.Response(404, json={}), httpx.Response(200, json={"id": "2"})
+        httpx2.Response(200, json={"id": "1"}), httpx2.Response(404, json={}), httpx2.Response(200, json={"id": "2"})
     )
     message = client(server)
     message.publish({"n": 1})
@@ -346,7 +347,7 @@ def test_deleted_message_is_recreated_on_the_next_publish(warnings: list[str]) -
 
 def test_rate_limit_is_swallowed_logged_once_and_respected(clock: Clock, warnings: list[str]) -> None:
     # Given a 429 asking to wait 90 s
-    server = Server(httpx.Response(429, json={"retry_after": 90.0}))
+    server = Server(httpx2.Response(429, json={"retry_after": 90.0}))
     message = client(server)
     message.publish({"n": 1})
     # When trying again before and after the deadline
@@ -364,7 +365,7 @@ def test_rate_limit_is_swallowed_logged_once_and_respected(clock: Clock, warning
 @pytest.mark.usefixtures("clock")
 def test_server_errors_and_invalid_json_are_swallowed(warnings: list[str]) -> None:
     # Given a 500 and then a 200 whose body is not JSON
-    server = Server(httpx.Response(500), httpx.Response(200, content=b"<html>"), httpx.Response(200, json={"x": 1}))
+    server = Server(httpx2.Response(500), httpx2.Response(200, content=b"<html>"), httpx2.Response(200, json={"x": 1}))
     message = client(server)
     for _ in range(3):
         message.publish({"n": 1}, force=True)
@@ -376,7 +377,7 @@ def test_server_errors_and_invalid_json_are_swallowed(warnings: list[str]) -> No
 @pytest.mark.usefixtures("clock")
 def test_network_error_is_swallowed_logged_once_and_never_leaks_the_url(warnings: list[str]) -> None:
     # Given a network that is down and whose error text contains the webhook URL
-    server = Server(*[httpx.ConnectError(f"cannot reach {URL}") for _ in range(3)])
+    server = Server(*[httpx2.ConnectError(f"cannot reach {URL}") for _ in range(3)])
     message = client(server)
     # When publishing repeatedly
     for _ in range(3):
@@ -390,7 +391,7 @@ def test_network_error_is_swallowed_logged_once_and_never_leaks_the_url(warnings
 @pytest.mark.usefixtures("warnings")
 def test_failures_back_off_so_a_dead_discord_costs_little(clock: Clock) -> None:
     # Given a failed attempt
-    server = Server(httpx.ConnectError("down"))
+    server = Server(httpx2.ConnectError("down"))
     message = client(server)
     message.publish({"n": 1})
     # When publishing at the normal interval, and then after the doubled wait
@@ -407,7 +408,7 @@ def test_failures_back_off_so_a_dead_discord_costs_little(clock: Clock) -> None:
 def test_announce_posts_a_standalone_message_and_swallows_failures(warnings: list[str]) -> None:
     # Given a live message and then a failing announcement
     server = Server(
-        httpx.Response(200, json={"id": "9"}), httpx.Response(200, json={"id": "10"}), httpx.ConnectError("x")
+        httpx2.Response(200, json={"id": "9"}), httpx2.Response(200, json={"id": "10"}), httpx2.ConnectError("x")
     )
     message = client(server)
     message.publish({"embeds": []})
@@ -446,7 +447,7 @@ def test_equal_counts_render_a_green_line_with_the_note() -> None:
     # Then the line is ✅, joined by "=", in pt-BR format, with the note
     assert equal_line().is_valid
     assert format_validation_line(equal_line()) == (
-        "✅ DPS · Oracle (SCN) 193.000.000 = arquivos 193.000.000 = BigQuery 193.000.000 · "
+        "✅ DPS · Oracle (SCN) 193.000.000 = arquivos 193.000.000 = BigQuery 193.000.000 · " +
         "Σ VALOR_SERVICO, NUMERO_DPS iguais"
     )
 
@@ -508,38 +509,17 @@ def test_many_long_validation_lines_stay_inside_the_discord_limits() -> None:
     assert total_chars(embed) <= 6000
 
 
-def test_webhook_prefers_the_environment_variable_over_the_secret_block(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given both sources holding a webhook
-    loaded: list[str] = []
+def test_webhook_comes_from_the_environment_variable(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given the variable set, with surrounding spaces
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", f"  {URL} ")
 
-    def load(name: str) -> str:
-        loaded.append(name)
-        return "https://discord.test/block"
-
-    # When the webhook is resolved, Then the variable wins and the block is not read
-    monkeypatch.setenv("DISCORD_WEBHOOK_URL", URL)
-    assert resolve_webhook(load) == URL
-    assert loaded == []
+    # When the webhook is resolved, Then the trimmed value is used
+    assert resolve_webhook() == URL
 
 
-def test_webhook_falls_back_to_the_secret_block_without_the_variable(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given no variable and a Secret block with surrounding spaces
-    def load(name: str) -> str:
-        assert name == "discord-webhook-nota-carioca"
-        return f"  {URL} "
-
-    # When the webhook is resolved, Then the block value is used
+def test_a_missing_variable_disables_notifications(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given no variable
     monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
-    assert resolve_webhook(load) == URL
 
-
-def test_unreadable_or_empty_secret_block_disables_notifications(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given a block that fails to load and one that is empty
-    def missing(name: str) -> str:
-        raise ValueError(f"block {name} not found")
-
-    # When it is read, Then no webhook is returned and nothing is raised
-    assert webhook_from_secret_block(missing) is None
-    assert webhook_from_secret_block(lambda _name: "   ") is None
-    monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
-    assert resolve_webhook(missing) is None
+    # When the webhook is resolved, Then there is none
+    assert resolve_webhook() is None

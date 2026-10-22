@@ -217,6 +217,11 @@ select = [
 "tests/**" = [
   "PLR2004",
 ] # the expected numbers and values of an assertion are the point of a test
+"pipelines/*/tests/**" = [
+  "PLR0913",
+  "PLR0917",
+  "PLR2004",
+] # the expected values of an assertion are the point of a test, and a factory of test data takes many options
 "tests/fixtures.py" = [
   "A002",
   "ARG002",

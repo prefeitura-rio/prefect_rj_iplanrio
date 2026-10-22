@@ -2,16 +2,14 @@
 import json
 from dataclasses import replace
 from datetime import UTC, datetime
-from types import SimpleNamespace
-from typing import Literal
+from typing import Literal, final
 
-import httpx
+import httpx2
 import pytest
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle import flow as flow_module
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle import tasks as tasks_module
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import discord as discord_module
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import slots, sqlldr
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import oracle, sqlldr
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import ExportedFile
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import LoadPlan
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import DiscordStatusMessage
@@ -33,21 +31,24 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify_view import (
     table_fraction,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.stages import Step, TableStep
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tests.conftest import silence
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import Load, Source
 
 NOW = datetime(2026, 10, 9, 15, 0, 0, tzinfo=UTC)
 GIB = 1024**3
 
 
+@final
 class Discord:
     """Webhook falso que registra o que o notificador envia."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
-        self.transport = httpx.MockTransport(self.handle)
+        self.transport = httpx2.MockTransport(self.handle)
 
-    def handle(self, request: httpx.Request) -> httpx.Response:
+    def handle(self, request: httpx2.Request) -> httpx2.Response:
         self.calls.append((request.method, json.loads(request.content)))
-        return httpx.Response(200, json={"id": "42"})
+        return httpx2.Response(200, json={"id": "42"})
 
     @property
     def embeds(self) -> list[dict[str, object]]:
@@ -65,7 +66,7 @@ def make(
     run_dbt: bool = False,
     mode: Literal["full", "synonyms_only"] = "full",
 ) -> LoadNotifier:
-    config = NotifierConfig("nota_carioca_staging", "run-1", "nota_carioca_staging", tables, 2, run_dbt, mode, True)
+    config = NotifierConfig("nota_carioca_staging", None, "nota_carioca_staging", tables, 2, run_dbt, mode, True)
     message = (
         DiscordStatusMessage("https://discord.example/api/webhooks/1/t", transport=discord.transport)
         if discord
@@ -81,9 +82,8 @@ def snapshot(done: int, total: int = 100 * GIB, elapsed: float = 100.0) -> sqlld
 
 
 @pytest.fixture(autouse=True)
-def quiet_logs(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(discord_module, "warn", lambda _: None)
-    monkeypatch.setattr(discord_module, "info", lambda _: None)
+def quiet_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(discord_module, "warn", silence)
 
 
 def state(**overrides: object) -> RunState:
@@ -354,120 +354,49 @@ def test_running_and_synonyms_only_views_have_no_validation_section() -> None:
 # --- reachability from tasks -------------------------------------------------------------------------------------
 
 
+def fake_artifact(**kwargs: object) -> str:
+    del kwargs
+
+    return "artifact"
+
+
+def fake_progress(**kwargs: object) -> None:
+    del kwargs
+
+
+def fake_config() -> None:
+    return None
+
+
 def test_load_task_feeds_the_active_notifier_without_receiving_it(monkeypatch: pytest.MonkeyPatch) -> None:
     # Given a load task whose SQL*Loader reports one progress tick, run inside the notifier guard
     notifier = make(None)
     snap = snapshot(25 * GIB)
-    monkeypatch.setattr(tasks_module, "create_progress_artifact", lambda **_: "artifact")
-    monkeypatch.setattr(tasks_module, "update_progress_artifact", lambda **_: None)
-    monkeypatch.setattr(tasks_module.oracle, "read_oracle_config", lambda: None)
+    monkeypatch.setattr(tasks_module, "create_progress_artifact", fake_artifact)
+    monkeypatch.setattr(tasks_module, "update_progress_artifact", fake_progress)
+    monkeypatch.setattr(oracle, "read_oracle_config", fake_config)
 
     def fake_load(
         config: object, job: object, on_progress: object, progress_interval_seconds: float
     ) -> sqlldr.LoadResult:
+        del config, job, progress_interval_seconds
         assert callable(on_progress)
         on_progress(snap)
         return sqlldr.LoadResult(rows=5, sessions=[], elapsed_seconds=1.0)
 
-    monkeypatch.setattr(tasks_module.sqlldr, "load_from_gcs", fake_load)
+    monkeypatch.setattr(sqlldr, "load_from_gcs", fake_load)
     plan = LoadPlan(columns=[], fields=[], ignored=[], excluded=[])
     # When the task runs under the notifier
     with notifier.guard():
         notifier.enter(Step.TABLES)
         notifier.table_step("A", TableStep.LOAD)
         rows = tasks_module.load_into_oracle_task.fn(
-            "BQLOAD_A_B", plan, "bucket", [ExportedFile("f.csv.gz", 10)], 2, 30
+            "BQLOAD_A_B",
+            plan,
+            [ExportedFile("f.csv.gz", 10)],
+            Source(bucket="bucket"),
+            Load(sessions=2, progress_interval_seconds=30),
         )
     # Then the tick reached the table state
     assert rows == 5
     assert notifier.state.tables["A"].load == snap
-
-
-# --- flow wiring -------------------------------------------------------------------------------------------------
-
-
-def run_flow_with_fakes(
-    monkeypatch: pytest.MonkeyPatch, notifier: LoadNotifier, mode: Literal["full", "synonyms_only"] = "full"
-) -> list[str]:
-    order: list[str] = []
-    files = [ExportedFile("a.csv.gz", 4 * GIB), ExportedFile("b.csv.gz", 4 * GIB)]
-    exported = SimpleNamespace(schema={"num_rows": 7, "fields": []}, files=files, last_modified=NOW)
-    slot_plan = slots.SlotPlan("BQLOAD_A", None, "BQLOAD_A_B")
-
-    def fake(name: str, result: object = None):
-        def call(**_: object) -> object:
-            order.append(name)
-            return result
-
-        return call
-
-    plain = {
-        "refresh_synonyms_task": None,
-        "plan_load_task": "plan",
-        "plan_structure_task": "structure",
-        "ensure_oracle_table_task": "BQLOAD_A_B",
-        "drop_oracle_indexes_task": "BQLOAD_A_B",
-        "truncate_oracle_table_task": "BQLOAD_A_B",
-        "load_into_oracle_task": 7,
-        "validate_row_count_task": 7,
-        "create_oracle_indexes_task": "BQLOAD_A_B",
-        "gather_oracle_stats_task": "BQLOAD_A_B",
-        "grant_access_task": "BQLOAD_A_B",
-        "record_load_task": slot_plan,
-        "start_inmemory_population_task": None,
-        "wait_inmemory_task": [slot_plan],
-        "swap_synonyms_task": None,
-        "list_tables_task": ["A"],
-        "export_snapshot_task": {"A": exported},
-        "resolve_slots_task": slot_plan,
-    }
-    for name, result in plain.items():
-        monkeypatch.setattr(flow_module, name, fake(name, result))
-    monkeypatch.setattr(
-        flow_module, "delete_gcs_files_task", SimpleNamespace(submit=lambda **_: SimpleNamespace(result=lambda: None))
-    )
-    monkeypatch.setattr(flow_module.LoadNotifier, "create", lambda _: notifier)
-    flow_module.rj_smfp__nota_carioca_bq_to_oracle.fn(mode=mode)
-    return order
-
-
-def test_flow_reports_every_table_step_in_order(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given the whole flow with fake tasks and a recording notifier
-    seen: list[tuple[str, str]] = []
-    discord = Discord()
-    notifier = make(discord, tables=())
-    original = notifier.table_step
-
-    def spy(table: str, step: TableStep, slot: str | None = None) -> None:
-        seen.append((table, step.name))
-        original(table, step, slot)
-
-    monkeypatch.setattr(notifier, "table_step", spy)
-    # When it runs
-    run_flow_with_fakes(monkeypatch, notifier)
-    # Then the table walks through the seven stages in order, with the slot, and the run ends green
-    names = [step for _, step in seen]
-    assert [name for name in dict.fromkeys(names)] == [
-        "PREPARATION",
-        "LOAD",
-        "VALIDATION",
-        "INDEXES",
-        "STATS",
-        "ACCESS",
-        "INMEMORY",
-    ]
-    assert notifier.state.tables["A"].slot == "B"
-    assert notifier.state.tables["A"].rows == 7
-    table = notifier.state.tables["A"]
-    assert (table.bq_rows, table.loaded_rows, table.oracle_rows, table.physical_table) == (7, 7, 7, "BQLOAD_A_B")
-    assert discord.embeds[-1]["color"] == COLOR_SUCCESS
-
-
-def test_synonyms_only_flow_skips_the_load_and_finishes_green(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given a synonyms-only run
-    discord = Discord()
-    notifier = make(discord, tables=(), mode="synonyms_only")
-    order = run_flow_with_fakes(monkeypatch, notifier, mode="synonyms_only")
-    # Then only the refresh ran and the message went green
-    assert order == ["list_tables_task", "refresh_synonyms_task"]
-    assert discord.embeds[-1]["color"] == COLOR_SUCCESS

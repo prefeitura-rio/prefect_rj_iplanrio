@@ -2,6 +2,8 @@
 
 import time
 from datetime import datetime
+from typing import cast
+from uuid import UUID
 
 from prefect import task
 from prefect.artifacts import create_progress_artifact, update_progress_artifact
@@ -10,8 +12,9 @@ from prefect.logging import get_logger
 from prefect.runtime import flow_run
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import DBT_POLL_SECONDS
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import bigquery, dbt, inmemory, oracle, runs, slots, sqlldr
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import LoadPlan, RawTextEncoding, build_load_plan
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import bigquery, dbt, inmemory, oracle, slots, sqlldr
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import TableSchema
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import LoadPlan, build_load_plan
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify import current as current_notifier
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import (
     StructurePlan,
@@ -19,19 +22,22 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import (
     plan_structure,
     slot_indexes,
 )
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import Dbt, Load, Source
+from utils.runs import PrefectRuns, start_deployment_run
 
 logger = get_logger("toolkit")
 
 
 @task(cache_policy=NO_CACHE)
-def run_dbt_task(deployment: str, parameters: dict[str, object], timeout_minutes: int) -> datetime:
-    """Roda o deployment de dbt como subflow, espera terminar com sucesso e retorna o fim dele (UTC)."""
-    run = runs.start_deployment_run(deployment=deployment, parameters=parameters)
+def run_dbt_task(options: Dbt) -> datetime:
+    """Run the dbt deployment as a subflow, wait for it to succeed, and return when it ended (UTC)."""
+    parameters = dbt.resolve_dbt_parameters(options.parameters)
+    run = start_deployment_run(deployment=options.deployment, parameters=parameters)
     link = f" ({run.url})" if run.url else ""
-    logger.info(f"dbt iniciado: run {run.name} [{run.id}] do deployment {deployment}{link}")
+    logger.info(f"dbt iniciado: run {run.name} [{run.id}] do deployment {options.deployment}{link}")
     waiter = dbt.RunWaiter(
-        runs=runs.PrefectRuns(),
-        timeout_seconds=timeout_minutes * 60,
+        runs=PrefectRuns(),
+        timeout_seconds=options.timeout_minutes * 60,
         poll_seconds=DBT_POLL_SECONDS,
         report=logger.info,
     )
@@ -41,87 +47,76 @@ def run_dbt_task(deployment: str, parameters: dict[str, object], timeout_minutes
 
 
 @task
-def list_tables_task(project: str, dataset_id: str, table_ids: list[str] | None) -> list[str]:
-    """Retorna as tabelas pedidas ou, se nenhuma for informada, todas as do dataset."""
-    return table_ids or bigquery.list_tables(project=project, dataset_id=dataset_id)
+def list_tables_task(source: Source) -> list[str]:
+    """Return the tables that were asked for or, with none, every table of the dataset."""
+    return source.table_ids or bigquery.list_tables(project=source.project, dataset_id=source.dataset_id)
 
 
 @task(cache_policy=NO_CACHE)
-def export_snapshot_task(  # noqa: PLR0913
-    project: str,
-    dataset_id: str,
-    table_ids: list[str],
-    bucket: str,
-    quiet_minutes: int,
-    dbt_finished_at: datetime | None,
+def export_snapshot_task(
+    source: Source, load: Load, table_ids: list[str], dbt_finished_at: datetime | None
 ) -> dict[str, bigquery.TableSnapshot]:
-    """Exporta todas as tabelas como uma foto única do BigQuery, num prefixo exclusivo deste flow run."""
-    prefix = f"{dataset_id}/{flow_run.id}"
+    """Export every table as one snapshot of BigQuery, under a prefix of this flow run."""
+    prefix = f"{source.dataset_id}/{flow_run.get_id()}"
     request = bigquery.SnapshotRequest(
-        project=project,
-        dataset_id=dataset_id,
+        project=source.project,
+        dataset_id=source.dataset_id,
         table_ids=table_ids,
-        bucket=bucket,
+        bucket=source.bucket,
         prefix=prefix,
-        quiet_seconds=quiet_minutes * 60,
+        quiet_seconds=load.bigquery_quiet_minutes * 60,
         dbt_finished_at=dbt_finished_at,
     )
     snapshot = bigquery.export_consistent_snapshot(request, report=logger.info)
     for table in snapshot.values():
         total = sqlldr.format_size(sum(exported.size for exported in table.files))
-        rows = sqlldr.format_count(oracle.to_int(table.schema["num_rows"]))
+        rows = sqlldr.format_count(table.schema.num_rows)
         logger.info(
             f"{table.table_id}: foto do BigQuery de {table.last_modified:%Y-%m-%d %H:%M:%S} UTC, "
-            f"{rows} linhas, {len(table.files)} arquivos ({total})"
+            + f"{rows} linhas, {len(table.files)} arquivos ({total})"
         )
     return snapshot
 
 
 @task(cache_policy=NO_CACHE)
-def plan_load_task(  # noqa: PLR0913
-    template_schema: str | None,
-    excluded_template_columns: list[str] | None,
-    table_id: str,
-    table_schema: dict[str, object],
-    raw_text_encoding: RawTextEncoding,
-) -> LoadPlan:
-    """Monta o plano de carga a partir da tabela original no Oracle e do schema do BigQuery."""
+def plan_load_task(load: Load, table_id: str, table_schema: TableSchema) -> LoadPlan:
+    """Build the load plan from the original table in Oracle and the schema of BigQuery."""
     config = oracle.read_oracle_config()
     template = oracle.fetch_template_columns(
         config=config,
-        template_schema=oracle.validate_identifier(template_schema or config.schema),
+        template_schema=oracle.validate_identifier(load.template_schema or config.schema),
         table=oracle.validate_identifier(table_id),
     )
-    plan = build_load_plan(table_schema["fields"], template, excluded_template_columns, raw_text_encoding)
+    plan = build_load_plan(table_schema.fields, template, load.excluded_columns, load.raw_text_encoding)
     if plan.excluded:
-        logger.info(f"{table_id}: colunas da original que não são criadas na BQLOAD_ (ROWID ou excluídas): {plan.excluded}")
+        logger.info(
+            f"{table_id}: colunas da original que não são criadas na BQLOAD_ (ROWID ou excluídas): {plan.excluded}"
+        )
     if plan.ignored:
         logger.info(f"{table_id}: colunas do BigQuery que não existem na original e são ignoradas: {plan.ignored}")
     return plan
 
 
 @task(cache_policy=NO_CACHE)
-def plan_structure_task(
-    template_schema: str | None, table_id: str, plan: LoadPlan
-) -> StructurePlan:
+def plan_structure_task(load: Load, table_id: str, plan: LoadPlan) -> StructurePlan:
     """Lê tablespace, partições e índices da tabela original e define os da tabela de destino."""
     config = oracle.read_oracle_config()
     template = oracle.fetch_template_layout(
         config=config,
-        template_schema=oracle.validate_identifier(template_schema or config.schema),
+        template_schema=oracle.validate_identifier(load.template_schema or config.schema),
         table=oracle.validate_identifier(table_id),
     )
     structure = plan_structure(template, [column.name for column in plan.columns], oracle.TABLE_PREFIX)
     indexes = ", ".join(index.name for index in structure.layout.indexes) or "nenhum"
     logger.info(
         f"{table_id}: tablespace {structure.layout.tablespace or '(padrão do schema)'}, "
-        f"{describe_partitioning(structure.layout.partitioning)}, {structure.layout.inmemory or 'NO INMEMORY'}; "
-        f"índices criados após a carga: {indexes}"
+        + f"{describe_partitioning(structure.layout.partitioning)}, {structure.layout.inmemory or 'NO INMEMORY'}; "
+        + f"índices criados após a carga: {indexes}"
     )
     if structure.skipped_indexes:
         logger.info(
             f"{table_id}: índices da original não replicados (internos de view materializada): "
-            f"{list(structure.skipped_indexes)}"
+            + f"{list(structure.skipped_indexes)}"
         )
     return structure
 
@@ -138,21 +133,14 @@ def resolve_slots_task(table_id: str) -> slots.SlotPlan:
 
 
 @task(cache_policy=NO_CACHE)
-def ensure_oracle_table_task(  # noqa: PLR0913
-    project: str,
-    dataset_id: str,
-    table_id: str,
-    table: str,
-    plan: LoadPlan,
-    structure: StructurePlan,
+def ensure_oracle_table_task(
+    source: Source, table_id: str, table: str, plan: LoadPlan, structure: StructurePlan
 ) -> str:
     """Cria ou confere a tabela física que recebe a carga e retorna o nome dela."""
     definition = oracle.TableDefinition(
-        columns=plan.columns, layout=structure.layout, source=f"{project}.{dataset_id}.{table_id}"
+        columns=plan.columns, layout=structure.layout, source=f"{source.project}.{source.dataset_id}.{table_id}"
     )
-    logger.info(
-        oracle.ensure_table(config=oracle.read_oracle_config(), table=table, definition=definition)
-    )
+    logger.info(oracle.ensure_table(config=oracle.read_oracle_config(), table=table, definition=definition))
     return table
 
 
@@ -160,7 +148,9 @@ def ensure_oracle_table_task(  # noqa: PLR0913
 def drop_oracle_indexes_task(table: str) -> str:
     """Apaga os índices da tabela de destino antes da carga paralela e retorna o nome dela."""
     dropped = oracle.drop_managed_indexes(config=oracle.read_oracle_config(), table=table)
-    logger.info(f"{table}: índices apagados para a carga: {dropped}" if dropped else f"{table}: sem índices para apagar")
+    logger.info(
+        f"{table}: índices apagados para a carga: {dropped}" if dropped else f"{table}: sem índices para apagar"
+    )
     return table
 
 
@@ -172,20 +162,16 @@ def truncate_oracle_table_task(table: str) -> str:
 
 
 @task(cache_policy=NO_CACHE)
-def load_into_oracle_task(  # noqa: PLR0913
-    table: str,
-    plan: LoadPlan,
-    bucket: str,
-    files: list[bigquery.ExportedFile],
-    sessions: int,
-    progress_interval_seconds: int,
+def load_into_oracle_task(
+    table: str, plan: LoadPlan, files: list[bigquery.ExportedFile], source: Source, load: Load
 ) -> int:
     """Carrega os arquivos com SQL*Loader direct path, registrando o andamento, e retorna as linhas carregadas."""
-    job = sqlldr.LoadJob(table=table, fields=plan.fields, bucket=bucket, files=files, sessions=sessions)
-    artifact_id = create_progress_artifact(progress=0.0, description=f"Carga de {table}")
+    sessions = load.sessions
+    job = sqlldr.LoadJob(table=table, fields=plan.fields, bucket=source.bucket, files=files, sessions=sessions)
+    artifact_id = cast("UUID", create_progress_artifact(progress=0.0, description=f"Carga de {table}"))
     logger.info(
         f"Carga de {table} iniciada: {len(files)} arquivos "
-        f"({sqlldr.format_size(sum(exported.size for exported in files))}) em {min(sessions, len(files))} sessão(ões)"
+        + f"({sqlldr.format_size(sum(exported.size for exported in files))}) em {min(sessions, len(files))} sessão(ões)"
     )
 
     notifier = current_notifier()
@@ -200,7 +186,7 @@ def load_into_oracle_task(  # noqa: PLR0913
         config=oracle.read_oracle_config(),
         job=job,
         on_progress=report,
-        progress_interval_seconds=progress_interval_seconds,
+        progress_interval_seconds=load.progress_interval_seconds,
     )
     update_progress_artifact(artifact_id=artifact_id, progress=100.0)
     sessions_text = ", ".join(
@@ -209,24 +195,22 @@ def load_into_oracle_task(  # noqa: PLR0913
     )
     logger.info(
         f"Carga de {table} concluída: {sqlldr.format_count(result.rows)} linhas em "
-        f"{sqlldr.format_duration(result.elapsed_seconds)} ({sessions_text})"
+        + f"{sqlldr.format_duration(result.elapsed_seconds)} ({sessions_text})"
     )
     return result.rows
 
 
 @task(cache_policy=NO_CACHE)
-def validate_row_count_task(
-    table: str, table_schema: dict[str, object], loaded_rows: int, parallel_degree: int
-) -> int:
+def validate_row_count_task(table: str, table_schema: TableSchema, loaded_rows: int, load: Load) -> int:
     """Confere se o BigQuery, o SQL*Loader e o Oracle têm o mesmo número de linhas.
 
     O ``COUNT(*)`` no Oracle roda com a dica ``PARALLEL(parallel_degree)``.
 
     :raises ValueError: Se as contagens divergirem.
     """
-    expected = int(table_schema["num_rows"])
+    expected = table_schema.num_rows
     oracle_rows = oracle.count_rows(
-        config=oracle.read_oracle_config(), table=table, parallel_degree=parallel_degree
+        config=oracle.read_oracle_config(), table=table, parallel_degree=load.index_parallel_degree
     )
     counts = ", ".join(
         f"{label}={sqlldr.format_count(value)}"
@@ -248,27 +232,27 @@ def grant_access_task(table: str) -> str:
 
 
 @task(cache_policy=NO_CACHE)
-def delete_gcs_files_task(project: str, bucket: str, files: list[bigquery.ExportedFile]) -> None:
+def delete_gcs_files_task(source: Source, files: list[bigquery.ExportedFile]) -> None:
     """Remove do GCS os arquivos exportados, em lotes.
 
     O flow submete esta task em segundo plano, depois da validação da contagem, e espera o resultado antes de
     terminar: uma falha na remoção continua falhando o flow, sem atrasar a criação dos índices.
     """
-    bigquery.delete_blobs(project=project, bucket=bucket, blob_names=[exported.name for exported in files])
-    logger.info(f"Removidos {len(files)} arquivos temporários de gs://{bucket}")
+    names = [exported.name for exported in files]
+    bigquery.delete_blobs(project=source.project, bucket=source.bucket, blob_names=names)
+    logger.info(f"Removidos {len(files)} arquivos temporários de gs://{source.bucket}")
 
 
 @task(cache_policy=NO_CACHE)
-def create_oracle_indexes_task(
-    table: str, structure: StructurePlan, slot: str, parallel_degree: int
-) -> str:
+def create_oracle_indexes_task(table: str, structure: StructurePlan, slot: str, load: Load) -> str:
     """Cria os índices da tabela física, com o sufixo dela, um por vez, e retorna o nome dela."""
     config = oracle.read_oracle_config()
+    parallel_degree = load.index_parallel_degree
     indexes = slot_indexes(structure.layout.indexes, slot)
     if not indexes:
         logger.info(f"{table}: a original não tem índices para replicar")
         return table
-    artifact_id = create_progress_artifact(progress=0.0, description=f"Índices de {table}")
+    artifact_id = cast("UUID", create_progress_artifact(progress=0.0, description=f"Índices de {table}"))
     notifier = current_notifier()
     if notifier is not None:
         notifier.indexes(0, len(indexes))
@@ -276,24 +260,26 @@ def create_oracle_indexes_task(
     for position, index in enumerate(indexes, start=1):
         logger.info(
             f"{table}: criando índice {position}/{len(indexes)} {index.name} {index.description} "
-            f"com PARALLEL {parallel_degree}"
+            + f"com PARALLEL {parallel_degree}"
         )
         index_started = time.monotonic()
         oracle.create_index(config=config, table=table, index=index, parallel_degree=parallel_degree)
         update_progress_artifact(artifact_id=artifact_id, progress=100.0 * position / len(indexes))
         if notifier is not None:
             notifier.indexes(position, len(indexes))
-        logger.info(f"{table}: índice {index.name} criado em {sqlldr.format_duration(time.monotonic() - index_started)}")
+        logger.info(
+            f"{table}: índice {index.name} criado em {sqlldr.format_duration(time.monotonic() - index_started)}"
+        )
     logger.info(f"{table}: {len(indexes)} índice(s) criado(s) em {sqlldr.format_duration(time.monotonic() - started)}")
     return table
 
 
 @task(cache_policy=NO_CACHE)
-def gather_oracle_stats_task(table: str, parallel_degree: int) -> str:
+def gather_oracle_stats_task(table: str, load: Load) -> str:
     """Coleta as estatísticas da tabela física para o otimizador e retorna o nome dela."""
     started = time.monotonic()
     oracle.gather_table_stats(
-        config=oracle.read_oracle_config(), table=table, parallel_degree=parallel_degree
+        config=oracle.read_oracle_config(), table=table, parallel_degree=load.index_parallel_degree
     )
     logger.info(f"{table}: estatísticas coletadas em {sqlldr.format_duration(time.monotonic() - started)}")
     return table
@@ -301,13 +287,13 @@ def gather_oracle_stats_task(table: str, parallel_degree: int) -> str:
 
 @task(cache_policy=NO_CACHE)
 def record_load_task(
-    plan: slots.SlotPlan, table: str, source: str, snapshot_modified: datetime
+    plan: slots.SlotPlan, table: str, source: Source, table_id: str, snapshot_modified: datetime
 ) -> slots.SlotPlan:
     """Grava no comentário da tabela física a foto do BigQuery carregada e retorna o plano pronto para a troca."""
     comment = slots.record_load(
         config=oracle.read_oracle_config(),
         table=table,
-        source=source,
+        source=f"{source.project}.{source.dataset_id}.{table_id}",
         snapshot_modified=snapshot_modified,
     )
     logger.info(f"{table}: carga concluída e registrada ({comment})")
@@ -315,25 +301,25 @@ def record_load_task(
 
 
 @task(cache_policy=NO_CACHE)
-def start_inmemory_population_task(
-    table: str, structure: StructurePlan, wait_minutes: int
-) -> None:
+def start_inmemory_population_task(table: str, structure: StructurePlan, load: Load) -> None:
     """Pede ao Oracle para popular a tabela física no In-Memory, se ela usa In-Memory e a espera está ligada."""
-    if structure.layout.inmemory is None or wait_minutes <= 0:
+    if structure.layout.inmemory is None or load.inmemory_wait_minutes <= 0:
         return
     errors = inmemory.start_population(
         config=oracle.read_oracle_config(),
         table=table,
         partitioned=structure.layout.partitioning is not None,
     )
-    logger.info(f"{table}: população do In-Memory iniciada" if not errors else f"{table}: população não iniciada: {errors}")
+    logger.info(
+        f"{table}: população do In-Memory iniciada" if not errors else f"{table}: população não iniciada: {errors}"
+    )
 
 
 @task(cache_policy=NO_CACHE)
-def wait_inmemory_task(
-    plans: list[slots.SlotPlan], wait_minutes: int
-) -> list[slots.SlotPlan]:
+def wait_inmemory_task(plans: list[slots.SlotPlan], load: Load) -> list[slots.SlotPlan]:
     """Espera as tabelas carregadas ficarem no In-Memory antes da troca e retorna os planos."""
+    wait_minutes = load.inmemory_wait_minutes
+
     if wait_minutes <= 0:
         logger.info("Espera pelo In-Memory desligada (inmemory_wait_minutes=0); a troca segue direto.")
         return plans

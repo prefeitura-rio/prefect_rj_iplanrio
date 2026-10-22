@@ -6,6 +6,7 @@ from pathlib import Path
 
 import oracledb
 from google.cloud import bigquery
+
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import get_last_modified, get_table_schema
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import RawTextEncoding, build_load_plan
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.inmemory import oracle_message, read_status
@@ -14,10 +15,14 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import (
     TABLE_PREFIX,
     OracleConfig,
     connect,
+    fetch_all,
+    fetch_one,
     fetch_rows,
+    fetch_scalar,
     oracle_table_name,
     read_column_definitions,
     read_table_layout,
+    to_int,
     validate_identifier,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import (
@@ -28,7 +33,6 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import (
     synonym_owners,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import TableLayout, plan_structure, slot_indexes
-
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.report import (
     compare_columns,
     compare_grants,
@@ -116,7 +120,7 @@ def describe_session(config: OracleConfig) -> str:
     """
     with connect(config) as connection, connection.cursor() as cursor:
         cursor.execute(render_query(QUERIES_ANCHOR, "get_session_info"))
-        session_user, proxy_user, db_name, service_name, db_version, db_time = cursor.fetchone()
+        session_user, proxy_user, db_name, service_name, db_version, db_time = fetch_one(cursor) or (None,) * 6
     return format_key_values(
         [
             ("Usuário efetivo da sessão", session_user),
@@ -142,8 +146,8 @@ def fetch_table_size_mb(cursor: oracledb.Cursor, owner: str, table: str) -> str:
         cursor.execute(render_query(QUERIES_ANCHOR, "get_table_size_dba"), {"owner": owner, "table_name": table})
     except oracledb.DatabaseError:
         cursor.execute(render_query(QUERIES_ANCHOR, "get_table_size_user"), {"table_name": table})
-    (size,) = cursor.fetchone()
-    return "sem segmento alocado" if size is None else f"{int(size) / MEGABYTE:.2f} MB"
+    size = fetch_scalar(cursor)
+    return "sem segmento alocado" if size is None else f"{to_int(size) / MEGABYTE:.2f} MB"
 
 
 def fetch_indexes_size_mb(cursor: oracledb.Cursor, owner: str, table: str) -> str:
@@ -158,8 +162,8 @@ def fetch_indexes_size_mb(cursor: oracledb.Cursor, owner: str, table: str) -> st
         cursor.execute(render_query(QUERIES_ANCHOR, "get_indexes_size_dba"), {"owner": owner, "table_name": table})
     except oracledb.DatabaseError:
         return "sem acesso a dba_segments"
-    (size,) = cursor.fetchone()
-    return "sem segmento alocado" if size is None else f"{int(size) / MEGABYTE:.2f} MB"
+    size = fetch_scalar(cursor)
+    return "sem segmento alocado" if size is None else f"{to_int(size) / MEGABYTE:.2f} MB"
 
 
 def table_comment(cursor: oracledb.Cursor, owner: str, table: str) -> tuple[bool, str | None]:
@@ -208,7 +212,7 @@ def swap_state(cursor: oracledb.Cursor, schema: str, base: str, bigquery_modifie
                 table=base,
                 sections=[
                     f"Troca A/B: ainda não houve troca; a tabela única antiga {schema}.{base} segue em uso "
-                    f"({describe_load(legacy_comment)}). A próxima carga cria {base}_A e a troca."
+                    + f"({describe_load(legacy_comment)}). A próxima carga cria {base}_A e a troca."
                 ],
             )
         return SwapState(table=base)
@@ -234,7 +238,7 @@ def swap_state(cursor: oracledb.Cursor, schema: str, base: str, bigquery_modifie
         pairs.append(("Tabela única antiga", f"{schema}.{base} ainda existe e deveria ter sido trocada pelo sinônimo"))
     notes = (
         "\nO BigQuery mudou depois da carga em uso: diferenças de contagem e métricas são esperadas "
-        "até a próxima carga."
+        + "até a próxima carga."
         if bigquery_changed
         else ""
     )
@@ -266,7 +270,7 @@ def grants_section(cursor: oracledb.Cursor, schema: str, table: str) -> tuple[in
         cursor.execute(render_query(QUERIES_ANCHOR, "get_table_grants_dba"), {"owner": schema, "table_name": table})
     except oracledb.DatabaseError:
         return 0, "Grants: sem acesso a dba_tab_privs; não conferidos."
-    rows = compare_grants(CONSUMER_GRANTS, [(str(grantee), str(privilege)) for grantee, privilege in cursor])
+    rows = compare_grants(CONSUMER_GRANTS, [(str(grantee), str(privilege)) for grantee, privilege in fetch_all(cursor)])
     divergences = count_divergences(rows)
     return divergences, f"Grants dos consumidores: {divergences} divergência(s)\n" + format_text_table(
         ["Grantee", "Esperado", "Concedido", "Status"], rows
@@ -315,13 +319,13 @@ def structure_sections(
     index_divergences = count_divergences(index_rows)
     sections = [
         f"Partições: tablespace original {expected.layout.tablespace or '(padrão)'}, carregada "
-        f"{loaded.tablespace or '(padrão)'} ({'OK' if tablespace_ok else 'DIVERGE'}); "
-        f"{partition_divergences} divergência(s). Partições criadas pelo INTERVAL não entram.\n"
+        + f"{loaded.tablespace or '(padrão)'} ({'OK' if tablespace_ok else 'DIVERGE'}); "
+        + f"{partition_divergences} divergência(s). Partições criadas pelo INTERVAL não entram.\n"
         + format_text_table(["#", "Partição", "Original", "Carregada", "Status"], partition_rows),
         f"In-Memory: esperado {expected.layout.inmemory or 'NO INMEMORY'}, carregada "
-        f"{loaded.inmemory or 'NO INMEMORY'} ({'OK' if inmemory_ok else 'DIVERGE'})",
+        + f"{loaded.inmemory or 'NO INMEMORY'} ({'OK' if inmemory_ok else 'DIVERGE'})",
         f"Índices: {len(expected_indexes)} esperado(s), {len(loaded.indexes)} na carregada, "
-        f"{index_divergences} divergente(s). Esperado: definição da original, utilizável e paralelismo 1.\n"
+        + f"{index_divergences} divergente(s). Esperado: definição da original, utilizável e paralelismo 1.\n"
         + (
             format_text_table(["Índice", "Esperado", "Carregado", "Paralelismo", "Status", "Resultado"], index_rows)
             if index_rows
@@ -366,7 +370,7 @@ def validate_table(config: OracleConfig, request: ValidationRequest) -> TableRep
     base = oracle_table_name(request.table_id)
     template_name = f"{request.template_schema}.{validate_identifier(request.table_id)}"
     table_schema = get_table_schema(project=request.project, dataset_id=request.dataset_id, table_id=request.table_id)
-    bq_fields, bq_rows = table_schema["fields"], int(table_schema["num_rows"])
+    bq_fields, bq_rows = table_schema.fields, table_schema.num_rows
     bq_modified = get_last_modified(project=request.project, dataset_id=request.dataset_id, table_id=request.table_id)
 
     with connect(config) as connection, connection.cursor() as cursor:
@@ -385,7 +389,7 @@ def validate_table(config: OracleConfig, request: ValidationRequest) -> TableRep
             report.sections.append(f"Tabela original {template_name} não encontrada no Oracle.")
             return report
         cursor.execute(render_query(QUERIES_ANCHOR, "get_table_overview"), binds)
-        overview = cursor.fetchone()
+        overview = fetch_one(cursor)
         if overview is None:
             report.divergences += 1
             report.sections.append(f"A tabela {report.target} não existe no Oracle. Rode a pipeline de carga.")
@@ -393,11 +397,11 @@ def validate_table(config: OracleConfig, request: ValidationRequest) -> TableRep
         created, last_ddl_time, comment, stats_rows, last_analyzed, tablespace, logging, inmemory = overview
 
         cursor.execute(render_query(QUERIES_ANCHOR, "count_rows", schema=config.schema, table=table))
-        (oracle_rows,) = cursor.fetchone()
+        oracle_rows = to_int(fetch_scalar(cursor))
         cursor.execute(render_query(QUERIES_ANCHOR, "get_table_index_count"), binds)
-        (indexes,) = cursor.fetchone()
+        indexes = fetch_scalar(cursor)
         cursor.execute(render_query(QUERIES_ANCHOR, "get_table_constraint_count"), binds)
-        (constraints,) = cursor.fetchone()
+        constraints = fetch_scalar(cursor)
         size = fetch_table_size_mb(cursor, config.schema, table)
         indexes_size = fetch_indexes_size_mb(cursor, config.schema, table)
         actual = read_column_definitions(cursor, config.schema, table)
@@ -407,7 +411,7 @@ def validate_table(config: OracleConfig, request: ValidationRequest) -> TableRep
         rows_status = "OK" if bq_rows == oracle_rows else "DIVERGE"
         if rows_status != "OK" and swap.bigquery_changed:
             rows_status += " (o BigQuery mudou depois da carga em uso)"
-        managed = (comment or "").startswith(MANAGED_TABLE_MARKER)
+        managed = str(comment or "").startswith(MANAGED_TABLE_MARKER)
         report.divergences += (bq_rows != oracle_rows) + (not managed)
         report.sections.append(
             "Tabela\n"
@@ -417,7 +421,7 @@ def validate_table(config: OracleConfig, request: ValidationRequest) -> TableRep
                     ("Destino (Oracle)", report.target),
                     ("Tabela original (modelo)", template_name),
                     ("Linhas no BigQuery", f"{bq_rows:,}".replace(",", ".")),
-                    ("Linhas no Oracle (COUNT)", f"{int(oracle_rows):,}".replace(",", ".")),
+                    ("Linhas no Oracle (COUNT)", f"{oracle_rows:,}".replace(",", ".")),
                     ("Contagem", rows_status),
                     ("Criada pela pipeline de carga", "sim" if managed else "NÃO"),
                     ("Comentário", comment),
@@ -459,7 +463,7 @@ def validate_table(config: OracleConfig, request: ValidationRequest) -> TableRep
         report.divergences += column_divergences
         report.sections.append(
             f"Colunas: {len(plan.columns)} esperadas (original sem as excluídas), {len(actual)} na carregada, "
-            f"{column_divergences} divergente(s)\n"
+            + f"{column_divergences} divergente(s)\n"
             + format_text_table(["#", "Coluna", "BigQuery", "Original", "Carregada", "Status"], column_rows)
         )
         if template_layout is not None and loaded_layout is not None:
@@ -491,7 +495,7 @@ def validate_table(config: OracleConfig, request: ValidationRequest) -> TableRep
                 table=table,
             )
         )
-        oracle_values = list(cursor.fetchone())
+        oracle_values = list(fetch_one(cursor) or ())
 
     bq_values = fetch_bigquery_metrics(
         request.project, request.dataset_id, request.table_id, [spec.bigquery_expression for spec in specs]

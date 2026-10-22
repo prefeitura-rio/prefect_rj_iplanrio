@@ -150,7 +150,7 @@ def table_fraction(table: TableState) -> float:
     return (done + TABLE_WEIGHTS[table.step] * inner) / TABLE_WEIGHT_TOTAL
 
 
-def _tables_fraction(state: RunState) -> float:
+def tables_fraction(state: RunState) -> float:
     tables = state.tables.values()
     total = sum(table.weight for table in tables)
     return sum(table.weight * table_fraction(table) for table in tables) / total if total else 0.0
@@ -165,19 +165,19 @@ def overall_fraction(state: RunState) -> float:
     total = sum(weights.values())
     done = sum(weight for step, weight in weights.items() if step < state.step)
     if state.step is Step.TABLES:
-        done += weights[Step.TABLES] * _tables_fraction(state)
+        done += weights[Step.TABLES] * tables_fraction(state)
     return done / total
 
 
-def _rate_and_eta(load: ProgressSnapshot) -> tuple[float, float | None]:
+def rate_and_eta(load: ProgressSnapshot) -> tuple[float, float | None]:
     rate = load.bytes_done / load.elapsed_seconds if load.elapsed_seconds > 0 else 0.0
     if rate <= 0 or load.bytes_done >= load.bytes_total:
         return rate, None
     return rate, (load.bytes_total - load.bytes_done) / rate
 
 
-def _load_detail(load: ProgressSnapshot) -> str:
-    rate, _ = _rate_and_eta(load)
+def load_detail(load: ProgressSnapshot) -> str:
+    rate, _ = rate_and_eta(load)
     parts = [
         f"{format_size(load.bytes_done)} de {format_size(load.bytes_total)}",
         f"{load.files_done}/{load.files_total} arquivos",
@@ -199,7 +199,7 @@ def table_view(table: TableState) -> TableView:
         return TableView(table.name, "Concluída", ItemStatus.DONE, 1.0, f"{rows}{format_duration(table.seconds or 0)}")
     detail, eta = "", None
     if table.step is TableStep.LOAD and table.load is not None:
-        detail, eta = _load_detail(table.load), _rate_and_eta(table.load)[1]
+        detail, eta = load_detail(table.load), rate_and_eta(table.load)[1]
     elif table.step is TableStep.INDEXES and table.indexes_total:
         detail = f"índices {table.indexes_done}/{table.indexes_total}"
     stage = TABLE_STEP_LABELS[table.step] + (f" (slot {table.slot})" if table.slot else "")
@@ -221,14 +221,14 @@ def validation_line(table: TableState) -> ValidationLine:
     return ValidationLine(table.name, sides)
 
 
-def _stage_text(state: RunState, step: Step) -> str:
+def stage_text(state: RunState, step: Step) -> str:
     table = state.tables.get(state.current_table or "")
     if step is Step.TABLES and table is not None and table.step is not None:
         return f"{table.name}: {TABLE_STEP_LABELS[table.step]}"
     return STEP_LABELS[step]
 
 
-def _stage_elapsed(state: RunState) -> str:
+def stage_elapsed(state: RunState) -> str:
     """Sufixo ``· há 3min 05s`` da etapa em curso; vazio abaixo de 1 min, fora da execução e com a tabela concluída."""
     table = state.tables.get(state.current_table or "")
     concluded = state.step is Step.TABLES and table is not None and table.step is TableStep.DONE
@@ -237,7 +237,7 @@ def _stage_elapsed(state: RunState) -> str:
     return f" · há {format_duration(state.step_elapsed_seconds)}"
 
 
-def _checklist(state: RunState) -> tuple[ChecklistItem, ...]:
+def checklist(state: RunState) -> tuple[ChecklistItem, ...]:
     items = []
     marker = state.step if state.failed_step is None else state.failed_step
     finished = sum(table.step is TableStep.DONE for table in state.tables.values())
@@ -255,7 +255,7 @@ def _checklist(state: RunState) -> tuple[ChecklistItem, ...]:
     return tuple(items)
 
 
-def _facts(state: RunState) -> tuple[Fact, ...]:
+def facts(state: RunState) -> tuple[Fact, ...]:
     facts = []
     table = state.tables.get(state.current_table or "")
     if table is not None and table.slot:
@@ -268,12 +268,12 @@ def _facts(state: RunState) -> tuple[Fact, ...]:
     return tuple(facts)
 
 
-def _overall_eta(state: RunState) -> float | None:
+def overall_eta(state: RunState) -> float | None:
     """Fim da carga SQL*Loader: o que falta da tabela atual e o volume das pendentes, na taxa medida (sem índices)."""
     table = state.tables.get(state.current_table or "")
     if state.step is not Step.TABLES or table is None or table.step is not TableStep.LOAD or table.load is None:
         return None
-    rate, eta = _rate_and_eta(table.load)
+    rate, eta = rate_and_eta(table.load)
     if eta is None:
         return None
     pending = sum(other.weight for other in state.tables.values() if other.step is None)
@@ -292,17 +292,17 @@ def build_view(state: RunState) -> RunView:
         dataset_id=state.dataset_id,
         url=state.url,
         status=state.status,
-        stage=_stage_text(state, step) + _stage_elapsed(state),
+        stage=stage_text(state, step) + stage_elapsed(state),
         fraction=overall_fraction(state),
         elapsed_seconds=state.elapsed_seconds,
         run_name=state.run_name,
         updated_at=state.updated_at,
-        checklist=_checklist(state),
+        checklist=checklist(state),
         tables=tuple(table_view(table) for table in state.tables.values()) if state.mode == "full" else (),
-        facts=_facts(state),
-        eta_seconds=_overall_eta(state),
+        facts=facts(state),
+        eta_seconds=overall_eta(state),
         error=state.error,
-        failed_stage=_stage_text(state, step) if state.failed_step is not None else None,
+        failed_stage=stage_text(state, step) if state.failed_step is not None else None,
         validation=(
             tuple(validation_line(table) for table in state.tables.values())
             if state.status is not RunStatus.RUNNING and state.mode == "full"

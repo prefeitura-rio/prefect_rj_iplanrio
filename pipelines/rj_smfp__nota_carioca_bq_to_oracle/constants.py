@@ -11,7 +11,7 @@ DBT_DEPLOYMENT = f"{DBT_FLOW_NAME}/rj-iplanrio--run_dbt--prod"
 DBT_POLL_SECONDS = 30.0
 """Intervalo entre as consultas ao estado do run de dbt."""
 
-_DBT_DEFAULT_PARAMETERS: dict[str, object] = {
+DBT_DEFAULT_PARAMETERS: dict[str, object] = {
     "command": "build",
     "select": "tag:nota_carioca",
     "send_discord_report": False,
@@ -27,4 +27,4 @@ def default_dbt_parameters() -> dict[str, object]:
 
     :returns: Parâmetros do flow ``rj_iplanrio__run_dbt``, que o chamador pode alterar.
     """
-    return copy.deepcopy(_DBT_DEFAULT_PARAMETERS)
+    return copy.deepcopy(DBT_DEFAULT_PARAMETERS)

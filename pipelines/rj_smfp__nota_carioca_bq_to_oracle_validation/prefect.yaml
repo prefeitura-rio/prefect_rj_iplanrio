@@ -47,7 +47,8 @@ deployments:
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_oracle_validation/flow.py:rj_smfp__nota_carioca_bq_to_oracle_validation
     parameters:
-      dataset_id: nota_carioca
+      source:
+        dataset_id: nota_carioca
     work_pool:
       name: onprem-pool
       work_queue_name: default

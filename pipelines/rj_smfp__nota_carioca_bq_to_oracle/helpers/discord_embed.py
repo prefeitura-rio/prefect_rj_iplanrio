@@ -9,7 +9,7 @@ Respeita os limites do Discord: descrição 4096, valor de campo 1024, 25 campos
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import assert_never
+from itertools import pairwise
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_format import (
     clip,
@@ -180,13 +180,13 @@ class RunView:
         return f"{self.flow_label} · {self.dataset_id}"
 
 
-_STATUS_LINE = {
+STATUS_LINE = {
     RunStatus.RUNNING: "🔄 **EM ANDAMENTO**",
     RunStatus.SUCCESS: "✅ **CONCLUÍDO**",
     RunStatus.FAILED: "❌ **FALHOU**",
     RunStatus.CANCELLED: "⚪ **CANCELADO**",
 }
-_ITEM_ICON = {ItemStatus.PENDING: "⬜", ItemStatus.RUNNING: "🔄", ItemStatus.DONE: "✅", ItemStatus.FAILED: "❌"}
+ITEM_ICON = {ItemStatus.PENDING: "⬜", ItemStatus.RUNNING: "🔄", ItemStatus.DONE: "✅", ItemStatus.FAILED: "❌"}
 
 
 def status_color(status: RunStatus) -> int:
@@ -200,13 +200,11 @@ def status_color(status: RunStatus) -> int:
             return COLOR_FAILURE
         case RunStatus.CANCELLED:
             return COLOR_CANCELLED
-        case unreachable:
-            assert_never(unreachable)
 
 
 def table_block(table: TableView, status: RunStatus) -> str:
     """Monta o bloco de uma tabela: nome, etapa, barra, detalhes e ETA (só uma linha no sucesso)."""
-    icon = _ITEM_ICON[table.status]
+    icon = ITEM_ICON[table.status]
     if status is RunStatus.SUCCESS:
         return f"{icon} **{table.name}**" + (f" — {table.detail}" if table.detail else "")
     lines = [f"{icon} **{table.name}** · {table.stage}"]
@@ -220,11 +218,11 @@ def table_block(table: TableView, status: RunStatus) -> str:
     return "\n".join(lines)
 
 
-def _count_text(side: CountSide) -> str:
+def count_text(side: CountSide) -> str:
     return f"{side.label} {format_count(side.rows) if side.rows is not None else MISSING_COUNT}"
 
 
-def _count_separator(left: CountSide, right: CountSide) -> str:
+def count_separator(left: CountSide, right: CountSide) -> str:
     if left.rows is None or right.rows is None:
         return " · "
     return " = " if left.rows == right.rows else " ≠ "
@@ -240,7 +238,7 @@ def format_validation_line(line: ValidationLine) -> str:
     :returns: Por exemplo ``✅ DPS · Oracle (SCN) 10 = BigQuery 10 · Σ VALOR iguais``.
     """
     icon = "✅" if line.is_valid else "❌" if line.has_counts else "⬜"
-    chain = _count_chain(line.sides)
+    chain = count_chain(line.sides)
     note = f" · {line.note}" if line.note and line.is_valid else ""
     return clip(f"{icon} {line.table} · {chain}{note}", VALIDATION_LINE_LIMIT)
 
@@ -250,12 +248,12 @@ def count_validated(lines: tuple[ValidationLine, ...]) -> int:
     return sum(line.is_valid for line in lines)
 
 
-def _count_chain(sides: tuple[CountSide, ...]) -> str:
+def count_chain(sides: tuple[CountSide, ...]) -> str:
     if not sides:
         return ""
-    parts = [_count_text(sides[0])]
-    for left, right in zip(sides, sides[1:], strict=False):
-        parts.append(_count_separator(left, right) + _count_text(right))
+    parts = [count_text(sides[0])]
+    for left, right in pairwise(sides):
+        parts.append(count_separator(left, right) + count_text(right))
     return "".join(parts)
 
 
@@ -276,7 +274,7 @@ def validation_summary(view: RunView) -> str:
 def build_description(view: RunView) -> str:
     """Monta a descrição: estado, etapa, barra geral e um bloco por tabela."""
     parts = [
-        f"{_STATUS_LINE[view.status]} · {view.stage}",
+        f"{STATUS_LINE[view.status]} · {view.stage}",
         f"`{progress_bar(view.fraction)}` {format_percent(view.fraction)}",
     ]
     blocks = "\n\n".join(table_block(table, view.status) for table in view.tables)
@@ -296,9 +294,7 @@ def build_fields(view: RunView) -> list[dict[str, object]]:
         stage = f"Cancelado em {view.failed_stage}"
     fields.append(("🧭 Etapa atual", stage, True))
     if view.checklist:
-        fields.append(
-            ("Etapas", "\n".join(f"{_ITEM_ICON[item.status]} {item.label}" for item in view.checklist), False)
-        )
+        fields.append(("Etapas", "\n".join(f"{ITEM_ICON[item.status]} {item.label}" for item in view.checklist), False))
     if view.validation:
         fields.append(("🔎 Validação", "\n".join(format_validation_line(line) for line in view.validation), False))
     fields.extend((fact.name, fact.value, fact.inline) for fact in view.facts)
@@ -310,7 +306,7 @@ def build_fields(view: RunView) -> list[dict[str, object]]:
     ]
 
 
-def _embed_size(embed: dict[str, object], fields: list[dict[str, object]]) -> int:
+def embed_size(embed: dict[str, object], fields: list[dict[str, object]]) -> int:
     footer = embed["footer"]
     footer_text = footer["text"] if isinstance(footer, dict) else ""
     field_chars = sum(len(str(field["name"])) + len(str(field["value"])) for field in fields)
@@ -333,9 +329,9 @@ def build_payload(view: RunView) -> dict[str, object]:
     }
     if view.url:
         embed["url"] = view.url
-    other = _embed_size({**embed, "description": ""}, fields)
+    other = embed_size({**embed, "description": ""}, fields)
     embed["description"] = clip(str(embed["description"]), max(TOTAL_BUDGET - other, MIN_DESCRIPTION))
-    while fields and _embed_size(embed, fields) > TOTAL_BUDGET:
+    while fields and embed_size(embed, fields) > TOTAL_BUDGET:
         fields.pop()
     return {"embeds": [embed], "allowed_mentions": dict(NO_MENTIONS)}
 
@@ -369,6 +365,4 @@ def build_announcement(view: RunView) -> dict[str, object]:
             text = f"⚪ {name} cancelado na etapa {stage} após {took}{link}"
         case RunStatus.RUNNING:
             raise ValueError("A mensagem final só existe depois do término da execução.")
-        case unreachable:
-            assert_never(unreachable)
     return {"content": clip(text, CONTENT_LIMIT), "allowed_mentions": dict(NO_MENTIONS)}

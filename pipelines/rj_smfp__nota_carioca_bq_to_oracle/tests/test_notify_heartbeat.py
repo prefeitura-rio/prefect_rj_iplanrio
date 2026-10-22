@@ -1,3 +1,4 @@
+from typing import final, override
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -33,25 +34,28 @@ class RecordingMessage(DiscordStatusMessage):
         super().__init__("https://discord.example/api/webhooks/1/t")
         self.publishes: list[Publish] = []
         self.announcements: list[Mapping[str, object]] = []
-        self._on_publish = on_publish
-        self._changed = threading.Condition()
+        self.on_publish: Callable[[bool], None] | None = on_publish
+        self.changed: threading.Condition = threading.Condition()
 
+    @override
     def publish(self, payload: Mapping[str, object], force: bool = False) -> None:
-        with self._changed:
+        with self.changed:
             self.publishes.append(Publish(payload, force))
-            self._changed.notify_all()
-        if self._on_publish is not None:
-            self._on_publish(force)
+            self.changed.notify_all()
+        if self.on_publish is not None:
+            self.on_publish(force)
 
+    @override
     def announce(self, payload: Mapping[str, object]) -> None:
         self.announcements.append(payload)
 
     def wait_for(self, count: int) -> bool:
         """Espera (com limite) até haver ``count`` publicações; ``False`` se o prazo estourar."""
-        with self._changed:
-            return self._changed.wait_for(lambda: len(self.publishes) >= count, WAIT_SECONDS)
+        with self.changed:
+            return self.changed.wait_for(lambda: len(self.publishes) >= count, WAIT_SECONDS)
 
 
+@final
 class Clock:
     """Substitui o módulo ``time`` do notificador para controlar o relógio monotônico."""
 
@@ -66,7 +70,7 @@ def make(
     message: DiscordStatusMessage | None, heartbeat_seconds: float = INTERVAL, tables: tuple[str, ...] = ("A",)
 ) -> LoadNotifier:
     config = NotifierConfig(
-        "nota_carioca_staging", "run-1", "nota_carioca_staging", tables, 2, False, "full", True, heartbeat_seconds
+        "nota_carioca_staging", None, "nota_carioca_staging", tables, 2, False, "full", True, heartbeat_seconds
     )
     return LoadNotifier(config, message)
 
@@ -91,7 +95,6 @@ def etapa_atual(notifier: LoadNotifier) -> str:
 def warnings(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     seen: list[str] = []
     monkeypatch.setattr(discord_module, "warn", seen.append)
-    monkeypatch.setattr(discord_module, "info", lambda _: None)
     return seen
 
 
@@ -134,12 +137,24 @@ def test_begin_twice_keeps_a_single_heartbeat() -> None:
         assert len(heartbeat_threads() - before) == 1
 
 
+def succeed(notifier: LoadNotifier) -> None:
+    notifier.succeed()
+
+
+def fail_with_error(notifier: LoadNotifier) -> None:
+    notifier.fail(RuntimeError("falhou"))
+
+
+def fail_with_interrupt(notifier: LoadNotifier) -> None:
+    notifier.fail(KeyboardInterrupt())
+
+
 @pytest.mark.parametrize(
     "finish",
     [
-        pytest.param(lambda notifier: notifier.succeed(), id="succeed"),
-        pytest.param(lambda notifier: notifier.fail(RuntimeError("falhou")), id="fail"),
-        pytest.param(lambda notifier: notifier.fail(KeyboardInterrupt()), id="cancel"),
+        pytest.param(succeed, id="succeed"),
+        pytest.param(fail_with_error, id="fail"),
+        pytest.param(fail_with_interrupt, id="cancel"),
     ],
 )
 def test_heartbeat_stops_when_the_run_is_finalized(finish: Callable[[LoadNotifier], None]) -> None:
@@ -192,7 +207,7 @@ def test_no_heartbeat_when_discord_is_off_or_the_interval_is_zero() -> None:
     before = heartbeat_threads()
     without_client = make(None)
     disabled = LoadNotifier.create(
-        NotifierConfig("ds", "run-1", "ds", ("A",), 2, False, "full", enabled=False, heartbeat_seconds=INTERVAL)
+        NotifierConfig("ds", None, "ds", ("A",), 2, False, "full", enabled=False, heartbeat_seconds=INTERVAL)
     )
     no_interval = make(RecordingMessage(), heartbeat_seconds=0)
     # When each begins and finishes
@@ -226,7 +241,11 @@ def test_a_failing_publish_neither_kills_the_heartbeat_nor_raises(warnings: list
 
 def test_heartbeat_makes_the_elapsed_and_the_step_elapsed_advance(clock: Clock, warnings: list[str]) -> None:
     # Given a client that makes 30 s pass on every publish, so each heartbeat sees a later clock
-    message = RecordingMessage(on_publish=lambda _: setattr(clock, "now", clock.now + 30))
+    def advance(force: bool) -> None:
+        del force
+        clock.now += 30
+
+    message = RecordingMessage(on_publish=advance)
     notifier = make(message, tables=())
     # When the run sits in its first step (export) across the creation and three beats
     with notifier.guard():

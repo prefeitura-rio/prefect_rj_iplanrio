@@ -13,17 +13,15 @@ import threading
 import time
 from collections.abc import Callable, Mapping
 from functools import wraps
+from typing import final
 
-import httpx
-from prefect.logging import get_logger
+import httpx2
+from toolkit.telemetry import logger
 
 from utils.settings import NoticeSettings
-
-logger = get_logger("toolkit")
-
+from utils.utils import dig, read_json
 
 WEBHOOK_ENV = "DISCORD_WEBHOOK_URL"
-WEBHOOK_SECRET_BLOCK = "discord-webhook-nota-carioca"
 TIMEOUT_SECONDS = 10.0
 DEFAULT_MIN_INTERVAL_SECONDS = 20.0
 MAX_BACKOFF_SECONDS = 300.0
@@ -31,43 +29,44 @@ HTTP_NOT_FOUND = 404
 HTTP_RATE_LIMITED = 429
 HTTP_SUCCESS_MAX = 299
 DEFAULT_RETRY_AFTER_SECONDS = 5.0
-_fallback_logger = logging.getLogger(__name__)
+fallback_logger = logging.getLogger(__name__)
 
 
-def _log_safely(message: str, level: str) -> None:
+def log_safely(message: str, level: str) -> None:
     """Escreve no log do Prefect; fora de um run (testes, scripts) cai no ``logging`` padrão."""
     try:
         logger.info(message, level)
     except Exception:
-        _fallback_logger.log(logging.WARNING if level == "warning" else logging.INFO, message)
+        fallback_logger.log(logging.WARNING if level == "warning" else logging.INFO, message)
 
 
 def warn(message: str) -> None:
     """Registra um aviso de notificação pelo log do Prefect (``toolkit.pipelines_utils.logging.log``)."""
-    _log_safely(message, "warning")
+    log_safely(message, "warning")
 
 
 def info(message: str) -> None:
     """Registra uma informação de notificação pelo log do Prefect."""
-    _log_safely(message, "info")
+    log_safely(message, "info")
 
 
+@final
 class Warner:
     """Emite um aviso por falha, sem repetir a mesma mensagem em seguida (rede fora do ar não vira mil linhas)."""
 
     def __init__(self, emit: Callable[[str], None] | None = None) -> None:
-        self._emit = emit
-        self._last: str | None = None
+        self.emit = emit
+        self.last: str | None = None
 
     def __call__(self, message: str) -> None:
         """Avisa, a menos que seja igual ao último aviso."""
-        if message != self._last:
-            self._last = message
-            (self._emit if self._emit is not None else warn)(message)
+        if message != self.last:
+            self.last = message
+            (self.emit if self.emit is not None else warn)(message)
 
     def reset(self) -> None:
         """Esquece o último aviso; o próximo igual volta a aparecer."""
-        self._last = None
+        self.last = None
 
 
 def never_raises[**P](func: Callable[P, None]) -> Callable[P, None]:
@@ -95,34 +94,9 @@ def webhook_from_env() -> str | None:
     return value or None
 
 
-def _load_secret_block(name: str) -> str:
-    """Lê o valor de um Secret block do Prefect (import tardio: só quem precisa paga o import)."""
-    from prefect.blocks.system import Secret  # noqa: PLC0415
-
-    return str(Secret.load(name).get())
-
-
-def webhook_from_secret_block(load: Callable[[str], str] | None = None) -> str | None:
-    """Lê a URL do webhook do Secret block ``discord-webhook-nota-carioca`` do Prefect.
-
-    :param load: Leitor do bloco pelo nome; o padrão consulta a API do Prefect.
-    :returns: A URL, ou ``None`` se o bloco não existir, estiver vazio ou a leitura falhar.
-    """
-    try:
-        value = (load if load is not None else _load_secret_block)(WEBHOOK_SECRET_BLOCK).strip()
-    except Exception as error:  # bloco ausente ou API fora do ar: notificação desligada, a carga segue
-        info(f"Webhook do Discord não lido do Secret block {WEBHOOK_SECRET_BLOCK}: {type(error).__name__}")
-        return None
-    return value or None
-
-
-def resolve_webhook(load: Callable[[str], str] | None = None) -> str | None:
-    """URL do webhook: a variável ``DISCORD_WEBHOOK_URL`` (Infisical) ou, sem ela, o Secret block.
-
-    :param load: Leitor do Secret block; o padrão consulta a API do Prefect.
-    :returns: A URL, ou ``None`` se nenhuma das duas fontes tiver o webhook.
-    """
-    return webhook_from_env() or webhook_from_secret_block(load)
+def resolve_webhook() -> str | None:
+    """Return the webhook URL from `DISCORD_WEBHOOK_URL`, or nothing if it is not set."""
+    return webhook_from_env()
 
 
 class DiscordStatusMessage:
@@ -136,30 +110,30 @@ class DiscordStatusMessage:
 
     :param webhook_url: URL do webhook; ``None`` ou vazia desliga o cliente.
     :param min_interval_seconds: Intervalo mínimo entre edições sem ``force``.
-    :param transport: Transporte do ``httpx`` (os testes passam um ``MockTransport``).
+    :param transport: Transporte do ``httpx2`` (os testes passam um ``MockTransport``).
     """
 
     def __init__(
         self,
         webhook_url: str | None,
         min_interval_seconds: float = DEFAULT_MIN_INTERVAL_SECONDS,
-        transport: httpx.BaseTransport | None = None,
+        transport: httpx2.BaseTransport | None = None,
     ) -> None:
-        self._url = webhook_url.strip() if webhook_url and webhook_url.strip() else None
-        self._interval = min_interval_seconds
-        self._transport = transport
-        self._message_id: str | None = None
-        self._next_allowed = 0.0
-        self._failures = 0
-        self._warn = Warner()
-        self._lock = threading.Lock()
-        if self._url is None:
+        self.url: str | None = webhook_url.strip() if webhook_url and webhook_url.strip() else None
+        self.interval: float = min_interval_seconds
+        self.transport: httpx2.BaseTransport | None = transport
+        self.message_id: str | None = None
+        self.next_allowed: float = 0.0
+        self.failures: int = 0
+        self.warn: Warner = Warner()
+        self.lock: threading.Lock = threading.Lock()
+        if self.url is None:
             info(f"Notificações do Discord desligadas (parâmetro discord_notifications=false ou {WEBHOOK_ENV} vazia).")
 
     @property
     def enabled(self) -> bool:
         """Indica se há webhook configurado."""
-        return self._url is not None
+        return self.url is not None
 
     def publish(self, payload: Mapping[str, object], force: bool = False) -> None:
         """Cria a mensagem na primeira chamada e a edita nas seguintes; nunca levanta exceção.
@@ -167,89 +141,89 @@ class DiscordStatusMessage:
         :param payload: Corpo do webhook (``embeds``, ``allowed_mentions``).
         :param force: Ignora o intervalo mínimo e o recuo (etapas novas e o estado final).
         """
-        if self._url is None:
+        if self.url is None:
             return
-        with self._lock:
+        with self.lock:
             now = time.monotonic()
-            if not force and now < self._next_allowed:
+            if not force and now < self.next_allowed:
                 return
-            self._next_allowed = now + self._interval
-            self._send(payload, now)
+            self.next_allowed = now + self.interval
+            self.send(payload, now)
 
     def announce(self, payload: Mapping[str, object]) -> None:
         """Envia uma mensagem nova e avulsa (a que notifica as pessoas); nunca levanta exceção.
 
         :param payload: Corpo do webhook, normalmente só ``content``.
         """
-        if self._url is None:
+        if self.url is None:
             return
-        with self._lock:
+        with self.lock:
             try:
-                with httpx.Client(timeout=TIMEOUT_SECONDS, transport=self._transport) as client:
-                    response = client.post(self._url, params={"wait": "true"}, json=payload)
+                with httpx2.Client(timeout=TIMEOUT_SECONDS, transport=self.transport) as client:
+                    response = client.post(self.url, params={"wait": "true"}, json=payload)
                 if response.status_code > HTTP_SUCCESS_MAX:
-                    self._warn(f"Discord recusou a mensagem final: HTTP {response.status_code}.")
+                    self.warn(f"Discord recusou a mensagem final: HTTP {response.status_code}.")
             except Exception as error:
-                self._warn(self._describe(error))
+                self.warn(self.describe(error))
 
-    def _send(self, payload: Mapping[str, object], now: float) -> None:
+    def send(self, payload: Mapping[str, object], now: float) -> None:
         """Faz o POST ou o PATCH e atualiza o recuo; chamado com a trava."""
-        if self._url is None:
+        if self.url is None:
             return
         try:
-            with httpx.Client(timeout=TIMEOUT_SECONDS, transport=self._transport) as client:
-                if self._message_id is None:
-                    response = client.post(self._url, params={"wait": "true"}, json=payload)
+            with httpx2.Client(timeout=TIMEOUT_SECONDS, transport=self.transport) as client:
+                if self.message_id is None:
+                    response = client.post(self.url, params={"wait": "true"}, json=payload)
                 else:
-                    response = client.patch(f"{self._url}/messages/{self._message_id}", json=payload)
-            self._handle(response, now)
+                    response = client.patch(f"{self.url}/messages/{self.message_id}", json=payload)
+            self.handle(response, now)
         except Exception as error:
-            self._failed(self._describe(error), now, 0.0)
+            self.failed(self.describe(error), now, 0.0)
 
-    def _handle(self, response: httpx.Response, now: float) -> None:
+    def handle(self, response: httpx2.Response, now: float) -> None:
         """Interpreta a resposta: guarda o id, recria a mensagem apagada, respeita o 429."""
         if response.status_code == HTTP_RATE_LIMITED:
-            self._failed(
-                "Discord limitou as requisições (HTTP 429); pulando até o prazo.", now, self._retry_after(response)
+            self.failed(
+                "Discord limitou as requisições (HTTP 429); pulando até o prazo.", now, self.retry_after(response)
             )
-        elif response.status_code == HTTP_NOT_FOUND and self._message_id is not None:
-            self._message_id = None
-            self._failed("A mensagem do Discord foi apagada; uma nova será criada na próxima atualização.", now, 0.0)
+        elif response.status_code == HTTP_NOT_FOUND and self.message_id is not None:
+            self.message_id = None
+            self.failed("A mensagem do Discord foi apagada; uma nova será criada na próxima atualização.", now, 0.0)
         elif response.status_code > HTTP_SUCCESS_MAX:
-            self._failed(f"Discord respondeu HTTP {response.status_code}.", now, 0.0)
-        elif self._message_id is None:
-            message_id = response.json().get("id")
+            self.failed(f"Discord respondeu HTTP {response.status_code}.", now, 0.0)
+        elif self.message_id is None:
+            message_id = dig(read_json(response), "id")
             if not isinstance(message_id, str):
-                self._failed("Resposta do Discord sem o id da mensagem.", now, 0.0)
+                self.failed("Resposta do Discord sem o id da mensagem.", now, 0.0)
                 return
-            self._message_id = message_id
-            self._succeeded()
+            self.message_id = message_id
+            self.succeeded()
         else:
-            self._succeeded()
+            self.succeeded()
 
     @staticmethod
-    def _retry_after(response: httpx.Response) -> float:
+    def retry_after(response: httpx2.Response) -> float:
         """Lê ``retry_after`` (segundos) do JSON do 429, ou o cabeçalho ``Retry-After``."""
         try:
-            return float(response.json()["retry_after"])
-        except (ValueError, KeyError, TypeError):
+            return float(str(dig(read_json(response), "retry_after")))
+        except ValueError:
             try:
                 return float(response.headers["Retry-After"])
-            except (ValueError, KeyError):
+            except ValueError, KeyError:
                 return DEFAULT_RETRY_AFTER_SECONDS
 
-    def _succeeded(self) -> None:
-        self._failures = 0
-        self._warn.reset()
+    def succeeded(self) -> None:
+        self.failures = 0
+        self.warn.reset()
 
-    def _failed(self, message: str, now: float, retry_after: float) -> None:
+    def failed(self, message: str, now: float, retry_after: float) -> None:
         """Registra o aviso uma vez e adia as próximas tentativas sem ``force``."""
-        self._warn(message)
-        self._failures += 1
-        backoff = min(self._interval * 2**self._failures, MAX_BACKOFF_SECONDS)
-        self._next_allowed = now + max(backoff, retry_after)
+        self.warn(message)
+        self.failures += 1
+        backoff: float = min(self.interval * 2.0**self.failures, MAX_BACKOFF_SECONDS)
+        self.next_allowed = now + max(backoff, retry_after)
 
-    def _describe(self, error: Exception) -> str:
+    def describe(self, error: Exception) -> str:
         """Descreve a falha sem vazar a URL do webhook."""
-        text = str(error).replace(self._url or "", "<webhook>")
+        text = str(error).replace(self.url or "", "<webhook>")
         return f"Falha ao falar com o Discord: {type(error).__name__}{': ' + text if text else ''}"

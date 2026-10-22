@@ -5,11 +5,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
+from typing import cast
 
 import oracledb
-from prefect.logging import get_logger
+from toolkit.telemetry import logger
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.settings import Settings
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import OracleColumn, oracle_column
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import (
     IndexDefinition,
@@ -22,9 +22,8 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import (
     partitioning_from_dictionary,
     storage_clause,
 )
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.settings import Settings
 from utils.utils import render_query
-
-logger = get_logger("toolkit")
 
 TABLE_PREFIX = "BQLOAD_"
 MANAGED_TABLE_MARKER = "rj_smfp__nota_carioca_bq_to_oracle"
@@ -161,17 +160,42 @@ def assert_privileges(cursor: oracledb.Cursor, schema: str) -> None:
     :raises PermissionError: Se faltar algum privilégio.
     """
     cursor.execute(render_query(QUERIES_ANCHOR, "get_session_privileges"))
-    rows = cursor.fetchall()
-    session_user = rows[0][0] if rows else ""
-    missing = missing_privileges(session_user, schema, {privilege for _, privilege in rows})
+    rows = fetch_all(cursor)
+    session_user = str(rows[0][0]) if rows else ""
+    missing = missing_privileges(session_user, schema, {str(privilege) for _, privilege in rows})
     if missing and session_user == schema:
         raise PermissionError(f"O usuário {schema} não tem {missing}. Nada foi alterado. Peça à DBA.")
     if missing:
         raise PermissionError(
             f"O usuário {session_user} não é dono de {schema} e não tem {missing}. Nada foi alterado. "
-            f"Conecte como {schema} via proxy (DB_USERNAME=<usuario>[{schema}], após "
-            f'ALTER USER {schema} GRANT CONNECT THROUGH "<usuario>") ou peça esses privilégios à DBA.'
+            + f"Conecte como {schema} via proxy (DB_USERNAME=<usuario>[{schema}], após "
+            + f'ALTER USER {schema} GRANT CONNECT THROUGH "<usuario>") ou peça esses privilégios à DBA.'
         )
+
+
+type Row = tuple[object, ...]
+
+
+def fetch_all(cursor: oracledb.Cursor) -> list[Row]:
+    """Return every row that the cursor has left."""
+    return cast("list[Row]", cursor.fetchall())
+
+
+def fetch_one(cursor: oracledb.Cursor) -> Row | None:
+    """Return the next row of the cursor, or nothing if it has none."""
+    return cast("Row | None", cursor.fetchone())
+
+
+def fetch_scalar(cursor: oracledb.Cursor) -> object:
+    """Return the first value of the next row, or nothing if there is no row."""
+    row = fetch_one(cursor)
+
+    return row[0] if row else None
+
+
+def column_names(cursor: oracledb.Cursor) -> list[str]:
+    """Return the names of the columns of the last query, in lower case."""
+    return [str(description[0]).lower() for description in cursor.description or []]
 
 
 def column_definitions(columns: list[OracleColumn]) -> str:
@@ -193,8 +217,8 @@ def read_column_definitions(cursor: oracledb.Cursor, owner: str, table: str) -> 
         visível para a sessão.
     """
     cursor.execute(render_query(QUERIES_ANCHOR, "get_column_definitions"), {"owner": owner, "table_name": table})
-    names = [description[0].lower() for description in cursor.description]
-    return [oracle_column(dict(zip(names, row, strict=True))) for row in cursor.fetchall()]
+    names = column_names(cursor)
+    return [oracle_column(dict(zip(names, row, strict=True))) for row in fetch_all(cursor)]
 
 
 def fetch_template_columns(config: OracleConfig, template_schema: str, table: str) -> list[OracleColumn]:
@@ -237,9 +261,9 @@ def fetch_rows(cursor: oracledb.Cursor, query: str, binds: Mapping[str, object])
     :param binds: Valores das variáveis de bind.
     :returns: Linhas com as colunas em minúsculas.
     """
-    cursor.execute(render_query(QUERIES_ANCHOR, query), binds)
-    names = [description[0].lower() for description in cursor.description]
-    return [dict(zip(names, row, strict=True)) for row in cursor.fetchall()]
+    cursor.execute(render_query(QUERIES_ANCHOR, query), dict(binds))
+    names = column_names(cursor)
+    return [dict(zip(names, row, strict=True)) for row in fetch_all(cursor)]
 
 
 def read_table_layout(cursor: oracledb.Cursor, owner: str, table: str) -> TableLayout | None:
@@ -383,12 +407,12 @@ def ensure_table(config: OracleConfig, table: str, definition: TableDefinition) 
     with connect(config) as connection, connection.cursor() as cursor:
         assert_privileges(cursor, config.schema)
         cursor.execute(render_query(QUERIES_ANCHOR, "get_table_comment"), binds)
-        row = cursor.fetchone()
+        row = fetch_one(cursor)
         if row is None:
             create_managed_table(cursor, config.schema, table, definition)
             return f"Tabela {target} criada com a definição da original ({len(definition.columns)} colunas)."
 
-        assert_managed_table(table, row[1])
+        assert_managed_table(table, comment_of(row))
         existing = [column.definition for column in read_column_definitions(cursor, config.schema, table)]
         differences = definition_differences(existing, [column.definition for column in definition.columns])
         existing_layout = read_table_layout(cursor, config.schema, table)
@@ -402,6 +426,11 @@ def ensure_table(config: OracleConfig, table: str, definition: TableDefinition) 
         return f"Tabela {target} divergia da original e foi apagada e recriada. Diferenças: {differences}"
 
 
+def comment_of(row: Row) -> str | None:
+    """Return the comment of a table from the row of `get_table_comment`."""
+    return None if row[1] is None else str(row[1])
+
+
 def assert_managed_existing_table(cursor: oracledb.Cursor, schema: str, table: str) -> None:
     """Confirma que a tabela existe e pertence à pipeline antes de alterá-la.
 
@@ -411,10 +440,10 @@ def assert_managed_existing_table(cursor: oracledb.Cursor, schema: str, table: s
     :raises PermissionError: Se a tabela não existir ou não pertencer à pipeline.
     """
     cursor.execute(render_query(QUERIES_ANCHOR, "get_table_comment"), {"owner": schema, "table_name": table})
-    row = cursor.fetchone()
+    row = fetch_one(cursor)
     if row is None:
         raise PermissionError(f"{schema}.{table} não existe.")
-    assert_managed_table(table, row[1])
+    assert_managed_table(table, comment_of(row))
 
 
 def truncate_table(config: OracleConfig, table: str) -> None:
@@ -465,7 +494,7 @@ def drop_managed_indexes(config: OracleConfig, table: str) -> list[str]:
         if others:
             raise PermissionError(
                 f"{config.schema}.{table} tem índices que a pipeline não criou: {others}. Nada foi alterado; "
-                "a carga em paralelo exige a tabela sem índices."
+                + "a carga em paralelo exige a tabela sem índices."
             )
         for index in indexes:
             cursor.execute(render_query(QUERIES_ANCHOR, "drop_index", schema=config.schema, index=index.name))
@@ -522,5 +551,5 @@ def count_rows(config: OracleConfig, table: str, parallel_degree: int = 1) -> in
     )
     with connect(config) as connection, connection.cursor() as cursor:
         cursor.execute(query)
-        (count,) = cursor.fetchone()
-    return int(count)
+        row = fetch_one(cursor)
+    return to_int(row[0] if row else 0)

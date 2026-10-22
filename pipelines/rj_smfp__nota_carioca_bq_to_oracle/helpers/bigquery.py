@@ -6,11 +6,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from google.cloud import bigquery, storage
-from prefect.logging import get_logger
+from toolkit.telemetry import logger
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.dbt import skip_initial_quiet_wait
-
-logger = get_logger("toolkit")
 
 DELETE_BATCH_SIZE = 100
 """Máximo de objetos por requisição batch do GCS."""
@@ -40,14 +38,24 @@ def list_tables(project: str, dataset_id: str) -> list[str]:
     return sorted(table.table_id for table in tables if table.table_type == "TABLE")
 
 
-def get_table_schema(project: str, dataset_id: str, table_id: str) -> dict[str, object]:
+@dataclass(frozen=True)
+class TableSchema:
+    """O schema de uma tabela do BigQuery e o número de linhas.
+
+    ``fields`` tem ``name``, ``type`` e ``mode`` de cada coluna.
+    """
+
+    fields: list[dict[str, str]]
+    num_rows: int
+
+
+def get_table_schema(project: str, dataset_id: str, table_id: str) -> TableSchema:
     """Lê o schema e a contagem de linhas de uma tabela do BigQuery.
 
     :param project: Projeto da tabela.
     :param dataset_id: Dataset da tabela.
     :param table_id: Nome da tabela.
-    :returns: Dicionário com ``fields`` (lista de ``name``, ``type`` e ``mode``),
-        ``num_rows`` e ``last_modified`` (última alteração, em UTC).
+    :returns: O schema e o número de linhas.
     :raises ValueError: Se a tabela tiver linhas no streaming buffer, que o
         extract não exporta.
     """
@@ -57,7 +65,7 @@ def get_table_schema(project: str, dataset_id: str, table_id: str) -> dict[str, 
         raise ValueError(f"{table_id} tem linhas no streaming buffer; a contagem não seria confiável.")
     fields = [{"name": field.name, "type": field.field_type, "mode": field.mode} for field in table.schema]
     logger.info("Schema de %s: %d colunas, %d linhas", table_id, len(fields), table.num_rows)
-    return {"fields": fields, "num_rows": table.num_rows, "last_modified": table.modified}
+    return TableSchema(fields=fields, num_rows=table.num_rows or 0)
 
 
 def get_last_modified(project: str, dataset_id: str, table_id: str) -> datetime:
@@ -163,7 +171,7 @@ class TableSnapshot:
     """
 
     table_id: str
-    schema: dict[str, object]
+    schema: TableSchema
     last_modified: datetime
     files: list[ExportedFile]
 
@@ -225,7 +233,7 @@ def export_consistent_snapshot(
             if waited + wait > request.max_wait_seconds:
                 raise RuntimeError(
                     f"O BigQuery não ficou {request.quiet_seconds:.0f}s sem alterações em "
-                    f"{request.max_wait_seconds:.0f}s de espera; nada foi carregado."
+                    + f"{request.max_wait_seconds:.0f}s de espera; nada foi carregado."
                 )
             newest = max(modified.values())
             report(
