@@ -55,6 +55,14 @@
             "pyproject.toml"
           ];
         };
+        "lint:env" = {
+          exec = "nu scripts/checks.nu lint env";
+          execIfModified = [
+            "pipelines/**/*.py"
+            "src/**/*.py"
+            "packages/toolkit/toolkit/settings.py"
+          ];
+        };
         "lint:ci" = {
           exec = "actionlint .github/workflows/*.y*ml";
           execIfModified = [
@@ -88,6 +96,7 @@
           "lint:deps"
           "lint:prefect"
           "lint:imports"
+          "lint:env"
           "lint:ci"
         ];
         "test:all".after = [

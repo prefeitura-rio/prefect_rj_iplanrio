@@ -186,6 +186,7 @@ Adicione apenas quando a necessidade existir concretamente:
 
 ```
 ├── tasks.py         ← quando o flow chama funções decoradas com @task
+├── settings.py      ← quando a pipeline lê variáveis de ambiente (Seção 5.11)
 ├── helpers.py       ← quando as tasks delegam para helpers puros reutilizáveis
 ├── helpers/         ← quando os helpers abrangem múltiplos domínios distintos
 │   ├── api.py       ← nomeado pelo domínio, não pelo papel (nunca helpers/tasks.py)
@@ -688,6 +689,35 @@ Não faça isto:
 - `assert` fora de testes para validar dado.
 - Revalidar um dado que já passou pela borda.
 
+### 5.11 Variáveis de ambiente
+
+Uma pipeline lê uma variável de ambiente só por uma classe `Settings` (`pydantic-settings`) em `settings.py`. Não chame `getenv`, `environ.get` nem `environ[...]` no código da pipeline: `nu scripts/checks.nu lint env` recusa a leitura à mão. A classe estende `ToolkitSettings`, e o código a cria quando precisa dela, dentro da task ou da função, e não na importação do módulo. Um campo sem valor padrão e com `Field(min_length=1)` é obrigatório: faltando ou vazio, o `ValidationError` nomeia a variável.
+
+```python
+from pydantic import Field, SecretStr
+from toolkit.settings import ToolkitSettings
+
+
+class Settings(ToolkitSettings):
+    """The login of the Wetalkie API."""
+
+    WETALKIE_URL: str = Field(min_length=1)
+    WETALKIE_USERNAME: str = Field(min_length=1)
+    WETALKIE_PASSWORD: SecretStr = Field(min_length=1)
+```
+
+O nome de um campo segue estas regras, e o `lint env` confere as duas primeiras:
+
+1. `UPPER_SNAKE_CASE`, sem hífen, sem letra minúscula e sem sublinhado duplo.
+2. `<SERVIÇO>_<ATRIBUTO>`, com o serviço primeiro: `INMET_TOKEN`, `DATA_RELAY_API_KEY`, `WETALKIE_USERNAME`. O atributo é `TOKEN`, `API_KEY`, `USERNAME`, `PASSWORD`, `CLIENT_ID`, `CLIENT_SECRET`, `URL`, `BASE_URL`, `HOST`, `PORT` ou `WEBHOOK_URL`.
+3. Sem o ambiente (`STAGING`, `PROD`) e sem o nome da pipeline no nome. O ambiente é o do Infisical: `staging` e `prod` têm valores separados, e uma pipeline em `staging` nunca lê um valor de `prod`.
+4. O login de um banco é `DB_USERNAME` e `DB_PASSWORD` (`toolkit.settings.DatabaseSettings`).
+5. O webhook do Discord da pipeline é `DISCORD_WEBHOOK_URL`. Um segundo canal leva a finalidade no nome: `DISCORD_ERRORS_WEBHOOK_URL`.
+6. Um valor que não é segredo e muda com a implantação é parâmetro do `prefect.yaml`, e não variável.
+7. Não guarde credencial do Google em variável: use o ADC (workload identity).
+
+Uma variável que mais de uma pipeline lê entra em uma classe de `utils.settings` (`WetalkieSettings`, `SfmcSettings`, `DataRelaySettings`, `BifrostSettings`, `NoticeSettings`). No Infisical ela fica em `/shared/<grupo>`.
+
 ## 6. Padrões do Prefect 3.0
 
 ### 6.1 Declaração de flow
@@ -955,6 +985,7 @@ Promoção especulativa ("isso pode ser útil em outro lugar") não é motivo. C
 | Módulo        | Símbolo                                                                                                                                                                                                                                                   | Propósito                                                                                                            |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `utils.tasks` | `dump_db_to_gcs`, `publish_table_in_bq`, `upload_files_to_gcs`, `dump_bq_to_gcs`, `dump_arcgis_to_gcs`, `dump_gsheet_to_gcs`, `write_sheet`, `request_json`, `write_records`, `read_bq`, `run_bq_sql`, `notify_discord`, `list_delta_tables`, `maintain_delta_table`, `run_dbt` | Tasks compartilhadas sobre o toolkit. Veja o `README.md`.                                                            |
+| `utils.settings` | `WetalkieSettings`, `SfmcSettings`, `DataRelaySettings`, `BifrostSettings`, `NoticeSettings` | Variáveis de ambiente que mais de uma pipeline lê (Seção 5.11). |
 | `utils.flows` | `dump_database`, `dump_arcgis`, `dump_gsheet`, `load_files`, `ingest_api`, `maintain_delta`, `dbt_run`                                                                                                                                                    | Fluxos: o dump de uma fonte para uma tabela `Delta` sem repetir dado, a captura de uma API, a manutenção das tabelas `Delta` e o `dbt`. |
 
 ### 11.3 O nome `utils`

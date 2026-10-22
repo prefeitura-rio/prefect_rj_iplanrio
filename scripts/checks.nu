@@ -38,6 +38,36 @@ def 'main lint imports' []: nothing -> nothing {
     in-project . ruff check --select TID251 --no-fix pipelines
 }
 
+# Fail when a setting breaks the naming rule or a pipeline reads an environment variable by hand.
+def 'main lint env' []: nothing -> nothing {
+    let naming = '^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$'
+    let settings = glob pipelines/*/settings.py | append ['src/utils/settings.py' 'packages/toolkit/toolkit/settings.py']
+    let misnamed = $settings | each {|file|
+        open --raw $file
+        | lines
+        | parse --regex '^    (?<name>[A-Za-z_][A-Za-z0-9_]*):'
+        | get name
+        | where {|name| $name != 'model_config' and not ($name =~ $naming) }
+        | each {|name| $'($file): ($name) is not UPPER_SNAKE_CASE with single underscores' }
+    } | flatten
+
+    let hand_read = (glob pipelines/**/*.py) | append (glob src/**/*.py) | where {|file| not ($file | str contains '/tests/') } | each {|file|
+        open --raw $file
+        | lines
+        | enumerate
+        | where {|row|
+            let line = $row.item
+            ($line =~ 'getenv\(|environ\.get\(|read_env\(') or (($line =~ 'environ\[') and not ($line =~ '\] =') and not ($line | str trim --left | str starts-with 'del '))
+        }
+        | each {|row| $'($file):($row.index + 1): read the variable through a Settings class' }
+    } | flatten
+
+    let problems = $misnamed | append $hand_read
+    if ($problems | is-not-empty) {
+        fail $'Fix the environment variables:(char nl)($problems | str join (char nl))' {command: 'lint env', span: (metadata $problems).span}
+    }
+}
+
 # Lint the SQL templates of the toolkit.
 def 'main lint sql' []: nothing -> nothing {
     in-project packages/toolkit sqlfluff lint toolkit/executor/templates

@@ -7,7 +7,6 @@ from datetime import UTC, date, datetime
 from http import HTTPStatus
 from importlib import import_module
 from json import dumps
-from os import environ
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import cast
@@ -589,18 +588,6 @@ def load_credentials(scopes: Sequence[str] = CREDENTIAL_SCOPES) -> Credentials:
     Raise `DefaultCredentialsError` if the environment has no credentials.
     """
     return cast("Credentials", default(scopes=list(scopes))[0])
-
-
-def read_env(name: str) -> str:
-    """Return the value of an environment variable.
-
-    Raise `ValueError` if the variable is not set or is empty.
-    """
-    value = environ.get(name)
-    if not value:
-        raise ValueError(f"The environment variable {name} is not set")
-
-    return value
 
 
 def capture_options(dump_mode: DumpMode) -> DumpOptions:
