@@ -4870,22 +4870,14 @@ name = "rj-crm-agentforce-classificacao-llm"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__agentforce_classificacao_llm" }
 dependencies = [
-    { name = "aiohttp" },
-    { name = "discord-py" },
     { name = "google-cloud-bigquery" },
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio" },
-    { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "aiohttp" },
-    { name = "discord-py" },
     { name = "google-cloud-bigquery" },
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "requests" },
 ]
 
 [[package]]

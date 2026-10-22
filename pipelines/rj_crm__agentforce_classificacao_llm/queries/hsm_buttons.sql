@@ -13,7 +13,7 @@ SELECT
     hsm_nome,
     hsm_botoes_json,
     template_pos_versao_indicador
-FROM `{hsm_catalog_table}`
+FROM `{{ catalog_table }}`
 WHERE
-    jornada_nome IN ({jornadas})
+    jornada_nome IN ({% for name in journeys %}'{{ name }}'{% if not loop.last %}, {% endif %}{% endfor %})
     AND atividade_versao_mais_recente_indicador = true
