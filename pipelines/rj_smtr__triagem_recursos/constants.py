@@ -1,11 +1,8 @@
-"""
-Constantes centrais e resolução de ambiente (Local vs Cloud / SEI).
-"""
+"""Constantes centrais e resolução de ambiente (Local vs Cloud / SEI)."""
 
 from enum import Enum
 import os
 from pathlib import Path
-from typing import List
 
 PIPELINE_DIR = Path(__file__).resolve().parent
 
@@ -32,6 +29,7 @@ DEFAULT_ENVIRONMENT = os.getenv("ENVIRONMENT", "local").strip().lower()
 LOCAL_PDFS_DIR = PIPELINE_DIR / "pdfs"
 LOCAL_ARTIFACTS_DIR = PIPELINE_DIR / "artifacts"
 PROMPTS_DIR = PIPELINE_DIR / "prompts"
+QUERIES_DIR = PIPELINE_DIR / "queries"
 
 # ==============================================================================
 # MODELO E GATEWAY
@@ -39,7 +37,10 @@ PROMPTS_DIR = PIPELINE_DIR / "prompts"
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
 VERTEX_LLM_MODEL = os.getenv("LLM_MODEL", "vertex/gemini-3.7-flash")
 VERSAO_PROMPT_PADRAO = os.getenv("VERSAO_PROMPT", "v4_baseline")
-GCS_PROMPT_URI = os.getenv("GCS_PROMPT_URI", "gs://rj-agent-smtr-triagem-recurso/prompts/v4_baseline.txt")
+GCS_PROMPT_URI = os.getenv(
+    "GCS_PROMPT_URI",
+    "gs://rj-agent-smtr-triagem-recurso/prompts/v4_baseline.txt",
+)
 
 # ==============================================================================
 # PARÂMETROS DE CORTE
@@ -62,6 +63,8 @@ EPSILON_CRC: float = 0.02
 # TAXONOMIA E ENUMS
 # ==============================================================================
 class TaxonomiaRecurso(str, Enum):
+    """Classes formais do Goldenset de Recursos."""
+
     CITRAN = "citran"
     ROUBO_FURTO_CLONAGEM = "roubo_furto_clonagem"
     ERRO_CAPTURA_IMAGEM = "erro_captura_imagem"
@@ -71,16 +74,20 @@ class TaxonomiaRecurso(str, Enum):
     HIPOTESE_ESGOTADA = "hipotese_esgotada"
 
 
-TODAS_HIPOTESES: List[str] = [h.value for h in TaxonomiaRecurso]
+TODAS_HIPOTESES: list[str] = [h.value for h in TaxonomiaRecurso]
 
 
 class FaixaOperacional(str, Enum):
+    """Faixas de encaminhamento para a triagem automatizada."""
+
     VERDE = "VERDE"
     AMARELA = "AMARELA"
     VERMELHA = "VERMELHA"
 
 
 class RotaExecucao(str, Enum):
+    """Rotas de roteamento adaptativo da inferência."""
+
     N1_DIRETO = "N1_DIRETO"
     N2_CONSENSO = "N2_CONSENSO"
     HITL_BAIXA_CONFIANCA = "HITL_BAIXA_CONFIANCA"
@@ -89,14 +96,15 @@ class RotaExecucao(str, Enum):
 
 
 class StatusProcessamento(str, Enum):
+    """Status operacional da fila de triagem."""
+
     PENDENTE_IA = "PENDENTE_IA"
     PROCESSANDO_IA = "PROCESSANDO_IA"
     CONCLUIDO_IA = "CONCLUIDO_IA"
     ERRO_PROCESSAMENTO = "ERRO_PROCESSAMENTO"
 
 
-# As 8 features ativas
-FEATURES_MODELO_PRODUCAO: List[str] = [
+FEATURES_MODELO_PRODUCAO: list[str] = [
     "fuzz_ratio",
     "token_containment",
     "exact_match",
@@ -109,5 +117,9 @@ FEATURES_MODELO_PRODUCAO: List[str] = [
 
 
 def resolver_banco_url(is_local: bool) -> str:
-    """Retorna a URL do PostgreSQL local ou do Cloud SQL conforme o modo."""
+    """Retorna a URL do PostgreSQL local ou do Cloud SQL conforme o modo.
+
+    :param is_local: Se True, retorna DB_URL_LOCAL; caso contrário, DB_URL_CLOUD.
+    :returns: String de conexão com o banco de dados PostgreSQL.
+    """
     return DB_URL_LOCAL if is_local else DB_URL_CLOUD

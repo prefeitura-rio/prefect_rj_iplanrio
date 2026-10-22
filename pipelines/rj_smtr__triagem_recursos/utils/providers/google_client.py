@@ -1,10 +1,9 @@
-"""
-Cliente de Inferência Multimodal para Provedor Google GenAI / Vertex AI.
+"""Cliente de Inferência Multimodal para Provedor Google GenAI / Vertex AI.
+
 Extrai o consumo exato de tokens da resposta (response.usage_metadata).
 """
 
 import os
-from typing import Dict, Optional, Tuple
 from google import genai
 from google.genai import types
 
@@ -17,9 +16,9 @@ class GoogleLLMClient(BaseLLMClient):
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        default_model: Optional[str] = None
+        api_key: str | None = None,
+        base_url: str | None = None,
+        default_model: str | None = None,
     ) -> None:
         key = api_key or os.getenv("GEMINI_API_KEY")
         if not key:
@@ -27,24 +26,33 @@ class GoogleLLMClient(BaseLLMClient):
 
         model = default_model or os.getenv("LLM_MODEL", "gemini-3.7-flash")
         super().__init__(api_key=key, base_url=base_url, default_model=model)
-        
+
         self.client = genai.Client(api_key=self.api_key)
 
     def classificar(
         self,
         pdf_bytes: bytes,
         prompt_sistema: str,
-        modelo: Optional[str] = None,
-        temperature: float = 0.0
-    ) -> Tuple[EsquemaDecisao, Dict[str, int]]:
-        """Envia os bytes do PDF diretamente ao Gemini e valida a saída estruturada."""
+        modelo: str | None = None,
+        temperature: float = 0.0,
+        reasoning_effort: str = "medium",
+    ) -> tuple[EsquemaDecisao, dict[str, int]]:
+        """Envia os bytes do PDF diretamente ao Gemini e valida a saída estruturada.
+
+        :param pdf_bytes: Binário do sub-PDF truncado.
+        :param prompt_sistema: Instruções de diretrizes e regras de negócio.
+        :param modelo: Identificador específico do modelo (opcional).
+        :param temperature: Temperatura de amostragem.
+        :param reasoning_effort: Nível de esforço de raciocínio.
+        :returns: Tupla contendo EsquemaDecisao validado e dicionário de uso de tokens.
+        """
         model_name = modelo or self.default_model
 
         response = self.client.models.generate_content(
             model=model_name,
             contents=[
                 types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
-                "Analise as páginas do processo de recurso de trânsito em anexo e execute a triagem estrita conforme as instruções."
+                "Analise as páginas do processo de recurso de trânsito em anexo e execute a triagem estrita conforme as instruções.",
             ],
             config=types.GenerateContentConfig(
                 system_instruction=prompt_sistema,
@@ -55,14 +63,18 @@ class GoogleLLMClient(BaseLLMClient):
         )
 
         prompt_tokens = getattr(response.usage_metadata, "prompt_token_count", 0)
-        completion_tokens = getattr(response.usage_metadata, "candidates_token_count", 0)
-        cached_tokens = getattr(response.usage_metadata, "cached_content_token_count", 0)
+        completion_tokens = getattr(
+            response.usage_metadata, "candidates_token_count", 0
+        )
+        cached_tokens = getattr(
+            response.usage_metadata, "cached_content_token_count", 0
+        )
 
-        usage_dict = {
+        usage = {
             "prompt_tokens": int(prompt_tokens or 0),
             "completion_tokens": int(completion_tokens or 0),
             "cached_tokens": int(cached_tokens or 0),
         }
 
         decisao = EsquemaDecisao.model_validate_json(response.text)
-        return decisao, usage_dict
+        return decisao, usage

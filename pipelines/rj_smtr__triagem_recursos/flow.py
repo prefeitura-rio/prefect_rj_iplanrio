@@ -1,10 +1,10 @@
-"""
-Flow principal Prefect 3 para triagem de recursos SMTR-RJ.
+"""Flow principal Prefect 3 para triagem de recursos SMTR-RJ.
+
 Suporta processamento em memória a partir de PDFs locais ou integração direta com o SEI.
+Adere estritamente ao Styleguide do repositório (Seções 4.1 e 6.1 a 6.4).
 """
 
-import argparse
-from typing import Any, Dict, Optional
+from typing import Any
 from prefect import flow, get_run_logger, unmapped
 from prefect.task_runners import ThreadPoolTaskRunner
 
@@ -27,14 +27,14 @@ from .tasks import (
 
 @flow(
     name="rj_smtr__triagem_recursos",
-    task_runner=ThreadPoolTaskRunner(max_workers=4),
+    task_runner=ThreadPoolTaskRunner(max_workers=8),
     log_prints=True,
     description="Pipeline de triagem e classificação seletiva de recursos da SMTR-RJ.",
 )
 def rj_smtr__triagem_recursos(
     is_local: bool = True,
     fonte_pdf: str = "local",
-    cliente_sei: Optional[Any] = None,
+    cliente_sei: Any | None = None,
     modo_execucao: str = "INCREMENTAL",
     limite_lote: int = 300,
     limiar_alta: float = LIMIAR_ALTA,
@@ -43,10 +43,34 @@ def rj_smtr__triagem_recursos(
     max_paginas: int = MAX_PAGINAS_PDF,
     modelo_llm: str = VERTEX_LLM_MODEL,
     arquivo_prompt: str = f"{VERSAO_PROMPT_PADRAO}.txt",
-    data_inicio: Optional[str] = None,
-    data_fim: Optional[str] = None,
-    infisical_secret_path: Optional[str] = None,
-) -> Dict[str, Any]:
+    data_inicio: str | None = None,
+    data_fim: str | None = None,
+    infisical_secret_path: str | None = None,
+    reasoning_effort: str = "medium",
+    arquivos_especificos: list[Any] | None = None,
+    executar_n2: bool = False,
+) -> dict[str, Any]:
+    """Orquestra a triagem automatizada e calibração de recursos da SMTR.
+
+    :param is_local: Se True, opera contra banco local; False para Cloud SQL.
+    :param fonte_pdf: Origem dos documentos ("local" ou "sei").
+    :param cliente_sei: Cliente do SEI opcional para download em memória.
+    :param modo_execucao: Modo de carga ("INCREMENTAL" ou "PASSIVO").
+    :param limite_lote: Quantidade máxima de processos a triar nesta execução.
+    :param limiar_alta: Ponto de corte para admissão na Faixa Verde.
+    :param limiar_baixa: Limiar inferior para envio direto ao HITL.
+    :param limiar_dispersao: Tolerância máxima de dispersão de CoT para N=2.
+    :param max_paginas: Quantidade máxima de laudas da petição (smart windowing).
+    :param modelo_llm: Nome do modelo de linguagem no provedor/gateway.
+    :param arquivo_prompt: Nome do arquivo em prompts/ a utilizar.
+    :param data_inicio: Filtro temporal inicial opcional.
+    :param data_fim: Filtro temporal final opcional.
+    :param infisical_secret_path: Caminho de credenciais no Infisical.
+    :param reasoning_effort: Esforço de raciocínio da LLM ("high", "medium", "low", "off").
+    :param arquivos_especificos: Lista arbitrária opcional de arquivos para triagem pontual.
+    :param executar_n2: Flag para habilitar o segundo estágio adaptativo sob incerteza.
+    :returns: Sumário operacional e financeiro consolidado do lote.
+    """
     logger = get_run_logger()
     logger.info(
         "Iniciando pipeline | Local=%s | Fonte=%s | Modo=%s | Limite=%d",
@@ -70,6 +94,7 @@ def rj_smtr__triagem_recursos(
         limite=limite_lote,
         data_inicio=data_inicio,
         data_fim=data_fim,
+        arquivos_especificos=arquivos_especificos,
     )
 
     if not processos:
@@ -88,54 +113,15 @@ def rj_smtr__triagem_recursos(
         limiar_dispersao_max=unmapped(limiar_dispersao),
         max_paginas=unmapped(max_paginas),
         modelo_llm=unmapped(modelo_llm),
+        reasoning_effort=unmapped(reasoning_effort),
+        executar_n2=unmapped(executar_n2),
     )
+
+    # Resolve os futuros concorrentes dos workers
+    resultados = [f.result() for f in resultados_futuros]
 
     # 4. Persiste o lote de predições
-    task_persistir_lote_resultados(resultados_futuros, is_local=is_local)
+    task_persistir_lote_resultados(resultados, is_local=is_local)
 
     # 5. Consolida sumário operacional
-    return task_gerar_sumario_lote(resultados_futuros)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Executa o flow de triagem SMTR localmente ou integrado ao SEI."
-    )
-    parser.add_argument(
-        "--local",
-        action="store_true",
-        default=True,
-        help="Executa em modo local.",
-    )
-    parser.add_argument(
-        "--cloud",
-        action="store_false",
-        dest="local",
-        help="Executa em modo nuvem (Cloud SQL).",
-    )
-    parser.add_argument(
-        "--fonte-pdf",
-        default="local",
-        choices=["local", "sei"],
-        help="Origem dos PDFs: 'local' (pasta pdfs/) ou 'sei' (download em memória).",
-    )
-    parser.add_argument(
-        "--modo",
-        default="INCREMENTAL",
-        choices=["INCREMENTAL", "PASSIVO"],
-        help="Modo de carga.",
-    )
-    parser.add_argument(
-        "--limite",
-        type=int,
-        default=5,
-        help="Quantidade máxima de processos no lote de teste.",
-    )
-    args = parser.parse_args()
-
-    rj_smtr__triagem_recursos(
-        is_local=args.local,
-        fonte_pdf=args.fonte_pdf,
-        modo_execucao=args.modo,
-        limite_lote=args.limite,
-    )
+    return task_gerar_sumario_lote(resultados)

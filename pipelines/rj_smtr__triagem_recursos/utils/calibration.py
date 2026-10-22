@@ -1,5 +1,4 @@
-"""
-Módulo de Métricas Estatísticas de Incerteza e Calibração de Confiança.
+"""Módulo de Métricas Estatísticas de Incerteza e Calibração de Confiança.
 
 Calcula métricas formais de calibração para classificação desbalanceada:
 - ECE (Expected Calibration Error) e MCE (Maximum Calibration Error) globais.
@@ -7,28 +6,22 @@ Calcula métricas formais de calibração para classificação desbalanceada:
 - Brier Score multiclasse para mensuração de erro quadrático probabilístico.
 """
 
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any
 import numpy as np
 import pandas as pd
 
 
 def calcular_ece(
-    confiancas: np.ndarray, 
-    acertos: np.ndarray, 
-    n_bins: int = 5
-) -> Tuple[float, float, List[Dict[str, Any]]]:
+    confiancas: np.ndarray,
+    acertos: np.ndarray,
+    n_bins: int = 5,
+) -> tuple[float, float, list[dict[str, Any]]]:
     """Calcula o ECE e MCE particionando as predições em intervalos de confiança uniformes.
 
-    Args:
-        confiancas: Array de probabilidades/scores de confiança previstos [0.0 a 1.0].
-        acertos: Array booleano de acertos (1 para correto, 0 para erro).
-        n_bins: Número de intervalos de calibração (padrão: 5).
-
-    Returns:
-        Tuple[float, float, List[Dict]]:
-            - ECE ponderado global [0.0 a 1.0].
-            - MCE (desvio máximo observado em um único bin).
-            - Detalhamento tabular de volume, acurácia e confiança média por bin.
+    :param confiancas: Array de probabilidades/scores de confiança previstos [0.0 a 1.0].
+    :param acertos: Array booleano de acertos (1 para correto, 0 para erro).
+    :param n_bins: Número de intervalos de calibração (padrão: 5).
+    :returns: Tupla contendo ECE global ponderado, MCE e detalhamento por bin.
     """
     if len(confiancas) == 0:
         return 0.0, 0.0, []
@@ -37,13 +30,12 @@ def calcular_ece(
     ece = 0.0
     mce = 0.0
     total_amostras = len(confiancas)
-    detalhes_bins: List[Dict[str, Any]] = []
+    detalhes_bins: list[dict[str, Any]] = []
 
     for i in range(n_bins):
         limite_inf = limites_bins[i]
         limite_sup = limites_bins[i + 1]
 
-        # Inclui o limite superior no último bin
         if i == n_bins - 1:
             indices = np.where((confiancas >= limite_inf) & (confiancas <= limite_sup))[0]
         else:
@@ -63,7 +55,7 @@ def calcular_ece(
                 "volume": int(qtd_no_bin),
                 "acuracia_real": round(acuracia_bin, 4),
                 "confianca_media": round(confianca_bin, 4),
-                "calibracao_gap": round(desvio, 4)
+                "calibracao_gap": round(desvio, 4),
             })
         else:
             detalhes_bins.append({
@@ -71,14 +63,19 @@ def calcular_ece(
                 "volume": 0,
                 "acuracia_real": 0.0,
                 "confianca_media": 0.0,
-                "calibracao_gap": 0.0
+                "calibracao_gap": 0.0,
             })
 
     return round(float(ece), 4), round(float(mce), 4), detalhes_bins
 
 
 def calcular_brier_score(confiancas: np.ndarray, acertos: np.ndarray) -> float:
-    """Calcula o Brier Score (erro quadrático médio de calibração)."""
+    """Calcula o Brier Score (erro quadrático médio de calibração).
+
+    :param confiancas: Array de probabilidades preditas [0.0 a 1.0].
+    :param acertos: Array binário de acertos reais (0 ou 1).
+    :returns: Valor do Brier Score arredondado a 4 casas decimais.
+    """
     if len(confiancas) == 0:
         return 0.0
     return round(float(np.mean((confiancas - acertos) ** 2)), 4)
@@ -89,66 +86,39 @@ def calcular_cece(
     col_classe: str = "ouro_hipotese",
     col_confianca: str = "pred_confianca",
     col_acerto: str = "acertou_hipotese",
-    n_bins: int = 4
-) -> Dict[str, Any]:
+    n_bins: int = 4,
+) -> dict[str, Any]:
     """Calcula o ECE condicional independente para cada classe de hipótese legal.
 
-    Garante que classes raras recebam validação estatística sem serem mascaradas
-    pela acurácia elevada da classe default majoritária.
+    :param df: DataFrame contendo as predições e os acertos observados.
+    :param col_classe: Nome da coluna de classe real.
+    :param col_confianca: Nome da coluna com probabilidades calibradas.
+    :param col_acerto: Nome da coluna booleana de acerto.
+    :param n_bins: Quantidade de intervalos de probabilidade por classe.
+    :returns: Dicionário mapeando cada classe ao seu ECE, MCE e volume.
     """
-    cece_por_classe: Dict[str, Any] = {}
+    cece_por_classe: dict[str, Any] = {}
     classes_unicas = df[col_classe].dropna().unique()
-    ece_ponderado_total = 0.0
-    total_validos = len(df[df[col_classe].notna()])
 
-    for classe in sorted(classes_unicas):
-        sub_df = df[df[col_classe] == classe]
-        conf = sub_df[col_confianca].to_numpy(dtype=float)
-        acertos = sub_df[col_acerto].astype(int).to_numpy(dtype=int)
+    for cls in sorted(classes_unicas):
+        sub_df = df[df[col_classe] == cls]
+        if len(sub_df) == 0:
+            continue
 
-        ece_classe, mce_classe, bins_classe = calcular_ece(conf, acertos, n_bins=n_bins)
-        peso_classe = len(sub_df) / total_validos if total_validos > 0 else 0.0
-        ece_ponderado_total += peso_classe * ece_classe
+        conf_cls = sub_df[col_confianca].to_numpy(dtype=float)
+        acerto_cls = sub_df[col_acerto].astype(int).to_numpy()
 
-        cece_por_classe[str(classe)] = {
-            "volume_amostras": len(sub_df),
-            "proporcao_dataset": round(peso_classe, 4),
-            "acuracia_classe": round(float(np.mean(acertos)) * 100, 2) if len(acertos) > 0 else 0.0,
-            "confianca_media": round(float(np.mean(conf)), 4) if len(conf) > 0 else 0.0,
-            "ece": ece_classe,
-            "mce": mce_classe
+        ece_c, mce_c, bins_c = calcular_ece(conf_cls, acerto_cls, n_bins=n_bins)
+        brier_c = calcular_brier_score(conf_cls, acerto_cls)
+
+        cece_por_classe[str(cls)] = {
+            "volume_amostral": len(sub_df),
+            "acuracia_empirica": round(float(sub_df[col_acerto].mean()), 4),
+            "confianca_media": round(float(sub_df[col_confianca].mean()), 4),
+            "ece": ece_c,
+            "mce": mce_c,
+            "brier_score": brier_c,
+            "bins": bins_c,
         }
 
-    return {
-        "cece_macro_ponderado": round(float(ece_ponderado_total), 4),
-        "classes": cece_por_classe
-    }
-
-
-def computar_metricas_calibracao(
-    df_validos: pd.DataFrame,
-    col_confianca: Optional[str] = None
-) -> Dict[str, Any]:
-    """Agrega e executa a suíte analítica completa de calibração."""
-    if col_confianca is None:
-        col_confianca = (
-            "pred_confianca"
-            if "pred_confianca" in df_validos.columns
-            else ("p_calibrada" if "p_calibrada" in df_validos.columns else "confianca_score")
-        )
-
-    confiancas = df_validos[col_confianca].to_numpy(dtype=float)
-    acertos = df_validos["acertou_hipotese"].astype(int).to_numpy(dtype=int)
-
-    ece_global, mce_global, bins_globais = calcular_ece(confiancas, acertos, n_bins=5)
-    brier = calcular_brier_score(confiancas, acertos)
-    cece_dict = calcular_cece(df_validos, col_confianca=col_confianca)
-
-    return {
-        "ece_global": ece_global,
-        "mce_global": mce_global,
-        "brier_score": brier,
-        "cece_macro_ponderado": cece_dict["cece_macro_ponderado"],
-        "bins_detalhados": bins_globais,
-        "cece_por_classe": cece_dict["classes"]
-    }
+    return cece_por_classe

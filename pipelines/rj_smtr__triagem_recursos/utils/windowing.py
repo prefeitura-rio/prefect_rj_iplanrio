@@ -1,5 +1,4 @@
-"""
-Módulo de Gestão de Contexto e Smart Windowing.
+"""Módulo de Gestão de Contexto e Smart Windowing.
 
 Responsável por truncar processos administrativos extensos diretamente em memória RAM,
 isolando as primeiras páginas (núcleo da petição recursal) e descartando anexos 
@@ -9,22 +8,20 @@ Suporta leitura a partir de Path local, str, bytes ou io.BytesIO.
 
 import io
 from pathlib import Path
-from typing import Union
 import pymupdf as fitz
 
 
 def extrair_smart_window_pdf(
-    pdf_origem: Union[Path, str, bytes, io.BytesIO], 
-    max_paginas: int = 20
+    pdf_origem: Path | str | bytes | io.BytesIO,
+    max_paginas: int = 20,
 ) -> bytes:
     """Trunca um arquivo PDF até o limite estipulado de páginas operando em memória.
 
-    Args:
-        pdf_origem: Caminho local (Path/str) OU stream binário (bytes/BytesIO).
-        max_paginas: Quantidade máxima de páginas a reter (padrão: 20).
-
-    Returns:
-        bytes: Binário do sub-PDF truncado e compactado.
+    :param pdf_origem: Caminho local (Path/str) OU stream binário (bytes/BytesIO).
+    :param max_paginas: Quantidade máxima de páginas a reter (padrão: 20).
+    :returns: Binário do sub-PDF truncado e compactado.
+    :raises FileNotFoundError: Se o caminho do PDF não existir em disco.
+    :raises TypeError: Se o tipo do parâmetro pdf_origem for inválido.
     """
     if isinstance(pdf_origem, bytes):
         doc_origem = fitz.open(stream=pdf_origem, filetype="pdf")

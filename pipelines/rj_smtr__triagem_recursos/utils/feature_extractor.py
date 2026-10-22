@@ -1,5 +1,4 @@
-"""
-Módulo de Extração de Sinais Epistêmicos Locais e Análise de Grounding.
+"""Módulo de Extração de Sinais Epistêmicos Locais e Análise de Grounding.
 
 Processa a saída primária da LLM, o texto extraído via OCR pontual e metadados visuais,
 construindo o vetor de características z = Phi(X, LLM(X)) em tempo inferior a 200 ms na CPU.
@@ -15,17 +14,17 @@ Incorpora:
 from dataclasses import asdict, dataclass
 from difflib import SequenceMatcher
 import re
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 import numpy as np
 from scipy.spatial.distance import mahalanobis
 
 from ..utils.schemas import EsquemaDecisao
 
-_SENTENCE_MODEL = None
-_MODELO_EMBEDDING_NOME = "paraphrase-multilingual-MiniLM-L12-v2"
+SENTENCE_MODEL: Any | None = None
+MODELO_EMBEDDING_NOME = "paraphrase-multilingual-MiniLM-L12-v2"
 
 # Perfis médios reais apurados na base histórica de 730 processos do Goldenset
-PERFIS_MEDIOS_GOLDENSET: Dict[str, Dict[str, float]] = {
+PERFIS_MEDIOS_GOLDENSET: dict[str, dict[str, float]] = {
     "citran": {"media_sim": 0.8967, "media_maha": 3.0528},
     "erro_captura_imagem": {"media_sim": 0.8520, "media_maha": 3.0682},
     "hipotese_esgotada": {"media_sim": 0.8843, "media_maha": 3.5848},
@@ -38,7 +37,6 @@ MEDIANA_SIM_GOLDENSET = 0.8959
 MEDIANA_MAHA_GOLDENSET = 3.3785
 
 MARCADORES_ADVERSATIVOS = [
-    # Conectivos de oposição / hesitação
     r"\bcontudo\b",
     r"\btodavia\b",
     r"\bentretanto\b",
@@ -46,7 +44,6 @@ MARCADORES_ADVERSATIVOS = [
     r"\bapesar\b",
     r"\bpor[eé]m\b",
     r"\bno entanto\b",
-    # Marcadores de condicionalidade / dúvida fática
     r"\bsupost[oa]\b",
     r"\baparentemente\b",
     r"\bpossivelmente\b",
@@ -54,7 +51,6 @@ MARCADORES_ADVERSATIVOS = [
     r"\bcaso\b",
     r"\bse houver\b",
     r"\bse for\b",
-    # Marcadores de ausência probatória / conflito
     r"\bsem comprova[cç][aã]o\b",
     r"\baus[eê]ncia\b",
     r"\bn[aã]o restou\b",
@@ -63,21 +59,23 @@ MARCADORES_ADVERSATIVOS = [
     r"\bdiverg[eê]ncia\b",
     r"\bincompat[ií]vel\b",
     r"\bsem respaldo\b",
-    r"\bsem anexo\b"
+    r"\bsem anexo\b",
 ]
 
 
 @dataclass
 class EstatisticasSemanticasClasses:
     """Estrutura para armazenamento dos artefatos geométricos das classes."""
-    centroides: Dict[str, np.ndarray]
-    cov_inv: Dict[str, np.ndarray]
-    knn_indices: Optional[Any] = None
+
+    centroides: dict[str, np.ndarray]
+    cov_inv: dict[str, np.ndarray]
+    knn_indices: Any | None = None
 
 
 @dataclass
 class VetorSinaisEpistemicos:
     """Representação vetorial estruturada dos sinais epistêmicos essenciais (8 features)."""
+
     fuzz_ratio: float
     token_containment: float
     exact_match: float
@@ -88,35 +86,46 @@ class VetorSinaisEpistemicos:
     tesseract_mean_conf: float
 
     def to_array(self) -> np.ndarray:
-        return np.array([
-            self.fuzz_ratio,
-            self.token_containment,
-            self.exact_match,
-            self.adversarial_density,
-            self.sim_centroid_pred,
-            self.mahalanobis_dist,
-            self.is_manuscrito,
-            self.tesseract_mean_conf
-        ], dtype=np.float64)
+        """Converte as características em array NumPy 1D de float64."""
+        return np.array(
+            [
+                self.fuzz_ratio,
+                self.token_containment,
+                self.exact_match,
+                self.adversarial_density,
+                self.sim_centroid_pred,
+                self.mahalanobis_dist,
+                self.is_manuscrito,
+                self.tesseract_mean_conf,
+            ],
+            dtype=np.float64,
+        )
 
-    def to_dict(self) -> Dict[str, float]:
+    def to_dict(self) -> dict[str, float]:
+        """Converte as características em dicionário serializável."""
         return asdict(self)
 
 
-def _obter_modelo_embedding():
+def obter_modelo_embedding() -> Any:
     """Carrega o modelo sentence-transformers em memória com padrão singleton."""
-    global _SENTENCE_MODEL
-    if _SENTENCE_MODEL is None:
+    global SENTENCE_MODEL
+    if SENTENCE_MODEL is None:
         try:
             from sentence_transformers import SentenceTransformer
-            _SENTENCE_MODEL = SentenceTransformer(_MODELO_EMBEDDING_NOME)
+
+            SENTENCE_MODEL = SentenceTransformer(MODELO_EMBEDDING_NOME)
         except Exception:
-            _SENTENCE_MODEL = False
-    return _SENTENCE_MODEL
+            SENTENCE_MODEL = False
+    return SENTENCE_MODEL
 
 
 def calcular_fuzzy_levenshtein_janela(citacao: str, texto_ocr: str) -> float:
-    """Calcula a razão máxima de Levenshtein através de janela deslizante."""
+    """Calcula a razão máxima de Levenshtein através de janela deslizante.
+
+    :param citacao: String de citação a localizar.
+    :param texto_ocr: Texto completo extraído da lauda.
+    :returns: Maior similaridade difusa encontrada no texto (entre 0.0 e 1.0).
+    """
     if not citacao or not texto_ocr:
         return 0.0
 
@@ -139,7 +148,7 @@ def calcular_fuzzy_levenshtein_janela(citacao: str, texto_ocr: str) -> float:
     passo = max(1, tam_janela // 4)
 
     for i in range(0, tam_texto - tam_janela + 1, passo):
-        sub_str = t_norm[i:i + tam_janela]
+        sub_str = t_norm[i : i + tam_janela]
         score = SequenceMatcher(None, c_norm, sub_str).ratio()
         if score > melhor_score:
             melhor_score = score
@@ -150,7 +159,12 @@ def calcular_fuzzy_levenshtein_janela(citacao: str, texto_ocr: str) -> float:
 
 
 def calcular_token_containment(citacao: str, texto_ocr: str) -> float:
-    """Computa a fração de palavras-chave da citação presentes no texto de OCR."""
+    """Computa a fração de palavras-chave da citação presentes no texto de OCR.
+
+    :param citacao: Trecho citado pelo modelo.
+    :param texto_ocr: Texto lido na lauda.
+    :returns: Proporção de palavras contidas (0.0 a 1.0).
+    """
     if not citacao or not texto_ocr:
         return 0.0
 
@@ -165,7 +179,11 @@ def calcular_token_containment(citacao: str, texto_ocr: str) -> float:
 
 
 def calcular_densidade_adversativa(texto_cot: str) -> float:
-    """Calcula a proporção de termos de hesitação, divergência ou ausência probatória no CoT."""
+    """Calcula a proporção de termos de hesitação, divergência ou ausência probatória no CoT.
+
+    :param texto_cot: Cadeia de raciocínio explicativo gerada pela LLM.
+    :returns: Percentual de termos adversativos em relação ao total de palavras.
+    """
     if not texto_cot:
         return 0.0
 
@@ -182,14 +200,20 @@ def calcular_densidade_adversativa(texto_cot: str) -> float:
 
 
 def gerar_embedding_texto(texto: str) -> np.ndarray:
-    """Gera o vetor normalizado de embedding local para o raciocínio explicativo."""
+    """Gera o vetor normalizado de embedding local para o raciocínio explicativo.
+
+    :param texto: Texto de entrada para gerar representação densa.
+    :returns: Array NumPy 1D com 384 dimensões.
+    """
     if not texto or not texto.strip():
         return np.zeros(384, dtype=np.float64)
 
-    modelo = _obter_modelo_embedding()
+    modelo = obter_modelo_embedding()
     if modelo:
         try:
-            emb = modelo.encode(texto, normalize_embeddings=True, show_progress_bar=False)
+            emb = modelo.encode(
+                texto, normalize_embeddings=True, show_progress_bar=False
+            )
             return np.asarray(emb, dtype=np.float64)
         except Exception:
             pass
@@ -200,9 +224,15 @@ def gerar_embedding_texto(texto: str) -> np.ndarray:
 def calcular_similaridade_centroides(
     emb_cot: np.ndarray,
     classe_predita: str,
-    centroides: Optional[Dict[str, np.ndarray]] = None
+    centroides: dict[str, np.ndarray] | None = None,
 ) -> float:
-    """Calcula a similaridade de cosseno com o centróide da classe predita."""
+    """Calcula a similaridade de cosseno com o centróide da classe predita.
+
+    :param emb_cot: Vetor de embedding da CoT.
+    :param classe_predita: Hipótese classificada pela LLM.
+    :param centroides: Dicionário opcional com os centróides médios por hipótese.
+    :returns: Valor de similaridade de cosseno normalizado (entre 0.0 e 1.0).
+    """
     if centroides is not None and len(centroides) > 0 and np.any(emb_cot != 0):
         centroid_vec = centroides.get(classe_predita)
         if centroid_vec is not None:
@@ -213,7 +243,6 @@ def calcular_similaridade_centroides(
                 cos_sim = dot_product / (norm_c * norm_e)
                 return round(float(max(0.0, min(1.0, cos_sim))), 4)
 
-    # Fallback baseado no Goldenset caso centróide pontual não esteja disponível
     perfil = PERFIS_MEDIOS_GOLDENSET.get(classe_predita)
     if perfil:
         return perfil["media_sim"]
@@ -224,13 +253,23 @@ def calcular_similaridade_centroides(
 def calcular_distancia_mahalanobis(
     emb_cot: np.ndarray,
     classe_predita: str,
-    estatisticas: Optional[Union[EstatisticasSemanticasClasses, Dict[str, Any]]] = None
+    estatisticas: EstatisticasSemanticasClasses | dict[str, Any] | None = None,
 ) -> float:
-    """Calcula a distância de Mahalanobis condicional entre o embedding e a distribuição da classe."""
+    """Calcula a distância de Mahalanobis condicional entre o embedding e a distribuição da classe.
+
+    :param emb_cot: Vetor de embedding do raciocínio analítico.
+    :param classe_predita: Hipótese legal classificada.
+    :param estatisticas: Estatísticas geométricas ou dicionário com centroides e covariância inversa.
+    :returns: Distância de Mahalanobis calculada ou fallback empírico.
+    """
     if estatisticas is not None and np.any(emb_cot != 0):
         if isinstance(estatisticas, dict):
             centroides = estatisticas.get("centroides") or {}
-            cov_inv = estatisticas.get("cov_inv") or estatisticas.get("matrizes_covariancia") or {}
+            cov_inv = (
+                estatisticas.get("cov_inv")
+                or estatisticas.get("matrizes_covariancia")
+                or {}
+            )
         else:
             centroides = getattr(estatisticas, "centroides", {}) or {}
             cov_inv = getattr(estatisticas, "cov_inv", {}) or {}
@@ -245,7 +284,6 @@ def calcular_distancia_mahalanobis(
             except Exception:
                 pass
 
-    # Fallback baseado no Goldenset caso estatísticas matriciais não estejam disponíveis
     perfil = PERFIS_MEDIOS_GOLDENSET.get(classe_predita)
     if perfil:
         return perfil["media_maha"]
@@ -257,7 +295,9 @@ def extrair_sinais_epistemicos(
     decisao: EsquemaDecisao,
     texto_ocr_pagina: str,
     tesseract_mean_conf: float = 0.0,
-    estatisticas_classes: Optional[Union[EstatisticasSemanticasClasses, Dict[str, Any]]] = None
+    estatisticas_classes: (
+        EstatisticasSemanticasClasses | dict[str, Any] | None
+    ) = None,
 ) -> VetorSinaisEpistemicos:
     """Extrai o vetor completo de 8 características epistêmicas ativas da inferência.
 
@@ -265,17 +305,23 @@ def extrair_sinais_epistemicos(
     1. Hipótese Esgotada (sem necessidade de citação).
     2. Dados Estruturados / Omissões Sistêmicas (validação por espelho).
     3. Manuscritos (ajuste ponderado pelo ruído do OCR).
+
+    :param decisao: Decisão estruturada retornada pela inferência LLM.
+    :param texto_ocr_pagina: Texto extraído via OCR na página apontada como evidência.
+    :param tesseract_mean_conf: Confiança média do OCR retornado pelo Tesseract.
+    :param estatisticas_classes: Centróides e covariâncias das classes de referência.
+    :returns: Instância de VetorSinaisEpistemicos com as 8 features computadas.
     """
     citacao = decisao.frase_justificativa.strip()
     cot = decisao.justificativa_analise_previa.strip()
     hipotese = (
-        decisao.hipotese_legal.value 
-        if hasattr(decisao.hipotese_legal, "value") 
+        decisao.hipotese_legal.value
+        if hasattr(decisao.hipotese_legal, "value")
         else str(decisao.hipotese_legal)
     ).lower()
     tipo_cit = (
-        decisao.tipo_citacao.value 
-        if hasattr(decisao.tipo_citacao, "value") 
+        decisao.tipo_citacao.value
+        if hasattr(decisao.tipo_citacao, "value")
         else str(decisao.tipo_citacao)
     ).upper()
     is_manuscrito = getattr(decisao, "is_manuscrito", False)
@@ -285,8 +331,8 @@ def extrair_sinais_epistemicos(
 
     # Tratamento Condicional de Grounding
     if hipotese == "hipotese_esgotada" and (
-        not citacao 
-        or tipo_cit in ["NENHUMA_MENCAO", "ALEGACAO_HIPOTETICA"] 
+        not citacao
+        or tipo_cit in ["NENHUMA_MENCAO", "ALEGACAO_HIPOTETICA"]
         or getattr(decisao, "pagina_evidencia", 0) == 0
     ):
         fuzz = 1.0
@@ -294,8 +340,12 @@ def extrair_sinais_epistemicos(
         exact = 1.0
     elif tipo_cit == "DADO_ESTRUTURADO":
         aud = getattr(decisao, "auditoria_sistema", None)
-        tem_espelho = getattr(aud, "possui_espelho_nada_consta", True) if aud else True
-        expedicao = getattr(aud, "data_expedicao_penalidade", "") if aud else ""
+        tem_espelho = (
+            getattr(aud, "possui_espelho_nada_consta", True) if aud else True
+        )
+        expedicao = (
+            getattr(aud, "data_expedicao_penalidade", "") if aud else ""
+        )
 
         if not tem_espelho or "VALOR_NULO" in expedicao or "TRACO" in expedicao:
             fuzz = 1.0
@@ -305,7 +355,9 @@ def extrair_sinais_epistemicos(
             fuzz_raw = calcular_fuzzy_levenshtein_janela(citacao, texto_ocr_pagina)
             containment_raw = calcular_token_containment(citacao, texto_ocr_pagina)
             fuzz = max(fuzz_raw, 0.75) if fuzz_raw > 0.25 else fuzz_raw
-            containment = max(containment_raw, 0.75) if containment_raw > 0.25 else containment_raw
+            containment = (
+                max(containment_raw, 0.75) if containment_raw > 0.25 else containment_raw
+            )
             exact = 1.0 if (c_norm and c_norm in t_norm) else 0.0
     elif is_manuscrito:
         fuzz_raw = calcular_fuzzy_levenshtein_janela(citacao, texto_ocr_pagina)
@@ -335,15 +387,13 @@ def extrair_sinais_epistemicos(
         centroides_dict = None
 
     sim_pred = calcular_similaridade_centroides(
-        emb_cot=emb_cot,
-        classe_predita=hipotese,
-        centroides=centroides_dict
+        emb_cot=emb_cot, classe_predita=hipotese, centroides=centroides_dict
     )
 
     mahal_dist = calcular_distancia_mahalanobis(
         emb_cot=emb_cot,
         classe_predita=hipotese,
-        estatisticas=estatisticas_classes
+        estatisticas=estatisticas_classes,
     )
 
     return VetorSinaisEpistemicos(
@@ -354,5 +404,5 @@ def extrair_sinais_epistemicos(
         sim_centroid_pred=sim_pred,
         mahalanobis_dist=mahal_dist,
         is_manuscrito=1.0 if is_manuscrito else 0.0,
-        tesseract_mean_conf=round(float(tesseract_mean_conf), 4)
+        tesseract_mean_conf=round(float(tesseract_mean_conf), 4),
     )

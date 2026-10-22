@@ -5,7 +5,7 @@ import psycopg2
 PIPELINE_DIR = Path(__file__).resolve().parent.parent
 
 DB_URL = "postgresql://postgres:postgres@localhost:5432/smtr_triagem"
-SQL_FILE = PIPELINE_DIR / "utils" / "queries" / "create_db.sql"
+SQL_FILE = PIPELINE_DIR / "queries" / "create_db.sql"
 
 
 def main():

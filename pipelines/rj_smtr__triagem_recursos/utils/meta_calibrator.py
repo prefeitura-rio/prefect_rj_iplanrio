@@ -1,5 +1,4 @@
-"""
-Módulo de Meta-Calibração Top-versus-All (TvA).
+"""Módulo de Meta-Calibração Top-versus-All (TvA).
 
 Calcula probabilidades calibradas p_cal in [0.0, 1.0] sobre o vetor de características
 epistêmicas z = Phi(X, LLM(X)) utilizando:
@@ -9,7 +8,7 @@ epistêmicas z = Phi(X, LLM(X)) utilizando:
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
@@ -34,20 +33,29 @@ COLUNAS_FEATURES_PADRAO = [
 @dataclass
 class ModeloCalibrador:
     """Artefato consolidado de meta-calibração probabilística."""
-    feature_names: List[str]
-    medianas_imputacao: Dict[str, float]
-    medias_scaler: Dict[str, float]
-    desvios_scaler: Dict[str, float]
-    booster: Optional[lgb.Booster] = None
-    curva_isotonica: Optional[Dict[str, List[float]]] = None
-    estatisticas_classes: Optional[Union[EstatisticasSemanticasClasses, Dict[str, Any]]] = None
-    metadados_treino: Optional[Dict[str, Any]] = None
-    classificador_calibrado: Optional[Any] = None
-    preprocessor: Optional[Any] = None
+
+    feature_names: list[str]
+    medianas_imputacao: dict[str, float] | None = None
+    medias_scaler: dict[str, float] | None = None
+    desvios_scaler: dict[str, float] | None = None
+    booster: lgb.Booster | None = None
+    curva_isotonica: dict[str, list[float]] | None = None
+    estatisticas_classes: (
+        EstatisticasSemanticasClasses | dict[str, Any] | None
+    ) = None
+    metadados_treino: dict[str, Any] | None = None
+    classificador_calibrado: Any | None = None
+    preprocessor: Any | None = None
 
 
-def criar_calibrador_dos_parametros_banco(config_db: Dict[str, Any]) -> ModeloCalibrador:
-    """Instancia o modelo calibrador a partir dos parâmetros persistidos no PostgreSQL."""
+def criar_calibrador_dos_parametros_banco(
+    config_db: dict[str, Any]
+) -> ModeloCalibrador:
+    """Instancia o modelo calibrador a partir dos parâmetros persistidos no PostgreSQL.
+
+    :param config_db: Dicionário contendo a configuração de calibração recuperada do banco.
+    :returns: Instância de ModeloCalibrador inicializada.
+    """
     medianas = config_db["medianas_imputacao"]
     medias = config_db["medias_scaler"]
     desvios = config_db["desvios_scaler"]
@@ -77,14 +85,22 @@ def criar_calibrador_dos_parametros_banco(config_db: Dict[str, Any]) -> ModeloCa
     )
 
 
-def _imputar_e_padronizar_numpy(
+def imputar_e_padronizar_numpy(
     vetor_bruto: np.ndarray,
-    feature_names: List[str],
-    medianas: Dict[str, float],
-    medias: Dict[str, float],
-    desvios: Dict[str, float],
+    feature_names: list[str],
+    medianas: dict[str, float],
+    medias: dict[str, float],
+    desvios: dict[str, float],
 ) -> np.ndarray:
-    """Aplica imputação pela mediana e escalonamento padrão."""
+    """Aplica imputação pela mediana e escalonamento padrão.
+
+    :param vetor_bruto: Array NumPy 1D com os valores numéricos brutos das features.
+    :param feature_names: Nomes correspondentes a cada coluna de features.
+    :param medianas: Dicionário de medianas para imputação de NaNs.
+    :param medias: Médias de centralização do StandardScaler.
+    :param desvios: Desvios padrão de normalização do StandardScaler.
+    :returns: Array 2D padronizado no shape (1, n_features).
+    """
     arr = vetor_bruto.copy().astype(np.float64).flatten()
     vetor_proc = np.zeros_like(arr)
 
@@ -104,14 +120,15 @@ def _imputar_e_padronizar_numpy(
 
 
 def predizer_probabilidade_calibrada(
-    sinais: Union[VetorSinaisEpistemicos, Dict[str, float], np.ndarray],
+    sinais: VetorSinaisEpistemicos | dict[str, float] | np.ndarray,
     modelo: Any,
 ) -> float:
     """Estima a probabilidade matemática calibrada p_cal in [0.0, 1.0].
 
     :param sinais: Vetor de sinais epistêmicos, dicionário ou array de features.
     :param modelo: Objeto ModeloCalibrador (do banco ou joblib).
-    :return: Probabilidade calibrada arredondada a 4 casas decimais.
+    :returns: Probabilidade calibrada arredondada a 4 casas decimais.
+    :raises TypeError: Se o tipo do parâmetro sinais não for suportado.
     """
     feature_names = getattr(modelo, "feature_names", COLUNAS_FEATURES_PADRAO)
 
@@ -127,26 +144,24 @@ def predizer_probabilidade_calibrada(
     else:
         raise TypeError(f"Tipo de entrada não suportado: {type(sinais)}")
 
-    # 1. Se o modelo contiver o classificador do scikit-learn (CalibratedClassifierCV)
     clf = getattr(modelo, "classificador_calibrado", None)
     prep = getattr(modelo, "preprocessor", None)
     if clf is not None and prep is not None:
         try:
             df = pd.DataFrame([vetor], columns=feature_names)
-            X = prep.transform(df)
-            prob_calibrada = float(clf.predict_proba(X)[0][1])
+            x_trans = prep.transform(df)
+            prob_calibrada = float(clf.predict_proba(x_trans)[0][1])
             return round(float(np.clip(prob_calibrada, 0.0, 1.0)), 4)
         except Exception:
             pass
 
-    # 2. Se o modelo for baseado no Booster LightGBM puro do banco
     booster = getattr(modelo, "booster", None)
     if booster is not None:
         medianas = getattr(modelo, "medianas_imputacao", {})
         medias = getattr(modelo, "medias_scaler", {})
         desvios = getattr(modelo, "desvios_scaler", {})
 
-        vetor_proc = _imputar_e_padronizar_numpy(
+        vetor_proc = imputar_e_padronizar_numpy(
             vetor_bruto=vetor,
             feature_names=feature_names,
             medianas=medianas,
@@ -166,5 +181,16 @@ def predizer_probabilidade_calibrada(
 
         return round(float(np.clip(prob_calibrada, 0.0, 1.0)), 4)
 
-    # Fallback neutro se o modelo não tiver pesos
     return 0.5000
+
+
+def salvar_calibrador(modelo: ModeloCalibrador, caminho_arquivo: Path) -> None:
+    """Persiste o modelo calibrador em disco via joblib.
+
+    :param modelo: Instância de ModeloCalibrador a serializar.
+    :param caminho_arquivo: Destino onde salvar o arquivo joblib.
+    """
+    import joblib
+
+    caminho_arquivo.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(modelo, caminho_arquivo)

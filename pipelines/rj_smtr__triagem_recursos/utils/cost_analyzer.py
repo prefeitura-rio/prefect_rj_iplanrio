@@ -1,5 +1,4 @@
-"""
-Módulo de Auditoria Financeira, Consumo de Tokens e Eficiência de Custo.
+"""Módulo de Auditoria Financeira, Consumo de Tokens e Eficiência de Custo.
 
 Calcula custos reais e projetados para lotes de teste e escala operacional (1k, 10k processos),
 aplicando descontos de Prompt Caching e computando índices de Custo por Acerto.
@@ -8,12 +7,13 @@ aplicando descontos de Prompt Caching e computando índices de Custo por Acerto.
 from dataclasses import dataclass
 import os
 from pathlib import Path
-from typing import Dict, List
 import pandas as pd
 
 
 @dataclass
 class TabelaPrecoModelo:
+    """Tabela de tarifação oficial por milhão de tokens."""
+
     nome_modelo: str
     preco_in_1m: float
     preco_out_1m: float
@@ -22,10 +22,11 @@ class TabelaPrecoModelo:
 
     @property
     def preco_cache_in_1m(self) -> float:
+        """Retorna o valor efetivo de entrada sob cache implícito/explícito."""
         return self.preco_in_1m * (1.0 - self.desconto_cache)
 
 
-TABELA_PRECOS_PADRAO: Dict[str, TabelaPrecoModelo] = {
+TABELA_PRECOS_PADRAO: dict[str, TabelaPrecoModelo] = {
     "gemini-3.7-flash": TabelaPrecoModelo(
         nome_modelo="gemini-3.7-flash",
         preco_in_1m=float(os.getenv("PRICE_GEMINI_3_7_FLASH_IN", 0.75)),
@@ -48,15 +49,24 @@ def calcular_custo_chamada(
     prompt_tokens: int,
     completion_tokens: int,
     cached_tokens: int = 0,
-    aplicar_cache_estatico: bool = True
-) -> Dict[str, float]:
-    """Calcula o custo exato em USD para uma única inferência."""
-    mod_clean = modelo.lower().replace('vertex/', '').replace('google/', '')
+    aplicar_cache_estatico: bool = True,
+) -> dict[str, float]:
+    """Calcula o custo exato em USD para uma única inferência.
+
+    :param modelo: Identificador do modelo na API.
+    :param prompt_tokens: Total de tokens no prompt de entrada.
+    :param completion_tokens: Total de tokens gerados na saída.
+    :param cached_tokens: Quantidade de tokens aproveitados do cache.
+    :param aplicar_cache_estatico: Flag para aplicar desconto no prompt de sistema padrão.
+    :returns: Dicionário contendo custo_total_usd, custo_sem_cache_usd e economia_cache_usd.
+    """
+    mod_clean = modelo.lower().replace("vertex/", "").replace("google/", "")
     tabela = TABELA_PRECOS_PADRAO.get(mod_clean)
     if not tabela:
-        tabela = TabelaPrecoModelo(nome_modelo=modelo, preco_in_1m=0.75, preco_out_1m=3.75)
+        tabela = TabelaPrecoModelo(
+            nome_modelo=modelo, preco_in_1m=0.75, preco_out_1m=3.75
+        )
 
-    # Se aplicar cache estático no prompt do sistema (~1.5k tokens)
     if aplicar_cache_estatico and cached_tokens == 0 and prompt_tokens > 1500:
         tokens_cache = 1500
         tokens_in_puro = max(0, prompt_tokens - 1500)
@@ -74,15 +84,20 @@ def calcular_custo_chamada(
     return {
         "custo_total_usd": round(custo_total, 6),
         "custo_sem_cache_usd": round(custo_sem_cache, 6),
-        "economia_cache_usd": round(custo_sem_cache - custo_total, 6)
+        "economia_cache_usd": round(custo_sem_cache - custo_total, 6),
     }
 
 
 def gerar_relatorio_comparativo_modelos(
-    caminhos_resultados: List[Path],
-    taxa_cambio_brl: float = 5.80
+    caminhos_resultados: list[Path],
+    taxa_cambio_brl: float = 5.80,
 ) -> pd.DataFrame:
-    """Consolida múltiplos DataFrames de execução e gera matriz de custo-benefício."""
+    """Consolida múltiplos DataFrames de execução e gera matriz de custo-benefício.
+
+    :param caminhos_resultados: Lista de caminhos para arquivos CSV de execução.
+    :param taxa_cambio_brl: Cotação de conversão cambial USD/BRL.
+    :returns: DataFrame com resumo comparativo consolidado.
+    """
     linhas_resumo = []
 
     for caminho in caminhos_resultados:
@@ -95,47 +110,52 @@ def gerar_relatorio_comparativo_modelos(
 
         modelo = str(df["modelo"].iloc[0])
         total_casos = len(df)
-        acuracia = float(df["acertou_hipotese"].mean() * 100) if "acertou_hipotese" in df else 0.0
-
-        # Médias de tokens (se registradas, ou estimativas padrão: 3.5k in / 150 out)
-        avg_prompt_tokens = int(df["prompt_tokens"].mean()) if "prompt_tokens" in df else 3500
-        avg_comp_tokens = int(df["completion_tokens"].mean()) if "completion_tokens" in df else 150
-
-        custo_unitario = calcular_custo_chamada(
-            modelo=modelo,
-            prompt_tokens=avg_prompt_tokens,
-            completion_tokens=avg_comp_tokens,
-            aplicar_cache_estatico=True
+        acuracia = (
+            float(df["acertou_hipotese"].mean() * 100)
+            if "acertou_hipotese" in df
+            else 0.0
         )
 
-        custo_amostra_usd = custo_unitario["custo_total_usd"] * total_casos
-        custo_1k_usd = custo_unitario["custo_total_usd"] * 1_000
-        custo_1k_brl = custo_1k_usd * taxa_cambio_brl
+        media_tokens_in = (
+            float(df["tokens_input"].mean())
+            if "tokens_input" in df
+            else 3500.0
+        )
+        media_tokens_out = (
+            float(df["tokens_output"].mean())
+            if "tokens_output" in df
+            else 150.0
+        )
+        media_tokens_cache = (
+            float(df["tokens_cached"].mean())
+            if "tokens_cached" in df
+            else 0.0
+        )
 
-        # Custo por caso correto
-        custo_por_acerto_usd = (custo_1k_usd / (acuracia * 10)) if acuracia > 0 else 0.0
+        info_custo = calcular_custo_chamada(
+            modelo=modelo,
+            prompt_tokens=int(media_tokens_in),
+            completion_tokens=int(media_tokens_out),
+            cached_tokens=int(media_tokens_cache),
+        )
 
-        tabela_info = TABELA_PRECOS_PADRAO.get(modelo.lower())
-        intel_score = tabela_info.indice_inteligencia if tabela_info else 0
+        custo_unit_usd = info_custo["custo_total_usd"]
+        custo_unit_brl = custo_unit_usd * taxa_cambio_brl
+
+        custo_acerto = custo_unit_usd / (acuracia / 100.0) if acuracia > 0 else 0.0
 
         linhas_resumo.append({
             "Modelo": modelo,
-            "Intelligence": intel_score,
-            "Acurácia (%)": round(acuracia, 2),
-            "Avg In Tokens": avg_prompt_tokens,
-            "Avg Out Tokens": avg_comp_tokens,
-            f"Custo Lote ({total_casos})": f"${custo_amostra_usd:.4f}",
-            "Custo / 1k (USD)": f"${custo_1k_usd:.2f}",
-            "Custo / 1k (BRL)": f"R$ {custo_1k_brl:.2f}",
-            "Custo / Acerto (1k)": f"${custo_por_acerto_usd:.4f}"
+            "Acurácia Global (%)": round(acuracia, 2),
+            "Tokens In Médio": int(media_tokens_in),
+            "Tokens Out Médio": int(media_tokens_out),
+            "Tokens Cache Médio": int(media_tokens_cache),
+            "Custo Unitário (USD)": f"${custo_unit_usd:.5f}",
+            "Custo Unitário (BRL)": f"R${custo_unit_brl:.4f}",
+            "Custo Lote 760 (BRL)": f"R${custo_unit_brl * 760:.2f}",
+            "Projeção 2.000 (BRL)": f"R${custo_unit_brl * 2000:.2f}",
+            "Custo por Acerto (USD)": f"${custo_acerto:.5f}",
+            "Economia Cache Unit. (USD)": f"${info_custo['economia_cache_usd']:.5f}",
         })
 
-    df_comparativo = pd.DataFrame(linhas_resumo)
-
-    #print("\n" + "=" * 80)
-    #print("MATRIZ COMPARATIVA DE CUSTO, CONSUMO E EFICIÊNCIA")
-    #print("=" * 80)
-    #print(df_comparativo.to_string(index=False))
-    #print("=" * 80 + "\n")
-
-    return df_comparativo
+    return pd.DataFrame(linhas_resumo)

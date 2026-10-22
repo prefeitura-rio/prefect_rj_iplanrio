@@ -65,9 +65,9 @@ pipelines/rj_iplanrio__nf_agent/tests/__pycache__/
 
 # SMTR
 pipelines/rj_smtr__triagem_recursos/pdfs/
-pipelines/rj_smtr__triagem_recursos/scripts/
 pipelines/rj_smtr__triagem_recursos/artifacts/
 pipelines/rj_smtr__triagem_recursos/prompts/
 pipelines/rj_smtr__triagem_recursos/docs/
+pipelines/rj_smtr__triagem_recursos/outputs/
 pipelines/rj_smtr__triagem_recursos/AGENTS.md
 pipelines/rj_iplanrio__nf_agent/__pypackages__/

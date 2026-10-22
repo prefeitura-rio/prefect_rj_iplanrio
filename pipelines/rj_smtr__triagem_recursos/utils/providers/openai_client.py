@@ -1,12 +1,11 @@
-"""
-Cliente LLM para OpenAI e Gateways Compatíveis (Bifrost).
+"""Cliente LLM para OpenAI e Gateways Compatíveis (Bifrost).
+
 Suporta chamadas multimodais para OpenAI, Claude e Gemini via endpoint OpenAI-compatible.
 Extrai o consumo exato de tokens da resposta (response.usage).
 """
 
 import base64
 import os
-from typing import Any, Dict, List, Optional, Tuple
 from openai import OpenAI
 import pymupdf as fitz
 
@@ -18,10 +17,12 @@ from .base import BaseLLMClient
 class OpenAILLMClient(BaseLLMClient):
     """Cliente para OpenAI e proxies compatíveis como Bifrost."""
 
-    def __init__(self, default_model: Optional[str] = None) -> None:
+    def __init__(self, default_model: str | None = None) -> None:
         api_key = os.getenv("BIFROST_VIRTUAL_KEY") or os.getenv("OPENAI_API_KEY")
         base_url = os.getenv("BIFROST_BASE_URL")
-        modelo_padrao = default_model or os.getenv("LLM_MODEL") or VERTEX_LLM_MODEL
+        modelo_padrao = (
+            default_model or os.getenv("LLM_MODEL") or VERTEX_LLM_MODEL
+        )
 
         if not api_key:
             raise ValueError(
@@ -32,17 +33,22 @@ class OpenAILLMClient(BaseLLMClient):
             api_key=api_key, base_url=base_url, default_model=modelo_padrao
         )
 
-        # Configuração com timeout estendido para sub-PDFs
         self.client = OpenAI(
-            api_key=self.api_key, 
+            api_key=self.api_key,
             base_url=self.base_url,
             timeout=180.0,
-            max_retries=2
+            max_retries=2,
         )
 
-    def _converter_pdf_para_imagens_base64(
+    def converter_pdf_para_imagens_base64(
         self, pdf_bytes: bytes, dpi: int = 150
-    ) -> List[str]:
+    ) -> list[str]:
+        """Converte páginas de PDF em imagens JPEG serializadas em Base64.
+
+        :param pdf_bytes: Stream de bytes do PDF de entrada.
+        :param dpi: Resolução de rasterização.
+        :returns: Lista de strings em Base64 correspondentes a cada página.
+        """
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         imagens_b64 = []
         zoom = dpi / 72.0
@@ -60,60 +66,66 @@ class OpenAILLMClient(BaseLLMClient):
         self,
         pdf_bytes: bytes,
         prompt_sistema: str,
-        modelo: Optional[str] = None,
-        temperature: float = 0.0
-    ) -> Tuple[EsquemaDecisao, Dict[str, int]]:
-        mod = modelo or self.default_model
-        pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
+        modelo: str | None = None,
+        temperature: float = 0.0,
+        reasoning_effort: str = "medium",
+    ) -> tuple[EsquemaDecisao, dict[str, int]]:
+        """Executa a inferência multimodal no gateway OpenAI/Bifrost.
 
-        conteudo_usuario: List[Dict[str, Any]] = [
+        :param pdf_bytes: Binário do sub-PDF truncado.
+        :param prompt_sistema: Instruções de diretrizes e regras de negócio.
+        :param modelo: Identificador específico do modelo (opcional).
+        :param temperature: Temperatura de amostragem.
+        :param reasoning_effort: Nível de esforço de raciocínio.
+        :returns: Tupla contendo EsquemaDecisao validado e dicionário de uso de tokens.
+        """
+        target_model = modelo or self.default_model
+
+        imagens_b64 = self.converter_pdf_para_imagens_base64(pdf_bytes, dpi=150)
+
+        conteudo_usuario = [
             {
                 "type": "text",
-                "text": "Analise o processo administrativo e emita a decisão estruturada:",
-            },
-            {
+                "text": "Analise as páginas do processo de recurso de trânsito em anexo e execute a triagem estrita conforme as instruções.",
+            }
+        ]
+
+        for img_b64 in imagens_b64:
+            conteudo_usuario.append({
                 "type": "image_url",
                 "image_url": {
-                    "url": f"data:application/pdf;base64,{pdf_b64}",
+                    "url": f"data:image/jpeg;base64,{img_b64}",
+                    "detail": "high",
                 },
-            },
-        ]
+            })
 
-        mensagens = [
-            {"role": "system", "content": prompt_sistema},
-            {"role": "user", "content": conteudo_usuario},
-        ]
+        extra_body = {}
+        if reasoning_effort and reasoning_effort != "none":
+            extra_body["reasoning_effort"] = reasoning_effort
 
-        kwargs: Dict[str, Any] = {
-            "model": mod,
-            "messages": mensagens,
-            "response_format": EsquemaDecisao,
-            "temperature": temperature,
-        }
-        if any(r in mod.lower() for r in ["3.7", "o1", "o3"]):
-            kwargs["reasoning_effort"] = "medium"
-
-        completion = self.client.beta.chat.completions.parse(**kwargs)
-
-        decisao = completion.choices[0].message.parsed
-        if decisao is None:
-            raise ValueError(f"Falha na validação do schema no modelo {mod}.")
-
-        usage = getattr(completion, "usage", None)
-        prompt_tokens = getattr(usage, "prompt_tokens", 3500) if usage else 3500
-        completion_tokens = (
-            getattr(usage, "completion_tokens", 150) if usage else 150
+        response = self.client.beta.chat.completions.parse(
+            model=target_model,
+            messages=[
+                {"role": "system", "content": prompt_sistema},
+                {"role": "user", "content": conteudo_usuario},
+            ],
+            response_format=EsquemaDecisao,
+            temperature=temperature,
+            extra_body=extra_body if extra_body else None,
         )
-        cached_tokens = 0
-        if usage and hasattr(usage, "prompt_tokens_details"):
-            cached_tokens = getattr(
-                usage.prompt_tokens_details, "cached_tokens", 0
-            )
 
-        usage_dict = {
-            "prompt_tokens": int(prompt_tokens),
-            "completion_tokens": int(completion_tokens),
-            "cached_tokens": int(cached_tokens),
-        }
+        usage = {"prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0}
+        if response.usage:
+            cached = 0
+            if hasattr(response.usage, "prompt_tokens_details") and response.usage.prompt_tokens_details:
+                cached = getattr(
+                    response.usage.prompt_tokens_details, "cached_tokens", 0
+                )
 
-        return decisao, usage_dict
+            usage = {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "cached_tokens": cached or 0,
+            }
+
+        return response.choices[0].message.parsed, usage

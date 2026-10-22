@@ -1,7 +1,7 @@
 [project]
 name = "rj-smtr-triagem-recursos"
 version = "1.0.0"
-description = "Triagem automatizada e classificacao seletiva de recursos de multas de transito da SMTR."
+description = "Automated triage and selective classification of traffic citation appeals for SMTR-RJ using LLM reasoning and tabular meta-calibration."
 requires-python = ">=3.13"
 dependencies = [
     "prefect_rj_iplanrio",
@@ -35,4 +35,5 @@ only-include = [
     "tasks.py",
     "constants.py",
     "utils",
+    "queries",
 ]
