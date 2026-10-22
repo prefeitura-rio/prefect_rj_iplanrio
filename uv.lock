@@ -5015,14 +5015,14 @@ name = "rj-crm-get-history-data"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__get_history_data" }
 dependencies = [
+    { name = "defusedxml" },
     { name = "prefect-rj-iplanrio" },
-    { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "defusedxml" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "requests" },
 ]
 
 [[package]]

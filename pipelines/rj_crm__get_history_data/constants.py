@@ -1,32 +1,27 @@
-"""
-Constantes específicas para pipeline CRM Get History Data (SFMC)
-"""
+"""Constants of rj_crm__get_history_data."""
 
-from enum import Enum
+from typing import Final
 
-
-class GetHistoryDataConstants(Enum):
-    """
-    Constantes para o pipeline de extração de Data Extensions históricas do SFMC
-    """
-
-    # Sufixo que identifica DEs históricas
-    DE_SUFFIX = "historico"
-
-    # REST API: máximo de registros por página
-    SFMC_MAX_PAGE_SIZE = 2500
-
-    # Duração estimada do token OAuth2 em segundos (~20 minutos)
-    TOKEN_CACHE_SECONDS = 1200
-
-    # Destino no BigQuery (hardcoded a pedido — não vem de variável de ambiente)
-    GCP_SFMC_DESTINATION_PROJECT_ID = "rj-crm-registry"
-    GCP_SFMC_DESTINATION_DATASET_ID = "brutos_salesforce_staging"
-    GCP_SFMC_TMP_TABLE_ID = "historico_sfmc_tmp"
-    GCP_SFMC_FINAL_TABLE_ID = "historico_sfmc"
-
-    # Janela (em dias) de entrada_data considerada a cada execução
-    WINDOW_DAYS = 30
-
-    # Chave de dedup usada no MERGE (tabela tmp -> tabela final)
-    MERGE_KEY_COLUMNS = ("de_nome", "telefone", "entrada_data")
+DE_SUFFIX: Final = "historico"
+"""The suffix of the name of a Data Extension that holds history."""
+PAGE_SIZE: Final = 2500
+"""The most rows that the REST API of SFMC gives in a page."""
+PROJECT_ID: Final = "rj-crm-registry"
+DATASET_ID: Final = "brutos_salesforce_staging"
+TMP_TABLE_ID: Final = "historico_sfmc_tmp"
+FINAL_TABLE_ID: Final = "historico_sfmc"
+DEFAULT_WINDOW_DAYS: Final = 30
+"""The days of `entrada_data` that each run takes."""
+MERGE_KEYS: Final = ("de_nome", "telefone", "entrada_data")
+SOAP_NS: Final = "http://schemas.xmlsoap.org/soap/envelope/"
+PARTNER_NS: Final = "http://exacttarget.com/wsdl/partnerAPI"
+SOAP_HEADERS: Final = {"Content-Type": "text/xml; charset=utf-8", "SOAPAction": "Retrieve"}
+DATE_FORMATS: Final = (
+    "%m/%d/%Y %I:%M:%S %p",
+    "%m/%d/%Y %H:%M:%S",
+    "%m/%d/%Y",
+    "%d/%m/%Y %H:%M:%S",
+    "%d/%m/%Y",
+)
+"""The formats of the dates of SFMC after the ISO format, month first before day first."""
+HTTP_TIMEOUT: Final = 60

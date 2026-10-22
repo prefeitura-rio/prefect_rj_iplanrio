@@ -1,390 +1,159 @@
-"""
-Tasks para pipeline CRM Get History Data (SFMC)
-Extrai dados de Data Extensions com sufixo 'historico' do Salesforce Marketing Cloud
-"""
+"""Tasks of rj_crm__get_history_data."""
 
-import json
-from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional
+from asyncio import to_thread
+from datetime import UTC, datetime
 
-import pandas as pd
-import requests
-from google.cloud import bigquery
+from httpx2 import AsyncClient, HTTPError
 from prefect import task
-from prefect.cache_policies import NO_CACHE
-from prefect.logging import get_logger
+from toolkit.telemetry import logger
 
-from pipelines.rj_crm__get_history_data.constants import GetHistoryDataConstants
-from pipelines.rj_crm__get_history_data.helpers.bigquery import (
-    ensure_historico_tables,
-    get_bq_client,
-    historico_table_schema,
-    truncate_and_load_tmp_table,
+from pipelines.rj_crm__get_history_data.constants import (
+    DATASET_ID,
+    FINAL_TABLE_ID,
+    HTTP_TIMEOUT,
+    MERGE_KEYS,
+    PAGE_SIZE,
+    PROJECT_ID,
+    SOAP_HEADERS,
+    TMP_TABLE_ID,
 )
+from pipelines.rj_crm__get_history_data.helpers import bq
+from pipelines.rj_crm__get_history_data.helpers.history import filter_recent, keep_history
 from pipelines.rj_crm__get_history_data.helpers.sfmc import (
-    build_field_types_soap_envelope,
-    build_soap_envelope,
-    normalize_field_name,
-    parse_field_types_soap_response,
-    parse_soap_response,
+    build_fields_envelope,
+    build_list_envelope,
+    parse_extensions,
+    parse_fields,
 )
+from pipelines.rj_crm__get_history_data.types import Extension, Extraction, Row
 from utils.settings import SfmcSettings
+from utils.utils import dig, read_json, render_query
 
-logger = get_logger("toolkit")
 
-
-@task
-def authenticate_sfmc() -> str:
-    """
-    Autentica com Salesforce Marketing Cloud via OAuth2 e retorna o access token.
-    POST {SFMC_AUTH_URI}/v2/token
-    """
+@task(retries=2, retry_delay_seconds=30)
+async def authenticate_task() -> str:
+    """Log in to SFMC with the client credentials and return the access token, which lasts about 20 minutes."""
     settings = SfmcSettings()
-
-    url = f"{settings.SFMC_AUTH_URL.rstrip('/')}/v2/token"
     payload = {
         "grant_type": "client_credentials",
         "client_id": settings.SFMC_CLIENT_ID,
         "client_secret": settings.SFMC_CLIENT_SECRET.get_secret_value(),
     }
 
-    logger.info(f"Autenticando no SFMC via {url}")
-    response = requests.post(url, json=payload, timeout=30)
-    response.raise_for_status()
-
-    data = response.json()
-    access_token = data.get("access_token")
-    if not access_token:
-        raise ValueError(f"access_token não encontrado na resposta SFMC: {list(data.keys())}")
-
-    expires_in = data.get("expires_in", GetHistoryDataConstants.TOKEN_CACHE_SECONDS.value)
-    logger.info(f"Autenticação SFMC bem-sucedida. Token válido por {expires_in}s")
-    return access_token
-
-
-@task
-def list_data_extensions_historico(access_token: str, soap_uri: str) -> List[Dict[str, str]]:
-    """
-    Lista todas as Data Extensions com nome terminando em 'historico' via SOAP API.
-    Trata paginação SOAP via status MoreDataAvailable.
-
-    Args:
-        access_token: Token OAuth2 do SFMC
-        soap_uri: URI base do endpoint SOAP (ex: https://mcXXX.soap.marketingcloudapis.com)
-
-    Returns:
-        Lista de dicts com {name, external_key, object_id}
-    """
-    endpoint = f"{soap_uri.rstrip('/')}/Service.asmx"
-    headers = {
-        "Content-Type": "text/xml; charset=utf-8",
-        "SOAPAction": "Retrieve",
-    }
-
-    all_des: List[Dict[str, str]] = []
-    continue_request_id: Optional[str] = None
-    page = 0
-
-    while True:
-        envelope = build_soap_envelope(access_token, continue_request_id)
-        response = requests.post(endpoint, data=envelope, headers=headers, timeout=60)
+    async with AsyncClient(timeout=30) as client:
+        response = await client.post(f"{settings.SFMC_AUTH_URL.rstrip('/')}/v2/token", json=payload)
         response.raise_for_status()
 
-        overall_status, request_id, results = parse_soap_response(response.text)
-        logger.info(f"Página SOAP {page}: status={overall_status}, DEs retornadas={len(results)}")
-        all_des.extend(results)
+    token = dig(read_json(response), "access_token")
 
-        if overall_status == "MoreDataAvailable":
-            continue_request_id = request_id
-            page += 1
-        elif overall_status in ("OK", ""):
-            break
-        else:
-            raise RuntimeError(f"SOAP API retornou status inesperado: {overall_status}")
+    if not isinstance(token, str) or not token:
+        raise ValueError("The login of SFMC has no access_token")
 
-    suffix = GetHistoryDataConstants.DE_SUFFIX.value
-    historico_des = [de for de in all_des if de["name"].lower().endswith(suffix)]
-
-    logger.info(f"Total de DEs encontradas: {len(all_des)}, com sufixo '{suffix}': {len(historico_des)}")
-    if historico_des:
-        logger.info(f"  -> {', '.join(de['name'] for de in historico_des)}")
-
-    return historico_des
+    return token
 
 
-@task
-def fetch_data_extension_data(
-    access_token: str,
-    external_key: str,
-    rest_uri: str,
-) -> List[Dict[str, Any]]:
-    """
-    Extrai todos os registros de uma Data Extension via REST API com paginação.
-    GET {rest_uri}/data/v1/customobjectdata/key/{external_key}/rowset?$page={page}
+@task(retries=2, retry_delay_seconds=30)
+async def list_extensions_task(token: str, soap_uri: str) -> list[Extension]:
+    """List the Data Extensions whose name ends in `historico`, with the pages of the SOAP API.
 
-    Args:
-        access_token: Token OAuth2 do SFMC
-        external_key: CustomerKey da DE
-        rest_uri: URI base do endpoint REST (ex: https://mcXXX.rest.marketingcloudapis.com)
-
-    Returns:
-        Lista de dicts com todos os registros da DE
-    """
-    headers = {"Authorization": f"Bearer {access_token}"}
-    base_url = f"{rest_uri.rstrip('/')}/data/v1/customobjectdata/key/{external_key}/rowset"
-
-    all_rows: List[Dict[str, Any]] = []
-    page = 1
-
-    page_size = GetHistoryDataConstants.SFMC_MAX_PAGE_SIZE.value
-
-    while True:
-        response = requests.get(
-            base_url, headers=headers, params={"$page": page, "$pageSize": page_size}, timeout=60
-        )
-        response.raise_for_status()
-
-        data = response.json()
-        items = data.get("items", [])
-
-        all_rows.extend(items)
-
-        # O rowset do SFMC não retorna "pageCount", só "count" (total de registros da DE)
-        total = data.get("count", len(items))
-        if len(all_rows) >= total or not items:
-            break
-        page += 1
-
-    logger.info(f"  [{external_key}] {page} página(s) lida(s), {len(all_rows)} de {total} registro(s).")
-    return all_rows
-
-
-@task
-def fetch_de_field_types(
-    access_token: str,
-    customer_key: str,
-    de_name: str,
-    soap_uri: str,
-) -> List[Dict[str, str]]:
-    """
-    Retorna o schema (nome + tipo + pk) de uma Data Extension via SOAP API.
-    Usa ObjectType=DataExtensionField filtrado por DataExtension.CustomerKey.
+    Raise `RuntimeError` if the API answers with a status that is neither `OK` nor `MoreDataAvailable`.
     """
     endpoint = f"{soap_uri.rstrip('/')}/Service.asmx"
-    headers = {
-        "Content-Type": "text/xml; charset=utf-8",
-        "SOAPAction": "Retrieve",
-    }
+    found: list[Extension] = []
+    continue_id: str | None = None
 
-    envelope = build_field_types_soap_envelope(access_token, customer_key)
+    async with AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        while True:
+            response = await client.post(
+                endpoint, content=build_list_envelope(token, continue_id), headers=SOAP_HEADERS
+            )
+            response.raise_for_status()
+            status, request_id, page = parse_extensions(response.text)
+            found += page
 
-    response = requests.post(endpoint, data=envelope, headers=headers, timeout=60)
-    response.raise_for_status()
-
-    fields = parse_field_types_soap_response(response.text)
-
-    logger.info(f"  [{de_name}] Schema: {len(fields)} campos | "
-        f"phone={next((f['name'] for f in fields if f['type'].lower() == 'phone'), None)} | "
-        f"pk={next((f['name'] for f in fields if f['is_pk'].lower() == 'true'), None)}")
-    return fields
-
-
-@task
-def build_historico_dataframe(results: List[Dict[str, Any]]) -> pd.DataFrame:
-    """
-    Constrói, loga e retorna um DataFrame com uma linha por registro de cada DE.
-
-    Colunas:
-        de_nome      - nome da Data Extension
-        telefone     - valor da coluna de tipo Phone
-        id_de        - valor da coluna que é Primary Key
-        entrada_data - valor do campo cujo nome contém "data de entrada"
-        dados_json   - todos os campos do registro em JSON
-    """
-    rows = []
-    for result in results:
-        if result.get("status") != "success":
-            continue
-
-        de_name = result["de_name"]
-        dados = result.get("dados", [])
-        field_types = result.get("tipos", [])
-
-        phone_col = next((f["name"] for f in field_types if f["type"].lower() == "phone"), None)
-        pk_col = next((f["name"] for f in field_types if f["is_pk"].lower() == "true"), None)
-        entrada_data_col = next(
-            (f["name"] for f in field_types if "data de entrada" in normalize_field_name(f["name"])), None
-        )
-        if entrada_data_col is None:
-            date_cols = [f["name"] for f in field_types if f["type"].lower() == "date"]
-            if len(date_cols) == 1:
-                entrada_data_col = date_cols[0]
-
-        for item in dados:
-            # O REST API do SFMC retorna cada registro como {"keys": {...}, "values": {...}};
-            # campos que não são PK só existem em "values", então é preciso mesclar os dois.
-            if isinstance(item, dict) and ("keys" in item or "values" in item):
-                record = {**item.get("keys", {}), **item.get("values", {})}
+            if status == "MoreDataAvailable":
+                continue_id = request_id
+            elif status in ("OK", ""):
+                break
             else:
-                record = item
-            # A REST API do SFMC devolve as chaves do registro em lowercase,
-            # mas o schema (SOAP) informa o nome "oficial" do campo com a
-            # capitalização original — por isso o lookup precisa ser case-insensitive.
-            record_lower = {k.lower(): v for k, v in record.items()}
-            rows.append({
-                "de_nome": de_name,
-                "telefone": record_lower.get(phone_col.lower()) if phone_col else None,
-                "id_de": record_lower.get(pk_col.lower()) if pk_col else None,
-                "entrada_data": record_lower.get(entrada_data_col.lower()) if entrada_data_col else None,
-                "dados_json": json.dumps(record, ensure_ascii=False),
-            })
+                raise RuntimeError(f"The SOAP API answered with an unexpected status: {status}")
 
-    df = pd.DataFrame(rows, columns=["de_nome", "telefone", "id_de", "entrada_data", "dados_json"])
+    history = keep_history(found)
+    logger.info("Data Extensions: total=%d history=%d", len(found), len(history))
 
-    logger.info(f"DataFrame historico SFMC: {df.shape[0]} linhas x {df.shape[1]} colunas")
-
-    return df
+    return history
 
 
 @task
-def filter_recent_and_partition(df: pd.DataFrame, window_days: int) -> pd.DataFrame:
-    """
-    Filtra o DataFrame consolidado para manter apenas registros com entrada_data
-    dentro dos últimos `window_days` dias. Linhas sem entrada_data parseável
-    (DEs sem coluna de data) são sempre mantidas, pois não é possível avaliar
-    sua idade.
+async def extract_task(token: str, soap_uri: str, rest_uri: str, extension: Extension) -> Extraction:
+    """Read all the records and the columns of a Data Extension, or return the error if it fails.
 
-    Adiciona data_particao (DATE): a entrada_data parseada, ou a data de
-    execução para linhas sem entrada_data. Usada para o particionamento
-    mensal das tabelas no BigQuery.
+    The records come from the REST API in pages of 2500, and the columns from the SOAP API. A failure of one
+    extension does not stop the others, so it comes back as the `error` of the extraction.
     """
-    df = df.copy()
-    entrada_parsed = pd.to_datetime(df["entrada_data"], errors="coerce", utc=True).dt.tz_localize(None)
-    cutoff = datetime.now() - timedelta(days=window_days)
+    url = f"{rest_uri.rstrip('/')}/data/v1/customobjectdata/key/{extension.external_key}/rowset"
+    records = []
 
-    keep_mask = entrada_parsed.isna() | (entrada_parsed >= cutoff)
-    total_antes = len(df)
-    df = df[keep_mask].copy()
-    entrada_parsed = entrada_parsed[keep_mask]
+    try:
+        async with AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            page = 1
+
+            while True:
+                response = await client.get(
+                    url, headers={"Authorization": f"Bearer {token}"}, params={"$page": page, "$pageSize": PAGE_SIZE}
+                )
+                response.raise_for_status()
+                body = read_json(response)
+                items = dig(body, "items")
+                batch = [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+                records += batch
+                total = dig(body, "count")
+
+                if not batch or len(records) >= (total if isinstance(total, int) else len(batch)):
+                    break
+
+                page += 1
+
+            fields_response = await client.post(
+                f"{soap_uri.rstrip('/')}/Service.asmx",
+                content=build_fields_envelope(token, extension.external_key),
+                headers=SOAP_HEADERS,
+            )
+            fields_response.raise_for_status()
+            fields = parse_fields(fields_response.text)
+    except (HTTPError, ValueError) as error:
+        logger.error("A Data Extension failed: name=%s error=%s", extension.name, error)
+        return Extraction(extension.name, error=str(error))
 
     logger.info(
-        f"Janela de {window_days} dias: {total_antes} -> {len(df)} linha(s) "
-        f"({total_antes - len(df)} descartada(s) por entrada_data antiga)."
+        "Data Extension read: name=%s pages=%d records=%d fields=%d", extension.name, page, len(records), len(fields)
     )
 
-    df["data_particao"] = entrada_parsed.dt.date
-    df["data_particao"] = df["data_particao"].fillna(date.today())
-
-    key_columns = list(GetHistoryDataConstants.MERGE_KEY_COLUMNS.value)
-    df = df.drop_duplicates(subset=key_columns).reset_index(drop=True)
-
-    return df
+    return Extraction(extension.name, records, fields)
 
 
-@task(cache_policy=NO_CACHE)
-def load_recent_data_to_tmp_table(
-    df: pd.DataFrame,
-    project_id: str,
-    dataset_id: str,
-    tmp_table_id: str,
-    final_table_id: str,
-) -> bigquery.Client:
+@task(retries=2, retry_delay_seconds=60)
+async def load_task(rows: list[Row], window_days: int) -> int:
+    """Keep the rows of the window, replace the tmp table with them, and MERGE it into the final table.
+
+    The MERGE updates the rows with the same key and inserts the new ones, and it never deletes from the final table.
+    Return the rows that the MERGE touched.
     """
-    Garante que as tabelas nativas existam, trunca a tabela temporária e
-    carrega nela os dados recentes (já filtrados pela janela de dias).
-    """
-    client = get_bq_client(project_id=project_id)
-    ensure_historico_tables(
-        client=client,
-        project_id=project_id,
-        dataset_id=dataset_id,
-        tmp_table_id=tmp_table_id,
-        final_table_id=final_table_id,
+    recent = filter_recent(rows, window_days, datetime.now(UTC))
+    tmp = f"{PROJECT_ID}.{DATASET_ID}.{TMP_TABLE_ID}"
+    target = f"{PROJECT_ID}.{DATASET_ID}.{FINAL_TABLE_ID}"
+    await to_thread(bq.ensure_tables, PROJECT_ID, DATASET_ID, [TMP_TABLE_ID, FINAL_TABLE_ID])
+    await to_thread(bq.replace_table, PROJECT_ID, tmp, recent)
+    sql = render_query(
+        __file__,
+        "merge_history",
+        target=target,
+        source=tmp,
+        keys=list(MERGE_KEYS),
+        columns=bq.COLUMNS,
+        update_columns=[column for column in bq.COLUMNS if column not in MERGE_KEYS],
     )
-    truncate_and_load_tmp_table(
-        client=client,
-        df=df,
-        project_id=project_id,
-        dataset_id=dataset_id,
-        tmp_table_id=tmp_table_id,
-    )
-    return client
+    touched = await to_thread(bq.run_merge, PROJECT_ID, sql)
+    logger.info("MERGE done: target=%s rows=%d", target, touched)
 
-
-@task(cache_policy=NO_CACHE)
-def merge_tmp_into_historico(
-    client: bigquery.Client,
-    project_id: str,
-    dataset_id: str,
-    tmp_table_id: str,
-    final_table_id: str,
-) -> None:
-    """
-    Faz o MERGE da tabela temporária na tabela final histórica: atualiza
-    registros já existentes (mesma chave de dedup) e insere os novos. Nunca
-    apaga nada da tabela final.
-    """
-    key_columns = list(GetHistoryDataConstants.MERGE_KEY_COLUMNS.value)
-    all_columns = [field.name for field in historico_table_schema()]
-    update_columns = [col for col in all_columns if col not in key_columns]
-
-    target = f"`{project_id}.{dataset_id}.{final_table_id}`"
-    source = f"`{project_id}.{dataset_id}.{tmp_table_id}`"
-    on_clause = " AND ".join(f"T.{col} IS NOT DISTINCT FROM S.{col}" for col in key_columns)
-    update_clause = ", ".join(f"{col} = S.{col}" for col in update_columns)
-    insert_columns = ", ".join(all_columns)
-    insert_values = ", ".join(f"S.{col}" for col in all_columns)
-
-    query = f"""
-        MERGE {target} AS T
-        USING {source} AS S
-        ON {on_clause}
-        WHEN MATCHED THEN
-          UPDATE SET {update_clause}
-        WHEN NOT MATCHED THEN
-          INSERT ({insert_columns})
-          VALUES ({insert_values})
-    """
-
-    logger.info(f"Executando MERGE em {project_id}.{dataset_id}.{final_table_id}:\n{query}")
-    job = client.query(query)
-    job.result()
-    logger.info(f"MERGE concluído: {job.num_dml_affected_rows} linha(s) afetada(s).")
-
-
-@task
-def process_historico_extraction(results: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Agrega resultados da extração e loga resumo estruturado.
-
-    Args:
-        results: Lista de dicts com resultado por DE
-                 (campos: de_name, external_key, status, total_rows, error)
-
-    Returns:
-        Dict com metadados: des_sucesso, des_erro, total_registros, detalhes
-    """
-    des_sucesso = [r for r in results if r.get("status") == "success"]
-    des_erro = [r for r in results if r.get("status") == "error"]
-    total_registros = sum(r.get("total_rows", 0) for r in des_sucesso)
-
-    logger.info("=" * 60)
-    logger.info("RESUMO DA EXTRACAO DE HISTORICOS SFMC")
-    logger.info("=" * 60)
-    logger.info(f"DEs processadas com sucesso : {len(des_sucesso)}")
-    logger.info(f"DEs com erro                : {len(des_erro)}")
-    logger.info(f"Total de registros extraidos: {total_registros}")
-
-    if des_erro:
-        logger.info("\nErros detalhados:")
-        for r in des_erro:
-            logger.error(f"  [{r['de_name']}] ERRO: {r.get('error')}")
-
-    logger.info("=" * 60)
-
-    return {
-        "des_sucesso": len(des_sucesso),
-        "des_erro": len(des_erro),
-        "total_registros": total_registros,
-        "detalhes": results,
-    }
+    return touched

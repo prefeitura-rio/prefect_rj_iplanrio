@@ -1,128 +1,89 @@
-"""
-Funções auxiliares (não-task) para integração SOAP/REST com o Salesforce
-Marketing Cloud (SFMC).
-"""
+"""The SOAP messages of SFMC, and how to read their answers."""
 
-import re
-import xml.etree.ElementTree as ET
-from typing import Dict, List, Optional, Tuple
+from xml.etree.ElementTree import Element
 
-_SOAP_NS = "http://schemas.xmlsoap.org/soap/envelope/"
-_ET_NS = "http://exacttarget.com/wsdl/partnerAPI"
+from defusedxml.ElementTree import fromstring
 
+from pipelines.rj_crm__get_history_data.constants import PARTNER_NS, SOAP_NS
+from pipelines.rj_crm__get_history_data.types import Extension, Field
 
-def normalize_field_name(name: str) -> str:
-    """Reduz espaços, underscores e hífens a um único espaço para comparar nomes de campo."""
-    return re.sub(r"[\s_-]+", " ", name.strip().lower())
-
-
-def build_soap_envelope(access_token: str, continue_request_id: Optional[str] = None) -> bytes:
-    """Monta o envelope SOAP para listagem de DataExtensions."""
-    if continue_request_id:
-        body_inner = f"""
-        <RetrieveRequestMsg>
-            <RetrieveRequest>
-                <ContinueRequest>{continue_request_id}</ContinueRequest>
-            </RetrieveRequest>
-        </RetrieveRequestMsg>
-        """
-    else:
-        body_inner = """
-        <RetrieveRequestMsg>
-            <RetrieveRequest>
-                <ObjectType>DataExtension</ObjectType>
-                <Properties>Name</Properties>
-                <Properties>CustomerKey</Properties>
-                <Properties>ObjectID</Properties>
-            </RetrieveRequest>
-        </RetrieveRequestMsg>
-        """
-
-    envelope = f"""<?xml version="1.0" encoding="UTF-8"?>
+ENVELOPE = """<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope
     xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns:xsd="http://www.w3.org/2001/XMLSchema"
     xmlns="http://exacttarget.com/wsdl/partnerAPI">
     <soapenv:Header>
-        <fueloauth xmlns="http://exacttarget.com/wsdl/partnerAPI">{access_token}</fueloauth>
-    </soapenv:Header>
-    <soapenv:Body>
-        {body_inner}
-    </soapenv:Body>
-</soapenv:Envelope>"""
-    return envelope.encode("utf-8")
-
-
-def parse_soap_response(xml_text: str) -> Tuple[str, str, List[Dict[str, str]]]:
-    """
-    Parseia a resposta SOAP de listagem de DataExtensions.
-    Retorna (overall_status, request_id, lista de DEs)
-    """
-    root = ET.fromstring(xml_text)
-    body = root.find(f"{{{_SOAP_NS}}}Body")
-    response_msg = body.find(f"{{{_ET_NS}}}RetrieveResponseMsg")
-
-    overall_status = response_msg.findtext(f"{{{_ET_NS}}}OverallStatus", default="")
-    request_id = response_msg.findtext(f"{{{_ET_NS}}}RequestID", default="")
-
-    results = []
-    for result in response_msg.findall(f"{{{_ET_NS}}}Results"):
-        name = result.findtext(f"{{{_ET_NS}}}Name", default="")
-        customer_key = result.findtext(f"{{{_ET_NS}}}CustomerKey", default="")
-        object_id = result.findtext(f"{{{_ET_NS}}}ObjectID", default="")
-        results.append({
-            "name": name,
-            "external_key": customer_key,
-            "object_id": object_id,
-        })
-
-    return overall_status, request_id, results
-
-
-def build_field_types_soap_envelope(access_token: str, customer_key: str) -> bytes:
-    """Monta o envelope SOAP para listagem do schema (campos) de uma DataExtension."""
-    envelope = f"""<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope
-    xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-    xmlns="http://exacttarget.com/wsdl/partnerAPI">
-    <soapenv:Header>
-        <fueloauth xmlns="http://exacttarget.com/wsdl/partnerAPI">{access_token}</fueloauth>
+        <fueloauth xmlns="http://exacttarget.com/wsdl/partnerAPI">{token}</fueloauth>
     </soapenv:Header>
     <soapenv:Body>
         <RetrieveRequestMsg>
             <RetrieveRequest>
-                <ObjectType>DataExtensionField</ObjectType>
-                <Properties>Name</Properties>
-                <Properties>FieldType</Properties>
-                <Properties>IsRequired</Properties>
-                <Properties>IsPrimaryKey</Properties>
-                <Filter xsi:type="SimpleFilterPart">
-                    <Property>DataExtension.CustomerKey</Property>
-                    <SimpleOperator>equals</SimpleOperator>
-                    <Value>{customer_key}</Value>
-                </Filter>
+                {request}
             </RetrieveRequest>
         </RetrieveRequestMsg>
     </soapenv:Body>
 </soapenv:Envelope>"""
-    return envelope.encode("utf-8")
+LIST_REQUEST = (
+    "<ObjectType>DataExtension</ObjectType><Properties>Name</Properties>"
+    "<Properties>CustomerKey</Properties><Properties>ObjectID</Properties>"
+)
+FIELDS_REQUEST = (
+    "<ObjectType>DataExtensionField</ObjectType><Properties>Name</Properties><Properties>FieldType</Properties>"
+    "<Properties>IsRequired</Properties><Properties>IsPrimaryKey</Properties>"
+    '<Filter xsi:type="SimpleFilterPart"><Property>DataExtension.CustomerKey</Property>'
+    "<SimpleOperator>equals</SimpleOperator><Value>{key}</Value></Filter>"
+)
 
 
-def parse_field_types_soap_response(xml_text: str) -> List[Dict[str, str]]:
-    """Parseia a resposta SOAP de schema (campos) de uma DataExtension."""
-    root = ET.fromstring(xml_text)
-    body = root.find(f"{{{_SOAP_NS}}}Body")
-    response_msg = body.find(f"{{{_ET_NS}}}RetrieveResponseMsg")
+def build_list_envelope(token: str, continue_request_id: str | None = None) -> bytes:
+    """Return the message that lists the Data Extensions, or that asks for the next page of a list."""
+    request = f"<ContinueRequest>{continue_request_id}</ContinueRequest>" if continue_request_id else LIST_REQUEST
 
-    fields = []
-    for result in response_msg.findall(f"{{{_ET_NS}}}Results"):
-        fields.append({
-            "name": result.findtext(f"{{{_ET_NS}}}Name", default=""),
-            "type": result.findtext(f"{{{_ET_NS}}}FieldType", default=""),
-            "is_pk": result.findtext(f"{{{_ET_NS}}}IsPrimaryKey", default="false"),
-        })
+    return ENVELOPE.format(token=token, request=request).encode()
 
-    return fields
+
+def build_fields_envelope(token: str, customer_key: str) -> bytes:
+    """Return the message that lists the columns of a Data Extension."""
+    return ENVELOPE.format(token=token, request=FIELDS_REQUEST.format(key=customer_key)).encode()
+
+
+def find_response(xml_text: str) -> Element:
+    """Return the `RetrieveResponseMsg` of an answer. Raise `ValueError` if the answer does not have one."""
+    body = fromstring(xml_text).find(f"{{{SOAP_NS}}}Body")
+    response = body.find(f"{{{PARTNER_NS}}}RetrieveResponseMsg") if body is not None else None
+
+    if response is None:
+        raise ValueError("The SOAP answer has no RetrieveResponseMsg")
+
+    return response
+
+
+def parse_extensions(xml_text: str) -> tuple[str, str, list[Extension]]:
+    """Read the answer that lists the Data Extensions: the overall status, the id of the request and the extensions."""
+    response = find_response(xml_text)
+    extensions = [
+        Extension(
+            result.findtext(f"{{{PARTNER_NS}}}Name", default=""),
+            result.findtext(f"{{{PARTNER_NS}}}CustomerKey", default=""),
+        )
+        for result in response.findall(f"{{{PARTNER_NS}}}Results")
+    ]
+
+    return (
+        response.findtext(f"{{{PARTNER_NS}}}OverallStatus", default=""),
+        response.findtext(f"{{{PARTNER_NS}}}RequestID", default=""),
+        extensions,
+    )
+
+
+def parse_fields(xml_text: str) -> list[Field]:
+    """Read the answer that lists the columns of a Data Extension."""
+    return [
+        Field(
+            result.findtext(f"{{{PARTNER_NS}}}Name", default=""),
+            result.findtext(f"{{{PARTNER_NS}}}FieldType", default=""),
+            result.findtext(f"{{{PARTNER_NS}}}IsPrimaryKey", default="false").lower() == "true",
+        )
+        for result in find_response(xml_text).findall(f"{{{PARTNER_NS}}}Results")
+    ]

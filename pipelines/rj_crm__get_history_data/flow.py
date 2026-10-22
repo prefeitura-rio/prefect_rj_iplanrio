@@ -1,124 +1,42 @@
-
-from typing import Any, Dict, List, Optional
+"""Flow for rj_crm__get_history_data."""
 
 from prefect import flow
+from toolkit.telemetry import logger
 
-from pipelines.rj_crm__get_history_data.constants import GetHistoryDataConstants
+from pipelines.rj_crm__get_history_data.constants import DEFAULT_WINDOW_DAYS
+from pipelines.rj_crm__get_history_data.helpers.history import build_rows
 from pipelines.rj_crm__get_history_data.settings import Settings
-from pipelines.rj_crm__get_history_data.tasks import (
-    authenticate_sfmc,
-    build_historico_dataframe,
-    fetch_data_extension_data,
-    fetch_de_field_types,
-    filter_recent_and_partition,
-    list_data_extensions_historico,
-    load_recent_data_to_tmp_table,
-    merge_tmp_into_historico,
-    process_historico_extraction,
-)
+from pipelines.rj_crm__get_history_data.tasks import authenticate_task, extract_task, list_extensions_task, load_task
+from utils.hooks import notify_failure
 
 
-@flow(log_prints=True)
-def rj_crm__get_history_data(
-    rest_uri: Optional[str] = None,
-    soap_uri: Optional[str] = None,
-    window_days: Optional[int] = None,
-):
-    """
-    Flow para extrair dados de todas as Data Extensions do SFMC com sufixo 'historico'
-    e publicar o resultado consolidado no BigQuery (rj-crm-registry.brutos_salesforce_staging).
+@flow(log_prints=True, flow_run_name="get-history-data", on_failure=[notify_failure])
+async def rj_crm__get_history_data(
+    *,
+    rest_uri: str | None = None,
+    soap_uri: str | None = None,
+    window_days: int = DEFAULT_WINDOW_DAYS,
+) -> None:
+    """Load the history Data Extensions of SFMC to BigQuery.
 
-    Passos:
-        1. Autentica com SFMC via OAuth2 (client_credentials)
-        2. Lista DEs cujo nome termina em 'historico' via SOAP API
-        3. Para cada DE, extrai todos os registros via REST API com paginação
-        4. Loga resumo estruturado (totais, amostras, erros)
-        5. Monta o DataFrame consolidado (de_nome, telefone, id_de, entrada_data, dados_json)
-        6. Filtra apenas registros com entrada_data dentro dos últimos `window_days`
-           dias (registros sem entrada_data identificável são sempre mantidos)
-        7. Trunca e recarrega a tabela temporária historico_sfmc_tmp com esses dados
-        8. Faz o MERGE da tabela temporária na tabela final historico (upsert por
-           de_nome + telefone + entrada_data) — nunca apaga dados da tabela final
-
-    Args:
-        rest_uri: URI REST do SFMC. Se não fornecido, usa env SFMC_REST_BASE_URL.
-        soap_uri: URI SOAP do SFMC. Se não fornecido, usa env SFMC_SOAP_BASE_URL.
-        window_days: Quantos dias de entrada_data considerar a cada execução.
-            Se não fornecido, usa GetHistoryDataConstants.WINDOW_DAYS.
+    The flow logs in to SFMC, lists the Data Extensions whose name ends in `historico`, and reads the records of
+    each. One row goes out for each record, with the phone, the primary key, the entry date and the whole record as
+    JSON. The rows whose entry date is in the last `window_days` days (30 by default) replace the tmp table
+    `historico_sfmc_tmp` and are MERGEd into `historico_sfmc` by name, phone and entry date. A row with no entry
+    date is always kept. The addresses come from the settings unless `rest_uri` and `soap_uri` are given.
+    A Data Extension that fails is logged and the others still load.
     """
     settings = Settings()
-    rest_uri = rest_uri or settings.SFMC_REST_BASE_URL
-    soap_uri = soap_uri or settings.SFMC_SOAP_BASE_URL
-    window_days = window_days or GetHistoryDataConstants.WINDOW_DAYS.value
+    rest = rest_uri or settings.SFMC_REST_BASE_URL
+    soap = soap_uri or settings.SFMC_SOAP_BASE_URL
+    token = await authenticate_task()
+    extensions = await list_extensions_task(token, soap)
 
-    project_id = GetHistoryDataConstants.GCP_SFMC_DESTINATION_PROJECT_ID.value
-    dataset_id = GetHistoryDataConstants.GCP_SFMC_DESTINATION_DATASET_ID.value
-    tmp_table_id = GetHistoryDataConstants.GCP_SFMC_TMP_TABLE_ID.value
-    final_table_id = GetHistoryDataConstants.GCP_SFMC_FINAL_TABLE_ID.value
-
-
-    access_token = authenticate_sfmc()
-
-    data_extensions = list_data_extensions_historico(
-        access_token=access_token,
-        soap_uri=soap_uri,
-    )
-
-    if not data_extensions:
-        print("Nenhuma Data Extension com sufixo 'historico' encontrada. Flow finalizado.")
+    if not extensions:
+        logger.info("No Data Extension ends in historico")
         return
 
-    print(f"Processando {len(data_extensions)} DEs com sufixo 'historico'...")
-
-    extraction_results: List[Dict[str, Any]] = []
-    for de in data_extensions:
-        try:
-            rows = fetch_data_extension_data(
-                access_token=access_token,
-                external_key=de["external_key"],
-                rest_uri=rest_uri,
-            )
-            field_types = fetch_de_field_types(
-                access_token=access_token,
-                customer_key=de["external_key"],
-                de_name=de["name"],
-                soap_uri=soap_uri,
-            )
-            extraction_results.append({
-                "de_name": de["name"],
-                "external_key": de["external_key"],
-                "status": "success",
-                "total_rows": len(rows),
-                "dados": rows,
-                "tipos": field_types,
-            })
-        except Exception as exc:
-            print(f"Erro ao extrair DE '{de['name']}': {exc}")
-            extraction_results.append({
-                "de_name": de["name"],
-                "external_key": de["external_key"],
-                "status": "error",
-                "total_rows": 0,
-                "dados": [],
-                "tipos": [],
-                "error": str(exc),
-            })
-
-    process_historico_extraction(results=extraction_results)
-    df_historico = build_historico_dataframe(results=extraction_results)
-    df_recent = filter_recent_and_partition(df=df_historico, window_days=window_days)
-
-    client = load_recent_data_to_tmp_table(
-        df=df_recent,
-        project_id=project_id,
-        dataset_id=dataset_id,
-        tmp_table_id=tmp_table_id,
-        final_table_id=final_table_id,
-    )
-    merge_tmp_into_historico(
-        client=client,
-        project_id=project_id,
-        dataset_id=dataset_id,
-        tmp_table_id=tmp_table_id,
-        final_table_id=final_table_id,
-    )
+    results = [await extract_task(token, soap, rest, extension) for extension in extensions]
+    failed = [result.name for result in results if result.error is not None]
+    logger.info("Extraction done: extensions=%d failed=%s", len(results), failed)
+    await load_task(build_rows(results), window_days)
