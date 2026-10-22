@@ -51,6 +51,7 @@ env:
 jobs:
   plan:
     name: Choose the pipelines
+    if: vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
