@@ -1,14 +1,12 @@
 """Tasks of rj_iplanrio__cor_alerts_aggregator."""
 
 from asyncio import to_thread
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import uuid4
 
-import gspread
 from google.api_core.exceptions import NotFound
-from gspread.utils import ValueInputOption
 from httpx2 import HTTPError
 from prefect import task
 from toolkit.telemetry import logger
@@ -16,24 +14,19 @@ from toolkit.telemetry import logger
 from pipelines.rj_iplanrio__cor_alerts_aggregator.constants import (
     ALLOWED_NEIGHBORHOODS,
     DATASET_ID,
-    DEFAULT_RETENTION_HOURS,
     HISTORY_TABLE_ID,
     SENT_TABLE_ID,
-    SHEET_COLUMNS,
-    SHEET_TAB,
     SP_TZ,
     TEST_PREFIX,
 )
 from pipelines.rj_iplanrio__cor_alerts_aggregator.helpers.clusters import build_event, read_alerts
 from pipelines.rj_iplanrio__cor_alerts_aggregator.helpers.cor_api import open_event
-from pipelines.rj_iplanrio__cor_alerts_aggregator.helpers.rows import plan_sheet_update
+from pipelines.rj_iplanrio__cor_alerts_aggregator.helpers.sheets import update_sheet
 from pipelines.rj_iplanrio__cor_alerts_aggregator.settings import Settings
 from pipelines.rj_iplanrio__cor_alerts_aggregator.types import Alert, Cluster, Row, Sheet
 from utils.tasks import publish_table_in_bq, read_bq, upload_files_to_gcs, write_records
 from utils.types import Cloud, Table
-from utils.utils import capture_options, load_credentials, render_query
-
-SHEET_SCOPES = ("https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.readonly")
+from utils.utils import capture_options, render_query
 
 
 @task(retries=2, retry_delay_seconds=10)
@@ -108,34 +101,6 @@ async def load_rows_task(rows: list[Row], table_id: str, cloud: Cloud) -> None:
 
     await publish_table_in_bq.fn(table, cloud)
     logger.info("Rows added: table=%s count=%d", table_id, len(rows))
-
-
-def update_sheet(rows: list[Row], sheet: Sheet) -> int:
-    """Bring the sheet up to date with the rows, and return how many rows it wrote."""
-    client = gspread.authorize(load_credentials(SHEET_SCOPES))
-    worksheet = client.open_by_key(sheet["spreadsheet_id"]).worksheet(SHEET_TAB)
-    cutoff = datetime.now(SP_TZ) - timedelta(hours=sheet.get("retention_hours", DEFAULT_RETENTION_HOURS))
-    plan = plan_sheet_update(worksheet.get_all_values(), rows, cutoff)
-
-    if plan.clear:
-        worksheet.clear()
-
-    if plan.header:
-        worksheet.append_row(list(SHEET_COLUMNS.values()))
-
-    for number in sorted(plan.stale_rows, reverse=True):
-        worksheet.delete_rows(number)
-
-    if plan.updates:
-        worksheet.batch_update(
-            [{"range": f"A{number}", "values": [line]} for number, line in plan.updates.items()],
-            value_input_option=ValueInputOption.raw,
-        )
-
-    if plan.appends:
-        worksheet.append_rows(plan.appends, value_input_option=ValueInputOption.raw)
-
-    return len(plan.updates) + len(plan.appends)
 
 
 @task

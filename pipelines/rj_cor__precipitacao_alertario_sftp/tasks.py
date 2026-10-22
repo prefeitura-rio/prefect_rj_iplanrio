@@ -4,16 +4,15 @@ from asyncio import to_thread
 
 import polars as pl
 from google.api_core.exceptions import NotFound
-from google.cloud import storage
 from prefect import task
 from toolkit.telemetry import logger
 
 from pipelines.rj_cor__precipitacao_alertario_sftp.helpers import (
     Record,
+    download_files,
     drop_repeats,
-    keep_new_files,
+    list_new_files,
     parse_xml,
-    read_watermark,
 )
 from utils.tasks import read_bq
 from utils.utils import render_query
@@ -32,20 +31,6 @@ async def read_watermark_task(table: str, project: str) -> str | None:
     logger.info("Watermark read: table=%s latest=%s", table, latest)
 
     return latest
-
-
-def list_new_files(bucket_name: str, prefix: str, watermark: str | None) -> list[str]:
-    """List the XML files of the landing zone that come after the watermark."""
-    blobs = storage.Client().bucket(bucket_name).list_blobs(prefix=prefix)
-
-    return keep_new_files([blob.name for blob in blobs], read_watermark(watermark))
-
-
-def download_files(bucket_name: str, names: list[str]) -> list[str]:
-    """Download the XML files of the landing zone as text."""
-    bucket = storage.Client().bucket(bucket_name)
-
-    return [bucket.blob(name).download_as_text(encoding="utf-8") for name in names]
 
 
 @task(retries=3, retry_delay_seconds=10)

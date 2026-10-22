@@ -43,3 +43,4 @@ SHEET_TIME_FORMAT: Final = "%d/%m/%Y %H:%M:%S"
 CONCURRENCY_LIMIT: Final = "cor-alerts-aggregator"
 REPORTS_SHOWN: Final = 5
 """The most reports that the type of an event lists."""
+SHEET_SCOPES: Final = ("https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.readonly")

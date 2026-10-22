@@ -6,6 +6,7 @@ from re import search
 from xml.etree.ElementTree import Element
 
 from defusedxml.ElementTree import fromstring
+from google.cloud import storage
 
 from pipelines.rj_cor__precipitacao_alertario_sftp.constants import (
     FILE_PATTERN,
@@ -111,3 +112,17 @@ def drop_repeats(records: Sequence[Mapping[str, str | float | None]]) -> list[Ma
         seen.setdefault((record["id_estacao"], record["data_medicao"]), record)
 
     return list(seen.values())
+
+
+def list_new_files(bucket_name: str, prefix: str, watermark: str | None) -> list[str]:
+    """List the XML files of the landing zone that come after the watermark."""
+    blobs = storage.Client().bucket(bucket_name).list_blobs(prefix=prefix)
+
+    return keep_new_files([blob.name for blob in blobs], read_watermark(watermark))
+
+
+def download_files(bucket_name: str, names: list[str]) -> list[str]:
+    """Download the XML files of the landing zone as text."""
+    bucket = storage.Client().bucket(bucket_name)
+
+    return [bucket.blob(name).download_as_text(encoding="utf-8") for name in names]
