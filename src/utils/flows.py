@@ -7,22 +7,25 @@ from tempfile import TemporaryDirectory
 from prefect import flow
 from pydantic import JsonValue
 from toolkit.dbt import DbtRun
+from toolkit.settings import DiscordSettings
 from toolkit.telemetry import configure_telemetry, logger
 
 from .hooks import notify_failure
 from .tasks import (
-    compact_delta_table,
     dump_arcgis_to_gcs,
     dump_db_to_gcs,
     dump_gsheet_to_gcs,
+    list_delta_tables,
+    maintain_delta_table,
+    notify_discord,
     publish_table_in_bq,
     request_json,
     run_dbt,
     upload_files_to_gcs,
     write_records,
 )
-from .types import Cloud, Database, DatabaseDumpOptions, DumpMode, DumpOptions, FileFormat, Read, Table
-from .utils import capture_time, extract_records, load_records_schema, validate_records
+from .types import Cloud, Database, DatabaseDumpOptions, DumpMode, DumpOptions, FileFormat, Maintenance, Read, Table
+from .utils import capture_time, extract_records, load_records_schema, summarize_maintenance, validate_records
 
 configure_telemetry()
 
@@ -183,10 +186,38 @@ async def ingest_api(
 
 
 @flow(log_prints=True, on_failure=[notify_failure])
-async def compact_tables(*, cloud: Cloud, tables: list[Table]) -> None:
-    """Merge the small files of the Delta tables that run appends into every few minutes."""
-    for table in tables:
-        await compact_delta_table(table, bucket=cloud["bucket"])
+async def maintain_delta(*, cloud: Cloud, exclude: list[str] | None = None) -> None:
+    """Keep the Delta tables of the bucket fast, and report what looks wrong.
+
+    It finds every Delta table under `staging/`, merges its small files, writes a
+    checkpoint, removes the files that nothing reads, and refreshes its BigQuery table.
+    It never changes the rows. A table that fails does not stop the others, and the
+    run fails at the end. The message to Discord lists the failed tables, the tables
+    whose chunk keys mix two layouts, and the files that the run merged. It posts only if
+    `DISCORD_WEBHOOK_URL` is set. `exclude`
+    holds the tables to skip, as `dataset_id.table_id`.
+    """
+    skipped = set(exclude or [])
+    done: list[Maintenance] = []
+    failed: dict[str, str] = {}
+
+    for table in await list_delta_tables(cloud["bucket"]):
+        name = f"{table['dataset_id']}.{table['table_id']}"
+        if name in skipped:
+            continue
+        try:
+            done.append(await maintain_delta_table(table, bucket=cloud["bucket"]))
+            await publish_table_in_bq(table, cloud)
+        except Exception as error:
+            failed[name] = str(error)[:200]
+
+    message = summarize_maintenance(done, failed)
+    logger.info(message)
+    if DiscordSettings().DISCORD_WEBHOOK_URL.get_secret_value():
+        await notify_discord(message)
+
+    if failed:
+        raise RuntimeError(f"{len(failed)} tables failed: {', '.join(failed)}")
 
 
 @flow(
@@ -194,12 +225,14 @@ async def compact_tables(*, cloud: Cloud, tables: list[Table]) -> None:
     log_prints=True,
     on_failure=[notify_failure],
 )
-async def dbt_run(*, request: DbtRun) -> None:
+async def dbt_run(*, request: DbtRun, report: bool = False) -> None:
     """Run one dbt command from a queries repository.
 
     The repository is cloned, `dbt deps` runs, and then the command of `request`. Set
     `request` in the `prefect.yaml` of the pipeline, with the repository, the command,
-    the target and the selection. A failed run posts to Discord if `DISCORD_WEBHOOK_URL`
-    is set.
+    the target and the selection. A private repository URL has `GITHUB_TOKEN` where the
+    token goes, and `GITHUB_TOKEN` from the environment replaces it. With `report` the
+    result goes to Discord, failed or not, if `DISCORD_WEBHOOK_URL` is set. A failed run
+    also posts through the failure hook.
     """
-    await run_dbt(request)
+    await run_dbt(request, report=report)

@@ -1,11 +1,25 @@
 from json import loads
+from os import environ
+from types import SimpleNamespace
 
 import pytest
+from deltalake import DeltaTable, write_deltalake
 from httpx2 import HTTPStatusError
+from pyarrow import table as arrow_table
+from toolkit.dbt import DbtRun
 
 from utils import tasks
 from utils.constants import DISCORD_LIMIT
-from utils.tasks import dump_arcgis_to_gcs, notify_discord, request_json, run_bq_sql, write_records
+from utils.tasks import (
+    dump_arcgis_to_gcs,
+    maintain_delta_table,
+    notify_discord,
+    request_json,
+    run_bq_sql,
+    run_dbt,
+    write_records,
+)
+from utils.utils import Destination
 
 
 async def test_a_get_sends_the_params_and_the_headers_and_returns_the_json(fake_api):
@@ -108,3 +122,81 @@ async def test_the_crs_of_a_layer_reaches_the_read_as_a_srid(monkeypatch, crs, e
     await dump_arcgis_to_gcs.fn({"dataset_id": "d", "table_id": "t"}, "https://x/layer", bucket="b", crs=crs)
 
     assert seen[0].srid == expected
+
+
+async def test_maintenance_merges_the_small_files_and_keeps_the_rows(tmp_path, monkeypatch):
+    """Report fewer files after the run, with the same rows and a layout that looks right."""
+    uri = str(tmp_path / "table")
+    monkeypatch.setattr(Destination, "uri", property(lambda _: uri))
+    for number in range(3):
+        rows = arrow_table({"id": [number], "batch": ["2024-03-01"]})
+        write_deltalake(uri, rows, mode="append", partition_by=["batch"])
+
+    result = await maintain_delta_table.fn({"dataset_id": "ds", "table_id": "tb"}, bucket="b")
+
+    assert (result["table"], result["before"]["files"], result["after"]["files"]) == ("ds.tb", 3, 1)
+    assert result["problems"] == []
+    assert set(DeltaTable(uri).to_pyarrow_table().to_pydict()["id"]) == {0, 1, 2}
+
+
+async def test_dbt_runs_deps_then_the_command_in_the_cloned_project(fake_runner, tmp_path):
+    """Regression: the clone was ignored, so dbt ran in the working directory."""
+    await run_dbt.fn(DbtRun(repository="https://example.invalid/q.git", select="vendas"))
+
+    [runner] = fake_runner.instances
+    assert runner.settings.project_dir == tmp_path / "queries"
+    assert runner.invoked == [["deps"], ["run", "--target", "dev", "--select", "vendas"]]
+
+
+@pytest.mark.parametrize("has_profile", [True, False])
+async def test_regression_the_profile_of_the_repository_is_used_when_it_has_one(fake_runner, tmp_path, has_profile):
+    """Regression: dbt ignored the `profiles.yml` of the repository."""
+    if has_profile:
+        (tmp_path / "queries" / "profiles.yml").write_text("p: {}\n")
+
+    await run_dbt.fn(DbtRun(repository="https://example.invalid/q.git"))
+
+    [runner] = fake_runner.instances
+    assert (runner.settings.profiles_dir == tmp_path / "queries") is has_profile
+    assert "DBT_PROFILES_DIR" not in environ
+
+
+async def test_a_node_that_fails_raises_with_its_name(fake_runner, dbt_node):
+    """Fail the run, and name the nodes that failed. A warning does not fail it."""
+    fake_runner.result = SimpleNamespace(
+        success=False,
+        result=SimpleNamespace(results=[dbt_node("a", "success"), dbt_node("b", "error"), dbt_node("c", "warn")]),
+    )
+
+    with pytest.raises(RuntimeError, match=r"dbt run failed: b$"):
+        await run_dbt.fn(DbtRun(repository="https://example.invalid/q.git"))
+
+
+async def test_the_report_goes_to_discord_with_the_nodes_that_went_wrong(fake_runner, fake_api, monkeypatch, dbt_node):
+    """Post the result, also of a run that failed, when `report` is on and a webhook is set."""
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", f"{fake_api.url}/hook")
+    fake_runner.result = SimpleNamespace(
+        success=False, result=SimpleNamespace(results=[dbt_node("b", "error", "boom")])
+    )
+
+    with pytest.raises(RuntimeError, match="failed"):
+        await run_dbt.fn(
+            DbtRun(repository="https://example.invalid/queries-x.git", command="build", target="prod"), report=True
+        )
+
+    [seen] = fake_api.requests
+    assert loads(seen.body)["content"].splitlines() == [
+        ":x: **[queries-x]** `dbt build` finished with errors",
+        "- Target: `prod`",
+        ":red_circle: `b` error: boom",
+    ]
+
+
+async def test_no_report_is_posted_when_it_is_off(fake_runner, fake_api, monkeypatch):
+    """Post nothing without `report`, even with a webhook."""
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", f"{fake_api.url}/hook")
+
+    await run_dbt.fn(DbtRun(repository="https://example.invalid/q.git"))
+
+    assert fake_runner.instances
+    assert fake_api.requests == []

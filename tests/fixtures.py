@@ -55,7 +55,7 @@ from toolkit.executor.sources.registry import get_source
 from toolkit.executor.types import Origin
 from toolkit.gcs import create_store
 from toolkit.oracle import Oracle
-from toolkit.types import Columns, QueryParams
+from toolkit.types import Columns, QueryParams, TableReport
 
 from utils import tasks, utils
 from utils.couchdb import BCADASTRO
@@ -827,6 +827,71 @@ def commits():
         return DeltaTable(str(uri)).version() + 1
 
     return commits
+
+
+class FakeRunner:
+    """A `PrefectDbtRunner` that records the settings and the arguments."""
+
+    instances: ClassVar[list[FakeRunner]] = []
+    error: ClassVar[Exception | None] = None
+    result: ClassVar[SimpleNamespace] = SimpleNamespace(success=True)
+
+    def __init__(self, **kwargs: object) -> None:
+        """Record the keyword arguments and register the instance."""
+        self.kwargs = kwargs
+        self.invoked: list[list[str]] = []
+        FakeRunner.instances.append(self)
+
+    @property
+    def settings(self):
+        """Return the settings that the runner got."""
+        return self.kwargs["settings"]
+
+    def invoke(self, arguments: list[str]) -> SimpleNamespace:
+        """Record the arguments, and fail if an error is set. `deps` always works."""
+        self.invoked.append(arguments)
+        if arguments == ["deps"]:
+            return SimpleNamespace(success=True)
+        if FakeRunner.error is not None:
+            raise FakeRunner.error
+        return FakeRunner.result
+
+
+@pytest.fixture
+def fake_runner(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Replace the dbt runner, and clone into a folder of the test."""
+    project = tmp_path / "queries"
+    project.mkdir()
+    FakeRunner.instances = []
+    FakeRunner.error = None
+    FakeRunner.result = SimpleNamespace(success=True)
+    monkeypatch.setattr(tasks, "PrefectDbtRunner", FakeRunner)
+    monkeypatch.setattr(tasks, "clone_repository", lambda repository, destination: project)
+    return FakeRunner
+
+
+@pytest.fixture
+def dbt_node():
+    """Provide the `dbt_node` helper."""
+
+    def dbt_node(name: str, status: str, message: str = "") -> SimpleNamespace:
+        """Return a dbt result for a node, as dbt gives it."""
+        return SimpleNamespace(
+            status=status, message=message, node=SimpleNamespace(name=name, unique_id=f"model.x.{name}")
+        )
+
+    return dbt_node
+
+
+@pytest.fixture
+def report():
+    """Provide the `report` helper."""
+
+    def report(files: int) -> TableReport:
+        """Return the state of a Delta table that has this many files."""
+        return TableReport(version=0, files=files, bytes=0, last_commit=datetime.now(UTC), keys=[])
+
+    return report
 
 
 @pytest.fixture

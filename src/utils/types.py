@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Literal, NotRequired, TypedDict
 
 from pydantic import ConfigDict, JsonValue, with_config
-from toolkit.types import Chunks
+from toolkit.types import Chunks, TableReport
 
 type DumpMode = Literal["append", "overwrite"]
 type FileFormat = Literal["parquet", "csv", "json"]
@@ -101,3 +101,27 @@ class DatabaseDumpOptions(DumpOptions, total=False):
 
     batch_size: int
     concurrency: int
+
+
+class Maintenance(TypedDict):
+    """What the maintenance of one Delta table did: its state before and after."""
+
+    table: str
+    before: TableReport
+    after: TableReport
+    problems: list[str]
+
+
+class DbtNode(TypedDict):
+    """A dbt node that failed or warned: its name, its status and its message."""
+
+    name: str
+    status: str
+    message: str
+
+
+class DbtOutcome(TypedDict):
+    """What a dbt command did: whether it succeeded, and the nodes that went wrong."""
+
+    success: bool
+    nodes: list[DbtNode]

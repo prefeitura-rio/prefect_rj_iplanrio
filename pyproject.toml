@@ -124,6 +124,10 @@ reportUnknownLambdaType = false # lambdas passed to fakes
 reportAny = false # values from untyped fakes
 
 [[tool.basedpyright.executionEnvironments]]
+root = "src/utils/tasks.py"
+reportMissingTypeStubs = false # prefect_dbt ships no stubs
+
+[[tool.basedpyright.executionEnvironments]]
 root = "src/utils/hooks.py"
 reportUnusedParameter = false # Prefect calls a retry check and a hook with a fixed signature
 
@@ -176,6 +180,7 @@ select = [
   "A002",
   "ARG002",
   "ARG003",
+  "ARG005",
   "N802",
   "N815",
 ] # a fake follows the names and the signatures of the real API (`http.server`, the BigQuery client)

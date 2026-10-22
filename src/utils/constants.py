@@ -16,3 +16,9 @@ DISCORD_LIMIT: Final = 2000
 
 DOCUMENT_STORES: Final = frozenset({"couchdb", "mongodb"})
 """The database types that store documents, and read a selector instead of SQL."""
+
+DBT_FAILED: Final = ("error", "fail", "runtime error")
+"""The statuses of a dbt node that mean the node failed."""
+
+DBT_WARNED: Final = ("warn",)
+"""The statuses of a dbt node that mean a warning."""

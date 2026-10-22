@@ -3,14 +3,16 @@
 from asyncio import to_thread
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from httpx2 import AsyncClient
 from polars import DataFrame
 from prefect import task
+from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
 from pydantic import JsonValue, TypeAdapter
 from toolkit.bigquery import BigQuery
-from toolkit.dbt import DbtRun, execute_dbt
-from toolkit.delta import compact, maintain
+from toolkit.dbt import DbtRun, clone_repository, fill_token, find_project_dir, use_profiles
+from toolkit.delta import compact, find_layout_problems, inspect_table, maintain
 from toolkit.executor.constants import DEFAULT_BATCH_SIZE
 from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.requests import Files, Layer, Sheet
@@ -19,23 +21,28 @@ from toolkit.executor.sources.backends.files import FilesSource
 from toolkit.executor.sources.backends.gsheets import GSheetsSource
 from toolkit.executor.sources.protocols import DBConn
 from toolkit.executor.sources.registry import get_source
+from toolkit.gcs import create_store
 from toolkit.settings import DatabaseSettings, DiscordSettings
+from toolkit.telemetry import logger
 
-from .constants import RETRIES, RETRY_DELAY_SECONDS
+from .constants import DBT_FAILED, RETRIES, RETRY_DELAY_SECONDS
 from .hooks import retry_on_transient_error
 from .types import (
     Cloud,
     Database,
     DatabaseDumpOptions,
+    DbtOutcome,
     DumpMode,
     DumpOptions,
     FileFormat,
+    Maintenance,
     Read,
     Table,
 )
 from .utils import (
     Destination,
     bigquery_source,
+    discover_tables,
     dump_in_batches,
     epsg_code,
     files_glob,
@@ -43,7 +50,9 @@ from .utils import (
     post_discord,
     publish,
     read_dataframe,
+    read_nodes,
     read_request,
+    summarize_dbt,
     without_chunks,
     write_json_lines,
 )
@@ -310,15 +319,67 @@ async def notify_discord(message: str, *, webhook: str | None = None) -> None:
     await post_discord(url, message)
 
 
+@task
+async def list_delta_tables(bucket: str) -> list[Table]:
+    """List the Delta tables under the staging folder of the bucket."""
+    found = await discover_tables(create_store(bucket), bucket)
+    return [Table(dataset_id=item.dataset_id, table_id=item.table_id) for item in found]
+
+
 @retrying
-async def compact_delta_table(table: Table, *, bucket: str) -> None:
-    """Merge the small files of a Delta table, and remove the files that nothing reads."""
+async def maintain_delta_table(table: Table, *, bucket: str) -> Maintenance:
+    """Merge the small files of a Delta table and remove the files that nothing reads.
+
+    It writes a checkpoint too, and it returns the state of the table before and after.
+    It never changes the rows.
+    """
     destination = Destination(bucket, table["dataset_id"], table["table_id"])
+    before = await to_thread(inspect_table, destination.uri)
     await to_thread(compact, destination.uri)
     await to_thread(maintain, destination.uri)
+    after = await to_thread(inspect_table, destination.uri)
+
+    return Maintenance(
+        table=f"{table['dataset_id']}.{table['table_id']}",
+        before=before,
+        after=after,
+        problems=find_layout_problems(after["keys"]),
+    )
 
 
 @task
-async def run_dbt(request: DbtRun) -> None:
-    """Run one dbt command from a cloned queries repository."""
-    await to_thread(execute_dbt, request)
+async def run_dbt(request: DbtRun, *, report: bool = False) -> None:
+    """Clone the repository of `request` and run its dbt command in it.
+
+    The clone is temporary, and dbt runs `deps` before the command. A `profiles.yml` in
+    the project wins over the one in `~/.dbt`. With `report` and a Discord webhook, the
+    result goes to Discord, failed or not. Raise `RuntimeError` if the clone, `deps` or a
+    node fails, and `ValueError` for a repository that needs a missing token.
+    """
+
+    def run() -> DbtOutcome:
+        """Run the command in a clone and return what it did."""
+        with TemporaryDirectory(prefix="dbt_repository_") as directory:
+            project_dir = find_project_dir(
+                clone_repository(fill_token(request.repository), Path(directory) / "repository")
+            )
+
+            with use_profiles(project_dir):
+                runner = PrefectDbtRunner(settings=PrefectDbtSettings(project_dir=project_dir), raise_on_failure=False)
+                if not runner.invoke(["deps"]).success:
+                    raise RuntimeError("dbt deps failed")
+                result = runner.invoke(request.build_arguments())
+
+        return DbtOutcome(success=result.success, nodes=read_nodes(result))
+
+    outcome = await to_thread(run)
+    logger.info("dbt command finished: command=%s success=%s", request.command, outcome["success"])
+
+    webhook = DiscordSettings().DISCORD_WEBHOOK_URL.get_secret_value()
+
+    if report and webhook:
+        await post_discord(webhook, summarize_dbt(request, outcome))
+
+    if not outcome["success"]:
+        failed = ", ".join(node["name"] for node in outcome["nodes"] if node["status"] in DBT_FAILED)
+        raise RuntimeError(f"dbt {request.command} failed: {failed or 'see the log'}")

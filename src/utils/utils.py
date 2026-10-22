@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from http import HTTPStatus
 from importlib import import_module
 from json import dumps
+from os import environ
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import cast
@@ -30,7 +31,8 @@ from toolkit.chunks import (
     select_pending,
     split_chunks,
 )
-from toolkit.constants import BATCH_COLUMN, EXTRACTED_AT_COLUMN, TIMEZONE
+from toolkit.constants import ALL_KEY, BATCH_COLUMN, EXTRACTED_AT_COLUMN, TIMEZONE
+from toolkit.dbt import DbtRun
 from toolkit.delta import (
     compute_fingerprint,
     maintain,
@@ -46,13 +48,13 @@ from toolkit.executor.sources.backends.bigquery import BigQuerySource
 from toolkit.executor.sources.protocols import Source
 from toolkit.executor.types import Origin
 from toolkit.functions.native import now_sao_paulo
-from toolkit.gcs import create_store, delete_keys, list_keys, upload
+from toolkit.gcs import create_store, delete_keys, list_keys, list_prefixes, upload
 from toolkit.telemetry import logger
 from toolkit.types import Columns
 from toolkit.utils import select_columns
 
-from .constants import DISCORD_LIMIT, DOCUMENT_STORES, STAGING_PREFIX
-from .types import DumpMode, DumpOptions, FileFormat, Read
+from .constants import DBT_FAILED, DBT_WARNED, DISCORD_LIMIT, DOCUMENT_STORES, STAGING_PREFIX
+from .types import DbtNode, DbtOutcome, DumpMode, DumpOptions, FileFormat, Maintenance, Read
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +111,38 @@ async def publish(
         await bigquery.sync_delta_table(destination.table(project), destination.uri, connection)
 
 
+async def discover_tables(store: ObjectStore, bucket: str) -> list[Destination]:
+    """Return the Delta tables under the staging folder of a bucket.
+
+    A folder `staging/<dataset>/<table>` with a `_delta_log` is a table.
+    """
+    found: list[Destination] = []
+
+    for dataset in await list_prefixes(store, STAGING_PREFIX):
+        for folder in await list_prefixes(store, dataset):
+            if f"{folder}/_delta_log" in await list_prefixes(store, folder):
+                found.append(Destination(bucket, dataset.rsplit("/", 1)[-1], folder.rsplit("/", 1)[-1]))
+
+    return found
+
+
+def summarize_maintenance(done: Sequence[Maintenance], failed: Mapping[str, str]) -> str:
+    """Return the Discord message of a maintenance run, cut to the limit of Discord.
+
+    It lists the failed tables first, then the tables whose layout looks wrong, then
+    the files and bytes that the run removed.
+    """
+    lines = [f"**Delta maintenance**: {len(done)} ok, {len(failed)} failed"]
+    lines += [f":red_circle: `{name}`: {reason}" for name, reason in failed.items()]
+    lines += [f":warning: `{item['table']}`: {problem}" for item in done for problem in item["problems"]]
+
+    before = sum(item["before"]["files"] for item in done)
+    after = sum(item["after"]["files"] for item in done)
+    lines.append(f"Files: {before} to {after}")
+
+    return "\n".join(lines)[:DISCORD_LIMIT]
+
+
 def files_glob(data_path: Path, source_format: FileFormat) -> str:
     """Return the path of a file, or the glob of the files of a folder."""
     if data_path.is_dir():
@@ -136,6 +170,45 @@ def failure_message(flow_name: str, run_name: str, reason: str, url: str | None)
     """Return the Discord message of a failed flow run, short enough to send."""
     link = f"\n{url}" if url else ""
     return f":red_circle: **{flow_name}** `{run_name}` failed: {reason}{link}"[:DISCORD_LIMIT]
+
+
+def read_nodes(result: object) -> list[DbtNode]:
+    """Return the nodes of a dbt result that failed or warned, in the order of dbt.
+
+    A command with no result per node, such as `debug`, has none.
+    """
+    items = cast("Sequence[object]", getattr(getattr(result, "result", None), "results", ()))
+    nodes: list[DbtNode] = []
+
+    for item in items:
+        status = str(getattr(item, "status", ""))
+        if status in (*DBT_FAILED, *DBT_WARNED):
+            node = getattr(item, "node", item)
+            name = getattr(node, "name", None) or getattr(node, "unique_id", "")
+            nodes.append(DbtNode(name=str(name), status=status, message=str(getattr(item, "message", None) or "")))
+
+    return nodes
+
+
+def summarize_dbt(request: DbtRun, outcome: DbtOutcome) -> str:
+    """Return the Discord message of a dbt run, cut to the limit of Discord.
+
+    The failed and warned nodes are listed only if there are some. The repository shows
+    by its name, never by its URL, because the URL can hold a token.
+    """
+    name = request.repository.rsplit("/", 1)[-1].removesuffix(".git")
+    mark = ":white_check_mark:" if outcome["success"] else ":x:"
+    ending = "without errors" if outcome["success"] else "with errors"
+    lines = [f"{mark} **[{name}]** `dbt {request.command}` finished {ending}", f"- Target: `{request.target}`"]
+    lines += [
+        f"- {label}: `{value}`" for label, value in (("Select", request.select), ("Exclude", request.exclude)) if value
+    ]
+
+    for node in outcome["nodes"]:
+        icon = ":warning:" if node["status"] in DBT_WARNED else ":red_circle:"
+        lines.append(f"{icon} `{node['name']}` {node['status']}: {node['message']}")
+
+    return "\n".join(lines)[:DISCORD_LIMIT]
 
 
 def hash_config(origin: Origin, options: DumpOptions) -> str:
@@ -172,7 +245,7 @@ def cut_chunks(options: DumpOptions, dump_mode: DumpMode) -> list[Chunk]:
         return [Chunk(capture.date().isoformat(), 0, 0)]
     if spec:
         return [*split_chunks(spec, now_sao_paulo().date()), NULL_CHUNK]
-    return [Chunk("all", 0, 0)]
+    return [Chunk(ALL_KEY, 0, 0)]
 
 
 async def dump_to_delta(
@@ -462,6 +535,27 @@ def validate_records(records: Sequence[Mapping[str, JsonValue]], schema: type) -
                 for problem in error.errors()
             )
             raise ValueError(f"record {index}: {problems}") from None
+
+
+def read_env(name: str) -> str:
+    """Return the value of an environment variable.
+
+    Raise `ValueError` if the variable is not set or is empty.
+    """
+    value = environ.get(name)
+    if not value:
+        raise ValueError(f"The environment variable {name} is not set")
+
+    return value
+
+
+def capture_options(dump_mode: DumpMode) -> DumpOptions:
+    """Return the options that make an `append` run safe to send again, or none.
+
+    An `append` of a run adds its rows under the capture time of the run, so a retry of
+    the same run adds nothing. An `overwrite` replaces the table and needs none.
+    """
+    return DumpOptions(capture=capture_time()) if dump_mode == "append" else DumpOptions()
 
 
 def capture_time() -> datetime:

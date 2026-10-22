@@ -4,6 +4,7 @@ from decimal import Decimal
 from json import loads
 from pathlib import Path
 from re import compile as compile_pattern
+from types import SimpleNamespace
 from typing import Unpack, cast
 
 import pytest
@@ -19,6 +20,7 @@ from pyarrow import timestamp as arrow_timestamp
 from pyarrow.parquet import write_table
 from toolkit import gcs
 from toolkit.constants import BATCH_COLUMN
+from toolkit.dbt import DbtRun
 from toolkit.executor.requests import Changes, Files, Query
 from toolkit.executor.requests import Table as TableOrigin
 from toolkit.executor.sources.backends.files import FilesSource
@@ -26,12 +28,13 @@ from toolkit.types import Chunks
 
 from utils import utils
 from utils.constants import DISCORD_LIMIT
-from utils.types import DumpMode, DumpOptions
+from utils.types import DbtNode, DbtOutcome, DumpMode, DumpOptions, Maintenance
 from utils.utils import (
     Destination,
     capture_time,
     clear_legacy,
     clear_prefix,
+    discover_tables,
     dump_in_batches,
     dump_to_delta,
     epsg_code,
@@ -43,7 +46,10 @@ from utils.utils import (
     load_to_delta,
     publish,
     read_dataframe,
+    read_nodes,
     read_request,
+    summarize_dbt,
+    summarize_maintenance,
     validate_records,
     without_chunks,
     write_json_lines,
@@ -1046,3 +1052,117 @@ def test_a_records_schema_that_cannot_be_found_is_refused(path, message):
     """Raise `ValueError` that says what is wrong with the path."""
     with pytest.raises(ValueError, match=message):
         load_records_schema(path)
+
+
+async def test_discovery_keeps_only_the_folders_that_have_a_delta_log(store, put):
+    """Find the tables of the staging folder and skip a folder of loose files."""
+    await put(
+        store,
+        "staging/ds/tb/_delta_log/00000000000000000000.json",
+        "staging/ds/tb/batch=all/a.parquet",
+        "staging/ds/old/part-1.parquet",
+        "staging/other/tb2/_delta_log/00000000000000000000.json",
+        "elsewhere/ds/tb3/_delta_log/00000000000000000000.json",
+    )
+
+    found = await discover_tables(store, "b")
+
+    assert found == [Destination("b", "ds", "tb"), Destination("b", "other", "tb2")]
+
+
+def test_the_maintenance_message_lists_the_failures_then_the_layout_problems(report):
+    """Put the failed tables first, and count the files that the run merged."""
+    done = [
+        Maintenance(table="ds.a", before=report(10), after=report(2), problems=[]),
+        Maintenance(table="ds.b", before=report(5), after=report(1), problems=["all next to chunk keys"]),
+    ]
+
+    lines = summarize_maintenance(done, {"ds.c": "no connection"}).splitlines()
+
+    assert lines == [
+        "**Delta maintenance**: 2 ok, 1 failed",
+        ":red_circle: `ds.c`: no connection",
+        ":warning: `ds.b`: all next to chunk keys",
+        "Files: 15 to 3",
+    ]
+
+
+def test_the_maintenance_message_stays_within_the_limit_of_discord():
+    """Cut a long list of failures to what Discord accepts."""
+    failed = {f"ds.t{number}": "x" * 100 for number in range(100)}
+
+    assert len(summarize_maintenance([], failed)) == DISCORD_LIMIT
+
+
+@pytest.mark.parametrize(
+    ("outcome", "expected"),
+    [
+        pytest.param(
+            DbtOutcome(success=True, nodes=[]),
+            [
+                ":white_check_mark: **[queries-x]** `dbt build` finished without errors",
+                "- Target: `prod`",
+                "- Select: `tag:daily`",
+            ],
+            id="a_clean_run_lists_no_node",
+        ),
+        pytest.param(
+            DbtOutcome(
+                success=False,
+                nodes=[DbtNode(name="a", status="fail", message="m1"), DbtNode(name="b", status="warn", message="m2")],
+            ),
+            [
+                ":x: **[queries-x]** `dbt build` finished with errors",
+                "- Target: `prod`",
+                "- Select: `tag:daily`",
+                ":red_circle: `a` fail: m1",
+                ":warning: `b` warn: m2",
+            ],
+            id="the_nodes_that_went_wrong_are_listed",
+        ),
+    ],
+)
+def test_the_dbt_message_names_the_repository_and_never_its_url(outcome, expected):
+    """Show the name of the repository and the nodes, with no URL (it can hold a token)."""
+    request = DbtRun(
+        repository="https://TOKEN@github.com/org/queries-x.git", command="build", target="prod", select="tag:daily"
+    )
+
+    message = summarize_dbt(request, outcome)
+
+    assert message.splitlines() == expected
+    assert "TOKEN" not in message
+
+
+def test_the_dbt_message_stays_within_the_limit_of_discord():
+    """Cut a long list of nodes to what Discord accepts."""
+    nodes = [DbtNode(name=f"n{number}", status="error", message="x" * 100) for number in range(100)]
+
+    message = summarize_dbt(DbtRun(repository="https://x/y.git"), DbtOutcome(success=False, nodes=nodes))
+
+    assert len(message) == DISCORD_LIMIT
+
+
+def test_only_the_nodes_that_failed_or_warned_are_read_from_a_dbt_result(dbt_node):
+    """Skip the nodes that passed, and take a node name or a plain unique id."""
+    result = SimpleNamespace(
+        result=SimpleNamespace(
+            results=[
+                dbt_node("ok", "success"),
+                dbt_node("bad", "error", "boom"),
+                dbt_node("late", "runtime error"),
+                SimpleNamespace(status="fail", message=None, unique_id="operation.x.y"),
+            ]
+        )
+    )
+
+    assert read_nodes(result) == [
+        DbtNode(name="bad", status="error", message="boom"),
+        DbtNode(name="late", status="runtime error", message=""),
+        DbtNode(name="operation.x.y", status="fail", message=""),
+    ]
+
+
+def test_a_dbt_result_with_no_nodes_has_none_to_read():
+    """Give an empty list for a command such as `debug`."""
+    assert read_nodes(SimpleNamespace(success=True)) == []
