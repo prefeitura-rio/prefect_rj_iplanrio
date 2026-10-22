@@ -201,7 +201,7 @@ Adicione apenas quando a necessidade existir concretamente:
 
 ### 3.3 Proibidos nos diretórios de pipeline
 
-O seguinte nunca deve ser commitado em um diretório de pipeline:
+`nu scripts/checks.nu lint layout [pipeline]` confere esta seção e a 4: os arquivos proibidos, o nome do flow, o `@task` fora de `tasks.py`, o `@flow` fora de `flow.py`, o `import prefect` em `helpers` e o nome de função com `_`. O seguinte nunca deve ser commitado em um diretório de pipeline:
 
 | Arquivo / padrão                                                       | Motivo                                                                                                                                                      |
 | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -215,7 +215,7 @@ O seguinte nunca deve ser commitado em um diretório de pipeline:
 | `FIX_SUMMARY.md`, `MIGRATION_NOTES.md`, `MIGRACAO_*.md`                | Artefatos de sessões de LLM. Delete antes de commitar.                                                                                                      |
 | `.python-version`                                                      | A versão do Python é fixada na raiz do workspace no `pyproject.toml`.                                                                                       |
 | `.DS_Store`                                                            | Metadados do macOS. Coberto pelo `.gitignore` — se aparecer, o gitignore falhou.                                                                            |
-| Arquivos de dados avulsos (`.json`, `.xml`, `.sql` fora de `queries/`) | Fixtures pertencem a `tests/fixtures/`; scripts DDL pertencem a um repositório de migrations.                                                               |
+| Arquivos de dados avulsos (`.json`, `.xml`, `.sql` fora de `queries/`) | Fixtures pertencem a `tests/fixtures/`; scripts DDL pertencem a um repositório de migrations. A exceção é `pipelines/`, com os estágios de agregação do `MongoDB`, um `.json` por agregação.   |
 
 ## 4. Responsabilidades dos módulos
 

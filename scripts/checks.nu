@@ -81,6 +81,79 @@ def 'main lint telemetry' []: nothing -> nothing {
     }
 }
 
+# List the folders of the pipelines to check: the names given, or every pipeline.
+def pipeline-folders [names: list<string>]: nothing -> list<string> {
+    if ($names | is-empty) {
+        ls pipelines | where type == dir | get name
+    } else {
+        $names | each {|name| $'pipelines/($name)' }
+    }
+}
+
+# List how one pipeline breaks the file contract of the style guide (sections 3.3 and 4).
+def layout-problems [folder: string]: nothing -> list<string> {
+    let name = $folder | path basename
+    let root = $folder | path expand
+    let files = glob $'($root)/**/*' | where {|file| ($file | path type) == file and not ($file | str contains '__pycache__') }
+    let relative = $files | each {|file| $file | path relative-to $root }
+    let python = $relative | where {|file| ($file | str ends-with '.py') and not ($file | str starts-with 'tests/') }
+    let forbidden_names = ['__init__.py' 'utils.py' 'env.py' 'schedules.py' 'build_prefect_yaml.py' '.python-version' '.DS_Store']
+
+    let forbidden = $relative | where {|file|
+        let base = $file | path basename
+        ($base in $forbidden_names) or ($file | str starts-with 'utils/') or ($base =~ '^scheduler.*\.ya?ml$') or ($file == 'helpers/tasks.py') or ($file =~ '^test_[^/]*\.py$') or ($base =~ '^(FIX_SUMMARY|MIGRATION_NOTES|MIGRACAO_)')
+    } | each {|file| $'($name)/($file): forbidden file' }
+
+    let loose = $relative | where {|file|
+        ($file =~ '\.(json|xml|sql|jq)$') and not ($file | str starts-with 'queries/') and not ($file | str starts-with 'tests/') and not ($file | str starts-with 'pipelines/')
+    } | each {|file| $'($name)/($file): data file outside queries/, tests/ and pipelines/' }
+
+    let flow = if ('flow.py' in $relative) {
+        let text = open --raw $'($root)/flow.py'
+        let named = $text =~ ('(?m)^(async )?def ' + $name + '\(|^' + $name + ' = ')
+        let task = $text =~ '(?m)^@task'
+        []
+        | append (if $named { [] } else { [$'($name)/flow.py: no flow named ($name)'] })
+        | append (if $task { [$'($name)/flow.py: @task belongs in tasks.py'] } else { [] })
+    } else { [$'($name)/flow.py: missing'] }
+
+    let roles = $python | each {|file|
+        let text = open --raw $'($root)/($file)'
+        let base = $file | path basename
+        let in_helpers = ($base == 'helpers.py') or ($file | str starts-with 'helpers/')
+        []
+        | append (if (($base == 'tasks.py') and ($text =~ '(?m)^@flow')) { [$'($name)/($file): @flow belongs in flow.py'] } else { [] })
+        | append (if ($in_helpers and ($text =~ '(?m)^(from prefect import|import prefect)')) { [$'($name)/($file): helpers do not import Prefect'] } else { [] })
+        | append (if ($text =~ '(?m)^\s*(async )?def _[a-z]') { [$'($name)/($file): function name starts with an underscore'] } else { [] })
+    } | flatten
+
+    $forbidden | append $loose | append $flow | append $roles
+}
+
+# Fail when a pipeline breaks the file contract of the style guide.
+def 'main lint layout' [...names: string]: nothing -> nothing {
+    let problems = pipeline-folders $names | each {|folder| layout-problems $folder } | flatten
+
+    if ($problems | is-not-empty) {
+        fail $'Fix the layout:(char nl)($problems | str join (char nl))' {command: 'lint layout', span: (metadata $problems).span}
+    }
+}
+
+# Check style, types and layout of the named pipelines, or of all of them.
+def 'main lint pipelines' [...names: string]: nothing -> nothing {
+    let folders = pipeline-folders $names
+
+    in-project . ruff check ...$folders
+    in-project . ruff format --check ...$folders
+
+    for folder in $folders {
+        let python = ^uv run --frozen --package ($folder | path basename) python -c 'import sys; print(sys.executable)' | str trim
+        in-project . basedpyright --pythonpath $python $folder
+    }
+
+    main lint layout ...$names
+}
+
 # Lint the SQL templates of the toolkit.
 def 'main lint sql' []: nothing -> nothing {
     in-project packages/toolkit sqlfluff lint toolkit/executor/templates
