@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 from bson import Decimal128
 from parity_dataset import rows
 from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 
 ENV = json.loads((Path(environ.get("PARITY_LAB", "/tmp/toolkit-parity")) / "env.json").read_text())
 
@@ -67,11 +68,20 @@ def mongodb() -> None:
     else:
         raise SystemExit("mongod did not open its port")
 
-    anonymous = MongoClient(entry["host"], entry["port"])
-    anonymous.admin.command("createUser", entry["user"], pwd=entry["password"], roles=[{"role": "root", "db": "admin"}])
+    if not entry.get("image"):
+        anonymous = MongoClient(entry["host"], entry["port"])
+        anonymous.admin.command(
+            "createUser", entry["user"], pwd=entry["password"], roles=[{"role": "root", "db": "admin"}]
+        )
     client = MongoClient(
         entry["host"], entry["port"], username=entry["user"], password=entry["password"], authSource="admin"
     )
+    for _ in range(120):
+        try:
+            client.admin.command("ping")
+            break
+        except PyMongoError:
+            time.sleep(1)
     documents = [
         {
             "id": row["id"],

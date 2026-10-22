@@ -1,6 +1,7 @@
 import pytest
+from pymongoarrow.api import Schema
+from pymongoarrow.types import ObjectIdType
 
-from toolkit.arrow_bson import ObjectIdType, Schema
 from toolkit.executor.engines.base import Engine, load_engines
 from toolkit.executor.engines.couchdb import CouchDBEngine
 from toolkit.executor.engines.duckdb import DuckDBEngine

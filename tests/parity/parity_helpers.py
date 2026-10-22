@@ -8,7 +8,7 @@ from pathlib import Path
 
 from parity_dataset import Order
 from parity_dataset import rows as dataset_rows
-from parity_lab import source_of
+from parity_lab import build_source
 from pyarrow import Table
 from pyarrow.parquet import read_table
 from toolkit.chunks import Rows
@@ -53,7 +53,7 @@ def filters_for(engine: str, kind: str) -> list[str]:
 
 async def stage(name: str, rows: Rows, columns=(), **options: object) -> Table:
     """Write a chunk of `orders` through the engine of `name`, and return the file as a table."""
-    async with Engine.from_source(source_of(name, **options)) as engine:
+    async with Engine.from_source(build_source(name, **options)) as engine:
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder) / "out.parquet"
             await engine.materialize(target, rows, columns)

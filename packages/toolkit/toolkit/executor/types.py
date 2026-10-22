@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from polars import DataType
 from pyarrow import Table
 
-from .requests import Changes, Files, Layer, Query, Sheet
+from .requests import Aggregate, Changes, Files, Layer, Query, Sheet
 from .requests import Table as TableOrigin
 from .schema import Column
 from .sources.models import CouchDBItem
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from pymongo.collection import Collection
     from pymongoarrow.api import Schema
 
-type Origin = TableOrigin | Query | Changes | Files | Layer | Sheet
+type Origin = TableOrigin | Query | Aggregate | Changes | Files | Layer | Sheet
 """What a source reads."""
 
 type Expected = Mapping[str, Column | DataType | type[DataType]]
@@ -28,3 +28,8 @@ type Fetch = Callable[
     [Collection[dict[str, object]], Mapping[str, object], Schema, int], Table
 ]
 """Read one page of a collection: query, schema and limit, sorted by `_id`."""
+
+type Run = Callable[
+    [Collection[dict[str, object]], Sequence[Mapping[str, object]], Schema], Table
+]
+"""Run an aggregation of a collection: the stages and the schema of the result."""

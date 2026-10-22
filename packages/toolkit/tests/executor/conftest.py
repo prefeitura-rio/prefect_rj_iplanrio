@@ -471,14 +471,14 @@ def numbers(tmp_path) -> Executor:
 
 
 @pytest.fixture
-def pages_of():
-    """Provide the `pages_of` helper."""
+def collect_pages():
+    """Provide the `collect_pages` helper."""
 
-    async def pages_of(engine: MongoDBEngine, origin, rows: Rows) -> list[Table]:
+    async def collect_pages(engine: MongoDBEngine, origin, rows: Rows) -> list[Table]:
         """Return every page that the engine reads."""
         return [table async for table in engine.read_pages(origin, rows)]
 
-    return pages_of
+    return collect_pages
 
 
 @pytest.fixture

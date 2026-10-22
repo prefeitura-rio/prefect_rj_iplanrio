@@ -6,7 +6,8 @@ from os import environ
 from pathlib import Path
 
 from pyarrow import schema, string
-from toolkit.arrow_bson import Decimal128Type, ObjectIdType, Schema
+from pymongoarrow.api import Schema
+from pymongoarrow.types import Decimal128Type, ObjectIdType
 from toolkit.executor.requests import Table
 from toolkit.executor.sources.backends.couchdb import CouchDBSource
 from toolkit.executor.sources.backends.files import FilesSource
@@ -55,7 +56,7 @@ def available() -> list[str]:
     return [name for name in ENGINES if name in known]
 
 
-def conn_of(name: str) -> DBConn:
+def build_conn(name: str) -> DBConn:
     """Return the connection of an engine."""
     entry = environment()[name]
 
@@ -64,10 +65,10 @@ def conn_of(name: str) -> DBConn:
     )
 
 
-def source_of(name: str, origin: Origin | None = None, **options: object) -> Source:
+def build_source(name: str, origin: Origin | None = None, **options: object) -> Source:
     """Return the source of an engine, reading `orders` unless another origin is given."""
     entry = environment()[name]
-    conn = conn_of(name)
+    conn = build_conn(name)
     origin = origin or Table(str(entry["table"]))
 
     match name:

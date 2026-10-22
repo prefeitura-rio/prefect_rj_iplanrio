@@ -1,7 +1,7 @@
 """The MongoDB engine: it reads a collection in pages and writes chunks as Parquet."""
 
 from asyncio import to_thread
-from collections.abc import AsyncGenerator, Mapping
+from collections.abc import AsyncGenerator, Mapping, Sequence
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, time
@@ -16,20 +16,22 @@ from pyarrow.parquet import ParquetWriter
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
+from pymongoarrow.api import Schema, aggregate_arrow_all, find_arrow_all
+from pymongoarrow.types import Decimal128Type, ObjectIdType
 
-from ...arrow_bson import Decimal128Type, ObjectIdType, Schema, find_arrow_all
 from ...chunks import NULL_CHUNK, Chunk, Rows
-from ...types import Columns
+from ...types import Chunks, Columns
 from ...utils import filter_selectors
 from ..constants import DEFAULT_BATCH_SIZE, MONGO_ID_FIELD
 from ..requests import (
+    Aggregate,
     Query,
     UnsupportedRequestError,
 )
 from ..requests import Table as TableOrigin
 from ..sources.backends.mongodb import MongoDBSource
 from ..sources.protocols import Source
-from ..types import Fetch, Origin
+from ..types import Fetch, Origin, Run
 from .base import Engine, require_origin
 from .duckdb import DuckDBEngine, describe_extracted, materialize_extracted
 
@@ -44,6 +46,15 @@ def fetch_page(
     return find_arrow_all(
         collection, query, schema=schema, sort=[(MONGO_ID_FIELD, 1)], limit=limit
     )
+
+
+def run_aggregate(
+    collection: Collection[dict[str, object]],
+    pipeline: Sequence[Mapping[str, object]],
+    schema: Schema,
+) -> Table:
+    """Run an aggregation with PyMongoArrow and return the whole result."""
+    return aggregate_arrow_all(collection, list(pipeline), schema=schema)
 
 
 def make_portable(table: Table) -> Table:
@@ -101,13 +112,16 @@ class MongoDBEngine(Engine):
     and the null chunk keeps the documents with no value. The `shape` of the source is
     a PyMongoArrow schema with the field `_id`, and its `batch_size` is the documents of
     one page. The pages go to a raw Parquet file, and a DuckDB engine of its own writes
-    the final file from it. `fetch` reads one page, and a test replaces it.
+    the final file from it. `fetch` reads one page, and a test replaces it. An
+    aggregation reads a chunk in one result, with no pages, because its stages can
+    change `_id`, and `aggregate` runs it. `batch_size` does not apply to it.
     """
 
     source_type: ClassVar[type[Source]] = MongoDBSource
 
     source: MongoDBSource
     fetch: Fetch = field(default=fetch_page)
+    aggregate: Run = field(default=run_aggregate)
     duckdb: DuckDBEngine = field(init=False, repr=False)
     database: Database[dict[str, object]] = field(init=False, repr=False)
 
@@ -159,6 +173,16 @@ class MongoDBEngine(Engine):
         """
         async for table in self.read_pages(require_origin(self.source), Rows()):
             yield DataFrame(table)
+
+    @override
+    def check_chunks(self, chunks: Chunks, described: Mapping[str, str]) -> None:
+        """Raise `ValueError` unless the chunk column fits the width of the chunks.
+
+        An aggregation names the field of the stored documents, and its result can hold
+        the field with another type, so only a read of a collection is checked.
+        """
+        if not isinstance(self.source.origin, Aggregate):
+            super().check_chunks(chunks, described)
 
     @override
     async def describe(self) -> dict[str, str]:
@@ -215,8 +239,8 @@ class MongoDBEngine(Engine):
     async def read_pages(self, origin: Origin, rows: Rows) -> AsyncGenerator[Table]:
         """Yield the pages of the chunk of an origin, and none for an empty read.
 
-        Raise `ValueError` for filters that are not JSON objects, and for a query with
-        no collection.
+        Raise `ValueError` for filters that are not JSON objects, for a query with no
+        collection, and for a paged read when the shape has no `_id`.
         """
         selector: dict[str, object] = {}
 
@@ -230,6 +254,8 @@ class MongoDBEngine(Engine):
                     )
                 collection_name = table
                 selector = loads(text)
+            case Aggregate(_, table):
+                collection_name = table
             case _:
                 raise UnsupportedRequestError("MongoDBEngine", origin)
 
@@ -248,6 +274,19 @@ class MongoDBEngine(Engine):
             return
 
         collection = self.database[collection_name]
+
+        if isinstance(origin, Aggregate):
+            stages = [*([{"$match": query}] if query else []), *loads(origin.stages)]
+            result = await to_thread(self.aggregate, collection, stages, self.schema)
+            if result.num_rows:
+                yield make_portable(result)
+            return
+
+        if MONGO_ID_FIELD not in self.schema.typemap:
+            raise ValueError(
+                f"A paged read needs the field {MONGO_ID_FIELD} in the shape"
+            )
+
         last: object = None
 
         while True:

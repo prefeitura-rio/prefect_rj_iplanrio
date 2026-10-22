@@ -12,9 +12,9 @@ import psycopg
 import pytest
 from deltalake import DeltaTable
 from parity_helpers import DOCUMENTS, canonical, column, expected
-from parity_lab import available, environment, source_of
+from parity_lab import available, build_source, environment
 from pymongo import MongoClient
-from toolkit.arrow_bson import find_arrow_all
+from pymongoarrow.api import find_arrow_all
 from toolkit.chunks import split_chunks
 from toolkit.constants import BATCH_COLUMN
 from toolkit.executor import couchdb as couchdb_module
@@ -28,12 +28,12 @@ pytestmark = pytest.mark.parity
 TODAY = date(2024, 6, 1)
 
 
-def chunks_of(engine: str) -> Chunks:
+def build_chunks(engine: str) -> Chunks:
     """Return chunks of 100 ids over the id column of an engine, from 0 up to 399."""
     return Chunks(column=column(engine), width=100, begin=0, end=399)
 
 
-def table_of(uri: Path, engine: str):
+def load_table(uri: Path, engine: str):
     """Return the rows of the Delta table, and the chunk of each id.
 
     MongoDB keeps `_id` as `id` and the business id as `id_1`, because the names of
@@ -53,15 +53,15 @@ def table_of(uri: Path, engine: str):
 
 async def dump(engine: str, uri: Path, **options: object) -> None:
     """Dump `orders` of an engine into a Delta table."""
-    await dump_to_delta(source_of(engine, **options), str(uri), "append", {"chunks": chunks_of(engine)})
+    await dump_to_delta(build_source(engine, **options), str(uri), "append", {"chunks": build_chunks(engine)})
 
 
 async def test_every_engine_loads_the_same_rows_in_the_same_chunks(engine, tmp_path):
     """Load the 303 rows that the chunks cover, each in the chunk that holds its id."""
     await dump(engine, tmp_path / "t")
 
-    table, chunks_of_ids = table_of(tmp_path / "t", engine)
-    cut = split_chunks(chunks_of(engine), TODAY)
+    table, chunks_of_ids = load_table(tmp_path / "t", engine)
+    cut = split_chunks(build_chunks(engine), TODAY)
     owner = {number: chunk.key for chunk in cut for number in range(chunk.start, chunk.stop)}
 
     assert canonical(table) == expected(lambda row: row["id"] < 400)
@@ -85,8 +85,8 @@ async def test_concurrent_chunks_load_the_same_table(tmp_path, workers):
         await dump(name, tmp_path / f"{name}-1", concurrency=1)
         await dump(name, tmp_path / f"{name}-n", concurrency=workers)
 
-        one, _ = table_of(tmp_path / f"{name}-1", name)
-        many, _ = table_of(tmp_path / f"{name}-n", name)
+        one, _ = load_table(tmp_path / f"{name}-1", name)
+        many, _ = load_table(tmp_path / f"{name}-n", name)
         assert canonical(many) == canonical(one) == expected(lambda row: row["id"] < 400)
 
 
@@ -143,13 +143,13 @@ async def test_a_changed_row_replaces_its_chunk_and_only_that_one(name, tmp_path
     original = {1: None}
     await dump(name, tmp_path / "t")
     before = DeltaTable(str(tmp_path / "t")).version()
-    original = {row[0]: row[1] for row in canonical(table_of(tmp_path / "t", name)[0])}
+    original = {row[0]: row[1] for row in canonical(load_table(tmp_path / "t", name)[0])}
     nome = original[150]
 
     try:
         UPDATES[name](150, "alterado")
         await dump(name, tmp_path / "t")
-        after = {row[0]: row[1] for row in canonical(table_of(tmp_path / "t", name)[0])}
+        after = {row[0]: row[1] for row in canonical(load_table(tmp_path / "t", name)[0])}
     finally:
         UPDATES[name](150, nome)
 
@@ -167,9 +167,9 @@ async def test_date_chunks_load_every_row_in_the_chunk_of_its_month(engine, tmp_
 
     name = {"oracle": "DIA"}.get(engine, "dia")
     chunks = Chunks(column=name, width="month", begin="2024-01-01", end="2024-03-31")
-    await dump_to_delta(source_of(engine), str(tmp_path / "t"), "append", {"chunks": chunks})
+    await dump_to_delta(build_source(engine), str(tmp_path / "t"), "append", {"chunks": chunks})
 
-    table, _ = table_of(tmp_path / "t", engine)
+    table, _ = load_table(tmp_path / "t", engine)
     month = {row["id"]: row[BATCH_COLUMN] for row in table.to_pylist()}
 
     assert canonical(table) == expected()
@@ -218,10 +218,10 @@ async def test_chunks_really_overlap_on_the_real_server(monkeypatch, tmp_path):
 async def test_mongodb_keeps_its_business_id_when_select_leaves_the_object_id_out(tmp_path):
     """README: `select` without `_id` leaves the field `id` with the name `id`."""
     await dump_to_delta(
-        source_of("mongodb"),
+        build_source("mongodb"),
         str(tmp_path / "t"),
         "append",
-        {"chunks": chunks_of("mongodb"), "select": ["id", "nome", "dia", "valor"]},
+        {"chunks": build_chunks("mongodb"), "select": ["id", "nome", "dia", "valor"]},
     )
 
     table = DeltaTable(str(tmp_path / "t")).to_pyarrow_table()
@@ -235,7 +235,7 @@ async def test_select_loads_only_the_columns_that_it_names(engine, tmp_path):
     names = [column(engine), "NOME" if engine == "oracle" else "nome"]
 
     await dump_to_delta(
-        source_of(engine), str(tmp_path / "t"), "append", {"chunks": chunks_of(engine), "select": names}
+        build_source(engine), str(tmp_path / "t"), "append", {"chunks": build_chunks(engine), "select": names}
     )
 
     assert DeltaTable(str(tmp_path / "t")).to_pyarrow_table().column_names == ["id", "nome", BATCH_COLUMN]

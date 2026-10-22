@@ -27,6 +27,18 @@ class Query:
 
 
 @dataclass(frozen=True, slots=True)
+class Aggregate:
+    """An aggregation of a MongoDB collection: its stages as JSON text, and the name.
+
+    The stages run after a `$match` that holds the filters and the chunk, so the chunk
+    field is the one of the stored documents.
+    """
+
+    stages: str
+    table: str
+
+
+@dataclass(frozen=True, slots=True)
 class Changes:
     """The changes of a CouchDB database after a sequence.
 

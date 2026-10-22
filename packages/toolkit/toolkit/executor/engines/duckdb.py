@@ -25,6 +25,7 @@ from ...utils import filter_conditions
 from ..constants import ALIAS, DEFAULT_BATCH_SIZE, SECRET
 from ..render import render_template
 from ..requests import (
+    Aggregate,
     Changes,
     Files,
     Layer,
@@ -86,7 +87,8 @@ def read_next_batch(batches: Iterator[DataFrame]) -> DataFrame | None:
 def build_origin_values(origin: Origin) -> dict[str, TemplateValue]:
     """Return the template values that read an origin, for the `source_table` macro.
 
-    Raise `UnsupportedRequestError` for `Changes`, which only CouchDB answers.
+    Raise `UnsupportedRequestError` for `Changes` and `Aggregate`, which only CouchDB
+    and MongoDB answer.
     """
     base: dict[str, TemplateValue] = {
         "alias": Literal(ALIAS),
@@ -115,7 +117,7 @@ def build_origin_values(origin: Origin) -> dict[str, TemplateValue]:
         case Sheet(identifier, name):
             values = {**base, "type": "gsheets", "query": Literal(identifier)}
             return {**values, "sheet": Literal(name)} if name else values
-        case Changes():
+        case Changes() | Aggregate():
             raise UnsupportedRequestError("DuckDBEngine", origin)
 
 

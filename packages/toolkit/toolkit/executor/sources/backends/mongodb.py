@@ -6,10 +6,10 @@ from urllib.parse import quote_plus, urlencode
 
 from pydantic import BeforeValidator, InstanceOf, PositiveInt
 from pydantic.dataclasses import dataclass
+from pymongoarrow.api import Schema
 
-from ....arrow_bson import Schema
 from ....constants import MONGO_BATCH_ROWS
-from ...constants import DEFAULT_CONCURRENCY, MONGO_ID_FIELD, SOURCE_CONFIG
+from ...constants import DEFAULT_CONCURRENCY, SOURCE_CONFIG
 from ..base import Registered
 from ..protocols import DBConn
 
@@ -18,7 +18,7 @@ def load_schema(value: str | Schema) -> Schema:
     """Return the PyMongoArrow schema that a path `module:name` names.
 
     Any other value is returned as it is. Raise `ValueError` if the path does not lead
-    to a schema, or if the schema has no field `_id`, which pages the read.
+    to a schema.
     """
     if not isinstance(value, str):
         return value
@@ -35,10 +35,8 @@ def load_schema(value: str | Schema) -> Schema:
         raise ValueError(f"The shape {path!r} cannot be imported: {error}") from error
 
     match found:
-        case Schema() if MONGO_ID_FIELD in found.typemap:
-            return found
         case Schema():
-            raise ValueError(f"The shape {path!r} needs the field {MONGO_ID_FIELD}")
+            return found
         case _:
             raise ValueError(f"The shape {path!r} is not a PyMongoArrow Schema")
 
@@ -47,10 +45,11 @@ def load_schema(value: str | Schema) -> Schema:
 class MongoDBSource(Registered):
     """A MongoDB server that the `MongoDBEngine` reads in pages of `_id`.
 
-    `shape` is the PyMongoArrow schema of the collection, as a `Schema` or the path
-    `module:name` of one. `batch_size` is the documents of one page, `auth_source` the
-    database that holds the user, `tls` turns TLS on or off, and `concurrency` is the
-    chunks that a dump reads at the same time.
+    `shape` is the PyMongoArrow schema of what a read returns, as a `Schema` or the path
+    `module:name` of one. A paged read of a collection needs the field `_id` in it.
+    `batch_size` is the documents of one page, `auth_source` the database that holds
+    the user, `tls` turns TLS on or off, and `concurrency` is the chunks that a dump
+    reads at the same time.
     """
 
     name: ClassVar[str] = "mongodb"

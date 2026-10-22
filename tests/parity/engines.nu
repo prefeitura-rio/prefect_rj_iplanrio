@@ -6,6 +6,9 @@
 #   nu tests/parity/engines.nu down
 #   nu tests/parity/engines.nu clean
 #
+# `MONGODB_IMAGE=docker.io/library/mongo:8.0 nu tests/parity/engines.nu up mongodb` runs MongoDB in a container
+# instead of the nix package. Use another PARITY_LAB to keep two versions apart.
+#
 # Then run `uv run pytest -m parity tests/parity`. `PARITY_LAB` is /tmp/toolkit-parity unless
 # it is set. Nothing here touches a path outside it, or a container that does not start with
 # `engines-`. Passwords are generated, kept in env.json (mode 600) and never printed.
@@ -157,16 +160,21 @@ def up-couchdb []: nothing -> nothing {
 }
 
 def up-mongodb []: nothing -> nothing {
-    let bin = (nix-bin "mongodb-ce") | path join "bin"
+    let image = ($env.MONGODB_IMAGE? | default "")
     let dir = $"(lab-dir)/mongodb"
     let port = (free-port)
     let password = (secret)
     rm -rf $dir
     mkdir $"($dir)/data"
-    background $"($bin)/mongod --dbpath ($dir)/data --port ($port) --bind_ip 127.0.0.1 --auth --nounixsocket" $"($dir)/log" $"($dir)/pid"
+    if ($image | is-empty) {
+        let bin = (nix-bin "mongodb-ce") | path join "bin"
+        background $"($bin)/mongod --dbpath ($dir)/data --port ($port) --bind_ip 127.0.0.1 --auth --nounixsocket" $"($dir)/log" $"($dir)/pid"
+    } else {
+        ^podman run -d --name $"engines-mongodb-($port)" -e MONGO_INITDB_ROOT_USERNAME=lab -e $"MONGO_INITDB_ROOT_PASSWORD=($password)" -p $"127.0.0.1:($port):27017" $image | ignore
+    }
     save-env mongodb {
         host: "127.0.0.1", port: $port, database: "lab", user: "lab", password: $password,
-        table: "orders", auth_source: "admin",
+        table: "orders", auth_source: "admin", image: $image, container: (if ($image | is-empty) { "" } else { $"engines-mongodb-($port)" }),
     }
     with-env {PARITY_LAB: (lab-dir)} { ^$"($ALL_PATHS)/.venv/bin/python" $"($HERE)/parity_docs.py" mongodb }
 }
@@ -230,7 +238,9 @@ def "main down" []: nothing -> nothing {
         let pid = (pid-of $"(lab-dir)/($name)")
         if $pid != null { do -i { ^kill $pid } }
     }
-    for container in [engines-mssql engines-oracle] {
+    let mongodb = (load-env | get -o mongodb | get -o container | default "")
+    for container in [engines-mssql engines-oracle $mongodb] {
+        if ($container | is-empty) { continue }
         do -i { ^podman rm -f $container e> /dev/null | ignore }
     }
 }

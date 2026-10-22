@@ -2,21 +2,26 @@
 
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
 from parity_dataset import Order
 from parity_helpers import DOCUMENTS, canonical, column, dia, expected, filters_for, stage
-from parity_lab import source_of
+from parity_lab import available, build_conn, build_source, environment
+from pyarrow.parquet import read_table
+from pymongoarrow.api import Schema
 from toolkit.chunks import NULL_CHUNK, Chunk, Rows
 from toolkit.executor.engines.base import Engine
-from toolkit.executor.requests import UnsupportedRequestError
+from toolkit.executor.requests import Aggregate, UnsupportedRequestError
+from toolkit.executor.sources.backends.mongodb import MongoDBSource
 from toolkit.types import Chunks
 
 pytestmark = pytest.mark.parity
 
 
 async def describe(engine_name: str) -> dict[str, str]:
-    async with Engine.from_source(source_of(engine_name)) as engine:
+    async with Engine.from_source(build_source(engine_name)) as engine:
         return await engine.describe()
 
 
@@ -123,7 +128,7 @@ async def test_the_chunk_column_check_follows_the_type_of_the_id(engine, width, 
     described = await describe(engine)
     chunks = Chunks(column=column(engine), width=width, begin=0)
 
-    async with Engine.from_source(source_of(engine)) as opened:
+    async with Engine.from_source(build_source(engine)) as opened:
         if fits:
             opened.check_chunks(chunks, described)
         else:
@@ -135,7 +140,7 @@ async def test_sql_runs_where_the_system_has_sql(engine):
     """Run a statement on the SQL engines, and refuse it on the document stores."""
     sql = "SELECT 1 FROM DUAL" if engine == "oracle" else "SELECT 1"
 
-    async with Engine.from_source(source_of(engine)) as opened:
+    async with Engine.from_source(build_source(engine)) as opened:
         if engine in DOCUMENTS:
             with pytest.raises(UnsupportedRequestError):
                 await opened.execute(sql)
@@ -154,7 +159,7 @@ async def test_the_decimal_keeps_every_digit(engine):
 
 async def test_read_returns_every_row_in_datadataframes_where_the_engine_reads_whole(engine):
     """Read the 304 rows as datadataframes of at most `batch_size`, and refuse on Oracle, which only writes chunks."""
-    async with Engine.from_source(source_of(engine)) as opened:
+    async with Engine.from_source(build_source(engine)) as opened:
         if engine == "oracle":
             with pytest.raises(UnsupportedRequestError):
                 opened.read()
@@ -169,8 +174,34 @@ async def test_read_returns_every_row_in_datadataframes_where_the_engine_reads_w
 
 async def test_a_clone_is_a_new_engine_that_works(engine):
     """Open a clone of an engine, and get the same columns from it."""
-    async with Engine.from_source(source_of(engine)) as opened:
+    async with Engine.from_source(build_source(engine)) as opened:
         first = await opened.describe()
         async with opened.clone() as other:
             assert other is not opened
             assert await other.describe() == first
+
+
+async def test_a_mongodb_pipeline_returns_the_rows_of_a_plain_read():
+    """Project two fields with a pipeline, and get the same rows as a plain read gives."""
+    if "mongodb" not in available():
+        pytest.skip("MongoDB is not up")
+
+    entry = environment()["mongodb"]
+    source = MongoDBSource(
+        build_conn("mongodb"),
+        shape=Schema({"id": int, "nome": str}),
+        auth_source=str(entry["auth_source"]),
+        tls=False,
+        origin=Aggregate('[{"$project": {"_id": 0, "id": 1, "nome": 1}}]', str(entry["table"])),
+    )
+
+    async with Engine.from_source(source) as engine:
+        with TemporaryDirectory() as folder:
+            target = Path(folder) / "out.parquet"
+            await engine.materialize(target, Rows())
+            projected = read_table(target)
+
+    plain = await stage("mongodb", Rows())
+    assert sorted(zip(projected["id"].to_pylist(), projected["nome"].to_pylist(), strict=True)) == sorted(
+        zip(plain["id"].to_pylist(), plain["nome"].to_pylist(), strict=True)
+    )
