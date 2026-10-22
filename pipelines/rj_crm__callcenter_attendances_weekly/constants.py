@@ -1,42 +1,11 @@
-"""
-Constantes específicas para pipeline SMAS Call Center Attendances Weekly
-"""
+"""Constants of rj_crm__callcenter_attendances_weekly."""
 
-from enum import Enum
+from typing import Final
+from zoneinfo import ZoneInfo
 
-
-class CallCenterAttendancesConstants(Enum):
-    """
-    Constantes para o pipeline de coleta semanal de atendimentos do call center
-    """
-
-    # Dataset e tabela do BigQuery (valores a serem definidos)
-    DATASET_ID = "brutos_wetalkie"
-    TABLE_ID = "fluxos_ura"
-    DUMP_MODE = "append"
-
-    # Configuração para materialização após dump
-    MATERIALIZE_AFTER_DUMP = True
-
-    # Configurações de particionamento
-    PARTITION_COLUMN = "begin_date"
-    FILE_FORMAT = "csv"
-    ROOT_FOLDER = "./data_attendances_weekly/"
-
-    # Configurações do BigQuery
-    BIGLAKE_TABLE = True
-
-    # Configurações da API Wetalkie
-    API_LOGIN_ROUTE = "users/login"
-    API_ATTENDANCES_ENDPOINT = "/callcenter/attendances"
-
-    # Schedule configuration
-    SCHEDULE_INTERVAL = 604800  # 7 days in seconds
-    SCHEDULE_ANCHOR_DATE = "2024-01-01T09:00:00"
-    SCHEDULE_TIMEZONE = "America/Sao_Paulo"
-
-    # BigQuery configuration for duplicate check
-    BILLING_PROJECT_ID = "rj-crm-registry"
-
-    # Date interval for data extraction
-    DATE_INTERVAL = 7  # days
+ATTENDANCES_PATH: Final = "callcenter/attendances"
+PAGE_SIZE: Final = 100
+"""The most that the API gives in one page."""
+MAX_PAGES: Final = 1000
+MAX_AUDIO_SECONDS: Final = 300
+SP_TZ: Final = ZoneInfo("America/Sao_Paulo")

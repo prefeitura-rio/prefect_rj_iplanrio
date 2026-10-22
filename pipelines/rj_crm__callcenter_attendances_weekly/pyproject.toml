@@ -1,14 +1,10 @@
 [project]
 name = "rj_crm__callcenter_attendances_weekly"
 version = "0.1.0"
-description = "Pipeline CRM Call Center Attendances Weekly para coleta semanal de dados de atendimentos"
+description = "Pipeline CRM para coletar os atendimentos do call center da API Wetalkie em janelas semanais"
 dependencies = [
     "prefect_rj_iplanrio",
-    "mutagen",
-    "google-cloud-speech",
-    "pytz",
-    "google-cloud-bigquery",
-    "requests",
 ]
+
 [tool.uv.sources]
 prefect_rj_iplanrio = { workspace = true }

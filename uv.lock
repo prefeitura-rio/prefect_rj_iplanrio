@@ -4910,23 +4910,11 @@ name = "rj-crm-callcenter-attendances-weekly"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__callcenter_attendances_weekly" }
 dependencies = [
-    { name = "google-cloud-bigquery" },
-    { name = "google-cloud-speech" },
-    { name = "mutagen" },
     { name = "prefect-rj-iplanrio" },
-    { name = "pytz" },
-    { name = "requests" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "google-cloud-bigquery" },
-    { name = "google-cloud-speech" },
-    { name = "mutagen" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "pytz" },
-    { name = "requests" },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-crm-disparo-template"
