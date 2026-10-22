@@ -54,6 +54,7 @@ members = [
     "rj-iplanrio-data-catalog",
     "rj-iplanrio-eai-history",
     "rj-iplanrio-equipamentos-arcgis",
+    "rj-iplanrio-maintain-delta",
     "rj-iplanrio-run-dbt",
     "rj-iplanrio-sici",
     "rj-iplanrio-sicop",
@@ -1260,6 +1261,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/7f/dd/5817c7af5e614e45cdf38cbf6c3f4597590c442822a648121a34dee7fa0f/discord_py-2.5.2.tar.gz", hash = "sha256:01cd362023bfea1a4a1d43f5280b5ef00cad2c7eba80098909f98bf28e578524", size = 1054879, upload-time = "2025-03-05T01:15:29.798Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/57/a8/dc908a0fe4cd7e3950c9fa6906f7bf2e5d92d36b432f84897185e1b77138/discord_py-2.5.2-py3-none-any.whl", hash = "sha256:81f23a17c50509ffebe0668441cb80c139e74da5115305f70e27ce821361295a", size = 1155105, upload-time = "2025-03-05T01:15:27.323Z" },
+]
+
+[[package]]
+name = "distlib"
+version = "0.4.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/68/bc/d36966de7304047a1001a7559fbf266c464bb5d8cc85464536ef8c9bcc32/distlib-0.4.4.tar.gz", hash = "sha256:ca4175b4ac7f71223cc30ed7248c45d2b38c2439d8ee6e498ab67ed63cf3508d", size = 621304, upload-time = "2026-10-16T13:56:34.203Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c1/2b/238f02a4927fa2e27aa995371d240a468b52e42eae44a678434aff736b38/distlib-0.4.4-py2.py3-none-any.whl", hash = "sha256:cf09d55b1e85a89576b036aeb71550bfd68320f3f21761ca329eadadad918638", size = 472099, upload-time = "2026-10-16T13:56:32.053Z" },
 ]
 
 [[package]]
@@ -3635,6 +3645,23 @@ wheels = [
 ]
 
 [[package]]
+name = "pandas-read-xml"
+version = "0.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "distlib" },
+    { name = "pandas" },
+    { name = "pyarrow" },
+    { name = "requests" },
+    { name = "urllib3" },
+    { name = "xmltodict" },
+    { name = "zipfile36" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dd/67/033ecb058eb44bfabc1f1b4f92e4a80f59c9b423c442255a56e1826776b5/pandas_read_xml-0.3.1-py3-none-any.whl", hash = "sha256:76b0047e9c81c6ba47bc2e788b866280d862f0eea52f0aac0f1d65ba9ff72e3c", size = 6258, upload-time = "2021-04-08T13:32:41.817Z" },
+]
+
+[[package]]
 name = "pandavro"
 version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3738,15 +3765,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/23/26/fcb2f6e37175b04f53570b59937867e2b80ee1685e744023153028fc14f9/pillow-12.3.0-cp314-cp314t-win32.whl", hash = "sha256:4b0a7fe987b14c31ebda6083f74f22b561fd3739bc0ac51e019622e3d72668c7", size = 6474125, upload-time = "2026-07-01T11:55:30.956Z" },
     { url = "https://files.pythonhosted.org/packages/90/de/3634abee5f1c9e13c56787b7d5517b0ba8d6de51700b95578cf338349c9f/pillow-12.3.0-cp314-cp314t-win_amd64.whl", hash = "sha256:962864dc93511324d51ddbb5b9f8731bf71675b93ca612a07441896f4688fb8c", size = 7242939, upload-time = "2026-07-01T11:55:34.044Z" },
     { url = "https://files.pythonhosted.org/packages/ce/2a/fd13f8eb24de5714a6eb444a3d67e2842c6c576e159a43793adf23051351/pillow-12.3.0-cp314-cp314t-win_arm64.whl", hash = "sha256:0740a512dc522224c77d9aa5a8d70d8b7d73fb91f2c21125d8d025d3b8990e45", size = 2567506, upload-time = "2026-07-01T11:55:35.988Z" },
-]
-
-[[package]]
-name = "pip"
-version = "26.2.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ae/15/4500e320e6b101ec3b719ae85b697d9940b6cda672bc555bd6016fc60c6f/pip-26.2.1.tar.gz", hash = "sha256:f6ad667e89a1fe78046c8f13232b247200f5258d7828f3f7883d660878e0813f", size = 1848877, upload-time = "2026-08-04T22:51:14.148Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f3/6e/1736e5b4ae2b778ef2f81c47d797de9f891d4d8acb047a24ca37a60294dd/pip-26.2.1-py3-none-any.whl", hash = "sha256:71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e", size = 1816632, upload-time = "2026-08-04T22:51:12.472Z" },
 ]
 
 [[package]]
@@ -4940,12 +4958,14 @@ source = { virtual = "pipelines/rj_cor__meteorologia_inmet" }
 dependencies = [
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
+    { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "requests" },
 ]
 
 [[package]]
@@ -4955,12 +4975,14 @@ source = { virtual = "pipelines/rj_cor__meteorologia_redemet" }
 dependencies = [
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
+    { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "requests" },
 ]
 
 [[package]]
@@ -4970,12 +4992,14 @@ source = { virtual = "pipelines/rj_cor__meteorologia_redemet_estacoes" }
 dependencies = [
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
+    { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "requests" },
 ]
 
 [[package]]
@@ -4988,6 +5012,7 @@ dependencies = [
     { name = "lxml" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
+    { name = "requests" },
 ]
 
 [package.metadata]
@@ -4997,6 +5022,7 @@ requires-dist = [
     { name = "lxml", specifier = "==6.1.1" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "requests" },
 ]
 
 [[package]]
@@ -5029,12 +5055,14 @@ source = { virtual = "pipelines/rj_cor__precipitacao_cemaden" }
 dependencies = [
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
+    { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "requests" },
 ]
 
 [[package]]
@@ -5046,6 +5074,7 @@ dependencies = [
     { name = "openpyxl" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
+    { name = "requests" },
 ]
 
 [package.metadata]
@@ -5054,6 +5083,7 @@ requires-dist = [
     { name = "openpyxl" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "requests" },
 ]
 
 [[package]]
@@ -5061,11 +5091,17 @@ name = "rj-cor-precipitacao-websirene"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_cor__precipitacao_websirene" }
 dependencies = [
+    { name = "pandas-read-xml" },
+    { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
+requires-dist = [
+    { name = "pandas-read-xml" },
+    { name = "pendulum" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+]
 
 [[package]]
 name = "rj-crm-agentforce-classificacao-llm"
@@ -5095,36 +5131,22 @@ name = "rj-crm-api-wetalkie"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__api_wetalkie" }
 dependencies = [
-    { name = "dbt-bigquery" },
-    { name = "dbt-core" },
-    { name = "gitpython" },
+    { name = "google-cloud-bigquery" },
     { name = "google-cloud-speech" },
-    { name = "google-cloud-storage" },
-    { name = "marshmallow" },
     { name = "mutagen" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "prefeitura-rio", extra = ["actions"] },
-    { name = "python-dotenv" },
     { name = "pytz" },
-    { name = "simplejson" },
+    { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "dbt-bigquery" },
-    { name = "dbt-core" },
-    { name = "gitpython" },
+    { name = "google-cloud-bigquery" },
     { name = "google-cloud-speech" },
-    { name = "google-cloud-storage" },
-    { name = "marshmallow" },
     { name = "mutagen" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "prefeitura-rio", extras = ["actions"], git = "https://github.com/prefeitura-rio/prefeitura-rio?rev=54593ddff444158b0ecbab5514c5cde4d44012c0" },
-    { name = "python-dotenv" },
     { name = "pytz" },
-    { name = "simplejson" },
+    { name = "requests" },
 ]
 
 [[package]]
@@ -5132,36 +5154,22 @@ name = "rj-crm-callcenter-attendances-weekly"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__callcenter_attendances_weekly" }
 dependencies = [
-    { name = "dbt-bigquery" },
-    { name = "dbt-core" },
-    { name = "gitpython" },
+    { name = "google-cloud-bigquery" },
     { name = "google-cloud-speech" },
-    { name = "google-cloud-storage" },
-    { name = "marshmallow" },
     { name = "mutagen" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "prefeitura-rio", extra = ["actions"] },
-    { name = "python-dotenv" },
     { name = "pytz" },
-    { name = "simplejson" },
+    { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "dbt-bigquery" },
-    { name = "dbt-core" },
-    { name = "gitpython" },
+    { name = "google-cloud-bigquery" },
     { name = "google-cloud-speech" },
-    { name = "google-cloud-storage" },
-    { name = "marshmallow" },
     { name = "mutagen" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "prefeitura-rio", extras = ["actions"], git = "https://github.com/prefeitura-rio/prefeitura-rio?rev=54593ddff444158b0ecbab5514c5cde4d44012c0" },
-    { name = "python-dotenv" },
     { name = "pytz" },
-    { name = "simplejson" },
+    { name = "requests" },
 ]
 
 [[package]]
@@ -5220,44 +5228,14 @@ name = "rj-crm-disparos-nao-efetuados"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__disparos_nao_efetuados" }
 dependencies = [
-    { name = "asyncssh" },
-    { name = "dbt-bigquery" },
-    { name = "dbt-core" },
-    { name = "discord-py" },
-    { name = "gitpython" },
-    { name = "google-cloud-speech" },
-    { name = "google-cloud-storage" },
-    { name = "marshmallow" },
-    { name = "mutagen" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "prefeitura-rio", extra = ["actions"] },
-    { name = "pydantic" },
-    { name = "python-dotenv" },
-    { name = "ruamel-yaml" },
-    { name = "simplejson" },
-    { name = "unidecode" },
+    { name = "pytz" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "asyncssh" },
-    { name = "dbt-bigquery" },
-    { name = "dbt-core" },
-    { name = "discord-py" },
-    { name = "gitpython" },
-    { name = "google-cloud-speech" },
-    { name = "google-cloud-storage" },
-    { name = "marshmallow" },
-    { name = "mutagen" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "prefeitura-rio", extras = ["actions"], git = "https://github.com/prefeitura-rio/prefeitura-rio?rev=54593ddff444158b0ecbab5514c5cde4d44012c0" },
-    { name = "pydantic" },
-    { name = "python-dotenv" },
-    { name = "ruamel-yaml" },
-    { name = "simplejson" },
-    { name = "unidecode" },
+    { name = "pytz" },
 ]
 
 [[package]]
@@ -5381,48 +5359,14 @@ name = "rj-crm-relatorio-cvl"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__relatorio_cvl" }
 dependencies = [
-    { name = "dbt-bigquery" },
-    { name = "dbt-core" },
-    { name = "discord-py" },
-    { name = "geopy" },
-    { name = "gitpython" },
-    { name = "google-cloud-speech" },
-    { name = "google-cloud-storage" },
-    { name = "marshmallow" },
-    { name = "mutagen" },
-    { name = "opencage" },
-    { name = "openlocationcode" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "prefeitura-rio", extra = ["actions"] },
-    { name = "pydantic" },
-    { name = "python-dotenv" },
-    { name = "ruamel-yaml" },
-    { name = "simplejson" },
-    { name = "unidecode" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "dbt-bigquery" },
-    { name = "dbt-core" },
-    { name = "discord-py" },
-    { name = "geopy" },
-    { name = "gitpython" },
-    { name = "google-cloud-speech" },
-    { name = "google-cloud-storage" },
-    { name = "marshmallow" },
-    { name = "mutagen" },
-    { name = "opencage" },
-    { name = "openlocationcode" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "prefeitura-rio", extras = ["actions"], git = "https://github.com/prefeitura-rio/prefeitura-rio?rev=54593ddff444158b0ecbab5514c5cde4d44012c0" },
-    { name = "pydantic" },
-    { name = "python-dotenv" },
-    { name = "ruamel-yaml" },
-    { name = "simplejson" },
-    { name = "unidecode" },
 ]
 
 [[package]]
@@ -5453,48 +5397,24 @@ name = "rj-crm-run-dbt"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__run_dbt" }
 dependencies = [
-    { name = "aiohttp" },
-    { name = "dbt-bigquery" },
-    { name = "discord-py" },
-    { name = "gitpython" },
-    { name = "pip" },
-    { name = "prefect-dbt" },
     { name = "prefect-rj-iplanrio" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "aiohttp" },
-    { name = "dbt-bigquery" },
-    { name = "discord-py" },
-    { name = "gitpython" },
-    { name = "pip" },
-    { name = "prefect-dbt" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-crm-salesforce-api"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__salesforce_api" }
 dependencies = [
-    { name = "google-cloud-storage" },
-    { name = "pandas" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "pydantic" },
-    { name = "python-dotenv" },
     { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "google-cloud-storage" },
-    { name = "pandas" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "pydantic" },
-    { name = "python-dotenv" },
     { name = "requests" },
 ]
 
@@ -5524,106 +5444,56 @@ name = "rj-crm-webhook-wetalkie-channel-quality-update"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__webhook_wetalkie_channel_quality_update" }
 dependencies = [
-    { name = "basedosdados" },
-    { name = "defusedxml" },
-    { name = "google-cloud-bigquery" },
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio" },
-    { name = "requests" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "basedosdados" },
-    { name = "defusedxml" },
-    { name = "google-cloud-bigquery" },
-    { name = "pandas" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "requests" },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-crm-webhook-wetalkie-template-category-update"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__webhook_wetalkie_template_category_update" }
 dependencies = [
-    { name = "basedosdados" },
-    { name = "defusedxml" },
-    { name = "google-cloud-bigquery" },
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio" },
-    { name = "requests" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "basedosdados" },
-    { name = "defusedxml" },
-    { name = "google-cloud-bigquery" },
-    { name = "pandas" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "requests" },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-crm-webhook-wetalkie-template-quality-update"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__webhook_wetalkie_template_quality_update" }
 dependencies = [
-    { name = "basedosdados" },
-    { name = "defusedxml" },
-    { name = "google-cloud-bigquery" },
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio" },
-    { name = "requests" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "basedosdados" },
-    { name = "defusedxml" },
-    { name = "google-cloud-bigquery" },
-    { name = "pandas" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "requests" },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-crm-webhook-wetalkie-template-status-update"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__webhook_wetalkie_template_status_update" }
 dependencies = [
-    { name = "basedosdados" },
-    { name = "defusedxml" },
-    { name = "google-cloud-bigquery" },
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio" },
-    { name = "requests" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "basedosdados" },
-    { name = "defusedxml" },
-    { name = "google-cloud-bigquery" },
-    { name = "pandas" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "requests" },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-crm-wetalkie-api-hsm-info"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__wetalkie_api_hsm_info" }
 dependencies = [
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio" },
     { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "requests" },
 ]
@@ -5633,32 +5503,16 @@ name = "rj-crm-wetalkie-atualiza-contato"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__wetalkie_atualiza_contato" }
 dependencies = [
-    { name = "dbt-bigquery" },
-    { name = "dbt-core" },
-    { name = "gitpython" },
-    { name = "google-cloud-storage" },
-    { name = "marshmallow" },
-    { name = "pendulum" },
+    { name = "google-cloud-bigquery" },
     { name = "prefect-rj-iplanrio" },
-    { name = "prefeitura-rio", extra = ["actions"] },
-    { name = "python-dotenv" },
-    { name = "pytz" },
-    { name = "simplejson" },
+    { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "dbt-bigquery" },
-    { name = "dbt-core" },
-    { name = "gitpython" },
-    { name = "google-cloud-storage" },
-    { name = "marshmallow" },
-    { name = "pendulum" },
+    { name = "google-cloud-bigquery" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "prefeitura-rio", extras = ["actions"], git = "https://github.com/prefeitura-rio/prefeitura-rio?rev=54593ddff444158b0ecbab5514c5cde4d44012c0" },
-    { name = "python-dotenv" },
-    { name = "pytz" },
-    { name = "simplejson" },
+    { name = "requests" },
 ]
 
 [[package]]
@@ -5754,20 +5608,16 @@ name = "rj-iplanrio-alertario-previsao-24h"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__alertario_previsao_24h" }
 dependencies = [
-    { name = "basedosdados" },
     { name = "defusedxml" },
     { name = "google-cloud-bigquery" },
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio" },
     { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "basedosdados" },
     { name = "defusedxml" },
     { name = "google-cloud-bigquery" },
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "requests" },
 ]
@@ -5777,17 +5627,13 @@ name = "rj-iplanrio-betterstack-api"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__betterstack_api" }
 dependencies = [
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio" },
-    { name = "prefeitura-rio", extra = ["actions"] },
     { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "prefeitura-rio", extras = ["actions"], git = "https://github.com/prefeitura-rio/prefeitura-rio?rev=54593ddff444158b0ecbab5514c5cde4d44012c0" },
     { name = "requests" },
 ]
 
@@ -5896,36 +5742,32 @@ requires-dist = [
 ]
 
 [[package]]
-name = "rj-iplanrio-run-dbt"
+name = "rj-iplanrio-maintain-delta"
 version = "0.1.0"
-source = { virtual = "pipelines/rj_iplanrio__run_dbt" }
+source = { virtual = "pipelines/rj_iplanrio__maintain_delta" }
 dependencies = [
-    { name = "aiohttp" },
-    { name = "dbt-bigquery" },
-    { name = "discord-py" },
-    { name = "gitpython" },
-    { name = "pip" },
-    { name = "prefect-dbt" },
     { name = "prefect-rj-iplanrio" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "aiohttp" },
-    { name = "dbt-bigquery" },
-    { name = "discord-py" },
-    { name = "gitpython" },
-    { name = "pip" },
-    { name = "prefect-dbt" },
-    { name = "prefect-rj-iplanrio", editable = "." },
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
+
+[[package]]
+name = "rj-iplanrio-run-dbt"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_iplanrio__run_dbt" }
+dependencies = [
+    { name = "prefect-rj-iplanrio" },
 ]
+
+[package.metadata]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-iplanrio-sici"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__sici" }
 dependencies = [
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio" },
     { name = "pytz" },
     { name = "zeep" },
@@ -5933,7 +5775,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "pytz" },
     { name = "zeep" },
@@ -6121,6 +5962,7 @@ version = "0.1.0"
 source = { virtual = "pipelines/rj_segur__forca_municipal" }
 dependencies = [
     { name = "fastkml" },
+    { name = "google-cloud-bigquery" },
     { name = "prefect-rj-iplanrio" },
     { name = "tenacity" },
 ]
@@ -6128,6 +5970,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastkml", specifier = ">=1.4.0" },
+    { name = "google-cloud-bigquery" },
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "tenacity", specifier = ">=9.1.4" },
 ]
@@ -6137,61 +5980,31 @@ name = "rj-setur-turismo-fluxo-visitantes"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_setur__turismo_fluxo_visitantes" }
 dependencies = [
+    { name = "google-api-python-client" },
+    { name = "gspread" },
     { name = "prefect-rj-iplanrio" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
+requires-dist = [
+    { name = "google-api-python-client" },
+    { name = "gspread" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+]
 
 [[package]]
 name = "rj-smas-api-datametrica-agendamentos"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_smas__api_datametrica_agendamentos" }
 dependencies = [
-    { name = "dbt-bigquery" },
-    { name = "dbt-core" },
-    { name = "discord-py" },
-    { name = "geopy" },
-    { name = "gitpython" },
-    { name = "google-cloud-speech" },
-    { name = "google-cloud-storage" },
-    { name = "marshmallow" },
-    { name = "mutagen" },
-    { name = "opencage" },
-    { name = "openlocationcode" },
-    { name = "pandas" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "prefeitura-rio", extra = ["actions"] },
-    { name = "python-dotenv" },
     { name = "requests" },
-    { name = "simplejson" },
-    { name = "unidecode" },
-    { name = "urllib3" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "dbt-bigquery" },
-    { name = "dbt-core" },
-    { name = "discord-py" },
-    { name = "geopy" },
-    { name = "gitpython" },
-    { name = "google-cloud-speech" },
-    { name = "google-cloud-storage" },
-    { name = "marshmallow" },
-    { name = "mutagen" },
-    { name = "opencage" },
-    { name = "openlocationcode" },
-    { name = "pandas" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "prefeitura-rio", extras = ["actions"], git = "https://github.com/prefeitura-rio/prefeitura-rio?rev=54593ddff444158b0ecbab5514c5cde4d44012c0" },
-    { name = "python-dotenv" },
     { name = "requests" },
-    { name = "simplejson" },
-    { name = "unidecode" },
-    { name = "urllib3", specifier = ">=1.26.0" },
 ]
 
 [[package]]
@@ -6556,25 +6369,11 @@ name = "rj-ssm-run-dbt"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_ssm__run_dbt" }
 dependencies = [
-    { name = "aiohttp" },
-    { name = "dbt-bigquery" },
-    { name = "discord-py" },
-    { name = "gitpython" },
-    { name = "pip" },
-    { name = "prefect-dbt" },
     { name = "prefect-rj-iplanrio" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "aiohttp" },
-    { name = "dbt-bigquery" },
-    { name = "discord-py" },
-    { name = "gitpython" },
-    { name = "pip" },
-    { name = "prefect-dbt" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rpds-py"
@@ -7680,6 +7479,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/7e/c2/e06e5f177d818d0fc34fcbe2f98c175af2cba63b7d90f4bfcb6fe360d343/zeep-4.3.3.tar.gz", hash = "sha256:99d5059f92f721020998695fd9c85289ccb03ec5a2398ad49c6dbe43f19cfb94", size = 167372, upload-time = "2026-06-18T17:17:58.994Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b5/87/5c1d29f52fc32da98b75dc8a681cd0de78c9cfd5c10493cd7fb730e1d4b0/zeep-4.3.3-py3-none-any.whl", hash = "sha256:5adfae35582848819f8bb97b6ea9f1a34a2d4851a539f830e14dbab09961dd18", size = 102054, upload-time = "2026-06-18T17:17:57.223Z" },
+]
+
+[[package]]
+name = "zipfile36"
+version = "0.1.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/5e/22f712e45898d12ad896d54875b736ef90dcfc22590ec118b1fc94fa52a4/zipfile36-0.1.3.tar.gz", hash = "sha256:a78a8dddf4fa114f7fe73df76ffcce7538e23433b7a6a96c1c904023f122aead", size = 61882, upload-time = "2016-10-16T13:09:03.325Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fd/8a/3b7da0b0bd87d1ef05b74207827c72d348b56a0d6d83242582be18a81e02/zipfile36-0.1.3-py3-none-any.whl", hash = "sha256:f7e48adf627f75cd74cdb50e7d850623b465f4cf5de913809196e8f3aa57dc4b", size = 20841, upload-time = "2016-10-16T13:08:59.547Z" },
 ]
 
 [[package]]
