@@ -22,10 +22,17 @@
           execIfModified = [
             "src/**/*.py"
             "tests/**/*.py"
+            "pipelines/**/*.py"
             "packages/toolkit/**/*.py"
             "pyproject.toml"
             "packages/toolkit/pyproject.toml"
             "uv.lock"
+          ];
+        };
+        "lint:layout" = {
+          exec = "nu scripts/checks.nu lint layout";
+          execIfModified = [
+            "pipelines/**"
           ];
         };
         "lint:sql" = {
@@ -98,6 +105,7 @@
         };
         "lint:all".after = [
           "lint:python"
+          "lint:layout"
           "lint:sql"
           "lint:deps"
           "lint:prefect"

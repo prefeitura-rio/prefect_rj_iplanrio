@@ -201,7 +201,7 @@ Adicione apenas quando a necessidade existir concretamente:
 
 ### 3.3 Proibidos nos diretórios de pipeline
 
-`nu scripts/checks.nu lint layout [pipeline]` confere esta seção e a 4: os arquivos proibidos, o nome do flow, o `@task` fora de `tasks.py`, o `@flow` fora de `flow.py`, o `import prefect` em `helpers` e o nome de função com `_`. O seguinte nunca deve ser commitado em um diretório de pipeline:
+`nu scripts/checks.nu lint layout [pipeline]` confere esta seção e a 4 em todas as pipelines, e o `lint:all` o roda: os arquivos proibidos, o nome do flow, o `@task` fora de `tasks.py`, o `@flow` fora de `flow.py`, o `import prefect` em `helpers` e o nome de função com `_`. O seguinte nunca deve ser commitado em um diretório de pipeline:
 
 | Arquivo / padrão                                                       | Motivo                                                                                                                                                      |
 | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1194,8 +1194,8 @@ Rode as verificações com `devenv --profile checks tasks run lint:all test:all`
 
 | Regra                                                                                                                                    | Verificação                                         |
 | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| Estrutura de arquivos, estilo, SQL, tags                                                                                                 | Revisão do PR (ainda não há verificação automática) |
-| Formatação, lint e tipos (`ruff`, `basedpyright`), SQL do toolkit (`sqlfluff`), versões só na raiz e workflows (`actionlint`) | `lint:all`                                          |
+| Estrutura de arquivos (`lint layout`), formatação, lint e tipos das pipelines, SQL e tags                                                | `lint:all` e revisão do PR                          |
+| Formatação, lint e tipos (`ruff`, `basedpyright`) de `src`, `tests`, `pipelines` e do toolkit, SQL do toolkit (`sqlfluff`), versões só na raiz e workflows (`actionlint`) | `lint:all`                                          |
 | Imports de módulos que saíram                                                                                                            | `lint:all` (`lint imports`)                         |
 | Testes unitários                                                                                                                         | `test:all`                                          |
 | Build, deploy dos flows, análise SAST                                                                                                    | CI do GitHub (`.github/workflows/`)                 |

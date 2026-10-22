@@ -22,10 +22,10 @@ def 'main sync' []: nothing -> nothing {
     ^uv sync --frozen --package toolkit --inexact
 }
 
-# Check style and types in the root project and in the toolkit.
+# Check style and types in the root project, in the pipelines and in the toolkit.
 def 'main lint python' []: nothing -> nothing {
-    in-project . ruff check src tests
-    in-project . ruff format --check src tests
+    in-project . ruff check src tests pipelines
+    in-project . ruff format --check src tests pipelines
     in-project . basedpyright
     in-project packages/toolkit ruff check .
     in-project packages/toolkit ruff format --check .
@@ -139,17 +139,13 @@ def 'main lint layout' [...names: string]: nothing -> nothing {
     }
 }
 
-# Check style, types and layout of the named pipelines, or of all of them.
+# Check style, types and layout of the named pipelines, or of all of them. `lint python` and `lint layout` run the same checks for all.
 def 'main lint pipelines' [...names: string]: nothing -> nothing {
     let folders = pipeline-folders $names
 
     in-project . ruff check ...$folders
     in-project . ruff format --check ...$folders
-
-    for folder in $folders {
-        let python = ^uv run --frozen --package ($folder | path basename) python -c 'import sys; print(sys.executable)' | str trim
-        in-project . basedpyright --pythonpath $python $folder
-    }
+    in-project . basedpyright ...$folders
 
     main lint layout ...$names
 }
