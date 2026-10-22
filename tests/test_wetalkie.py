@@ -1,3 +1,5 @@
+from json import dumps
+
 import pytest
 from httpx2 import AsyncClient, HTTPStatusError, MockTransport, Request, Response
 from pydantic import JsonValue
@@ -119,7 +121,7 @@ def test_a_row_takes_the_ura_or_the_flow_and_keeps_the_attendance_as_json() -> N
         "channel": "whatsapp",
         "begin_date": "2026-01-01",
         "end_date": "2026-01-02",
-        "json_data": '{"serial": 9, "protocol": "P1", "channel": "WHATSAPP", "beginDate": "2026-01-01", "endDate": "2026-01-02", "ura": {"id": 4, "name": "Main"}}',
+        "json_data": dumps(item),
     }
     assert build_attendance_row({"serial": 1, "flow": {"id": 2, "name": "F"}})["ura_name"] == "F"
     assert build_attendance_row({"serial": 1})["id_ura"] is None
