@@ -8,9 +8,10 @@ Registrar incidentes de interrupção de serviços de forma simplificada, permit
 ## Estrutura da Pipeline
 
 - **`flow.py`**: Orquestrador do processo de ETL, focado na ingestão de incidentes.
-- **`tasks.py`**: Funções específicas de extração (API v3) e transformação.
-- **`constants.py`**: Constantes e configurações (URLs, Monitor ID, IDs de tabelas, etc.).
-- **`utils/tasks.py`**: Funções auxiliares de particionamento de dados.
+- **`tasks.py`**: A task que busca os incidentes (API v3), página por página.
+- **`helpers.py`**: Datas, paginação e as linhas do resultado.
+- **`constants.py`**: A URL da API, o fuso e o tamanho da página.
+- **`settings.py`**: `BETTERSTACK_TOKEN` e `BETTERSTACK_MONITOR_ID`.
 
 ## Dados Ingeridos
 
@@ -26,7 +27,7 @@ A pipeline está configurada no `prefect.yaml` com dois deployments:
 2.  **Production**: Destino projeto `rj-iplanrio`. Agendamento diário às 03:00 AM (`cron: "0 3 * * *"`).
 
 ### Parâmetros do Flow
-O flow aceita os seguintes parâmetros opcionais para execuções manuais ou backfills:
+O flow recebe `cloud` e `table` do `prefect.yaml` e aceita os seguintes parâmetros opcionais para execuções manuais ou backfills:
 - `from_date`: Data de início (formato `YYYY-MM-DD`). Se nulo, assume D-1.
 - `to_date`: Data de fim (formato `YYYY-MM-DD`). Se nulo, assume D-1.
 
@@ -35,11 +36,11 @@ O flow aceita os seguintes parâmetros opcionais para execuções manuais ou bac
 
 ### Requisitos
 - **Token de API**: Deve estar configurado no Infisical (injetado via variáveis de ambiente) com a chave `BETTERSTACK_TOKEN`.
-- **Monitor ID**: Deve estar configurado no Infisical com a chave `MONITOR_ID`.
+- **Monitor ID**: Deve estar configurado no Infisical com a chave `BETTERSTACK_MONITOR_ID`.
 
 ## Resiliência e Monitoramento
 - **Retries**: As tarefas de busca de dados possuem 3 tentativas automáticas com 60s de intervalo.
-- **Particionamento**: Utiliza o modelo BigLake particionado por `data_particao` (YYYY-MM-DD) em formato Parquet para otimização de custos e consultas.
+- **Tabela**: Uma tabela `Delta` no bucket, lida pelo BigQuery por uma conexão BigLake. Cada coluna é texto, e `data_particao` (YYYY-MM-DD) é o dia do incidente.
 
 ---
 *Documentação atualizada em Janeiro/2026.*

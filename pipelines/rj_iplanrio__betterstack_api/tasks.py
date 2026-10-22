@@ -1,156 +1,35 @@
-"""
-Tasks for rj_iplanrio__betterstack_api pipeline
-"""
+"""Tasks of rj_iplanrio__betterstack_api."""
 
-import json
-from datetime import datetime, timedelta
-from typing import Any, Dict, List
-
-import pandas as pd
-import requests
 from prefect import task
-from prefect.logging import get_logger
+from pydantic import JsonValue
+from toolkit.telemetry import logger
 
-from pipelines.rj_iplanrio__betterstack_api.constants import BetterStackConstants
+from pipelines.rj_iplanrio__betterstack_api.constants import INCIDENTS_URL, PAGE_SIZE
+from pipelines.rj_iplanrio__betterstack_api.helpers import build_rows, read_next_page
 from pipelines.rj_iplanrio__betterstack_api.settings import Settings
-
-logger = get_logger("toolkit")
-
-
-@task
-def get_betterstack_credentials() -> str:
-    """Return the token of the Better Stack API."""
-    return Settings().BETTERSTACK_TOKEN.get_secret_value()
+from utils.tasks import request_json
+from utils.utils import extract_records
 
 
 @task
-def get_betterstack_monitor_id() -> str:
-    """Return the id of the Better Stack monitor."""
-    return Settings().BETTERSTACK_MONITOR_ID
-
-
-@task
-def calculate_date_range(from_date: str = None, to_date: str = None) -> Dict[str, str]:
-    """
-    Calcula o range de datas.
-    Se não fornecido, as default é D-1 (ontem).
-    """
-    if from_date and to_date:
-        return {"from": from_date, "to": to_date}
-
-    # Default logic: get yesterday's data
-    yesterday = datetime.now() - timedelta(days=1)
-    yesterday_str = yesterday.strftime("%Y-%m-%d")
-
-    # Se quiser pegar apenas o dia de ontem, o range é ontem -> hoje (exclusive) ou ontem -> ontem?
-    # BetterStack API docs: "from" and "to" are timestamps or dates.
-    # Usually "from" inclusive, "to" exclusive or inclusive depending on API.
-    # User said: "pegar o D-1 e ir adicionando de forma incremental"
-
-    return {"from": yesterday_str, "to": yesterday_str}
-
-
-
-
-
-@task(retries=3, retry_delay_seconds=60)
-def fetch_incidents(token: str, monitor_id: str, date_range: Dict[str, str]) -> List[Dict[str, Any]]:
-
-    """
-    Busca dados de incidents da API v3.
-    """
-    url = f"{BetterStackConstants.BASE_URL_V3.value}/incidents"
-
-    headers = {"Authorization": f"Bearer {token}"}
-    params = {
-        "from": date_range["from"],
-        "to": date_range["to"],
-        "monitor_id": monitor_id,
-        "per_page": 50 # Maximize page size just in case
+async def fetch_incidents_task(from_date: str, to_date: str) -> list[dict[str, str | None]]:
+    """Fetch the incidents of a monitor between two dates, page by page."""
+    settings = Settings()
+    headers = {"Authorization": f"Bearer {settings.BETTERSTACK_TOKEN.get_secret_value()}"}
+    params: dict[str, str] | None = {
+        "from": from_date,
+        "to": to_date,
+        "monitor_id": settings.BETTERSTACK_MONITOR_ID,
+        "per_page": str(PAGE_SIZE),
     }
-
-
-    logger.info(f"Fetching incidents from {url} with params {params}")
-
-    all_incidents = []
+    url: str | None = INCIDENTS_URL
+    incidents: list[dict[str, JsonValue]] = []
 
     while url:
-        try:
-            response = requests.get(
-                url,
-                headers=headers,
-                params=params,
-                timeout=BetterStackConstants.TIMEOUT.value,
-            )
-            response.raise_for_status()
-            data = response.json()
-        except requests.exceptions.Timeout as e:
-            logger.info(f"Timeout ao buscar incidents: {e}")
-            raise
-        except requests.exceptions.RequestException as e:
-            logger.info(f"Erro de requisição ao buscar incidents: {e}")
-            if hasattr(e, "response") and e.response is not None:
-                logger.info(f"Response status: {e.response.status_code}")
-                logger.info(f"Response text: {e.response.text[:500]}")
-            raise
-        except json.JSONDecodeError as e:
-            logger.info(f"Error decoding incidents JSON: {e}")
-            raise
+        page = await request_json(url, params=params, headers=headers)
+        incidents += extract_records(page, "data")
+        url, params = read_next_page(page), None
 
-        # Structure: data (list), pagination (dict)
-        try:
-            incidents = data.get("data", [])
-            all_incidents.extend(incidents)
+    logger.info("Incidents fetched: from=%s to=%s count=%d", from_date, to_date, len(incidents))
 
-            # Pagination handling
-            pagination = data.get("pagination", {})
-            next_url = pagination.get("next")
-
-            if next_url:
-                url = next_url
-                params = {} # params are usually encoded in the next_url
-            else:
-                url = None
-        except KeyError as e:
-            logger.info(f"Error parsing incidents structure: {e}")
-            url = None # Stop loop if structure is broken
-
-    return all_incidents
-
-
-
-
-
-@task
-def transform_incidents(data: List[Dict[str, Any]]) -> pd.DataFrame:
-    """
-    Transforma dados de incidents.
-    """
-    if not data:
-        return pd.DataFrame()
-
-    df = pd.DataFrame(data)
-
-    if not df.empty:
-        # Dynamic partitioning based on started_at in attributes
-        # First, ensure we can access attributes easily if it's a dict
-        def extract_date(row):
-            try:
-                attrs = row.get("attributes", {})
-                ts = attrs.get("started_at") or attrs.get("created_at")
-                if ts:
-                    return ts[:10] # YYYY-MM-DD
-            except Exception:
-                pass
-            return datetime.now().strftime("%Y-%m-%d")
-
-        df["data_particao"] = df.apply(extract_date, axis=1)
-
-        # Cast all columns to string to avoid schema mismatches in BigQuery brutos layer
-        for col in df.columns:
-            if col != "data_particao":
-                df[col] = df[col].astype(str)
-
-    return df
-
-
+    return build_rows(incidents)

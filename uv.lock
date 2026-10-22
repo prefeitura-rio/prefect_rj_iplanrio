@@ -5420,14 +5420,10 @@ version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__betterstack_api" }
 dependencies = [
     { name = "prefect-rj-iplanrio" },
-    { name = "requests" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "requests" },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-iplanrio-cor-alerts-aggregator"

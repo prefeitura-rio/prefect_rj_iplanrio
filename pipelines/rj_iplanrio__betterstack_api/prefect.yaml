@@ -42,9 +42,9 @@ deployments:
     parameters:
       from_date:
       to_date:
-      dataset_id: brutos_betterstack
-      billing_project_id: rj-iplanrio
-
+      table:
+        dataset_id: brutos_betterstack
+        table_id: eai_gateway_incidents
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio
@@ -67,8 +67,9 @@ deployments:
     parameters:
       from_date:
       to_date:
-      dataset_id: brutos_betterstack
-      billing_project_id: rj-iplanrio
+      table:
+        dataset_id: brutos_betterstack
+        table_id: eai_gateway_incidents
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio

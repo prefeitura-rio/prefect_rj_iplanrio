@@ -1,30 +1,8 @@
-from enum import Enum
+"""Constants of rj_iplanrio__betterstack_api."""
 
+from typing import Final
+from zoneinfo import ZoneInfo
 
-class BetterStackConstants(Enum):
-    """
-    Constantes utilizadas na pipeline do BetterStack.
-    """
-
-    BASE_URL_V3 = "https://uptime.betterstack.com/api/v3"
-
-
-
-    # Dataset e Tabelas
-    DATASET_ID = "brutos_betterstack"
-    BILLING_PROJECT_ID = "rj-iplanrio"
-    TABLE_ID_INCIDENTS = "eai_gateway_incidents"
-
-    # Configurações de execução
-    DUMP_MODE = "append"
-    MATERIALIZE_AFTER_DUMP = True
-
-    # Partitioning
-    PARTITION_COLUMN = "data_particao"
-    FILE_FORMAT = "parquet"
-    ROOT_FOLDER = "/tmp/betterstack"
-    BIGLAKE_TABLE = True
-
-    # Timeout
-    TIMEOUT = (5, 30)
-
+INCIDENTS_URL: Final = "https://uptime.betterstack.com/api/v3/incidents"
+SP_TZ: Final = ZoneInfo("America/Sao_Paulo")
+PAGE_SIZE: Final = 50
