@@ -5,10 +5,7 @@ description = "Pipeline para coleta de dados de precipitação e fluviometria do
 
 dependencies = [
     "prefect_rj_iplanrio",
-    "pendulum",
-    "beautifulsoup4",
     "openpyxl",
-    "requests",
 ]
 
 [tool.uv.sources]

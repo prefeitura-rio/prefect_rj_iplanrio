@@ -4878,20 +4878,14 @@ name = "rj-cor-precipitacao-inea"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_cor__precipitacao_inea" }
 dependencies = [
-    { name = "beautifulsoup4" },
     { name = "openpyxl" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "beautifulsoup4" },
     { name = "openpyxl" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "requests" },
 ]
 
 [[package]]

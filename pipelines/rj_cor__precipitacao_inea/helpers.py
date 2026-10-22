@@ -1,61 +1,81 @@
-# -*- coding: utf-8 -*-
-"""
-Funções auxiliares para particionamento de dados - INEA.
-"""
+"""Helpers of rj_cor__precipitacao_inea."""
 
-from typing import List, Tuple
+from collections.abc import Mapping, Sequence
+from datetime import datetime
+from io import BytesIO
 
-import pandas as pd
+from openpyxl import load_workbook
+
+from pipelines.rj_cor__precipitacao_inea.constants import (
+    MAX_WATER_HEIGHT,
+    MISSING,
+    PLUVIOMETRIC_COLUMNS,
+    TIME_FORMAT,
+    WATER_COLUMN,
+)
 
 
-def parse_date_columns(
-    dataframe: pd.DataFrame,
-    partition_column: str,
-) -> Tuple[pd.DataFrame, List[str]]:
+def read_sheet(content: bytes) -> list[dict[str, object]]:
+    """Return the rows of the first sheet of an Excel file, by the name of the header cells.
+
+    The names lose the spaces around them.
     """
-    Cria colunas de particionamento a partir de uma coluna de data.
+    sheet = load_workbook(BytesIO(content), read_only=True, data_only=True).worksheets[0]
+    rows = sheet.iter_rows(values_only=True)
+    names = [str(name).strip() if name is not None else "" for name in next(rows, ())]
 
-    Esta função adiciona três novas colunas ao DataFrame para particionamento:
-    - ano_particao: Ano no formato YYYY
-    - mes_particao: Mês no formato MM
-    - data_particao: Data completa no formato YYYY-MM-DD
+    return [dict(zip(names, row, strict=False)) for row in rows]
 
-    Args:
-        dataframe: DataFrame contendo a coluna de data
-        partition_column: Nome da coluna de data para criar as partições
 
-    Returns:
-        Tupla contendo:
-            - DataFrame com novas colunas de partição adicionadas
-            - Lista com nomes das colunas de partição criadas
+def read_number(value: object) -> float | None:
+    """Return a reading as a number, or nothing if it is missing or is not a number."""
+    if value is None or value == MISSING:
+        return None
 
-    Examples:
-        >>> df = pd.DataFrame({
-        ...     'data_medicao': ['2026-05-25 10:00:00', '2026-05-25 11:00:00'],
-        ...     'valor': [10, 20]
-        ... })
-        >>> df['data_medicao'] = pd.to_datetime(df['data_medicao'])
-        >>> df, partitions = parse_date_columns(df, 'data_medicao')
-        >>> print(partitions)
-        ['ano_particao', 'mes_particao', 'data_particao']
-        >>> print(df['ano_particao'].iloc[0])
-        '2026'
+    try:
+        return float(str(value))
+    except ValueError:
+        return None
 
-    Notes:
-        - A coluna especificada deve estar em formato datetime
-        - As novas colunas são criadas como strings
-        - O particionamento segue o padrão ano=YYYY/mes=MM/data=YYYY-MM-DD
+
+def read_time(row: Mapping[str, object]) -> str | None:
+    """Return the time of a row as `YYYY-MM-DD HH:MM:SS`, or nothing if it does not parse."""
+    text = f"{str(row.get('Data', '')).strip()} {str(row.get('Hora', '')).strip()}"
+
+    try:
+        return datetime.strptime(text, TIME_FORMAT).strftime("%Y-%m-%d %H:%M:%S")  # noqa: DTZ007  # the sheet has no time zone
+    except ValueError:
+        return None
+
+
+def build_rows(
+    stations: Mapping[str, Sequence[Mapping[str, object]]],
+) -> tuple[list[dict[str, str | float | None]], list[dict[str, str | float | None]]]:
+    """Return the pluviometric rows and the fluviometric rows of the sheets of the stations.
+
+    A row without a valid time is dropped, and a repeated station and time keeps the
+    first. A water height above 10000 is dropped from the fluviometric rows.
     """
-    # Garantir que a coluna está em formato datetime
-    if not pd.api.types.is_datetime64_any_dtype(dataframe[partition_column]):
-        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column])
+    pluviometric: list[dict[str, str | float | None]] = []
+    fluviometric: list[dict[str, str | float | None]] = []
 
-    # Criar colunas de partição
-    dataframe["ano_particao"] = dataframe[partition_column].dt.strftime("%Y")
-    dataframe["mes_particao"] = dataframe[partition_column].dt.strftime("%m")
-    dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
+    for station, sheet in stations.items():
+        seen: set[str] = set()
 
-    partition_columns = ["ano_particao", "mes_particao", "data_particao"]
+        for row in sheet:
+            measured = read_time(row)
 
-    return dataframe, partition_columns
+            if measured is None or measured in seen:
+                continue
 
+            seen.add(measured)
+            key = {"id_estacao": station, "data_medicao": measured}
+            pluviometric.append(
+                {**key, **{name: read_number(row.get(source)) for source, name in PLUVIOMETRIC_COLUMNS.items()}}
+            )
+            height = read_number(row.get(WATER_COLUMN))
+
+            if height is None or height <= MAX_WATER_HEIGHT:
+                fluviometric.append({**key, "altura_agua": height})
+
+    return pluviometric, fluviometric

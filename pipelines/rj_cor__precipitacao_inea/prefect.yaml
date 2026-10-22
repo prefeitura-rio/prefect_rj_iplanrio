@@ -71,8 +71,10 @@ deployments:
         timezone: America/Sao_Paulo
         slug: precipitacao-inea-15min
         parameters:
-          dataset_id_pluviometric: "clima_pluviometro"
-          table_id_pluviometric: "taxa_precipitacao_inea"
-          dataset_id_fluviometric: "clima_fluviometro"
-          table_id_fluviometric: "lamina_agua_inea"
-          dump_mode: "append"
+          pluviometric:
+            dataset_id: clima_pluviometro
+            table_id: taxa_precipitacao_inea
+          fluviometric:
+            dataset_id: clima_fluviometro
+            table_id: lamina_agua_inea
+          dump_mode: append
