@@ -5292,20 +5292,14 @@ name = "rj-pic-disparos-email"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_pic__disparos_email" }
 dependencies = [
-    { name = "google-cloud-bigquery" },
     { name = "jinja2" },
     { name = "prefect-rj-iplanrio" },
-    { name = "python-dotenv" },
-    { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "google-cloud-bigquery" },
     { name = "jinja2" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "python-dotenv" },
-    { name = "requests" },
 ]
 
 [[package]]
