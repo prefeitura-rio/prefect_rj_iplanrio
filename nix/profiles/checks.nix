@@ -52,7 +52,6 @@
           after = [ "env:sync" ];
           execIfModified = [
             "pipelines/**/*.py"
-            "scripts/legacy.nu"
             "pyproject.toml"
           ];
         };
