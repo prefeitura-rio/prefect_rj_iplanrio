@@ -216,10 +216,6 @@ O seguinte nunca deve ser commitado em um diretório de pipeline:
 | `.DS_Store`                                                            | Metadados do macOS. Coberto pelo `.gitignore` — se aparecer, o gitignore falhou.                                                                            |
 | Arquivos de dados avulsos (`.json`, `.xml`, `.sql` fora de `queries/`) | Fixtures pertencem a `tests/fixtures/`; scripts DDL pertencem a um repositório de migrations.                                                               |
 
-### 3.4 Pipelines legadas
-
-As pipelines listadas em `scripts/legacy.nu` ainda usam os módulos que saíram (`toolkit.pipelines_utils` e outros) e não cabem nos flows prontos. Elas mantêm o layout antigo e ficam fora das regras das Seções 3.3, 5.8 e 7 até migrarem. O `deploy.nu plan` e o `lint imports` as pulam, e os `deployments` delas seguem com a imagem antiga. Não copie o código delas para uma pipeline nova. Quando uma pipeline migra, tire o nome dela da lista.
-
 ## 4. Responsabilidades dos módulos
 
 ### 4.1 `flow.py`
@@ -1169,7 +1165,7 @@ Rode as verificações com `devenv --profile checks tasks run lint:all test:all`
 | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
 | Estrutura de arquivos, estilo, SQL, tags                                                                                                 | Revisão do PR (ainda não há verificação automática) |
 | Formatação, lint e tipos (`ruff`, `basedpyright`), SQL do toolkit (`sqlfluff`), versões só na raiz e workflows (`actionlint`) | `lint:all`                                          |
-| Imports de módulos que saíram                                                                                                            | `lint imports` (fora do `lint:all` até zerar)       |
+| Imports de módulos que saíram                                                                                                            | `lint:all` (`lint imports`)                         |
 | Testes unitários                                                                                                                         | `test:all`                                          |
 | Build, deploy dos flows, análise SAST                                                                                                    | CI do GitHub (`.github/workflows/`)                 |
 

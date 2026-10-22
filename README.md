@@ -9,7 +9,7 @@ pipelines/          uma pasta por pipeline: rj_<secretaria>__<pipeline>/
 src/utils/          flows e tasks prontos, usados por várias pipelines
 packages/toolkit/   biblioteca com o código de uso comum (DuckDB, GCS, BigQuery, dbt)
 templates/          modelo para criar uma pipeline nova
-scripts/            scripts Nushell: verificações, deploy e a lista de pipelines legadas
+scripts/            scripts Nushell: verificações e deploy
 tests/              testes de `src/utils` e testes de paridade
 Dockerfile          imagem base de todas as pipelines
 pyproject.toml      dependências do repositório
@@ -83,7 +83,7 @@ Os parâmetros são grupos com tipo (`src/utils/types.py`). O `Prefect` recusa u
 | `database` | `type`, `host`, `port`, `database` e `options` (opcional, da fonte). O usuário e a senha vêm de `DB_USERNAME` e `DB_PASSWORD`                             | `deployment`                |
 | `cloud`    | `bucket`, `project` e `connection` (a conexão `BigLake`)                                                                                                  | `deployment`                |
 | `table`    | `dataset_id` e `table_id`, a tabela no BigQuery                                                                                                           | `schedule`                  |
-| `read`     | `table` (`esquema.tabela`) ou `query` (no dialeto do banco). No CouchDB, `table` é a base, `query` um seletor Mango e `since` uma sequência de `_changes`. No MongoDB, `table` é a coleção e `query` um filtro `JSON` | `schedule`                  |
+| `read`     | `table` (`esquema.tabela`) ou `query` (no dialeto do banco). No CouchDB, `table` é a base, `query` um seletor Mango e `since` uma sequência de `_changes`. No MongoDB, `table` é a coleção, `query` um filtro `JSON` e `pipeline` uma lista de estágios de agregação, em texto `JSON` | `schedule`                  |
 | `options`  | `chunks`, `filters`, `select`, `columns`, `batch_size` e `concurrency`                                                                                    | `schedule`                  |
 
 Cada `schedule` repete o grupo inteiro. O `Prefect` troca o grupo todo, e não só uma chave.
@@ -318,7 +318,7 @@ O ambiente usa [`devenv`](https://devenv.sh) (Python 3.14, `uv`, `nushell`, `duc
 devenv --profile checks tasks run lint:all test:all   # o mesmo que o CI roda
 ```
 
-`nu scripts/checks.nu lint imports` lista os imports de módulos que saíram (`toolkit.pipelines_utils`, `prefect_rj_iplanrio` e outros) nas pipelines. As pipelines de `scripts/legacy.nu` ficam de fora dele e do deploy: elas ainda usam esses módulos e mantêm a implantação atual, com a imagem antiga. Ele falha enquanto outra pipeline os usa. O `lint:all` roda os linters, os tipos, o SQL, as versões de dependência, os imports e os workflows. O `test:all` roda os testes da raiz e do toolkit. O `devenv` roda em paralelo o que não depende um do outro e pula o que não mudou desde a última execução. As tasks chamam os scripts `Nushell` de `scripts/`.
+`nu scripts/checks.nu lint imports` lista os imports de módulos que saíram (`toolkit.pipelines_utils`, `prefect_rj_iplanrio` e outros) nas pipelines, e falha se achar algum. O `lint:all` roda os linters, os tipos, o SQL, as versões de dependência, os imports e os workflows. O `test:all` roda os testes da raiz e do toolkit. O `devenv` roda em paralelo o que não depende um do outro e pula o que não mudou desde a última execução. As tasks chamam os scripts `Nushell` de `scripts/`.
 
 ## Testes
 
@@ -345,7 +345,6 @@ Os testes de paridade (`tests/parity/`) rodam os seis motores de verdade: `Postg
 - Os nomes usam só letras minúsculas, números e `_`:
   - pasta: `rj_<secretaria>__<pipeline>`
   - `deployment`: `rj-<secretaria>--<pipeline>--<ambiente>`, como `rj-segovi--dump-db-1746--staging`
-- As pipelines de `scripts/legacy.nu` ainda usam os módulos que saíram e não cabem nos flows prontos. O `deploy.nu plan` e o `lint imports` as pulam, e os `deployments` delas seguem com a imagem antiga. Quando uma pipeline migra, tire o nome dela da lista.
 - `DB_USERNAME` e `DB_PASSWORD` vêm do `Secret` do `deployment`. Bancos com logins diferentes precisam de `secretName` diferentes.
 - O `staging` e a `prod` usam o mesmo `bucket` e o mesmo projeto. Um `overwrite` manual no `staging` troca a tabela da `prod`.
 - O `staging` não tem `schedule`. Para rodar à mão, copie os `parameters` de um `schedule` da `prod`.
@@ -368,7 +367,7 @@ O `deploy.yaml` só roda quando a variável do repositório `DEPLOY_ENABLED` val
 
 Como o `deploy.yaml` funciona:
 
-- **`plan`:** escolhe as pipelines que têm um `deployment` do ambiente, isto é, um `name` que termina em `--prod` ou `--staging`. O `plan` lê o `prefect.yaml` como YAML e nunca escolhe uma pipeline de `scripts/legacy.nu`.
+- **`plan`:** escolhe as pipelines que têm um `deployment` do ambiente, isto é, um `name` que termina em `--prod` ou `--staging`. O `plan` lê o `prefect.yaml` como YAML.
   - Se mudou um arquivo de `pipelines/<nome>/`, só essa pipeline entra.
   - Se mudou `src/`, `packages/`, `pyproject.toml` ou `uv.lock`, todas as pipelines entram, porque cada imagem tem esse código dentro. Arquivos `.md` não contam.
   - Em `staging/*`, só segue se a branch tem um `pull request` aberto para a `master`.
