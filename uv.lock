@@ -4861,17 +4861,11 @@ name = "rj-cor-precipitacao-cemaden"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_cor__precipitacao_cemaden" }
 dependencies = [
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "requests" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "pendulum" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "requests" },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-cor-precipitacao-inea"

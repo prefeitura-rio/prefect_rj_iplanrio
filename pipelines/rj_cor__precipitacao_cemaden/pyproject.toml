@@ -4,8 +4,6 @@ version = "0.1.0"
 description = "Pipeline para coleta de dados de precipitação do CEMADEN - COR"
 dependencies = [
     "prefect_rj_iplanrio",
-    "pendulum",
-    "requests",
 ]
 
 [tool.uv.sources]
