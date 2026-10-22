@@ -358,7 +358,6 @@ def test_load_task_feeds_the_active_notifier_without_receiving_it(monkeypatch: p
     # Given a load task whose SQL*Loader reports one progress tick, run inside the notifier guard
     notifier = make(None)
     snap = snapshot(25 * GIB)
-    monkeypatch.setattr(tasks_module, "log", lambda *_: None)
     monkeypatch.setattr(tasks_module, "create_progress_artifact", lambda **_: "artifact")
     monkeypatch.setattr(tasks_module, "update_progress_artifact", lambda **_: None)
     monkeypatch.setattr(tasks_module.oracle, "read_oracle_config", lambda _: None)
@@ -403,8 +402,6 @@ def run_flow_with_fakes(
         return call
 
     plain = {
-        "rename_current_flow_run_task": None,
-        "inject_bd_credentials_task": None,
         "refresh_synonyms_task": None,
         "plan_load_task": "plan",
         "plan_structure_task": "structure",
@@ -472,10 +469,5 @@ def test_synonyms_only_flow_skips_the_load_and_finishes_green(monkeypatch: pytes
     notifier = make(discord, tables=(), mode="synonyms_only")
     order = run_flow_with_fakes(monkeypatch, notifier, mode="synonyms_only")
     # Then only the refresh ran and the message went green
-    assert order == [
-        "rename_current_flow_run_task",
-        "inject_bd_credentials_task",
-        "list_tables_task",
-        "refresh_synonyms_task",
-    ]
+    assert order == ["list_tables_task", "refresh_synonyms_task"]
     assert discord.embeds[-1]["color"] == COLOR_SUCCESS

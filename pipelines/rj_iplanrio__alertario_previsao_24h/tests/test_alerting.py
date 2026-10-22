@@ -7,7 +7,6 @@ from pipelines.rj_iplanrio__alertario_previsao_24h.alerting import (
     build_alert_log_rows,
     extract_precipitation_alerts,
     format_precipitation_alert_message,
-    insert_alert_log_rows,
 )
 
 
@@ -92,18 +91,7 @@ def test_format_precipitation_alert_message_without_synoptic_keeps_layout():
     assert formatted.startswith("⚠️ Previsão de chuva – próximos dias (AlertaRio)\n\n27/11/2025")
 
 
-class _DummyBigQueryClient:
-    def __init__(self):
-        self.project = "test-project"
-        self.insert_calls: list[tuple[str, list[dict]]] = []
-
-    def insert_rows_json(self, table_ref, rows):
-        self.insert_calls.append((table_ref, rows))
-        return []
-
-
-def test_insert_alert_log_rows_serializes_date_fields():
-    dummy_client = _DummyBigQueryClient()
+def test_build_alert_log_rows_keeps_the_dates_and_the_sent_time():
     alerts = [
         PrecipitationAlert(
             forecast_date=date(2025, 12, 3),
@@ -123,16 +111,6 @@ def test_insert_alert_log_rows_serializes_date_fields():
         severity_level="info",
     )
 
-    insert_alert_log_rows(
-        client=dummy_client,
-        dataset_id="dataset",
-        table_id="table",
-        rows=rows,
-    )
-
-    assert len(dummy_client.insert_calls) == 1
-    table_ref, inserted_rows = dummy_client.insert_calls[0]
-    assert table_ref == "test-project.dataset.table"
-    assert inserted_rows[0]["alert_date"] == "2025-12-03"
-    assert inserted_rows[0]["forecast_date"] == "2025-12-03"
-    assert inserted_rows[0]["sent_at"].startswith("2025-12-03T12:00:00")
+    assert rows[0]["alert_date"] == date(2025, 12, 3)
+    assert rows[0]["forecast_date"] == date(2025, 12, 3)
+    assert rows[0]["sent_at"] == datetime(2025, 12, 3, 12, 0, tzinfo=timezone.utc)

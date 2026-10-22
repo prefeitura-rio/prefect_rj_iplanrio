@@ -41,8 +41,6 @@ class FakeFlowRun:
             for name in TABLES
         }
         fakes = {
-            "rename_current_flow_run_task": record("rename"),
-            "inject_bd_credentials_task": record("credentials"),
             "list_tables_task": record("list", TABLES),
             "export_snapshot_task": record("export", snapshot),
             "plan_load_task": record("plan_load", lambda kwargs: kwargs["raw_text_encoding"]),
