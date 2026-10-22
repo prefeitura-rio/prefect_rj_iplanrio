@@ -6,7 +6,6 @@ dependencies = [
     "prefect_rj_iplanrio",
     "fastkml>=1.4.0",
     "tenacity>=9.1.4",
-    "google-cloud-bigquery",
 ]
 
 [tool.uv.sources]

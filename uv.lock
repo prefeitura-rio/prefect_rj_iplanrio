@@ -5519,7 +5519,6 @@ version = "0.1.0"
 source = { virtual = "pipelines/rj_segur__forca_municipal" }
 dependencies = [
     { name = "fastkml" },
-    { name = "google-cloud-bigquery" },
     { name = "prefect-rj-iplanrio" },
     { name = "tenacity" },
 ]
@@ -5527,7 +5526,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastkml", specifier = ">=1.4.0" },
-    { name = "google-cloud-bigquery" },
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "tenacity", specifier = ">=9.1.4" },
 ]
