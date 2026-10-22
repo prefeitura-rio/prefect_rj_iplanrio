@@ -47,6 +47,15 @@
           exec = "nu scripts/checks.nu lint prefect";
           execIfModified = [ "pipelines/*/prefect.yaml" ];
         };
+        "lint:imports" = {
+          exec = "nu scripts/checks.nu lint imports";
+          after = [ "env:sync" ];
+          execIfModified = [
+            "pipelines/**/*.py"
+            "scripts/legacy.nu"
+            "pyproject.toml"
+          ];
+        };
         "lint:ci" = {
           exec = "actionlint .github/workflows/*.y*ml";
           execIfModified = [
@@ -79,6 +88,7 @@
           "lint:sql"
           "lint:deps"
           "lint:prefect"
+          "lint:imports"
           "lint:ci"
         ];
         "test:all".after = [

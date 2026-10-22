@@ -1,4 +1,5 @@
 use lib.nu [fail]
+use legacy.nu [LEGACY]
 
 # Run one command in a folder and fail with its name if it exits with an error.
 def --wrapped in-project [folder: path, command: string, ...arguments: string]: nothing -> nothing {
@@ -35,7 +36,8 @@ def 'main lint python' []: nothing -> nothing {
 
 # Fail if a pipeline imports a module that no longer exists.
 def 'main lint imports' []: nothing -> nothing {
-    in-project . ruff check --select TID251 --no-fix pipelines
+    let legacy = $LEGACY | each {|name| $'--exclude=pipelines/($name)' }
+    in-project . ruff check --select TID251 --no-fix ...$legacy pipelines
 }
 
 # Lint the SQL templates of the toolkit.

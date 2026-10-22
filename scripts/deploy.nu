@@ -1,4 +1,5 @@
 use lib.nu [fail]
+use legacy.nu [LEGACY]
 use std/log
 
 const RETRYABLE_ERRORS = [timeout connection network 'read timed out']
@@ -113,7 +114,11 @@ def 'main plan' [
         $changed | list-pipelines
     }
 
-    let chosen = $candidates | where (find-deployments $it $environment | is-not-empty) | sort
+    if ($pipeline != null) and ($pipeline in $LEGACY) {
+        fail $'The pipeline ($pipeline) is legacy, and it keeps its current deployment' {command: plan, span: (metadata $pipeline).span}
+    }
+
+    let chosen = $candidates | where $it not-in $LEGACY | where (find-deployments $it $environment | is-not-empty) | sort
 
     if ($pipeline != null) and ($chosen | is-empty) {
         fail $'The pipeline ($pipeline) has no ($environment) deployment' {command: plan, span: (metadata $pipeline).span}
