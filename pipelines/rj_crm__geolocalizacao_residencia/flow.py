@@ -1,174 +1,72 @@
-"""
-Flow migrado do Prefect 1.4 para 3.0 - CRM Geolocalização Residência
-
-⚠️ ATENÇÃO: Algumas funções da biblioteca prefeitura_rio NÃO têm equivalente no toolkit:
-- handler_initialize_sentry: SEM EQUIVALENTE
-- LocalDaskExecutor: Removido no Prefect 3.0
-- KubernetesRun: Removido no Prefect 3.0 (configurado no YAML)
-- GCS storage: Removido no Prefect 3.0 (configurado no YAML)
-- Parameter: Substituído por parâmetros de função
-- case (conditional execution): Substituído por if/else padrão
-"""
+"""Flow for rj_crm__geolocalizacao_residencia."""
 
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
+import polars as pl
 from prefect import flow
+from toolkit.telemetry import logger
 
-from pipelines.rj_crm__geolocalizacao_residencia.constants import GeolocalizacaoConstants
+from pipelines.rj_crm__geolocalizacao_residencia.constants import DEFAULT_MAX_CONCURRENT
 from pipelines.rj_crm__geolocalizacao_residencia.tasks import (
-    add_plus_code_column,
-    async_geocoding_dataframe,
-    async_geocoding_dataframe_with_fallback,
-    check_df_emptiness,
-    dataframe_to_file,
-    download_data_from_bigquery,
-    geoapify_batch_geocoding_task,
+    geocode_fallback_task,
+    geocode_geoapify_task,
+    geocode_nominatim_task,
+    read_addresses_task,
 )
+from pipelines.rj_crm__geolocalizacao_residencia.types import Strategy
+from utils.hooks import notify_failure
 from utils.tasks import publish_table_in_bq, upload_files_to_gcs
-from utils.types import Cloud, Table
+from utils.types import Cloud, DumpMode, Table
 from utils.utils import capture_options
 
 
-@flow(log_prints=True, flow_run_name="geo_{provider_strategy}_{table_id}_{dataset_id}")
+@flow(log_prints=True, flow_run_name="geo-{strategy}-{table[table_id]}", on_failure=[notify_failure])
 async def rj_crm__geolocalizacao_residencia(
     *,
     cloud: Cloud,
-    # Strategy parameter to choose geocoding approach
-    provider_strategy: str = GeolocalizacaoConstants.DEFAULT_STRATEGY.value,
-    # Query override
-    query_override: str | None = None,
-    # BigQuery parameters
-    dataset_id: str | None = None,
-    table_id: str | None = None,
-    billing_project_id: str | None = None,
-    bucket_name: str | None = None,
-    biglake_table: bool | None = None,
-    # File processing parameters
-    file_folder: str | None = None,
-    file_format: str | None = None,
-    source_format: str | None = None,
-    dump_mode: str | None = None,
-    # Geocoding parameters
-    max_concurrent_nominatim: int | None = None,
-    return_original_cols: bool | None = None,
-):
+    table: Table,
+    strategy: Strategy = "fallback",
+    dump_mode: DumpMode = "append",
+    max_concurrent: int = DEFAULT_MAX_CONCURRENT,
+) -> None:
+    """Find the coordinates of the home addresses of citizens that have none, and load them to BigQuery.
+
+    The flow reads up to 10,000 new addresses at random, and geocodes them by `strategy`:
+
+    - `nominatim`: the Nominatim server of the settings, fast and with less precision, `max_concurrent` at one time.
+    - `fallback`: Waze, MapTiler, Geocode.xyz, LocationIQ and OpenCage in turn, each taking what the last did not find.
+    - `geoapify_batch`: the batch API of Geoapify, medium speed and good precision.
+
+    Every row that got a point is loaded with its geocode and its plus code, all as text.
     """
-    Flow para geolocalizar endereços residenciais usando múltiplas estratégias.
+    addresses = await read_addresses_task()
 
-    Este flow suporta três estratégias de geocoding:
-    1. 'nominatim' - Usa apenas Nominatim self-hosted (rápido, menor precisão)
-    2. 'fallback' - Usa múltiplos provedores sequencialmente (lento, maior precisão)
-    3. 'geoapify_batch' - Usa API em lote do Geoapify (médio, boa precisão)
+    if not addresses:
+        logger.info("No address to geocode")
+        return
 
-    Args:
-        provider_strategy: Estratégia de geocoding a usar ('nominatim', 'fallback', 'geoapify_batch')
-        query_override: Query SQL personalizada (opcional)
-        dataset_id: ID do dataset no BigQuery (default: intermediario_dados_mestres)
-        table_id: ID da tabela no BigQuery (default: enderecos_geolocalizados)
-        billing_project_id: Projeto para billing (default: rj-crm-registry)
-        bucket_name: Nome do bucket (default: rj-sms)
-        biglake_table: Se é tabela BigLake (default: False)
-        file_folder: Pasta para arquivos temporários (default: pipelines/data)
-        file_format: Formato do arquivo (default: parquet)
-        source_format: Formato fonte para BigQuery (default: parquet)
-        dump_mode: Modo de dump (default: append)
-        max_concurrent_nominatim: Max requests concorrentes Nominatim (default: 100)
-        return_original_cols: Retornar colunas originais (default: True)
-    """
-
-    # Usar valores dos constants como padrão para parâmetros
-    dataset_id = dataset_id or GeolocalizacaoConstants.DATASET_ID.value
-    table_id = table_id or GeolocalizacaoConstants.TABLE_ID.value
-    billing_project_id = billing_project_id or GeolocalizacaoConstants.BILLING_PROJECT_ID.value
-    bucket_name = bucket_name or GeolocalizacaoConstants.BUCKET_NAME.value
-    biglake_table = biglake_table if biglake_table is not None else GeolocalizacaoConstants.BIGLAKE_TABLE.value
-
-    file_folder = file_folder or GeolocalizacaoConstants.FILE_FOLDER.value
-    file_format = file_format or GeolocalizacaoConstants.FILE_FORMAT.value
-    source_format = source_format or GeolocalizacaoConstants.SOURCE_FORMAT.value
-    dump_mode = dump_mode or GeolocalizacaoConstants.DUMP_MODE.value
-
-    max_concurrent_nominatim = max_concurrent_nominatim or GeolocalizacaoConstants.MAX_CONCURRENT_NOMINATIM.value
-    return_original_cols = (
-        return_original_cols if return_original_cols is not None else GeolocalizacaoConstants.RETURN_ORIGINAL_COLS.value
-    )
-
-    # Query to use
-    query = query_override or GeolocalizacaoConstants.ADDRESS_QUERY.value
-    address_column = GeolocalizacaoConstants.ADDRESS_COLUMN.value
-
-    # Renomear flow run para melhor identificação
-
-    # Injetar credenciais do BD
-
-    # Download addresses from BigQuery
-    dataframe = download_data_from_bigquery(
-        query=query,
-        billing_project_id=billing_project_id,
-        bucket_name=bucket_name,
-    )
-
-    # Check if we have addresses to process
-    empty_addresses = check_df_emptiness(dataframe=dataframe)
-    if empty_addresses:
-        print("Address dataframe empty")
-
-    if not empty_addresses:
-        # Choose geocoding strategy
-        if provider_strategy == GeolocalizacaoConstants.STRATEGY_NOMINATIM.value:
-            # Strategy 1: Nominatim only (fast, basic accuracy).
-            georeferenced_table = async_geocoding_dataframe(
-                dataframe=dataframe,
-                address_column=address_column,
-                max_concurrent_nominatim=max_concurrent_nominatim,
-                return_original_cols=return_original_cols,
-            )
-
-        elif provider_strategy == GeolocalizacaoConstants.STRATEGY_FALLBACK.value:
-            # Strategy 2: Multiple provider fallback (slower, higher accuracy).
-            georeferenced_table = async_geocoding_dataframe_with_fallback(
-                dataframe=dataframe,
-                address_column=address_column,
-            )
-
-        elif provider_strategy == GeolocalizacaoConstants.STRATEGY_GEOAPIFY_BATCH.value:
-            # Strategy 3: Geoapify batch processing (medium speed, good accuracy).
-            georeferenced_table = geoapify_batch_geocoding_task(
-                dataframe=dataframe,
-                address_column=address_column,
-                batch_size=GeolocalizacaoConstants.GEOAPIFY_BATCH_SIZE.value,
-                return_original_cols=return_original_cols,
-            )
-        else:
-            raise ValueError(
-                f"Invalid provider_strategy: {provider_strategy}. Must be one of: nominatim, fallback, geoapify_batch"
-            )
-
-        # Check if geocoding produced results
-        empty_geocoded = check_df_emptiness(dataframe=georeferenced_table)
-
-        if not empty_geocoded:
-            # Add plus codes
-            georeferenced_table = add_plus_code_column(georeferenced_table)
-
-            # Save to file
-            base_path = dataframe_to_file(
-                dataframe=georeferenced_table, file_folder=file_folder, file_format=file_format
-            )
-
-            table = Table(dataset_id=dataset_id, table_id=table_id)
-            await upload_files_to_gcs(
-                Path(base_path),
-                table,
-                bucket=cloud["bucket"],
-                dump_mode=dump_mode,
-                source_format=source_format,
-                options=capture_options(dump_mode),
-            )
-            await publish_table_in_bq(table, cloud)
-        else:
-            print(f"No geocoded results from strategy '{provider_strategy}' - skipping upload")
+    if strategy == "nominatim":
+        rows = await geocode_nominatim_task(addresses, max_concurrent)
+    elif strategy == "fallback":
+        rows = await geocode_fallback_task(addresses)
     else:
-        print("No addresses found to geocode - skipping flow execution.")
+        rows = await geocode_geoapify_task(addresses)
 
-# force deploy
+    if not rows:
+        logger.info("No address was geocoded by the strategy %s, so nothing is loaded", strategy)
+        return
+
+    with TemporaryDirectory() as directory:
+        folder = Path(directory)
+        pl.DataFrame(rows, schema=dict.fromkeys(rows[0], pl.String)).write_parquet(folder / "geocoded.parquet")
+        await upload_files_to_gcs(
+            folder,
+            table,
+            bucket=cloud["bucket"],
+            dump_mode=dump_mode,
+            source_format="parquet",
+            options=capture_options(dump_mode),
+        )
+
+    await publish_table_in_bq(table, cloud)

@@ -1,85 +1,49 @@
-"""
-Constants for geolocation pipeline
-"""
+"""Constants of rj_crm__geolocalizacao_residencia."""
 
-from enum import Enum
+from typing import Final
+from zoneinfo import ZoneInfo
 
+from pipelines.rj_crm__geolocalizacao_residencia.types import Step
 
-class GeolocalizacaoConstants(Enum):
-    """Constants for geolocation pipeline"""
-
-    # Dataset and table configuration
-    DATASET_ID = "brutos_dados_enriquecidos"
-    TABLE_ID = "enderecos_geolocalizados"
-    BILLING_PROJECT_ID = "rj-crm-registry"
-    BUCKET_NAME = "rj-sms"
-    BIGLAKE_TABLE = True
-
-    # File and data configuration
-    FILE_FOLDER = "pipelines/data"
-    FILE_FORMAT = "parquet"
-    SOURCE_FORMAT = "parquet"
-    DUMP_MODE = "append"
-
-    # Address column name
-    ADDRESS_COLUMN = "endereco_completo"
-    RETURN_ORIGINAL_COLS = True
-
-    # Geocoding configuration
-    MAX_CONCURRENT_NOMINATIM = 500
-    SLEEP_TIME = 1.1
-    USE_EXPONENTIAL_BACKOFF = True
-
-    # Provider strategies
-    STRATEGY_NOMINATIM = "nominatim"
-    STRATEGY_FALLBACK = "fallback"
-    STRATEGY_GEOAPIFY_BATCH = "geoapify_batch"
-
-    # Default strategy
-    DEFAULT_STRATEGY = "fallback"
-
-    # Geoapify batch configuration
-    GEOAPIFY_BATCH_SIZE = 100
-    GEOAPIFY_MAX_WAIT_TIME = 300
-    GEOAPIFY_POLL_INTERVAL = 5
-
-    # BigQuery address extraction query
-    ADDRESS_QUERY = """
-WITH enderecos_rmi AS (
-  SELECT
-    DISTINCT
-    LOWER(REGEXP_REPLACE(endereco.principal.tipo_logradouro, r'[^a-zA-Z0-9 ]', '')) AS tipo_logradouro,
-    LOWER(REGEXP_REPLACE(endereco.principal.logradouro, r'[^a-zA-Z0-9 ]', '')) AS logradouro_tratado,
-    LOWER(REGEXP_REPLACE(endereco.principal.numero, r'[^a-zA-Z0-9 ]', '')) AS numero_porta,
-    IFNULL(LOWER(REGEXP_REPLACE(endereco.principal.bairro, r'[^a-zA-Z0-9 ]', '')), "") AS bairro
-  FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`
-  WHERE endereco.indicador IS TRUE
-    AND (endereco.principal.municipio = "Rio de Janeiro" OR endereco.principal.municipio IS NULL)
-    AND endereco.principal.logradouro IS NOT NULL
-    AND obito.indicador = FALSE
-    AND menor_idade = FALSE
-),
-
-enderecos_geolocalizados AS (
-  SELECT
-    DISTINCT logradouro_tratado, numero_porta, IFNULL(bairro, "") AS bairro
-  FROM `rj-crm-registry.brutos_dados_enriquecidos.enderecos_geolocalizados`
+SP_TZ: Final = ZoneInfo("America/Sao_Paulo")
+BILLING_PROJECT: Final = "rj-crm-registry"
+DEFAULT_MAX_CONCURRENT: Final = 500
+"""The most requests at one time to the Nominatim server."""
+DEFAULT_SLEEP_SECONDS: Final = 1.1
+DEFAULT_TIMEOUT: Final = 10
+JITTER_RANGE: Final = 0.1
+MAX_BACKOFF_SECONDS: Final = 60.0
+MIN_SLEEP_SECONDS: Final = 0.1
+XYZ_ATTEMPTS: Final = 3
+XYZ_THROTTLE_BASE: Final = 2.0
+GEOAPIFY_BATCH_SIZE: Final = 100
+GEOAPIFY_MAX_WAIT_SECONDS: Final = 300
+GEOAPIFY_POLL_SECONDS: Final = 5
+GEOAPIFY_SUBMIT_TIMEOUT: Final = 30
+GEOAPIFY_POLL_TIMEOUT: Final = 15
+RIO_CONTEXT: Final = "Rio de Janeiro"
+MAX_LATITUDE: Final = 90
+MAX_LONGITUDE: Final = 180
+GEOCODE_FIELDS: Final = (
+    "latitude",
+    "longitude",
+    "logradouro_geocode",
+    "numero_porta_geocode",
+    "bairro_geocode",
+    "cidade_geocode",
+    "estado_geocode",
+    "cep_geocode",
+    "confianca",
+    "updated_date",
+    "geocode",
 )
-SELECT
-  DISTINCT
-    logradouro_tratado,
-        enderecos_rmi.numero_porta,
-        enderecos_rmi.bairro AS bairro,
-    CONCAT(
-        CASE WHEN enderecos_rmi.tipo_logradouro IS NULL THEN '' ELSE CONCAT(enderecos_rmi.tipo_logradouro, " ") END,
-        CASE WHEN enderecos_rmi.logradouro_tratado IS NULL THEN '' ELSE CONCAT(enderecos_rmi.logradouro_tratado, " ") END,
-        CASE WHEN enderecos_rmi.numero_porta IS NULL THEN ',' ELSE CONCAT(enderecos_rmi.numero_porta, ', ') END,
-        CASE WHEN enderecos_rmi.bairro IS NULL THEN '' ELSE enderecos_rmi.bairro END,
-        ", Rio de Janeiro, RJ, Brasil"
-    ) AS endereco_completo
-FROM enderecos_rmi
-LEFT JOIN enderecos_geolocalizados USING(logradouro_tratado, numero_porta, bairro)
-WHERE enderecos_geolocalizados.logradouro_tratado IS NULL
-ORDER BY RAND()
-LIMIT 10000
-    """
+"""The columns that a geocoding adds to an address."""
+WAZE_BOUNDS: Final = "-22.93958242,-43.198843;-22.87404002,-43.1470871"
+FALLBACK_STEPS: Final = (
+    Step("waze", None, 3, 3.0),
+    Step("maptiler", "MAPTILER_API_KEY", 10, 1.1),
+    Step("geocode_xyz", "GEOCODE_XYZ_API_KEY", 5, 1.6),
+    Step("locationiq", "LOCATIONIQ_API_KEY", 10, 1.1),
+    Step("opencage", "OPENCAGE_API_KEY", 10, 1.1),
+)
+"""The services of the fallback, in the order that they run, each with the setting of its key."""

@@ -40,20 +40,12 @@ deployments:
         secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
     parameters:
-      provider_strategy: "nominatim"
-      query_override:
-      dataset_id: "brutos_dados_enriquecidos"
-      table_id: "enderecos_geolocalizados"
-      billing_project_id: "rj-crm-registry"
-      bucket_name: "rj-sms"
-      biglake_table: false
-      file_folder: "pipelines/data"
-      file_format: "parquet"
-      source_format: "parquet"
-      dump_mode: "append"
-      max_concurrent_nominatim: 100
-      return_original_cols: true
-
+      strategy: nominatim
+      table:
+        dataset_id: brutos_dados_enriquecidos
+        table_id: enderecos_geolocalizados
+      dump_mode: append
+      max_concurrent: 100
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio
@@ -74,19 +66,12 @@ deployments:
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
     parameters:
-      provider_strategy: "nominatim"
-      query_override:
-      dataset_id: "brutos_dados_enriquecidos"
-      table_id: "enderecos_geolocalizados"
-      billing_project_id: "rj-crm-registry"
-      bucket_name: "rj-sms"
-      biglake_table: false
-      file_folder: "pipelines/data"
-      file_format: "parquet"
-      source_format: "parquet"
-      dump_mode: "append"
-      max_concurrent_nominatim: 100
-      return_original_cols: true
+      strategy: nominatim
+      table:
+        dataset_id: brutos_dados_enriquecidos
+        table_id: enderecos_geolocalizados
+      dump_mode: append
+      max_concurrent: 100
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio
@@ -113,20 +98,12 @@ deployments:
         secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
     parameters:
-      provider_strategy: "fallback"
-      query_override:
-      dataset_id: "brutos_dados_enriquecidos"
-      table_id: "enderecos_geolocalizados"
-      billing_project_id: "rj-crm-registry"
-      bucket_name: "rj-sms"
-      biglake_table: false
-      file_folder: "pipelines/data"
-      file_format: "parquet"
-      source_format: "parquet"
-      dump_mode: "append"
-      max_concurrent_nominatim: 100
-      return_original_cols: true
-
+      strategy: fallback
+      table:
+        dataset_id: brutos_dados_enriquecidos
+        table_id: enderecos_geolocalizados
+      dump_mode: append
+      max_concurrent: 100
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio
@@ -147,19 +124,12 @@ deployments:
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
     parameters:
-      provider_strategy: "fallback"
-      query_override:
-      dataset_id: "brutos_dados_enriquecidos"
-      table_id: "enderecos_geolocalizados"
-      billing_project_id: "rj-crm-registry"
-      bucket_name: "rj-sms"
-      biglake_table: false
-      file_folder: "pipelines/data"
-      file_format: "parquet"
-      source_format: "parquet"
-      dump_mode: "append"
-      max_concurrent_nominatim: 100
-      return_original_cols: true
+      strategy: fallback
+      table:
+        dataset_id: brutos_dados_enriquecidos
+        table_id: enderecos_geolocalizados
+      dump_mode: append
+      max_concurrent: 100
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio
@@ -186,20 +156,12 @@ deployments:
         secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
     parameters:
-      provider_strategy: "geoapify_batch"
-      query_override:
-      dataset_id: "brutos_dados_enriquecidos"
-      table_id: "enderecos_geolocalizados"
-      billing_project_id: "rj-crm-registry"
-      bucket_name: "rj-sms"
-      biglake_table: false
-      file_folder: "pipelines/data"
-      file_format: "parquet"
-      source_format: "parquet"
-      dump_mode: "append"
-      max_concurrent_nominatim: 100
-      return_original_cols: true
-
+      strategy: geoapify_batch
+      table:
+        dataset_id: brutos_dados_enriquecidos
+        table_id: enderecos_geolocalizados
+      dump_mode: append
+      max_concurrent: 100
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio
@@ -220,19 +182,12 @@ deployments:
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
     parameters:
-      provider_strategy: "geoapify_batch"
-      query_override:
-      dataset_id: "brutos_dados_enriquecidos"
-      table_id: "enderecos_geolocalizados"
-      billing_project_id: "rj-crm-registry"
-      bucket_name: "rj-sms"
-      biglake_table: false
-      file_folder: "pipelines/data"
-      file_format: "parquet"
-      source_format: "parquet"
-      dump_mode: "append"
-      max_concurrent_nominatim: 100
-      return_original_cols: true
+      strategy: geoapify_batch
+      table:
+        dataset_id: brutos_dados_enriquecidos
+        table_id: enderecos_geolocalizados
+      dump_mode: append
+      max_concurrent: 100
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio

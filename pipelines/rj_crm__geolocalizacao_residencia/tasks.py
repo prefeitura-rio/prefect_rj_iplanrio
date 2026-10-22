@@ -1,479 +1,129 @@
-"""
-Tasks for geolocation pipeline migrated to Prefect 3.x
-"""
+"""Tasks of rj_crm__geolocalizacao_residencia."""
 
-from pathlib import Path
-from time import sleep, time
-from uuid import uuid4
+from datetime import datetime
 
-import pandas as pd
-from google.cloud import bigquery
 from prefect import task
-from prefect.logging import get_logger
+from pydantic import TypeAdapter
+from toolkit.telemetry import logger
 
-from pipelines.rj_crm__geolocalizacao_residencia.helpers.async_utils import (
-    run_geoapify_batch_geocoding_async,
-    run_geocode_geocodexyz_async,
-    run_geocode_locationiq_async,
-    run_geocode_maptiler_async,
-    run_geocode_nominatim_async,
-    run_geocode_opencage_async,
-    run_geocode_waze_async,
+from pipelines.rj_crm__geolocalizacao_residencia.constants import (
+    BILLING_PROJECT,
+    DEFAULT_SLEEP_SECONDS,
+    FALLBACK_STEPS,
+    GEOAPIFY_BATCH_SIZE,
+    SP_TZ,
 )
-from pipelines.rj_crm__geolocalizacao_residencia.helpers.geo_utils import (
-    coordinates_to_pluscode,
-)
+from pipelines.rj_crm__geolocalizacao_residencia.helpers.geocode import geocode_geoapify, geocode_many, run_step
+from pipelines.rj_crm__geolocalizacao_residencia.helpers.providers import nominatim
+from pipelines.rj_crm__geolocalizacao_residencia.helpers.rows import has_point, join_rows
 from pipelines.rj_crm__geolocalizacao_residencia.settings import Settings
+from pipelines.rj_crm__geolocalizacao_residencia.types import Address, Geocode, Row
+from utils.tasks import read_bq
+from utils.utils import render_query
 
-logger = get_logger("toolkit")
+ADDRESSES: TypeAdapter[list[Address]] = TypeAdapter(list[Address])
+
+
+def today() -> str:
+    """Return today in São Paulo, as the text of the `updated_date` column."""
+    return datetime.now(SP_TZ).date().isoformat()
+
+
+def texts(addresses: list[Address]) -> list[str]:
+    """Return the full address of each address."""
+    return [address["endereco_completo"] or "" for address in addresses]
+
+
+@task(retries=2, retry_delay_seconds=30)
+async def read_addresses_task() -> list[Address]:
+    """Read up to 10,000 addresses of citizens that have no coordinates yet, in a random order.
+
+    Only an address with a full text is kept.
+    """
+    frame = await read_bq(render_query(__file__, "addresses"), project=BILLING_PROJECT)
+    addresses = [address for address in ADDRESSES.validate_python(frame.to_dicts()) if address["endereco_completo"]]
+    logger.info("Addresses to geocode: count=%d", len(addresses))
+
+    return addresses
 
 
 @task
-def download_data_from_bigquery(
-    query: str, billing_project_id: str, bucket_name: str, limit: int = None
-) -> pd.DataFrame:
-    """Download batch of addresses from BigQuery for geocoding"""
-
-    # Apply dynamic limit if provided
-    if limit is not None:
-        import re
-
-        query = re.sub(r"LIMIT \d+", f"LIMIT {limit}", query)
-        logger.info(f"Querying batch of addresses from BigQuery (max {limit} records)")
-    else:
-        logger.info("Querying batch of addresses from BigQuery")
-
-    bq_client = bigquery.Client(
-        project=billing_project_id,
-    )
-    job = bq_client.query(query)
-    while not job.done():
-        sleep(1)
-    logger.info("Getting result from query")
-    results = job.result()
-    logger.info("Converting result to pandas dataframe")
-    dfr = results.to_dataframe()
-    logger.info(f"Downloaded {len(dfr)} addresses for geocoding batch")
-    logger.info("End download data from bigquery")
-
-    return dfr
-
-
-@task
-def check_df_emptiness(dataframe: pd.DataFrame) -> bool:
-    """
-    Check if there are new addresses to georeference
-    """
-    return dataframe.empty
-
-
-@task
-def async_geocoding_dataframe(
-    dataframe: pd.DataFrame,
-    address_column: str = "address",
-    max_concurrent_nominatim: int = 100,
-    return_original_cols: bool = False,
-) -> pd.DataFrame:
-    """
-    Async geocoding dataframe using only Nominatim.
-    Processes all addresses in one batch with concurrent requests.
-
-    Args:
-        dataframe: DataFrame containing addresses to geocode
-        address_column: Column name containing addresses
-        max_concurrent_nominatim: Max concurrent requests for Nominatim
-        return_original_cols: Whether to return original columns
-
-    Returns:
-        DataFrame with geocoded addresses
-    """
-    logger.info("Start async georeferencing dataframe using Nominatim only")
-    start_time = time()
-
-    # Prepare dataframe
-    dataframe = dataframe.dropna(subset=[address_column])
-    dataframe = dataframe.reset_index(drop=True)
-    total_addresses = len(dataframe)
-
-    logger.info(f"Processing {total_addresses} addresses in one batch")
-
-    logger.info("Geocoding with Nominatim")
+async def geocode_nominatim_task(addresses: list[Address], max_concurrent: int) -> list[Row]:
+    """Geocode the addresses with the Nominatim server of the settings, and return the rows that got a point."""
     settings = Settings()
-    user_agent = settings.NOMINATIM_USER_AGENT
-    domain = settings.NOMINATIM_DOMAIN
-
-    final_dataframe = run_geocode_nominatim_async(
-        dataframe=dataframe,
-        address_column=address_column,
-        user_agent=user_agent,
-        domain=domain,
-        max_concurrent=max_concurrent_nominatim,
-        sleep_time=1.1,
-        use_exponential_backoff=True,
-        return_original_cols=return_original_cols,
+    provider = nominatim(settings.NOMINATIM_DOMAIN, settings.NOMINATIM_USER_AGENT)
+    geocodes = await geocode_many(
+        provider, texts(addresses), today=today(), concurrent=max_concurrent, wait=DEFAULT_SLEEP_SECONDS
     )
+    rows = join_rows(addresses, geocodes, need_street=False)
+    logger.info("Nominatim done: geocoded=%d of %d", len(rows), len(addresses))
 
-    # Only keep successfully geocoded addresses
-    final_dataframe = final_dataframe.dropna(subset=["latitude", "longitude"])
-
-    success_count = len(final_dataframe)
-    logger.info(f"Successfully geocoded {success_count}/{total_addresses} addresses")
-
-    # Ensure string types for all columns, replacing None with empty string
-    if not final_dataframe.empty:
-        final_dataframe = final_dataframe.astype("str")
-        final_dataframe = final_dataframe.replace({"nan": "", "None": "", "<NA>": ""})
-        final_dataframe = final_dataframe.fillna("")
-        logger.info(f"Final result preview: \n{final_dataframe.iloc[0]}")
-
-    total_time = time() - start_time
-    final_success_rate = (len(final_dataframe) / total_addresses) * 100 if total_addresses > 0 else 0
-    logger.info(
-        f"Async geocoding completed in {total_time: .2f}s - Final success "
-        f"{len(final_dataframe)}/{total_addresses} ({final_success_rate: .1f}%)"
-    )
-
-    return final_dataframe
+    return rows
 
 
 @task
-def async_geocoding_dataframe_with_fallback(
-    dataframe: pd.DataFrame,
-    address_column: str = "address",
-) -> pd.DataFrame:
+async def geocode_fallback_task(addresses: list[Address]) -> list[Row]:
+    """Geocode the addresses with a chain of services, each taking what the one before could not find.
+
+    The order is Waze, MapTiler, Geocode.xyz, LocationIQ and OpenCage. A service whose answers are all empty
+    counts as out of quota and is skipped, and so is one whose key is not set. Only an address with a point
+    and a street comes out.
     """
-    Async geocoding dataframe with sequential fallback through multiple geocoders.
-    Processes all addresses through geocoders sequentially while respecting rate limits.
-
-    Args:
-        dataframe: DataFrame containing addresses to geocode
-        address_column: Column name containing addresses
-
-    Returns:
-        DataFrame with geocoded addresses from all successful geocoders
-    """
-    logger.info("Start async georeferencing dataframe with sequential fallback")
-    start_time = time()
-
-    # Prepare dataframe
-    dataframe = dataframe.dropna(subset=[address_column])
-    dataframe = dataframe.reset_index(drop=True)
-    total_addresses = len(dataframe)
-
-    logger.info(f"Processing {total_addresses} addresses with sequential fallback")
-
-    # Track geocoder rate limit status
-    geocoder_status = {
-        "waze": {"rate_limited": False, "name": "Waze"},
-        "geocode_xyz": {"rate_limited": False, "name": "Geocode.xyz"},
-        "locationiq": {"rate_limited": False, "name": "LocationIQ"},
-        "maptiler": {"rate_limited": False, "name": "MapTiler"},
-        "opencage": {"rate_limited": False, "name": "OpenCage"},
+    settings = Settings()
+    keys = {
+        "MAPTILER_API_KEY": settings.MAPTILER_API_KEY.get_secret_value(),
+        "GEOCODE_XYZ_API_KEY": settings.GEOCODE_XYZ_API_KEY.get_secret_value(),
+        "LOCATIONIQ_API_KEY": settings.LOCATIONIQ_API_KEY.get_secret_value(),
+        "OPENCAGE_API_KEY": settings.OPENCAGE_API_KEY.get_secret_value(),
     }
+    day = today()
+    found_addresses: list[Address] = []
+    found_geocodes: list[Geocode] = []
+    remaining = list(addresses)
 
-    # Initialize successful results and remaining failures
-    successful_results = pd.DataFrame()
-    remaining_failures = dataframe.copy()
-
-    # Add empty latitude/longitude columns to remaining_failures if they don't exist
-    if "latitude" not in remaining_failures.columns:
-        remaining_failures[["latitude", "longitude"]] = None
-
-    # Process addresses through geocoders sequentially
-    geocoder_configs = [
-        {
-            "name": "waze",
-            "display_name": "Waze",
-            "function": run_geocode_waze_async,
-            "secret_path": None,
-            "secret_key": None,
-            "params": {"max_concurrent": 3, "sleep_time": 3.0},
-        },
-        {
-            "name": "maptiler",
-            "display_name": "MapTiler",
-            "function": run_geocode_maptiler_async,
-            "secret_key": "MAPTILER_API_KEY",
-            "params": {"max_concurrent": 10, "sleep_time": 1.1},
-        },
-        {
-            "name": "geocode_xyz",
-            "display_name": "Geocode.xyz",
-            "function": run_geocode_geocodexyz_async,
-            "secret_key": "GEOCODE_XYZ_API_KEY",
-            "params": {"max_concurrent": 5, "sleep_time": 1.6},
-        },
-        {
-            "name": "locationiq",
-            "display_name": "LocationIQ",
-            "function": run_geocode_locationiq_async,
-            "secret_key": "LOCATIONIQ_API_KEY",
-            "params": {"max_concurrent": 10, "sleep_time": 1.1},
-        },
-        {
-            "name": "opencage",
-            "display_name": "OpenCage",
-            "function": run_geocode_opencage_async,
-            "secret_key": "OPENCAGE_API_KEY",
-            "params": {"max_concurrent": 10, "sleep_time": 1.1},
-        },
-    ]
-
-    for step, config in enumerate(geocoder_configs, 1):
-        if remaining_failures.empty:
-            logger.info("No more failed addresses to process")
+    for step in FALLBACK_STEPS:
+        if not remaining:
             break
 
-        if geocoder_status[config["name"]]["rate_limited"]:
-            logger.info(f"Skipping {config['display_name']} - previously rate limited")
+        key = keys[step.key_setting] if step.key_setting else ""
+
+        if step.key_setting and not key:
+            logger.warning("The key is not set, so the service is skipped: service=%s", step.name)
             continue
 
-        logger.info(f"Step {step}: Proc. {len(remaining_failures)} addresses w. {config['display_name']}")
+        geocodes = await run_step(step, texts(remaining), key, day)
 
-        try:
-            # Get API key if required
-            if config["secret_key"]:
-                api_key = getattr(Settings(), config["secret_key"]).get_secret_value()
-                if not api_key:
-                    raise ValueError(f"The environment variable {config['secret_key']} is not set")
+        if not any(has_point(geocode) for geocode in geocodes):
+            logger.warning("Every answer is empty, so the service counts as out of quota: service=%s", step.name)
+            continue
 
-                # Process failed addresses with current geocoder (with API key)
-                geocoder_result = config["function"](
-                    dataframe=remaining_failures,
-                    address_column=address_column,
-                    api_key=api_key,
-                    use_exponential_backoff=True,
-                    **config["params"],
-                )
+        still: list[Address] = []
+
+        for address, geocode in zip(remaining, geocodes, strict=True):
+            if has_point(geocode):
+                found_addresses.append(address)
+                found_geocodes.append(geocode)
             else:
-                # Process failed addresses with geocoder that doesn't need API key
-                geocoder_result = config["function"](
-                    dataframe=remaining_failures,
-                    address_column=address_column,
-                    use_exponential_backoff=True,
-                    **config["params"],
-                )
+                still.append(address)
 
-            # Check for rate limiting by examining results
-            all_empty = geocoder_result["latitude"].isna().all() and geocoder_result["longitude"].isna().all()
+        logger.info("Service done: service=%s found=%d left=%d", step.name, len(found_addresses), len(still))
+        remaining = still
 
-            if all_empty and len(remaining_failures) > 0:
-                logger.info(f"{config['display_name']} appears to be rate limited - skipping")
-                geocoder_status[config["name"]]["rate_limited"] = True
-                continue
-
-            # Separate new successes and remaining failures
-            new_successes = geocoder_result.dropna(subset=["latitude", "longitude"]).copy()
-            remaining_failures = geocoder_result[
-                geocoder_result["latitude"].isna() | geocoder_result["longitude"].isna()
-            ].copy()
-
-            # Add new successes to our successful results
-            if not new_successes.empty:
-                successful_results = pd.concat([successful_results, new_successes], ignore_index=True)
-
-            geocoder_success = len(new_successes)
-            logger.info(f"{config['display_name']} geocoded {geocoder_success} additional addresses")
-
-        except Exception as e:
-            logger.info(f"Error processing with {config['display_name']}: {e}")
-            # Mark as rate limited if error suggests quota issues
-            if any(term in str(e).lower() for term in ["402", "quota", "limit", "credits", "balance"]):
-                geocoder_status[config["name"]]["rate_limited"] = True
-            continue
-
-    # Final results - ensure we only return rows with valid coordinates
-    if not successful_results.empty:
-        successful_results = successful_results.dropna(subset=["latitude", "longitude"])
-        successful_results = successful_results.dropna(subset=["logradouro_geocode"])
-
-    final_success_count = len(successful_results)
-
-    # Ensure string types for all columns, replacing None with empty string
-    if not successful_results.empty:
-        successful_results = successful_results.fillna("")
-        successful_results[successful_results.columns] = successful_results[successful_results.columns].astype("str")
-        logger.info(f"Final result preview: \n{successful_results.iloc[0]}")
-
-    total_time = time() - start_time
-    final_success_rate = (final_success_count / total_addresses) * 100 if total_addresses > 0 else 0
-    logger.info(
-        f"Sequential fallback geocoding completed in {total_time: .2f}s - Final success "
-        f"{final_success_count}/{total_addresses} ({final_success_rate: .1f}%)"
-    )
-    successful_results = successful_results[successful_results["logradouro_tratado"] != "nan"]
-    successful_results = successful_results[successful_results["logradouro_geocode"].notna()]
-
-    return successful_results
+    return join_rows(found_addresses, found_geocodes, need_street=True)
 
 
 @task
-def geoapify_batch_geocoding_task(
-    dataframe: pd.DataFrame,
-    address_column: str = "endereco_completo",
-    batch_size: int = 100,
-    return_original_cols: bool = True,
-) -> pd.DataFrame:
+async def geocode_geoapify_task(addresses: list[Address]) -> list[Row]:
+    """Geocode the addresses with the batch API of Geoapify, 100 at a time, and return the rows that got a point.
+
+    Without a key in the settings the result is empty.
     """
-    Geocode addresses using Geoapify Batch API.
+    key = Settings().GEOAPIFY_API_KEY.get_secret_value()
 
-    Args:
-        dataframe: DataFrame containing addresses to geocode
-        address_column: Column name containing addresses
-        batch_size: Number of addresses per batch (max 100 for Geoapify)
-        return_original_cols: Whether to return original columns
+    if not key:
+        logger.warning("No Geoapify key, so nothing is geocoded")
+        return []
 
-    Returns:
-        DataFrame with geocoded addresses
-    """
-    logger.info("Starting Geoapify batch geocoding task")
-    start_time = time()
+    geocodes = await geocode_geoapify(texts(addresses), key, today=today(), batch_size=GEOAPIFY_BATCH_SIZE)
 
-    # Prepare dataframe
-    dataframe = dataframe.dropna(subset=[address_column])
-    dataframe = dataframe.reset_index(drop=True)
-    total_addresses = len(dataframe)
-
-    if total_addresses == 0:
-        logger.info("No addresses to geocode")
-        return dataframe
-
-    logger.info(f"Processing {total_addresses} addresses with Geoapify batch API")
-
-    # Get API key from secrets
-    api_key = Settings().GEOAPIFY_API_KEY.get_secret_value()
-
-    if not api_key:
-        logger.info("No Geoapify API token found - returning empty results")
-        return pd.DataFrame()
-
-    # Use the working implementation from async_utils
-    final_dataframe = run_geoapify_batch_geocoding_async(
-        dataframe=dataframe,
-        address_column=address_column,
-        api_key=api_key,
-        batch_size=batch_size,
-    )
-
-    success_count = len(final_dataframe)
-    logger.info(f"Successfully geocoded {success_count}/{total_addresses} addresses")
-
-    # Ensure string types for all columns, replacing None with empty string
-    if not final_dataframe.empty:
-        final_dataframe = final_dataframe.fillna("")
-        final_dataframe[final_dataframe.columns] = final_dataframe[final_dataframe.columns].astype("str")
-        logger.info(f"Task result preview: \n{final_dataframe.iloc[0]}")
-
-    total_time = time() - start_time
-    final_success_rate = (success_count / total_addresses) * 100 if total_addresses > 0 else 0
-    logger.info(
-        f"Geoapify batch geocoding task completed in {total_time: .2f}s - Success "
-        f"{success_count}/{total_addresses} ({final_success_rate: .1f}%)"
-    )
-
-    return final_dataframe
-
-
-@task
-def dataframe_to_file(
-    dataframe: pd.DataFrame, file_folder: str = "pipelines/data", file_format: str = "parquet"
-) -> Path:
-    """
-    Save dataframe to file and return the folder path.
-
-    Args:
-        dataframe (pd.DataFrame): The dataframe to save
-        file_folder (str): The folder where the file will be saved
-        file_format (str): The format of the file (csv or parquet)
-
-    Returns:
-        Path: The folder path where the file was saved
-
-    Raises:
-        ValueError: If dataframe is empty or if file_folder is None
-    """
-    if dataframe.empty:
-        raise ValueError("Cannot save empty dataframe")
-
-    if not file_folder:
-        raise ValueError("file_folder cannot be None or empty")
-
-    file_folder_path = Path(file_folder)
-    file_folder_path.mkdir(parents=True, exist_ok=True)
-    file_path = file_folder_path / f"{uuid4()}.{file_format}"
-
-    if file_format == "csv":
-        dataframe.to_csv(file_path, index=False)
-    elif file_format == "parquet":
-        dataframe.to_parquet(file_path, index=False)
-
-    logger.info(f"\nDataframe saved on {file_folder_path}. Full path to file {file_path}\n")
-    logger.info(dataframe)
-
-    return file_folder_path
-
-
-@task
-def add_plus_code_column(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Adds a 'plus_code' column to the DataFrame using latitude and longitude.
-
-    Args:
-        df (pd.DataFrame): DataFrame with 'latitude' and 'longitude' columns.
-
-    Returns:
-        pd.DataFrame: DataFrame with an additional 'plus_code' column.
-
-    Note:
-        Unit testing is recommended to ensure correct plus code generation.
-    """
-    df = df.copy()
-    df["pluscode"] = df.apply(lambda row: coordinates_to_pluscode(row["latitude"], row["longitude"]), axis=1)
-    return df
-
-
-@task
-def merge_and_deduplicate_geocoding_results(dataframes: list) -> pd.DataFrame:
-    """
-    Merges multiple geocoding result dataframes and removes duplicates.
-
-    Args:
-        dataframes (list): List of pandas DataFrames with geocoding results
-
-    Returns:
-        pd.DataFrame: Combined dataframe with duplicates removed
-    """
-    logger.info("Starting merge and deduplication of geocoding results")
-
-    # Filter out empty dataframes
-    valid_dataframes = [df for df in dataframes if not df.empty]
-
-    if not valid_dataframes:
-        logger.info("No valid dataframes to merge")
-        return pd.DataFrame()
-
-    # Concatenate all dataframes
-    combined_df = pd.concat(valid_dataframes, ignore_index=True)
-    logger.info(f"Combined {len(valid_dataframes)} dataframes into {len(combined_df)} total rows")
-
-    # Remove duplicates based on address fields
-    # Use logradouro_tratado, numero_porta, and bairro as the key for deduplication
-    duplicate_cols = ["logradouro_tratado", "numero_porta", "bairro"]
-
-    # Only deduplicate if these columns exist
-    if all(col in combined_df.columns for col in duplicate_cols):
-        original_count = len(combined_df)
-        combined_df = combined_df.drop_duplicates(subset=duplicate_cols, keep="first")
-        deduplicated_count = len(combined_df)
-        removed_count = original_count - deduplicated_count
-        logger.info(f"rm {removed_count} duplicate addresses, keeping {deduplicated_count} unique adds")
-    else:
-        logger.info("Deduplication columns not found, keeping all rows")
-
-    # Ensure string types for all columns, replacing None with empty string
-    if not combined_df.empty:
-        combined_df = combined_df.fillna("")
-        combined_df[combined_df.columns] = combined_df[combined_df.columns].astype("str")
-        logger.info(f"Final merged result preview: \n{combined_df.iloc[0]}")
-
-    return combined_df
+    return join_rows(addresses, geocodes, need_street=False)
