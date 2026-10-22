@@ -353,23 +353,27 @@ def bigquery_source(project: str, origin: Origin) -> Source:
 def build_aggregate(db_type: str, read: Read) -> Aggregate:
     """Return the aggregation of a `read` that has a `pipeline`.
 
+    The `pipeline` is the path of a JSON file with the list of stages. The text of the
+    stages is compact, so the layout of the file does not change what a chunk hashes to.
+
     Raise `ValueError` for a database that is not MongoDB, for a read with no `table` or
-    with a `query` or a `since`, and for a stage that is not a JSON object.
+    with a `query` or a `since`, and for a file that is not a JSON list of objects.
     """
     table = read.get("table")
+    path = read.get("pipeline", "")
 
     if db_type != "mongodb":
         raise ValueError(f"{db_type} has no pipeline: only MongoDB aggregates")
     if table is None or "query" in read or "since" in read:
         raise ValueError("A pipeline needs a table, and takes no query or since")
 
-    stages = f"[{','.join(read.get('pipeline', []))}]"
+    adapter = TypeAdapter(list[dict[str, JsonValue]])
     try:
-        TypeAdapter(list[dict[str, JsonValue]]).validate_json(stages)
+        stages = adapter.validate_json(Path(path).read_text(encoding="utf-8"))
     except ValidationError:
-        raise ValueError("Each stage of a pipeline is a JSON object") from None
+        raise ValueError(f"{path} is not a JSON list of stages, each one an object") from None
 
-    return Aggregate(stages, table)
+    return Aggregate(adapter.dump_json(stages).decode(), table)
 
 
 def read_request(db_type: str, read: Read, batched: bool) -> Origin:

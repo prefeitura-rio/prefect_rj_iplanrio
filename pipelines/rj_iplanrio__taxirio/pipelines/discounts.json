@@ -1,0 +1,22 @@
+[
+  {
+    "$project": {
+      "id": {
+        "$toString": "$_id"
+      },
+      "description": 1,
+      "value": {
+        "$toString": "$value"
+      },
+      "createdAt": {
+        "$dateToString": {
+          "format": "%Y-%m-%d",
+          "date": "$createdAt"
+        }
+      }
+    }
+  },
+  {
+    "$unset": "_id"
+  }
+]

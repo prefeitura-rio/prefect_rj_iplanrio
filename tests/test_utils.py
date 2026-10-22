@@ -609,13 +609,6 @@ async def test_a_delta_table_without_a_connection_is_refused():
             Query('{"a": 1}', "mongodb", "p"),
             id="a_mongodb_selector",
         ),
-        pytest.param(
-            "mongodb",
-            {"table": "p", "pipeline": ['{"$project": {"a": 1}}', '{"$limit": 5}']},
-            True,
-            Aggregate('[{"$project": {"a": 1}},{"$limit": 5}]', "p"),
-            id="a_mongodb_pipeline_over_a_collection",
-        ),
     ],
 )
 def test_a_read_names_the_origin_that_the_database_reads(db_type, read, batched, expected):
@@ -632,22 +625,52 @@ def test_a_read_names_the_origin_that_the_database_reads(db_type, read, batched,
         pytest.param("couchdb", {}, False, "Give a table", id="a_database_with_nothing"),
         pytest.param("couchdb", {"query": "{}", "since": "0"}, False, "not both", id="query_and_since"),
         pytest.param("mongodb", {"table": "c", "since": "0"}, False, "only CouchDB", id="mongodb_has_no_changes"),
-        pytest.param("postgres", {"table": "a.b", "pipeline": ["{}"]}, False, "only MongoDB", id="a_pipeline_on_sql"),
-        pytest.param("mongodb", {"pipeline": ["{}"]}, False, "needs a table", id="a_pipeline_without_a_collection"),
+        pytest.param(
+            "postgres", {"table": "a.b", "pipeline": "stages.json"}, False, "only MongoDB", id="a_pipeline_on_sql"
+        ),
+        pytest.param(
+            "mongodb", {"pipeline": "stages.json"}, False, "needs a table", id="a_pipeline_without_a_collection"
+        ),
         pytest.param(
             "mongodb",
-            {"table": "c", "query": "{}", "pipeline": ["{}"]},
+            {"table": "c", "query": "{}", "pipeline": "stages.json"},
             False,
             "takes no query",
             id="pipeline_and_query",
         ),
-        pytest.param("mongodb", {"table": "c", "pipeline": ["[1]"]}, False, "JSON object", id="a_stage_that_is_a_list"),
     ],
 )
 def test_a_read_that_does_not_fit_is_refused(db_type, read, batched, message):
     """Raise before any connection, so a typo never reaches the database."""
     with pytest.raises(ValueError, match=message):
         read_request(db_type, read, batched)
+
+
+def test_a_mongodb_pipeline_is_read_from_a_json_file(tmp_path):
+    """Read the stages of a file, whatever its layout, as one compact text."""
+    stages = tmp_path / "stages.json"
+    stages.write_text('[\n  {"$project": {"a": 1}},\n  {"$limit": 5}\n]\n', encoding="utf-8")
+
+    origin = read_request("mongodb", {"table": "p", "pipeline": str(stages)}, True)
+
+    assert origin == Aggregate('[{"$project":{"a":1}},{"$limit":5}]', "p")
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param("[1]", id="a_stage_that_is_a_number"),
+        pytest.param('{"$limit": 5}', id="a_stage_without_a_list"),
+        pytest.param("[{", id="text_that_is_not_json"),
+    ],
+)
+def test_a_pipeline_file_that_is_not_a_list_of_stages_is_refused(tmp_path, content):
+    """Raise before any connection when the file is not a JSON list of objects."""
+    stages = tmp_path / "stages.json"
+    stages.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="JSON list of stages"):
+        read_request("mongodb", {"table": "c", "pipeline": str(stages)}, False)
 
 
 @pytest.fixture

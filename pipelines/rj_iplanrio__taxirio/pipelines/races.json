@@ -1,0 +1,103 @@
+[
+  {
+    "$project": {
+      "id": {
+        "$toString": "$_id"
+      },
+      "car": {
+        "$toString": "$car"
+      },
+      "driver": {
+        "$toString": "$driver"
+      },
+      "createdAt": {
+        "$dateToString": {
+          "date": "$createdAt"
+        }
+      },
+      "finishedAt": {
+        "$dateToString": {
+          "date": "$finishedAt"
+        }
+      },
+      "ano_particao": {
+        "$dateToString": {
+          "format": "%Y",
+          "date": "$createdAt"
+        }
+      },
+      "mes_particao": {
+        "$dateToString": {
+          "format": "%m",
+          "date": "$createdAt"
+        }
+      },
+      "dia_particao": {
+        "$dateToString": {
+          "format": "%d",
+          "date": "$createdAt"
+        }
+      },
+      "event": {
+        "$toString": "$event"
+      },
+      "passenger": {
+        "$toString": "$passenger"
+      },
+      "city": {
+        "$toString": "$city"
+      },
+      "broadcastQtd": {
+        "$toString": "$broadcastQtd"
+      },
+      "rating_score": {
+        "$toString": "$rating.score"
+      },
+      "isSuspect": {
+        "$toString": "$isSuspect"
+      },
+      "isInvalid": {
+        "$toString": "$isInvalid"
+      },
+      "billing_estimatedPrice": {
+        "$toString": "$billing.estimatedPrice"
+      },
+      "billing_associatedPaymentMethod": {
+        "$toString": "$billing.associatedPaymentMethod"
+      },
+      "billing_associatedTaximeter": {
+        "$toString": "$billing.associatedTaximeter"
+      },
+      "billing_associatedMinimumFare": {
+        "$toString": "$billing.associatedMinimumFare"
+      },
+      "billing_associatedDiscount": {
+        "$toString": "$billing.associatedDiscount"
+      },
+      "billing_associatedCorporative_externalPropertyPassenger": {
+        "$toString": "$billing.associatedCorporative.externalPropertyPassenger"
+      },
+      "billing_finalPrice_totalToPay": "$billing.finalPrice.totalToPay",
+      "billing_finalPrice_totalPriceToll": "$billing.finalPrice.totalPriceToll",
+      "billing_finalPrice_totalWithDiscount": "$billing.finalPrice.totalWithDiscount",
+      "billing_finalPrice_totalDiscount": "$billing.finalPrice.totalDiscount",
+      "billing_finalPrice_totalWithoutDiscount": "$billing.finalPrice.totalWithoutDiscount",
+      "billing_finalPrice_totalByTaximeter": "$billing.finalPrice.totalByTaximeter",
+      "billing_finalPrice_totalByStoppedTime": "$billing.finalPrice.totalByStoppedTime",
+      "billing_finalPrice_totalByKm": "$billing.finalPrice.totalByKm",
+      "billing_finalPrice_minPrice": "$billing.finalPrice.minPrice",
+      "status": 1,
+      "routeOriginDestination_distance_text": "$routeOriginDestination.distance.text",
+      "routeOriginDestination_distance_value": {
+        "$toString": "$routeOriginDestination.distance.value"
+      },
+      "routeOriginDestination_duration_text": "$routeOriginDestination.duration.text",
+      "routeOriginDestination_duration_value": {
+        "$toString": "$routeOriginDestination.duration.value"
+      }
+    }
+  },
+  {
+    "$unset": "_id"
+  }
+]

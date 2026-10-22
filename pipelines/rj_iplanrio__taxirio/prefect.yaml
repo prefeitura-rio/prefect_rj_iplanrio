@@ -82,9 +82,7 @@ deployments:
             table_id: cities
           read:
             table: cities
-            pipeline:
-              - '{"$project": {"id": {"$toString": "$_id"}, "name": 1, "stateAbbreviation": 1, "isCalulatedInApp": {"$toString": "$isCalulatedInApp"}, "isAbleToUsePaymentInApp": {"$toString": "$isAbleToUsePaymentInApp"}, "loginLabel": 1, "serviceStations": {"$function": {"lang": "js", "args": ["$serviceStations"], "body": "function(x) { return JSON.stringify(x); }"}}}}'
-              - '{"$unset": "_id"}'
+            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/cities.json
           dump_mode: overwrite
       - interval: 604800
         anchor_date: '2024-09-01T07:05:00'
@@ -103,10 +101,7 @@ deployments:
             table_id: drivers
           read:
             table: drivers
-            pipeline:
-              - '{"$project": {"id": {"$toString": "$_id"}, "user": {"$toString": "$user"}, "taxiDriverId": 1, "cars": {"$map": {"input": "$cars", "as": "car", "in": {"$toString": "$$car"}}}, "average": {"$toString": "$average"}, "associatedCar": {"$toString": "$associatedCar"}, "createdAt": {"$dateToString": {"date": "$createdAt"}}, "ano_particao": {"$dateToString": {"format": "%Y", "date": "$createdAt"}}, "mes_particao": {"$dateToString": {"format": "%m", "date": "$createdAt"}}, "dia_particao": {"$dateToString": {"format": "%d", "date": "$createdAt"}}, "status": 1, "associatedDiscount": {"$toString": "$associatedDiscount"}, "associatedPaymentsMethods": {"$map": {"input": "$associatedPaymentsMethods", "as": "paymentMethod", "in": {"$toString": "$$paymentMethod"}}}, "login": 1, "password": 1, "salt": 1, "isAbleToReceivePaymentInApp": {"$toString": "$isAbleToReceivePaymentInApp"}, "isAbleToReceivePaymentInCityHall": {"$toString": "$isAbleToReceivePaymentInCityHall"}, "ratingsReceived": {"$toString": "$ratingsReceived"}, "busy": {"$toString": "$busy"}, "associatedRace_originAtAccepted_position_lng": {"$toString": "$associatedRace.originAtAccepted.position.lng"}, "associatedRace_originAtAccepted_position_lat": {"$toString": "$associatedRace.originAtAccepted.position.lat"}, "associatedRace_race": {"$toString": "$associatedRace.race"}, "lastAverage": {"$toString": "$lastAverage"}, "expiredBlockByRankingDate": {"$toString": "$expiredBlockByRankingDate"}, "blockedRace": {"$toString": "$blockedRace"}, "infoPhone_updatedAt": {"$dateToString": {"date": "$infoPhone.updatedAt"}}, "infoPhone_id": {"$toString": "$infoPhone._id"}, "infoPhone_appVersion": "$infoPhone.appVersion", "infoPhone_phoneModel": "$infoPhone.phoneModel", "infoPhone_phoneManufacturer": "$infoPhone.phoneManufacturer", "infoPhone_osVersion": "$infoPhone.osVersion", "infoPhone_osName": "$infoPhone.osName", "tokenInfo_httpSalt": "$tokenInfo.httpSalt", "tokenInfo_wssSalt": "$tokenInfo.wssSalt", "tokenInfo_pushToken": "$tokenInfo.pushToken", "city": {"$toString": "$city"}, "serviceRecordRate": {"$toString": "$serviceRecordRate"}, "nota": {"$toString": "$nota"}, "averageTT": {"$toString": "$averageTT"}}}'
-              - '{"$unset": "_id"}'
-              - '{"$addFields": {"cars": {"$function": {"lang": "js", "args": ["$cars"], "body": "function(x) { return JSON.stringify(x); }"}}, "associatedPaymentsMethods": {"$function": {"lang": "js", "args": ["$associatedPaymentsMethods"], "body": "function(x) { return JSON.stringify(x); }"}}}}'
+            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/drivers.json
           dump_mode: overwrite
       - interval: 604800
         anchor_date: '2024-09-01T07:10:00'
@@ -125,9 +120,7 @@ deployments:
             table_id: discounts
           read:
             table: discounts
-            pipeline:
-              - '{"$project": {"id": {"$toString": "$_id"}, "description": 1, "value": {"$toString": "$value"}, "createdAt": {"$dateToString": {"format": "%Y-%m-%d", "date": "$createdAt"}}}}'
-              - '{"$unset": "_id"}'
+            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/discounts.json
           dump_mode: overwrite
       - interval: 604800
         anchor_date: '2024-09-01T07:15:00'
@@ -146,9 +139,7 @@ deployments:
             table_id: paymentmethods
           read:
             table: paymentmethods
-            pipeline:
-              - '{"$project": {"id": {"$toString": "$_id"}, "pindex": {"$toString": "$pindex"}, "name": 1, "type": 1}}'
-              - '{"$unset": "_id"}'
+            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/paymentmethods.json
           dump_mode: overwrite
       - interval: 604800
         anchor_date: '2024-09-02T07:20:00'
@@ -167,9 +158,7 @@ deployments:
             table_id: users
           read:
             table: users
-            pipeline:
-              - '{"$project": {"id": {"$toString": "$_id"}, "createdAt": {"$dateToString": {"date": "$createdAt"}}, "ano_particao": {"$dateToString": {"format": "%Y", "date": "$createdAt"}}, "mes_particao": {"$dateToString": {"format": "%m", "date": "$createdAt"}}, "dia_particao": {"$dateToString": {"format": "%d", "date": "$createdAt"}}, "displayName": 1, "fullName": 1, "email": 1, "phoneNumber": 1, "cpf": 1, "validadoReceita": {"$toString": "$validadoReceita"}, "federalRevenueData_name": "$federalRevenueData.name", "federalRevenueData_birthDate": "$federalRevenueData.birthDate", "federalRevenueData_mothersName": "$federalRevenueData.mothersName", "federalRevenueData_yearOfDeath": {"$toString": "$federalRevenueData.yearOfDeath"}, "federalRevenueData_phone": "$federalRevenueData.phone", "federalRevenueData_sex": "$federalRevenueData.sex"}}'
-              - '{"$unset": "_id"}'
+            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/users.json
           dump_mode: overwrite
       - interval: 86400
         anchor_date: '2025-04-28T07:25:00'
@@ -188,9 +177,7 @@ deployments:
             table_id: races
           read:
             table: races
-            pipeline:
-              - '{"$project": {"id": {"$toString": "$_id"}, "car": {"$toString": "$car"}, "driver": {"$toString": "$driver"}, "createdAt": {"$dateToString": {"date": "$createdAt"}}, "finishedAt": {"$dateToString": {"date": "$finishedAt"}}, "ano_particao": {"$dateToString": {"format": "%Y", "date": "$createdAt"}}, "mes_particao": {"$dateToString": {"format": "%m", "date": "$createdAt"}}, "dia_particao": {"$dateToString": {"format": "%d", "date": "$createdAt"}}, "event": {"$toString": "$event"}, "passenger": {"$toString": "$passenger"}, "city": {"$toString": "$city"}, "broadcastQtd": {"$toString": "$broadcastQtd"}, "rating_score": {"$toString": "$rating.score"}, "isSuspect": {"$toString": "$isSuspect"}, "isInvalid": {"$toString": "$isInvalid"}, "billing_estimatedPrice": {"$toString": "$billing.estimatedPrice"}, "billing_associatedPaymentMethod": {"$toString": "$billing.associatedPaymentMethod"}, "billing_associatedTaximeter": {"$toString": "$billing.associatedTaximeter"}, "billing_associatedMinimumFare": {"$toString": "$billing.associatedMinimumFare"}, "billing_associatedDiscount": {"$toString": "$billing.associatedDiscount"}, "billing_associatedCorporative_externalPropertyPassenger": {"$toString": "$billing.associatedCorporative.externalPropertyPassenger"}, "billing_finalPrice_totalToPay": "$billing.finalPrice.totalToPay", "billing_finalPrice_totalPriceToll": "$billing.finalPrice.totalPriceToll", "billing_finalPrice_totalWithDiscount": "$billing.finalPrice.totalWithDiscount", "billing_finalPrice_totalDiscount": "$billing.finalPrice.totalDiscount", "billing_finalPrice_totalWithoutDiscount": "$billing.finalPrice.totalWithoutDiscount", "billing_finalPrice_totalByTaximeter": "$billing.finalPrice.totalByTaximeter", "billing_finalPrice_totalByStoppedTime": "$billing.finalPrice.totalByStoppedTime", "billing_finalPrice_totalByKm": "$billing.finalPrice.totalByKm", "billing_finalPrice_minPrice": "$billing.finalPrice.minPrice", "status": 1, "routeOriginDestination_distance_text": "$routeOriginDestination.distance.text", "routeOriginDestination_distance_value": {"$toString": "$routeOriginDestination.distance.value"}, "routeOriginDestination_duration_text": "$routeOriginDestination.duration.text", "routeOriginDestination_duration_value": {"$toString": "$routeOriginDestination.duration.value"}}}'
-              - '{"$unset": "_id"}'
+            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/races.json
           dump_mode: append
           options:
             chunks:
@@ -215,9 +202,7 @@ deployments:
             table_id: passengers
           read:
             table: passengers
-            pipeline:
-              - '{"$project": {"id": {"$toString": "$_id"}, "user": {"$toString": "$user"}, "createdAt": {"$dateToString": {"date": "$createdAt"}}, "ano_particao": {"$dateToString": {"format": "%Y", "date": "$createdAt"}}, "mes_particao": {"$dateToString": {"format": "%m", "date": "$createdAt"}}, "dia_particao": {"$dateToString": {"format": "%d", "date": "$createdAt"}}, "login": 1, "password": 1, "salt": 1, "isAbleToUsePaymentInApp": {"$toString": "$isAbleToUsePaymentInApp"}, "infoPhone_updatedAt": {"$dateToString": {"date": "$infoPhone.updatedAt"}}, "infoPhone_id": {"$toString": "$infoPhone._id"}, "infoPhone_appVersion": "$infoPhone.appVersion", "infoPhone_phoneModel": "$infoPhone.phoneModel", "infoPhone_phoneManufacturer": "$infoPhone.phoneManufacturer", "infoPhone_osVersion": "$infoPhone.osVersion", "infoPhone_osName": "$infoPhone.osName", "tokenInfo_httpSalt": "$tokenInfo.httpSalt", "tokenInfo_wssSalt": "$tokenInfo.wssSalt", "tokenInfo_pushToken": "$tokenInfo.pushToken"}}'
-              - '{"$unset": "_id"}'
+            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/passengers.json
           dump_mode: append
           options:
             chunks:
@@ -242,10 +227,7 @@ deployments:
             table_id: rankingraces
           read:
             table: rankingraces
-            pipeline:
-              - '{"$project": {"id": {"$toString": "$_id"}, "createdAt": {"$dateToString": {"date": "$createdAt"}}, "updatedAt": {"$dateToString": {"date": "$updatedAt"}}, "ano_particao": {"$dateToString": {"format": "%Y", "date": "$createdAt"}}, "mes_particao": {"$dateToString": {"format": "%m", "date": "$createdAt"}}, "dia_particao": {"$dateToString": {"format": "%d", "date": "$createdAt"}}, "race": {"$toString": "$race"}, "competitors": {"$map": {"input": "$competitors", "as": "competitor", "in": {"driver": {"$toString": "$$competitor.driver"}, "id": {"$toString": "$$competitor._id"}, "rankingRaceStatus": "$$competitor.rankingRaceStatus", "distance": {"$toString": "$$competitor.distance"}, "acceptedLocation": "$$competitor.acceptedLocation"}}}}}'
-              - '{"$unset": "_id"}'
-              - '{"$addFields": {"competitors": {"$function": {"lang": "js", "args": ["$competitors"], "body": "function(x) { return JSON.stringify(x); }"}}}}'
+            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/rankingraces.json
           dump_mode: append
           options:
             chunks:
@@ -270,9 +252,7 @@ deployments:
             table_id: metricsdriverunoccupieds
           read:
             table: metricsdriverunoccupieds
-            pipeline:
-              - '{"$project": {"id": {"$toString": "$_id"}, "driver": {"$toString": "$driver"}, "associatedDiscount": {"$toString": "$associatedDiscount"}, "ano_particao": {"$dateToString": {"format": "%Y", "date": "$dateTime"}}, "mes_particao": {"$dateToString": {"format": "%m", "date": "$dateTime"}}, "dia_particao": {"$dateToString": {"format": "%d", "date": "$dateTime"}}, "dateTime": {"$toString": "$dateTime"}}}'
-              - '{"$unset": "_id"}'
+            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/metricsdriverunoccupieds.json
           dump_mode: append
           options:
             chunks:

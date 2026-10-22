@@ -59,9 +59,9 @@ class Read(TypedDict, total=False):
     A CouchDB read takes a `table` (the database), a `query` (a Mango selector) and a
     `since` (a sequence of `_changes`), with no more than one of `query` and `since`. A
     MongoDB read takes a `table` (the collection) and a `query` (a JSON filter), or a
-    `pipeline`: a list of aggregation stages, each one JSON text, that run on the
-    collection after the filters and the chunk. A `pipeline` needs a `table` and takes
-    no `query`.
+    `pipeline`: the path of a JSON file with a list of aggregation stages, each one an
+    object, that run on the collection after the filters and the chunk. A `pipeline`
+    needs a `table` and takes no `query`.
 
     A table is attached, so DuckDB pushes the filters and the chunks down to the
     source. A native query runs on the source as it is, and it cannot be cut into chunks
@@ -71,7 +71,7 @@ class Read(TypedDict, total=False):
     table: str
     query: str
     since: str
-    pipeline: list[str]
+    pipeline: str
 
 
 @with_config(ConfigDict(extra="forbid"))

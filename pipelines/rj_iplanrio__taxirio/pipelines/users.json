@@ -1,0 +1,51 @@
+[
+  {
+    "$project": {
+      "id": {
+        "$toString": "$_id"
+      },
+      "createdAt": {
+        "$dateToString": {
+          "date": "$createdAt"
+        }
+      },
+      "ano_particao": {
+        "$dateToString": {
+          "format": "%Y",
+          "date": "$createdAt"
+        }
+      },
+      "mes_particao": {
+        "$dateToString": {
+          "format": "%m",
+          "date": "$createdAt"
+        }
+      },
+      "dia_particao": {
+        "$dateToString": {
+          "format": "%d",
+          "date": "$createdAt"
+        }
+      },
+      "displayName": 1,
+      "fullName": 1,
+      "email": 1,
+      "phoneNumber": 1,
+      "cpf": 1,
+      "validadoReceita": {
+        "$toString": "$validadoReceita"
+      },
+      "federalRevenueData_name": "$federalRevenueData.name",
+      "federalRevenueData_birthDate": "$federalRevenueData.birthDate",
+      "federalRevenueData_mothersName": "$federalRevenueData.mothersName",
+      "federalRevenueData_yearOfDeath": {
+        "$toString": "$federalRevenueData.yearOfDeath"
+      },
+      "federalRevenueData_phone": "$federalRevenueData.phone",
+      "federalRevenueData_sex": "$federalRevenueData.sex"
+    }
+  },
+  {
+    "$unset": "_id"
+  }
+]

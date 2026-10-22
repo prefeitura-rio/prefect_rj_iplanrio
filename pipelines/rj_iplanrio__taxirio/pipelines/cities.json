@@ -1,0 +1,30 @@
+[
+  {
+    "$project": {
+      "id": {
+        "$toString": "$_id"
+      },
+      "name": 1,
+      "stateAbbreviation": 1,
+      "isCalulatedInApp": {
+        "$toString": "$isCalulatedInApp"
+      },
+      "isAbleToUsePaymentInApp": {
+        "$toString": "$isAbleToUsePaymentInApp"
+      },
+      "loginLabel": 1,
+      "serviceStations": {
+        "$function": {
+          "lang": "js",
+          "args": [
+            "$serviceStations"
+          ],
+          "body": "function(x) { return JSON.stringify(x); }"
+        }
+      }
+    }
+  },
+  {
+    "$unset": "_id"
+  }
+]
