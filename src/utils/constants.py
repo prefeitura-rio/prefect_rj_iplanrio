@@ -42,3 +42,6 @@ STAGES_NAME: Final = compile_pattern(r"[a-z0-9]+(-[a-z0-9]+)*")
 
 PLACEHOLDER_NAME: Final = r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)*"
 """The name in a `${NAME}` placeholder: `UPPER_SNAKE_CASE`, as an environment variable."""
+
+TOKEN_KEYS: Final = ("token", "access_token", "authToken", "jwt")
+"""The places of a login response where an API puts its token, in the order to look."""

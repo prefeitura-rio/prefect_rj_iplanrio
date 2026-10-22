@@ -6,34 +6,8 @@ from json import dumps
 
 from pydantic import JsonValue
 
-from pipelines.rj_crm__wetalkie_api_hsm_info.constants import CODED_FIELDS, SP_TZ, TOKEN_KEYS
-
-
-def dig(data: JsonValue, *path: str) -> JsonValue:
-    """Return the value at a path of keys, or nothing if the path breaks.
-
-    ```python
-    dig({"data": {"item": {"token": "t"}}}, "data", "item", "token")  # "t"
-    ```
-    """
-    for key in path:
-        data = data.get(key) if isinstance(data, dict) else None
-
-    return data
-
-
-def read_token(data: JsonValue) -> str:
-    """Return the token of a login response, in any of the places the API has put it.
-
-    Raise `ValueError` if the response has no token.
-    """
-    candidates = [dig(data, key) for key in TOKEN_KEYS] + [dig(data, "data", "item", "token")]
-
-    for candidate in candidates:
-        if isinstance(candidate, str) and candidate:
-            return candidate
-
-    raise ValueError("No token in the login response")
+from pipelines.rj_crm__wetalkie_api_hsm_info.constants import CODED_FIELDS, SP_TZ
+from utils.utils import dig
 
 
 def read_page(data: JsonValue) -> tuple[list[dict[str, JsonValue]], bool]:

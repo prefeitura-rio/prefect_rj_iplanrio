@@ -16,4 +16,3 @@ FIELDS: Final = (
 )
 CODED_FIELDS: Final = ("modelRejection", "metaMessageTemplateStatus", "metaMessageTemplateCategory", "qualityScore")
 """The fields that are an object with a code and a description."""
-TOKEN_KEYS: Final = ("token", "access_token", "authToken", "jwt")
