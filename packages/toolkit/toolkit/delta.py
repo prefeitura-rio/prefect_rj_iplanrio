@@ -133,7 +133,6 @@ def write_chunk(
                     uri,
                     reader,
                     mode="append",
-                    partition_by=[BATCH_COLUMN],
                     commit_properties=properties,
                 )
             else:
@@ -142,7 +141,6 @@ def write_chunk(
                     reader,
                     mode="overwrite",
                     predicate=f"{BATCH_COLUMN} = '{key}'",
-                    partition_by=[BATCH_COLUMN],
                     schema_mode="overwrite" if overwrite_schema else None,
                     commit_properties=properties,
                 )
@@ -185,9 +183,9 @@ def inspect_table(uri: str) -> TableReport:
     Raise `TableNotFoundError` if no Delta table lives at `uri`.
     """
     table = DeltaTable(uri)
-    sizes = cast(
-        "list[int]", arrow_table(table.get_add_actions())["size_bytes"].to_pylist()
-    )
+    actions = arrow_table(table.get_add_actions(flatten=True))
+    sizes = cast("list[int]", actions["size_bytes"].to_pylist())
+    keys = cast("list[str]", actions[f"min.{BATCH_COLUMN}"].to_pylist())
     stamp = cast("int", table.history(1)[0]["timestamp"])
 
     return TableReport(
@@ -195,7 +193,7 @@ def inspect_table(uri: str) -> TableReport:
         files=len(sizes),
         bytes=sum(sizes),
         last_commit=datetime.fromtimestamp(stamp / 1000, UTC),
-        keys=sorted(partition[BATCH_COLUMN] for partition in table.partitions()),
+        keys=sorted(set(keys)),
     )
 
 
