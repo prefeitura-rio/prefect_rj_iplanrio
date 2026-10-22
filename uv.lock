@@ -5657,19 +5657,11 @@ name = "rj-rmi-run-dbt"
 version = "1.0.0"
 source = { virtual = "pipelines/rj_rmi__run_dbt" }
 dependencies = [
-    { name = "dbt-bigquery" },
-    { name = "gitpython" },
-    { name = "prefect-dbt" },
     { name = "prefect-rj-iplanrio" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "dbt-bigquery" },
-    { name = "gitpython" },
-    { name = "prefect-dbt" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-seconserva-infraestrutura-siscor-obras"

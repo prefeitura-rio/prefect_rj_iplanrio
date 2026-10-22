@@ -1,37 +1,19 @@
 """Flow for rj_rmi__run_dbt."""
 
 from prefect import flow
+from toolkit.dbt import DbtRun
 
-from pipelines.rj_rmi__run_dbt.tasks import (
-    clone_repository_task,
-    run_dbt_task,
-    setup_credentials_task,
-)
+from pipelines.rj_rmi__run_dbt.tasks import setup_credentials_task
+from utils.hooks import notify_failure
+from utils.tasks import run_dbt
 
 
-@flow(log_prints=True, flow_run_name="DBT {command} {target}")
-def rj_rmi__run_dbt(
-    command: str = "build",
-    select: str = "",
-    flag: str = "",
-    target: str = "dev",
-) -> None:
-    """Roda um comando dbt do queries-rj-rmi como a service account do RMI.
+@flow(flow_run_name="dbt-{request.command}-{request.target}", log_prints=True, on_failure=[notify_failure])
+async def rj_rmi__run_dbt(*, request: DbtRun, report: bool = False) -> None:
+    """Run one dbt command of the RMI queries repository as the service account of the RMI.
 
-    :param command: Comando dbt, como ``build``, ``run``, ``test``,
-        ``source freshness`` ou ``debug``.
-    :param select: Valor do ``--select``, como ``tag:daily``.
-    :param flag: Demais argumentos, separados como no shell, como
-        ``--exclude x`` ou ``--vars '{a: 1}'``.
-    :param target: Target do ``profiles.yml``. Na pod só ``prod`` funciona:
-        a service account não tem papel no ``rj-rmi-dev``.
+    Set `request` in the `prefect.yaml`, as the `dbt_run` flow takes it. In a pod, only the
+    target `prod` works: the service account has no role in `rj-rmi-dev`.
     """
     setup_credentials_task()
-    project_dir = clone_repository_task()
-    run_dbt_task(
-        project_dir=project_dir,
-        command=command,
-        select=select,
-        flag=flag,
-        target=target,
-    )
+    await run_dbt(request, report=report)

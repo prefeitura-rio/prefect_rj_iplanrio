@@ -5,7 +5,6 @@ from toolkit.settings import ToolkitSettings, required_secret
 
 
 class Settings(ToolkitSettings):
-    """The service account of the RMI project and the token of its dbt repository."""
+    """The service account of the RMI project."""
 
     RMI_SERVICE_ACCOUNT: SecretStr = required_secret()
-    GITHUB_TOKEN: SecretStr = required_secret()
