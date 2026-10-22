@@ -21,7 +21,7 @@ distinct
  UNNEST(mensagens) as msg
  WHERE msg.data IS NOT NULL
    and DATE(msg.data) BETWEEN 
-    DATE_SUB(DATE('{START_DATE_PLACEHOLDER}'), INTERVAL 10 DAY) AND DATE_ADD(DATE('{END_DATE_PLACEHOLDER}'), INTERVAL 10 DAY)
-    and data_particao >= DATE_SUB(DATE('{START_DATE_PLACEHOLDER}'), interval 10 day)
-    and data_particao <= DATE_ADD(DATE('{END_DATE_PLACEHOLDER}'), interval 10 day)
+    DATE_SUB(DATE('{{ start_date }}'), INTERVAL 10 DAY) AND DATE_ADD(DATE('{{ end_date }}'), INTERVAL 10 DAY)
+    and data_particao >= DATE_SUB(DATE('{{ start_date }}'), interval 10 day)
+    and data_particao <= DATE_ADD(DATE('{{ end_date }}'), interval 10 day)
     and msg.fonte = 'CUSTOMER'

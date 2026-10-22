@@ -5109,15 +5109,11 @@ name = "rj-crm-relatorio-cvl"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__relatorio_cvl" }
 dependencies = [
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "pendulum" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-crm-relatorio-engajamento-hsm"

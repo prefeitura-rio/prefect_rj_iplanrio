@@ -1,23 +1,9 @@
-# -*- coding: utf-8 -*-
-"""
-Constantes específicas para pipeline de relatorio CVL
-"""
+"""Constants of rj_crm__relatorio_cvl."""
 
-from enum import Enum
+from typing import Final
+from zoneinfo import ZoneInfo
 
-
-class PipelineConstants(Enum):
-    """
-    Constantes para o pipeline de relatorio CVL
-    """
-
-    # Billing Project ID
-    BILLING_PROJECT_ID = "rj-crm-registry"
-
-    # Configurações de dataset para upload
-    DATASET_ID = "brutos_wetalkie"
-    TABLE_ID = "receptivo_sessoes_24h"
-    DUMP_MODE = "append"
-    
-    # Query 
-    QUERY_TABLE = "rj-crm-registry.intermediario_rmi_conversas.base_receptivo"
+BILLING_PROJECT: Final = "rj-crm-registry"
+SP_TZ: Final = ZoneInfo("America/Sao_Paulo")
+SESSION_SECONDS: Final = 24 * 3600
+"""A message that comes later than this after the start of a session starts the next one."""

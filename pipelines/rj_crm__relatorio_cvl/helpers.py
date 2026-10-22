@@ -1,44 +1,85 @@
 """Helpers of rj_crm__relatorio_cvl."""
 
-import os
-import uuid
-from datetime import datetime
-from typing import Literal
+from datetime import date, datetime, timedelta
 
-import pandas as pd
-from prefect.logging import get_logger
+import polars as pl
 
-logger = get_logger("toolkit")
+from pipelines.rj_crm__relatorio_cvl.constants import SESSION_SECONDS, SP_TZ
+from utils.utils import render_query
 
 
-def create_date_partitions(
-    dataframe,
-    partition_column: str | None = None,
-    file_format: Literal["csv", "parquet"] = "csv",
-    root_folder="./data/",
-):
-    """Save a DataFrame in one file, with the columns `ano_particao`, `mes_particao` and `data_particao`."""
-    if partition_column is None:
-        partition_column = "data_particao"
-        dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
-    else:
-        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column], errors="coerce")
-        dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
-        if dataframe["data_particao"].isnull().any():
-            raise ValueError("Some dates in the partition column could not be parsed.")
+def read_report_dates(start_date: str | None, end_date: str | None) -> tuple[date, date]:
+    """Return the dates of the report: the ones given, or the previous month in São Paulo."""
+    if start_date and end_date:
+        return date.fromisoformat(start_date), date.fromisoformat(end_date)
 
-    dataframe["ano_particao"] = dataframe["data_particao"].str[:4]
-    dataframe["mes_particao"] = dataframe["data_particao"].str[5:7]
-    columns = [c for c in dataframe.columns if c not in ("ano_particao", "mes_particao", "data_particao")]
-    dataframe = dataframe[[*columns, "ano_particao", "mes_particao", "data_particao"]]
+    first_of_month = datetime.now(SP_TZ).date().replace(day=1)
+    last_of_previous = first_of_month - timedelta(days=1)
 
-    os.makedirs(root_folder, exist_ok=True)
-    file_path = os.path.join(root_folder, f"{uuid.uuid4()}.{file_format}")
+    return last_of_previous.replace(day=1), last_of_previous
 
-    if file_format == "csv":
-        dataframe.to_csv(file_path, index=False)
-    else:
-        dataframe.to_parquet(file_path, index=False)
 
-    logger.info("Files saved on %s", root_folder)
-    return root_folder
+def build_query(start_date: date, end_date: date) -> str:
+    """Return the query of the messages around the dates."""
+    return render_query(__file__, "sessions", start_date=start_date, end_date=end_date)
+
+
+def flag_new_sessions(times: list[datetime]) -> list[bool]:
+    """Flag the messages that start a session, for the times of one contact in order.
+
+    The first message starts a session, and so does the first one that comes more than 24
+    hours after the start of the current one.
+
+    ```python
+    flag_new_sessions([t0, t0 + 1h, t0 + 25h, t0 + 26h])  # [True, False, True, False]
+    ```
+    """
+    flags: list[bool] = []
+    started: datetime | None = None
+
+    for time in times:
+        starts = started is None or (time - started).total_seconds() > SESSION_SECONDS
+        flags.append(starts)
+
+        if starts:
+            started = time
+
+    return flags
+
+
+def fix_phone(phone: str | None) -> str | None:
+    """Return a phone of 12 digits with the 9 after the area code, and any other phone as it is."""
+    return f"{phone[:4]}9{phone[4:]}" if phone is not None and len(phone) == 12 else phone  # noqa: PLR2004  # the length of a phone without the 9
+
+
+def build_sessions(messages: pl.DataFrame, report_month: str) -> pl.DataFrame:
+    """Return the messages of a month with the 24 hour session of each one.
+
+    The new columns are `inicio_datetime`, `nova_sessao` (1 for the message that starts a
+    session), `id_sessao_24h` (the phone and the number of the session) and `mes_ano`.
+    A message without a phone starts no session. Only the messages of `report_month`
+    (`YYYY-MM`) stay.
+    """
+    column = messages["mensagem_datahora"]
+    times = column.str.to_datetime(strict=False) if column.dtype == pl.String else column
+    phones = messages["contato_telefone"].map_elements(fix_phone, return_dtype=pl.String)
+    frame = messages.with_columns(inicio_datetime=times, contato_telefone=phones).sort(
+        ["contato_telefone", "inicio_datetime"], nulls_last=True
+    )
+
+    flags: list[int] = []
+    for _, group in frame.group_by("contato_telefone", maintain_order=True):
+        has_phone = group["contato_telefone"].null_count() == 0
+        starts = flag_new_sessions(group["inicio_datetime"].to_list()) if has_phone else [False] * group.height
+        flags += [int(start) for start in starts]
+
+    return (
+        frame.with_columns(nova_sessao=pl.Series(flags, dtype=pl.Int64))
+        .with_columns(
+            id_sessao_24h=pl.col("contato_telefone")
+            + "_"
+            + pl.col("nova_sessao").cum_sum().over("contato_telefone").cast(pl.String),
+            mes_ano=pl.col("inicio_datetime").dt.strftime("%Y-%m"),
+        )
+        .filter(pl.col("mes_ano") == report_month)
+    )
