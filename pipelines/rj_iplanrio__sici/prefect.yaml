@@ -72,8 +72,8 @@ deployments:
         timezone: America/Sao_Paulo
         slug: sici-orgaos-daily
         parameters:
-          dataset_id: unidades_administrativas
-          table_id: orgaos
+          table:
+            dataset_id: unidades_administrativas
+            table_id: orgaos
           wsdl: "http://sici.rio.rj.gov.br/Servico/WebServiceSICI.asmx?wsdl"
           dump_mode: overwrite
-          biglake_table: true

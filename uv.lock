@@ -5521,14 +5521,12 @@ version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__sici" }
 dependencies = [
     { name = "prefect-rj-iplanrio" },
-    { name = "pytz" },
     { name = "zeep" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "pytz" },
     { name = "zeep" },
 ]
 
