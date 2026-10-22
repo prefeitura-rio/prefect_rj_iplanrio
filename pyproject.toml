@@ -75,11 +75,12 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "pipelines/*/tests"]
 asyncio_mode = "auto"
-addopts = ["--import-mode=importlib", "-m", "not parity"]
+addopts = ["--import-mode=importlib", "-m", "not parity and not cloud"]
 pythonpath = ["tests", "tests/parity"]
 markers = [
+  "cloud: needs a working Google Cloud credential, because deltalake asks for a token even with the fake GCS",
   "extensions: needs a DuckDB extension that is downloaded the first time",
   "parity: needs the real engines that `tests/parity/engines.nu` starts",
 ]

@@ -78,13 +78,13 @@ No `dbt_run`, `request` é o grupo `DbtRun`: `repository`, `command`, `target`, 
 
 Os parâmetros são grupos com tipo (`src/utils/types.py`). O `Prefect` recusa uma chave que falta ou um tipo errado antes de rodar.
 
-| Grupo      | O que tem                                                                                                                                                 | Onde fica no `prefect.yaml` |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| `database` | `type`, `host`, `port`, `database` e `options` (opcional, da fonte). O usuário e a senha vêm de `DB_USERNAME` e `DB_PASSWORD`                             | `deployment`                |
-| `cloud`    | `bucket`, `project` e `connection` (a conexão `BigLake`)                                                                                                  | `deployment`                |
-| `table`    | `dataset_id` e `table_id`, a tabela no BigQuery                                                                                                           | `schedule`                  |
+| Grupo      | O que tem                                                                                                                                                                                                                                                                             | Onde fica no `prefect.yaml` |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `database` | `type`, `host`, `port`, `database` e `options` (opcional, da fonte). O usuário e a senha vêm de `DB_USERNAME` e `DB_PASSWORD`                                                                                                                                                         | `deployment`                |
+| `cloud`    | `bucket`, `project` e `connection` (a conexão `BigLake`)                                                                                                                                                                                                                              | `deployment`                |
+| `table`    | `dataset_id` e `table_id`, a tabela no BigQuery                                                                                                                                                                                                                                       | `schedule`                  |
 | `read`     | `table` (`esquema.tabela`) ou `query` (no dialeto do banco). No CouchDB, `table` é a base, `query` um seletor Mango e `since` uma sequência de `_changes`. No MongoDB, `table` é a coleção, `query` um filtro `JSON` e `pipeline` uma lista de estágios de agregação, em texto `JSON` | `schedule`                  |
-| `options`  | `chunks`, `filters`, `select`, `columns`, `batch_size` e `concurrency`                                                                                    | `schedule`                  |
+| `options`  | `chunks`, `filters`, `select`, `columns`, `batch_size` e `concurrency`                                                                                                                                                                                                                | `schedule`                  |
 
 Cada `schedule` repete o grupo inteiro. O `Prefect` troca o grupo todo, e não só uma chave.
 
@@ -144,12 +144,12 @@ deployments:
 
 `filters` é uma lista, e cada item é um filtro no idioma da fonte. Os itens se ligam por `AND`, e um `OR` fica dentro do seu item. O item vai entre parênteses, e não pode ter `;` nem comentário (`--` ou `/*`).
 
-| Fonte                       | O item é                                 | Exemplo                                 |
-| --------------------------- | ---------------------------------------- | --------------------------------------- |
-| `postgres`, `mysql`, `mssql` | um predicado em SQL do `DuckDB`          | `"status <> 'cancelado'"`               |
-| `oracle`                    | um predicado em SQL do Oracle            | `"STATUS <> 'CANCELADO'"`               |
-| `couchdb`                   | um seletor Mango, em texto `JSON`        | `'{"situacao": "ativo"}'`               |
-| `mongodb`                   | um documento de consulta, em texto `JSON` | `'{"situacao": "ativo"}'`               |
+| Fonte                        | O item é                                  | Exemplo                   |
+| ---------------------------- | ----------------------------------------- | ------------------------- |
+| `postgres`, `mysql`, `mssql` | um predicado em SQL do `DuckDB`           | `"status <> 'cancelado'"` |
+| `oracle`                     | um predicado em SQL do Oracle             | `"STATUS <> 'CANCELADO'"` |
+| `couchdb`                    | um seletor Mango, em texto `JSON`         | `'{"situacao": "ativo"}'` |
+| `mongodb`                    | um documento de consulta, em texto `JSON` | `'{"situacao": "ativo"}'` |
 
 Os nomes das colunas são os da fonte, como em `select`. No CouchDB, `chunks.column` precisa ser `id`, e os filtros não vão com `read.query` nem com `read.since`.
 
@@ -327,7 +327,7 @@ pytest              # sem rede nem contêiner
 pytest -n 4         # em quatro processos, como o `test:root`
 ```
 
-Os testes não usam a nuvem de verdade. Eles não precisam de credencial do Google. Uma credencial local que o Google recusa (`GOOGLE_APPLICATION_CREDENTIALS` com um arquivo inválido ou vencido) faz `tests/test_cloud.py` falhar com `invalid_grant`: apague a variável ou renove a credencial. O GCS é um servidor falso com a API XML, o BigQuery lê a tabela `Delta` com as regras que o serviço real mostrou, e o banco é um `DuckDB` em memória. O `deltalake`, o `DuckDB` e o `Polars` são os de verdade. Por isso um teste não pega uma mudança do serviço real: confira com uma execução em um ambiente de staging.
+Os testes não usam a nuvem de verdade, mas os de `tests/test_cloud.py` precisam de uma credencial do Google: o `deltalake` pede um token mesmo com o servidor GCS falso, e sem credencial os 13 testes falham depois de 4 minutos. Uma credencial que o Google recusa (`GOOGLE_APPLICATION_CREDENTIALS` com um arquivo inválido ou vencido) falha com `invalid_grant`. O marcador `cloud` fica desligado por padrão, então o CI não roda esses testes. Rode `uv run pytest -m cloud tests/test_cloud.py` com uma credencial válida. O GCS é um servidor falso com a API XML, o BigQuery lê a tabela `Delta` com as regras que o serviço real mostrou, e o banco é um `DuckDB` em memória. O `deltalake`, o `DuckDB` e o `Polars` são os de verdade. Por isso um teste não pega uma mudança do serviço real: confira com uma execução em um ambiente de staging.
 
 O `pytest-xdist` roda os testes da raiz em quatro processos, e cada processo sobe o próprio servidor GCS falso (as portas são livres, então não há conflito). Com mais de quatro o ganho some, porque cada processo importa o código de novo. Os testes do `toolkit` rodam em um processo só: o ganho lá é de 2 s.
 
@@ -363,7 +363,7 @@ O `GitHub Actions` roda as tasks do `devenv` e os scripts `Nushell` de `scripts/
 | `build-root-image.yaml` | Mudança no `Dockerfile` ou no `openssl.cnf` da raiz, na `master`; ou manual                                                                          | Publica `ghcr.io/<repositório>:latest` e chama `deploy.yaml` para todas as pipelines, em staging e em prod (os dois ambientes em paralelo). Os dois ambientes não esperam um `pull request`. |
 | `sast.yaml`             | `pull request` e `push` na `master`                                                                                                                  | Análise de segurança.                                                                                                                                                                        |
 
-O `deploy.yaml` só roda quando a variável do repositório `DEPLOY_ENABLED` vale `true`. Sem ela, nada faz deploy: nem um `push`, nem a execução manual, nem o `build-root-image.yaml`. Crie a variável em *Settings > Secrets and variables > Actions > Variables* para ligar o deploy, e apague-a para desligar.
+O `deploy.yaml` só roda quando a variável do repositório `DEPLOY_ENABLED` vale `true`. Sem ela, nada faz deploy: nem um `push`, nem a execução manual, nem o `build-root-image.yaml`. Crie a variável em _Settings > Secrets and variables > Actions > Variables_ para ligar o deploy, e apague-a para desligar.
 
 Como o `deploy.yaml` funciona:
 

@@ -29,6 +29,8 @@ from utils.utils import (
     read_request,
 )
 
+pytestmark = pytest.mark.cloud
+
 INSTANT = datetime(2024, 3, 1, 10, tzinfo=UTC)
 MONTHS: Chunks = {"column": "dia", "width": "month", "begin": "2024-01-01", "end": "2024-03-31"}
 
