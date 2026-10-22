@@ -1,73 +1,95 @@
-"""Cliente e helpers de Google Drive — a pasta raiz (ID vem do flow como parâmetro,
-default config.DRIVE_PASTA_RAIZ_ID — ver flow.py) precisa já existir e estar
-compartilhada (Editor) com a service account de BASEDOSDADOS_CREDENTIALS_PROD;
-subpastas por HSM são criadas automaticamente dentro dela.
+"""Google Drive: the folders of the reports and the upload of their files.
 
-A pasta raiz vive numa Unidade Compartilhada (não "Meu Drive") — por isso toda chamada
-files().get/list/create abaixo passa supportsAllDrives=True (e includeItemsFromAllDrives
-no list). Sem esse parâmetro a API do Drive trata item de Unidade Compartilhada como
-inexistente e devolve 404 mesmo com a service account tendo acesso — não confundir com
-falta de compartilhamento de fato."""
+The root folder lives in a shared drive, not in My Drive, so every call passes `supportsAllDrives`.
+Without it the API treats an item of a shared drive as if it did not exist, and answers 404 even
+when the service account has access.
+"""
 
-import io
+from datetime import date
+from io import BytesIO
+from typing import cast
 
 from googleapiclient.discovery import Resource, build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
-from prefect.logging import get_logger
+from toolkit.telemetry import logger
 
-from pipelines.rj_crm__relatorio_engajamento_hsm.config import DRIVE_FOLDER_MIME
+from pipelines.rj_crm__relatorio_engajamento_hsm.constants import DRIVE_FOLDER_MIME
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.report import report_slug
 from utils.utils import load_credentials
 
-logger = get_logger("toolkit")
+type Files = list[dict[str, str]]
 
 
-def get_drive_service() -> Resource:
-    credentials = load_credentials()
-    return build("drive", "v3", credentials=credentials)
+def connect() -> Resource:
+    """Return a Drive client with the credentials of the environment."""
+    return build("drive", "v3", credentials=load_credentials())
 
 
-def busca_pasta(drive: Resource, nome: str, parent_id: str | None) -> str | None:
-    query = f"name = '{nome}' and mimeType = '{DRIVE_FOLDER_MIME}' and trashed = false"
-    if parent_id:
-        query += f" and '{parent_id}' in parents"
-    resultado = drive.files().list(
-        q=query,
-        fields="files(id, name)",
-        spaces="drive",
-        supportsAllDrives=True,
-        includeItemsFromAllDrives=True,
+def list_files(drive: Resource, query: str) -> Files:
+    """Return the id and the name of the files that a Drive query finds, in all drives."""
+    api = drive.files()  # pyright: ignore[reportAttributeAccessIssue]
+    answer = api.list(
+        q=query, fields="files(id, name)", spaces="drive", supportsAllDrives=True, includeItemsFromAllDrives=True
     ).execute()
-    arquivos = resultado.get("files", [])
-    return arquivos[0]["id"] if arquivos else None
+
+    return cast("Files", answer.get("files", []))
 
 
-def confirma_pasta_raiz(drive: Resource, pasta_raiz_id: str) -> None:
-    """Confere que a pasta raiz (ID passado pelo flow — não busca por nome, pra não
-    correr o risco de pegar outra pasta com o mesmo nome compartilhada por engano com a
-    service account) existe e está acessível, antes de tentar criar subpasta/publicar
-    arquivo nela."""
+def find_folder(drive: Resource, name: str, parent_id: str) -> str | None:
+    """Return the id of the folder with a name inside a parent, or nothing."""
+    escaped = name.replace("\\", "\\\\").replace("'", "\\'")
+    files = list_files(
+        drive,
+        f"name = '{escaped}' and mimeType = '{DRIVE_FOLDER_MIME}' and trashed = false and '{parent_id}' in parents",
+    )
+
+    return files[0]["id"] if files else None
+
+
+def confirm_root(drive: Resource, root_id: str) -> None:
+    """Check that the root folder exists and the service account can reach it.
+
+    Raise `RuntimeError` if not. The id is used, not a name, so no other folder with that name gets the files.
+    """
     try:
-        drive.files().get(fileId=pasta_raiz_id, fields="id", supportsAllDrives=True).execute()
-    except HttpError as exc:
-        raise RuntimeError(
-            f"Pasta de ID '{pasta_raiz_id}' inacessível — confira se ela ainda existe e se está "
-            "compartilhada (Editor) com a service account de BASEDOSDADOS_CREDENTIALS_PROD."
-        ) from exc
+        api = drive.files()  # pyright: ignore[reportAttributeAccessIssue]
+        api.get(fileId=root_id, fields="id", supportsAllDrives=True).execute()
+    except HttpError as error:
+        raise RuntimeError(f"The folder {root_id!r} is not reachable: check that it is shared (Editor)") from error
 
 
-def pasta_hsm_id(drive: Resource, raiz_id: str, nome_hsm: str) -> str:
-    pasta_id = busca_pasta(drive, nome_hsm, parent_id=raiz_id)
-    if pasta_id:
-        return pasta_id
-    metadata = {"name": nome_hsm, "mimeType": DRIVE_FOLDER_MIME, "parents": [raiz_id]}
-    pasta = drive.files().create(body=metadata, fields="id", supportsAllDrives=True).execute()
-    logger.info(f"[DRIVE] subpasta '{nome_hsm}' criada.")
-    return pasta["id"]
+def hsm_folder_id(drive: Resource, root_id: str, hsm_name: str) -> str:
+    """Return the id of the subfolder of an HSM, and create it if it does not exist."""
+    if folder_id := find_folder(drive, hsm_name, root_id):
+        return folder_id
+
+    body = {"name": hsm_name, "mimeType": DRIVE_FOLDER_MIME, "parents": [root_id]}
+    api = drive.files()  # pyright: ignore[reportAttributeAccessIssue]
+    folder = api.create(body=body, fields="id", supportsAllDrives=True).execute()
+    logger.info("Folder created: %s", hsm_name)
+
+    return str(folder["id"])
 
 
-def upload_bytes(drive: Resource, pasta_id: str, nome_arquivo: str, conteudo: bytes, mime_type: str) -> None:
-    media = MediaIoBaseUpload(io.BytesIO(conteudo), mimetype=mime_type, resumable=False)
-    metadata = {"name": nome_arquivo, "parents": [pasta_id]}
-    drive.files().create(body=metadata, media_body=media, fields="id", supportsAllDrives=True).execute()
-    logger.info(f"[DRIVE] '{nome_arquivo}' publicado.")
+def report_exists(drive: Resource, root_id: str, hsm_name: str, reference: date) -> bool:
+    """Tell whether the subfolder of the HSM has a file of the report of a day, found by the prefix of its name."""
+    confirm_root(drive, root_id)
+    folder_id = find_folder(drive, hsm_name, root_id)
+
+    if folder_id is None:
+        return False
+
+    prefix = report_slug(hsm_name, reference)
+
+    return bool(list_files(drive, f"name contains '{prefix}' and '{folder_id}' in parents and trashed = false"))
+
+
+def upload(drive: Resource, folder_id: str, name: str, content: bytes, mime_type: str) -> None:
+    """Upload a file to a folder."""
+    media = MediaIoBaseUpload(BytesIO(content), mimetype=mime_type, resumable=False)
+    api = drive.files()  # pyright: ignore[reportAttributeAccessIssue]
+    api.create(
+        body={"name": name, "parents": [folder_id]}, media_body=media, fields="id", supportsAllDrives=True
+    ).execute()
+    logger.info("File published: %s", name)

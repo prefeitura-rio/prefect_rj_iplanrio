@@ -6,8 +6,6 @@ dependencies = [
     "prefect_rj_iplanrio",
     "google-cloud-bigquery",
     "google-api-python-client",
-    "requests",
-    "pandas",
     "python-docx>=1.1.0",
 ]
 

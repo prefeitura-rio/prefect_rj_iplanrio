@@ -5092,20 +5092,16 @@ source = { virtual = "pipelines/rj_crm__relatorio_engajamento_hsm" }
 dependencies = [
     { name = "google-api-python-client" },
     { name = "google-cloud-bigquery" },
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio" },
     { name = "python-docx" },
-    { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "google-api-python-client" },
     { name = "google-cloud-bigquery" },
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "python-docx", specifier = ">=1.1.0" },
-    { name = "requests" },
 ]
 
 [[package]]
