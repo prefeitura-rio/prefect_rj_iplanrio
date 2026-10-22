@@ -71,5 +71,6 @@ deployments:
         timezone: America/Sao_Paulo
         slug: meteorologia-redemet-estacoes-monthly
         parameters:
-          dataset_id: clima_estacao_meteorologica
-          table_id: estacoes_redemet
+          table:
+            dataset_id: clima_estacao_meteorologica
+            table_id: estacoes_redemet

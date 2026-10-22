@@ -1,48 +1,34 @@
-# -*- coding: utf-8 -*-
-"""
-Funções utilitárias para processamento de dados meteorológicos do REDEMET.
-"""
+"""Helpers of rj_cor__meteorologia_redemet_estacoes."""
 
-from typing import List, Tuple
+from collections.abc import Mapping, Sequence
 
-import pandas as pd
+from pydantic import JsonValue
+from unidecode import unidecode
+
+from pipelines.rj_cor__meteorologia_redemet_estacoes.constants import CITY, COLUMNS, KNOWN_STATIONS
 
 
-def parse_date_columns(
-    dataframe: pd.DataFrame,
-    partition_column: str,
-) -> Tuple[pd.DataFrame, List[str]]:
-    """
-    Converte coluna de data/datetime em colunas separadas de particionamento.
+def build_stations(records: Sequence[Mapping[str, JsonValue]], updated_on: str) -> list[dict[str, JsonValue]]:
+    """Return the stations of Rio de Janeiro, renamed, without accents and with the update date."""
+    stations: list[dict[str, JsonValue]] = []
 
-    Extrai ano, mês e dia de uma coluna datetime e cria colunas de particionamento
-    no formato esperado pelo BigQuery (ano=YYYY, mes=MM, dia=DD).
+    for record in records:
+        city = record.get("cidade")
 
-    Args:
-        dataframe: DataFrame com os dados
-        partition_column: Nome da coluna de data para particionar
+        if not isinstance(city, str) or CITY not in city:
+            continue
 
-    Returns:
-        Tupla contendo:
-            - DataFrame com colunas de partição adicionadas
-            - Lista com nomes das colunas de particionamento
+        station = {new: record.get(old) for old, new in COLUMNS.items()}
+        name = station["estacao"]
+        station["estacao"] = unidecode(name) if isinstance(name, str) else name
+        station["data_atualizacao"] = updated_on
+        stations.append(station)
 
-    Examples:
-        >>> df = pd.DataFrame({'data_medicao': ['2026-05-25 10:00:00']})
-        >>> df_result, partitions = parse_date_columns(df, 'data_medicao')
-        >>> partitions
-        ['ano', 'mes', 'dia']
-    """
-    # Garantir que a coluna está em formato datetime
-    if not pd.api.types.is_datetime64_any_dtype(dataframe[partition_column]):
-        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column])
+    return stations
 
-    # Criar colunas de partição
-    dataframe["ano"] = dataframe[partition_column].dt.strftime("%Y")
-    dataframe["mes"] = dataframe[partition_column].dt.strftime("%m")
-    dataframe["dia"] = dataframe[partition_column].dt.strftime("%d")
 
-    partitions = ["ano", "mes", "dia"]
+def find_new_stations(stations: Sequence[Mapping[str, JsonValue]]) -> list[str]:
+    """Return the ids of the stations that the REDEMET flow does not know, without repeats."""
+    ids = dict.fromkeys(str(station["id_estacao"]) for station in stations)
 
-    return dataframe, partitions
-
+    return [station_id for station_id in ids if station_id not in KNOWN_STATIONS]

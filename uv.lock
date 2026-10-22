@@ -4832,16 +4832,14 @@ name = "rj-cor-meteorologia-redemet-estacoes"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_cor__meteorologia_redemet_estacoes" }
 dependencies = [
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "requests" },
+    { name = "unidecode" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "requests" },
+    { name = "unidecode" },
 ]
 
 [[package]]
