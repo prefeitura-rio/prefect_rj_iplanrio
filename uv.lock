@@ -44,12 +44,9 @@ members = [
     "rj-crm-whitelist-whatsapp-relatorio",
     "rj-cvl-arquivo-virtual",
     "rj-cvl-osinfo",
-    "rj-iplanrio-1746-seconverva-salesforce-poc",
-    "rj-iplanrio-1746-ticket-capture",
     "rj-iplanrio-alertario-previsao-24h",
     "rj-iplanrio-betterstack-api",
     "rj-iplanrio-cor-alerts-aggregator",
-    "rj-iplanrio-cor-alerts-test-writer",
     "rj-iplanrio-dados-mestres",
     "rj-iplanrio-data-catalog",
     "rj-iplanrio-eai-history",
@@ -60,7 +57,6 @@ members = [
     "rj-iplanrio-sicop",
     "rj-iplanrio-sisbicho-images",
     "rj-iplanrio-taxirio",
-    "rj-iplanrio-test",
     "rj-iplanrio-vigia-urbano",
     "rj-pgm-divida-ativa",
     "rj-pic-disparos-email",
@@ -83,7 +79,6 @@ members = [
     "rj-smfp-iptu-inadimplentes",
     "rj-smfp-nota-carioca-bq-to-oracle",
     "rj-smfp-nota-carioca-bq-to-oracle-validation",
-    "rj-smfp-nota-carioca-oracle-probe",
     "rj-smfp-nota-carioca-oracle-to-bq",
     "rj-smfp-porte-empresa",
     "rj-smfp-sigma",
@@ -503,31 +498,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/47/d7/5bbeb12c44d7c4f2fb5b56abce497eb5ed9f34d85701de869acedd602619/backoff-2.2.1.tar.gz", hash = "sha256:03f829f5bb1923180821643f8753b0502c3b682293992485b0eef2807afa5cba", size = 17001, upload-time = "2022-10-05T19:19:32.061Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/df/73/b6e24bd22e6720ca8ee9a85a0c4a2971af8497d8f3193fa05390cbd46e09/backoff-2.2.1-py3-none-any.whl", hash = "sha256:63579f9a0628e06278f7e47b7d7d5b6ce20dc65c5e96a6f3ca99a6adca0396e8", size = 15148, upload-time = "2022-10-05T19:19:30.546Z" },
-]
-
-[[package]]
-name = "basedosdados"
-version = "2.0.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "google-api-python-client" },
-    { name = "google-cloud-bigquery" },
-    { name = "google-cloud-bigquery-connection" },
-    { name = "google-cloud-bigquery-storage" },
-    { name = "google-cloud-storage" },
-    { name = "gql" },
-    { name = "loguru" },
-    { name = "pandas" },
-    { name = "pandas-gbq" },
-    { name = "pandavro" },
-    { name = "pydata-google-auth" },
-    { name = "requests-toolbelt" },
-    { name = "tomlkit" },
-    { name = "tqdm" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c9/7b/7cdd911f2782cfaa41696d2f79da0aae5e601cac521bdf4e6883aa57f2f3/basedosdados-2.0.3.tar.gz", hash = "sha256:5bbe6860e8c052547238af2ac57b96de57c8962e549078c68fb5019236075043", size = 12171043, upload-time = "2026-03-03T13:57:57.407Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/10/65/b35f3e82093022ea5a690e30312f9a1a00ae8e5cac0afafa135d28541b87/basedosdados-2.0.3-py3-none-any.whl", hash = "sha256:f6f3375938fc6c57d0c1f320629075682157b92d7cd2da0796ce0d1fdbfd64af", size = 39823, upload-time = "2026-03-03T13:57:59.84Z" },
 ]
 
 [[package]]
@@ -1373,25 +1343,6 @@ wheels = [
 ]
 
 [[package]]
-name = "fastavro"
-version = "1.13.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d6/ee/05cae1eeb332f876a1226b382a1f1be4ac8ce66634c313f2746beadab16f/fastavro-1.13.1.tar.gz", hash = "sha256:6f05aa2539bf7a19e9eb3bdaf6580c4d0f082a8230f641eaf9c84e4bcf0e6bc4", size = 1126240, upload-time = "2026-10-08T00:28:07.552Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7d/14/823760744ddd004c690ae6f2a0c122e0ae042a579703e30ff4e9f1606459/fastavro-1.13.1-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:9f53c6e3179ef6c35724e5193c69bda85d001d987bbfb487a171fa04f526bd7c", size = 1065275, upload-time = "2026-10-08T00:28:49.274Z" },
-    { url = "https://files.pythonhosted.org/packages/c6/73/414a89d8b4c5da58abd0bf0ef7a874207e7597bd10172fe6bf4242e58e84/fastavro-1.13.1-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:8ceecd6896adbc57c9e59ee3295c8016ae372f17df9787c4d1ba5a73209d723a", size = 3477637, upload-time = "2026-10-08T00:28:51.201Z" },
-    { url = "https://files.pythonhosted.org/packages/38/36/944c833c4b222a0f02b0414f8613849ef693e6f64e406ec3dec8c8ed048b/fastavro-1.13.1-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:28305b4e0764f362cffe5bb6993021d584c050d49256f153d1f46ee4fb188ba8", size = 3522136, upload-time = "2026-10-08T00:28:53.528Z" },
-    { url = "https://files.pythonhosted.org/packages/f8/98/aa284187e5e365d4ade3eeb182c77ef187b0c9ae1c1f0e3f9b4c702f4699/fastavro-1.13.1-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:0723398cd2b246a47bb6f44cb8230f158391c59e998f79687ba256cfa37127d7", size = 3372926, upload-time = "2026-10-08T00:28:55.539Z" },
-    { url = "https://files.pythonhosted.org/packages/a5/73/9f5fff1b298e423bf61025ebba8c0cace3af05dec1977436f2b2223d5fcb/fastavro-1.13.1-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:a06d21d9ef55a9ab56eb869713ee88371b05da9fd9600a44170649eab71c6310", size = 3476482, upload-time = "2026-10-08T00:28:57.763Z" },
-    { url = "https://files.pythonhosted.org/packages/1c/d1/c34ceb9f4bc3254efd621eb0c8664d67f306137321a84aa4ad2b3591889f/fastavro-1.13.1-cp314-cp314-win_amd64.whl", hash = "sha256:aef0ba9b7b9c0b6febeb4c14da9f13957dc02bc522ca4ab01d226c4d0dcde08a", size = 472813, upload-time = "2026-10-08T00:28:59.23Z" },
-    { url = "https://files.pythonhosted.org/packages/88/f8/59feff709cc2e17e64e561bcbf2cc3328e09740bca1c71614f7605a3ac1d/fastavro-1.13.1-cp314-cp314-win_arm64.whl", hash = "sha256:d596200f71c5706e931708ab4cb6f39decbdebe660453c54707a36e7a66b4aba", size = 437358, upload-time = "2026-10-08T00:29:00.348Z" },
-    { url = "https://files.pythonhosted.org/packages/e3/03/59b2dc2d7a39775314ca47bc5aeb6d4f5575629083d1b24271aaf9981713/fastavro-1.13.1-cp314-cp314t-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:db65955d681266091392756ea80728b7f002e038b0c45f88873897b95c7963a0", size = 3700402, upload-time = "2026-10-08T00:29:02.888Z" },
-    { url = "https://files.pythonhosted.org/packages/23/ab/4123550b4fc915fa03dbb5a872c6d6c151819033698ea929475584c8e6ba/fastavro-1.13.1-cp314-cp314t-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3fbe18a47dc1ea35bcdf01c16b7c9fe0dbeb22aa0e57e75d8c4dcd7b57395ea6", size = 3641576, upload-time = "2026-10-08T00:29:05.179Z" },
-    { url = "https://files.pythonhosted.org/packages/d7/70/9d1373fc23f23a2d246438eed6177e095c3d553511ebe74e379055686fc4/fastavro-1.13.1-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:7db91731ae8f77e638525245a5b74c673c6ef1b1d3b1e64b91a5232cb4e34f6e", size = 3529729, upload-time = "2026-10-08T00:29:07.594Z" },
-    { url = "https://files.pythonhosted.org/packages/e2/8c/39b8e579f2923bda09c267a5c0c11c5eacc567d0f45c5fa7a3f44012b57f/fastavro-1.13.1-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:78251e44f96079b1d884b1977eeadee5a18b32098a42aa950a6914e5b6ec6e16", size = 3577699, upload-time = "2026-10-08T00:29:09.784Z" },
-]
-
-[[package]]
 name = "fastjsonschema"
 version = "2.22.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1755,23 +1706,6 @@ pandas = [
 ]
 
 [[package]]
-name = "google-cloud-bigquery-connection"
-version = "1.23.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "google-api-core", extra = ["grpc"] },
-    { name = "google-auth" },
-    { name = "grpc-google-iam-v1" },
-    { name = "grpcio" },
-    { name = "proto-plus" },
-    { name = "protobuf" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/2b/ce/15eef0bb57dccb9f76304532ed32e3e8b8d4c6631629e78754845b140689/google_cloud_bigquery_connection-1.23.0.tar.gz", hash = "sha256:fed4f41837f639525aee139f0447af7d20997bebfd78115dc8c6daec64c8002e", size = 80299, upload-time = "2026-10-01T18:15:07.215Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/83/f8/502304911dde61473e540401c75014995052cfdeac1d8194f98d1be13fde/google_cloud_bigquery_connection-1.23.0-py3-none-any.whl", hash = "sha256:706dd8846288a2a7420bf5d4c2db790e93ba8c14b140743bc1f1c6a71d655ac8", size = 70736, upload-time = "2026-10-01T18:08:31.21Z" },
-]
-
-[[package]]
 name = "google-cloud-bigquery-storage"
 version = "2.42.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1926,21 +1860,6 @@ wheels = [
 [package.optional-dependencies]
 grpc = [
     { name = "grpcio" },
-]
-
-[[package]]
-name = "gql"
-version = "4.4.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "graphql-core" },
-    { name = "tenacity" },
-    { name = "yarl" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/85/95/15fdc8ef0b3a5333a019ad1ade6097b3251a599637e9d477e938da97a030/gql-4.4.0.tar.gz", hash = "sha256:e54fe470d51347ceb46a04fc88c5553695d2d8c86b05bef13aeee8b8f2d5f61a", size = 234190, upload-time = "2026-09-27T16:40:07.193Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/75/c4/3c28d6e7d73072d1d94f4a4162f5ef6031f7b5a6fd420841fb4b78e8b9f7/gql-4.4.0-py3-none-any.whl", hash = "sha256:150ffd909a8814f14c9ca19ec9410afd572443253789d57e7efd6b92cc24d8f7", size = 96213, upload-time = "2026-09-27T16:40:06.031Z" },
 ]
 
 [[package]]
@@ -2206,19 +2125,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/0a/ea/13a1ef3c12d12662905801495283530251918b70d62d368f1d2e0272c70d/humanize-4.16.0.tar.gz", hash = "sha256:7dc2244a2f84a4bfb1d36c37bac80cd78e35cdc5c119206d87b018e1445f3a3f", size = 89515, upload-time = "2026-06-30T16:17:29.859Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b0/aa/0b7365d30fed43e7a3449aba1fe20a0a7174d9cf13e282af4e69ac825441/humanize-4.16.0-py3-none-any.whl", hash = "sha256:353eb2f34c09d098b2880eee8bef21832eae6d174f48c5762fff7e5fcb74d01d", size = 137209, upload-time = "2026-06-30T16:17:28.36Z" },
-]
-
-[[package]]
-name = "hvac"
-version = "0.11.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "requests" },
-    { name = "six" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/57/8c/51fc4c339a5ba7e2d3203a76c7c79c9bcafbbd1e2720381a186480be4359/hvac-0.11.2.tar.gz", hash = "sha256:f905c59d32d88d3f67571fe5a8a78de4659e04798ad809de439f667247d13626", size = 113064, upload-time = "2021-09-23T17:47:12.268Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3f/a9/c9362c1728aba6579f1c9d8853302b3a04727ffe77240364ecd4bcafee81/hvac-0.11.2-py2.py3-none-any.whl", hash = "sha256:3e8a34804b1e20954a2b4991cc13ed9c09b32e50dadd9d3438224481150f6568", size = 148965, upload-time = "2021-09-23T17:47:10.352Z" },
 ]
 
 [[package]]
@@ -2756,19 +2662,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c6/a3/b29580948b92e8c2f84dea70118ac702ff067dc52ec4ffb5d73c953536a5/lightgbm-4.7.0-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:d4529acec5c6fefe4768302a529707d0ead90f6a6f42df694b856212e09695b8", size = 3349492, upload-time = "2026-07-18T21:00:37.943Z" },
     { url = "https://files.pythonhosted.org/packages/15/eb/837ea3b40cc36e22eeebb9785c01e42b2c255d033eea1d2d9ee8e2540e55/lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:d23e922acd891e77212e4d0fbcee9ba973c96dee479491341d05ba595357ebb7", size = 3476028, upload-time = "2026-07-18T21:00:39.331Z" },
     { url = "https://files.pythonhosted.org/packages/d5/0b/c5c17d862b12ce292f24cd85d40f2f8f8981668fbdbd43fdc2625eccbc79/lightgbm-4.7.0-py3-none-win_amd64.whl", hash = "sha256:f42d1e5b32b6f170e606d7c689c6165671da98d7bf37f1addec2623efc8740c9", size = 1360833, upload-time = "2026-07-18T21:00:40.865Z" },
-]
-
-[[package]]
-name = "loguru"
-version = "0.7.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
-    { name = "win32-setctime", marker = "sys_platform == 'win32'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/3a/05/a1dae3dffd1116099471c643b8924f5aa6524411dc6c63fdae648c4f1aca/loguru-0.7.3.tar.gz", hash = "sha256:19480589e77d47b8d85b2c827ad95d49bf31b0dcde16593892eb51dd18706eb6", size = 63559, upload-time = "2024-12-06T11:20:56.608Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0c/29/0348de65b8cc732daa3e33e67806420b2ae89bdce2b04af740289c5c6c8c/loguru-0.7.3-py3-none-any.whl", hash = "sha256:31a33c10c8e1e10422bfd431aeb5d351c7cf7fa671e3c4df004162264b28220c", size = 61595, upload-time = "2024-12-06T11:20:54.538Z" },
 ]
 
 [[package]]
@@ -3662,20 +3555,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pandavro"
-version = "1.8.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "fastavro" },
-    { name = "numpy" },
-    { name = "pandas" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/f3/46/28b8c7f82c16fc54d7f31157df2392a8c1628a5c09c154e6f64c9b6f4426/pandavro-1.8.0.tar.gz", hash = "sha256:d99102e93b45f9a2d52a284fb4c1055ad6c32ba1569cb21a71c02eceb8a7393b", size = 8951, upload-time = "2023-11-22T10:01:00.084Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3b/74/13b8900ee2c617e5c782b1f2524122addf508030abe28cbe9106e3540110/pandavro-1.8.0-py3-none-any.whl", hash = "sha256:0e4e29520b63484ae1f1bc3021857929d446180b52f986500ee916a08b8e28a2", size = 8835, upload-time = "2023-11-22T10:00:51.111Z" },
-]
-
-[[package]]
 name = "parsedatetime"
 version = "2.6"
 source = { registry = "https://pypi.org/simple" }
@@ -3967,20 +3846,6 @@ wheels = [
 ]
 
 [[package]]
-name = "prefeitura-rio"
-version = "1.1.3a2"
-source = { git = "https://github.com/prefeitura-rio/prefeitura-rio?rev=54593ddff444158b0ecbab5514c5cde4d44012c0#54593ddff444158b0ecbab5514c5cde4d44012c0" }
-dependencies = [
-    { name = "hvac" },
-    { name = "loguru" },
-]
-
-[package.optional-dependencies]
-actions = [
-    { name = "ruamel-yaml" },
-]
-
-[[package]]
 name = "prometheus-client"
 version = "0.26.0"
 source = { registry = "https://pypi.org/simple" }
@@ -4160,24 +4025,24 @@ wheels = [
 
 [[package]]
 name = "pyarrow"
-version = "25.0.1"
+version = "25.0.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/3d/e3/27f57f80141379d60defe6703eb50a707325706f07fedfd1312c7a751995/pyarrow-25.0.1.tar.gz", hash = "sha256:9150a83248bfed9813ea3c3af74c3856c1984d444aa28e58bf7733b9750ddf6a", size = 1201653, upload-time = "2026-08-10T12:40:53.904Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/27/f3/95428098d1fa7d04432fb750eed06b41304c2f6a5d3319985e64db2d9d41/pyarrow-25.0.0.tar.gz", hash = "sha256:d2d697008b5ec06d75952ef260c2e9a8a0f6ccfce24266c04c9c8ade927cb3b4", size = 1199181, upload-time = "2026-07-10T08:29:50.116Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/36/4c/b525824ad3094076919273cd97db61fb3d78252dee76fa3b8dc8f76774aa/pyarrow-25.0.1-cp314-cp314-macosx_12_0_arm64.whl", hash = "sha256:bf0b672390cdcb640d7288f96b826d71ff4e9abb254a86c89890baf51a29cee6", size = 35885255, upload-time = "2026-08-10T12:39:32.366Z" },
-    { url = "https://files.pythonhosted.org/packages/08/62/448bb0e940de41aec31d1a956e63ad9c54afdf122a103cc3ab20c2a3ce33/pyarrow-25.0.1-cp314-cp314-macosx_12_0_x86_64.whl", hash = "sha256:38a9a4b4b9613380e200641891495a56c3d5a98a092db4a870af9975e220471d", size = 37644461, upload-time = "2026-08-10T12:39:38.142Z" },
-    { url = "https://files.pythonhosted.org/packages/6e/9a/13587e38bd4806fd218f50fd13b8903fab60588a699ff0c406372e5b4043/pyarrow-25.0.1-cp314-cp314-manylinux_2_28_aarch64.whl", hash = "sha256:0b726ad7e7b669be982b0c71c07fe4b037d654354130da79a7902a669e93a66b", size = 46877146, upload-time = "2026-08-10T12:39:43.722Z" },
-    { url = "https://files.pythonhosted.org/packages/8d/61/1c5d1229fa21da4cff5365e41e57177aaac57c563c727f35419b8513d1c1/pyarrow-25.0.1-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:9171748cdf796972d85a4b60157c279913e242992e350c90c7450182a9838b2a", size = 50131616, upload-time = "2026-08-10T12:39:49.304Z" },
-    { url = "https://files.pythonhosted.org/packages/43/20/291e1d65cc0b09aa19f03cf25cf51a2f5fa94b5db315178f2d254ed5cad4/pyarrow-25.0.1-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:b7a296aac7a71fa0886c08e155ddb6c636a50013f801f6178daafa0f9e726188", size = 50008879, upload-time = "2026-08-10T12:39:56.891Z" },
-    { url = "https://files.pythonhosted.org/packages/8b/7c/1b7c9ec28e76576337e4f97b31141c9a181b89b6d1d6221e9d8205621a58/pyarrow-25.0.1-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:0fe7c8b6c03969b49c8c66182e4a18e3819ab92d07cfab5d8370c531b9369ef0", size = 53170864, upload-time = "2026-08-10T12:40:04.918Z" },
-    { url = "https://files.pythonhosted.org/packages/b7/75/f3d789dc06011a765d14d86bda799cf72ac1d715b6a6edecaa0d73d95062/pyarrow-25.0.1-cp314-cp314-win_amd64.whl", hash = "sha256:f729cfdbd36fd99d543b67a914d2de044c84ebe45be8b34902b299b608c15c8f", size = 28620729, upload-time = "2026-08-10T12:40:51.41Z" },
-    { url = "https://files.pythonhosted.org/packages/fc/05/647a8ee6f7c2662feb6921315617bc04dcd6034763fb61b1199720bf6162/pyarrow-25.0.1-cp314-cp314t-macosx_12_0_arm64.whl", hash = "sha256:59a2de54c0cbd954da861eee4d1d330f8e909c45b53455baef696380f2c55033", size = 36130288, upload-time = "2026-08-10T12:40:11.014Z" },
-    { url = "https://files.pythonhosted.org/packages/93/f8/c9ee997554d7bea94520667dd1933f109ac1da3ee3556d2b49381e023484/pyarrow-25.0.1-cp314-cp314t-macosx_12_0_x86_64.whl", hash = "sha256:35935cd5de130aa5cf4dea052a63e6bf2e17006c35c3a468194242b9b2bf5956", size = 37762187, upload-time = "2026-08-10T12:40:16.592Z" },
-    { url = "https://files.pythonhosted.org/packages/a2/08/a28c01c7fe9e96e8233ce2d13df1d402f4f999f848f51d2daacd6bb4c036/pyarrow-25.0.1-cp314-cp314t-manylinux_2_28_aarch64.whl", hash = "sha256:f3831aaa25c67a99f99dc8b05873cb9d64560390372e2aa197ce9dd4a3f06a44", size = 46888003, upload-time = "2026-08-10T12:40:23.242Z" },
-    { url = "https://files.pythonhosted.org/packages/1b/b9/58612e977d28dc58c878448866838369ee8da2f1e7cc8ed2c84b952aafee/pyarrow-25.0.1-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:6a1fdfc6659b6b19022f2e50627fb5cf7156a66c46bf4299379955cbe742382a", size = 50079036, upload-time = "2026-08-10T12:40:29.169Z" },
-    { url = "https://files.pythonhosted.org/packages/72/13/66e1402dcc860e1dc2760b1e0292c9a569b62b3bccab69def1b3e907d006/pyarrow-25.0.1-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:169d3429d5be7c752125890620f75a60776d38b0035eddae939651640822332e", size = 50040226, upload-time = "2026-08-10T12:40:35.186Z" },
-    { url = "https://files.pythonhosted.org/packages/78/10/3f1a5497a7ef732ab0f03ecca3e66d89d9c0f57fdc61b4794c456b781f01/pyarrow-25.0.1-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:119297a6dc197e45d9c6d4415f7814a67ffa36c180d26f68c154c58067ae782d", size = 53149035, upload-time = "2026-08-10T12:40:41.454Z" },
-    { url = "https://files.pythonhosted.org/packages/93/c0/37d4a7e8e2f7a6076283673d5298018ca26478b934c6ee369e10505ab32c/pyarrow-25.0.1-cp314-cp314t-win_amd64.whl", hash = "sha256:4288f27577352d608ca08553b0865e4a9b3aa14820c5d95b53337218d609835b", size = 28753071, upload-time = "2026-08-10T12:40:46.623Z" },
+    { url = "https://files.pythonhosted.org/packages/55/c7/581ccbcdb3d897eb2893328d68db3d52eca373bf2a7e964d0a6276b8e85b/pyarrow-25.0.0-cp314-cp314-macosx_12_0_arm64.whl", hash = "sha256:72132b9a8a0a1840197794d4dea26080069b6b0981c116bc078762dc9691b21b", size = 35878945, upload-time = "2026-07-10T08:28:18.222Z" },
+    { url = "https://files.pythonhosted.org/packages/64/d1/ccb01db7329ea0411ef4fbd9b62a04d3268b36777d4e758d5e39b91ddeab/pyarrow-25.0.0-cp314-cp314-macosx_12_0_x86_64.whl", hash = "sha256:e009ef945e498dca2f050ea10d2e9764cb44017254826fc4574fdb8d2530173b", size = 37630854, upload-time = "2026-07-10T08:28:23.452Z" },
+    { url = "https://files.pythonhosted.org/packages/af/9f/2d81ba89d1e4198d0cb25fe7529de936830fdaec0db926bb52a1ef7080d4/pyarrow-25.0.0-cp314-cp314-manylinux_2_28_aarch64.whl", hash = "sha256:f57a39dbcb416345401c2e77a4373669b45fd111a1768e6cf267a7a0607ff0ec", size = 46905617, upload-time = "2026-07-10T08:28:29.376Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/29/0ed312ec800fb536f93783215126cee4b8977dcfeccba6f0f44df0cc87d7/pyarrow-25.0.0-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:447df764beb07c544f0178a5f6b70ef44b9ecf382b3cdfad4c2d7867353c3887", size = 50119765, upload-time = "2026-07-10T08:28:35.826Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/88/cab5063ba0c4d46a9f6b4b7eb1c9029dc0302d65cd5ab3510c949a386568/pyarrow-25.0.0-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:ac5dfeee59f9ceb4d45ba76e83b026c38c24334135bb329d8274baa49cec3c62", size = 50027563, upload-time = "2026-07-10T08:28:43.848Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/fb/4d24f1b7fe2e042dc4ef315ef75e4e702d8e46fe10c37e63caff00502b03/pyarrow-25.0.0-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:f0f100dacf2c0f400601664a79d1a907ced4740514bb2b00917341038e2ce76f", size = 53162437, upload-time = "2026-07-10T08:28:52.819Z" },
+    { url = "https://files.pythonhosted.org/packages/fa/65/da20806de93ca6ee91e72cb6a9b08b3ac890b46efc8d94a7326c651c4c81/pyarrow-25.0.0-cp314-cp314-win_amd64.whl", hash = "sha256:2e093efbecb5317372f819228fa4b4e6157eee48d3f0a7b0303705ebf81a7104", size = 28613262, upload-time = "2026-07-10T08:29:47.544Z" },
+    { url = "https://files.pythonhosted.org/packages/86/9f/c632afb1d3ef4a7814cee236718235f3a47eac46e97eb87df40f550b6b48/pyarrow-25.0.0-cp314-cp314t-macosx_12_0_arm64.whl", hash = "sha256:26be35b80780d2d21f4bae3d568b1666337c3a89722cc1794c956a77017cb24e", size = 36120702, upload-time = "2026-07-10T08:28:59.577Z" },
+    { url = "https://files.pythonhosted.org/packages/36/0a/093d53a0e72ad06e45d6443e00651bbc2d21af4211295086cbf4d873d3b9/pyarrow-25.0.0-cp314-cp314t-macosx_12_0_x86_64.whl", hash = "sha256:6f4812bfbf11ca7d8faf59eb8fff8bf4dd25ce3a38b62baa010cc17a0926d1b2", size = 37750674, upload-time = "2026-07-10T08:29:06.916Z" },
+    { url = "https://files.pythonhosted.org/packages/8a/18/b37fc31a69cff4bdfb8842683def5612f551b93fff6f44375e4a4a6a5535/pyarrow-25.0.0-cp314-cp314t-manylinux_2_28_aarch64.whl", hash = "sha256:b8af8ceedf0c9c160fd2b63440f2d205b9404db85866c1217bfea601de7cfb50", size = 46912304, upload-time = "2026-07-10T08:29:14.656Z" },
+    { url = "https://files.pythonhosted.org/packages/32/35/5cae19ba72493e5598022468b56f6a5571f399f485bf412f157356476caa/pyarrow-25.0.0-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:c70a5fd9a82bd1a702fd482bdc62d38dcb672fb2b449b1d7c0d7d1f4be7b7bfe", size = 50073652, upload-time = "2026-07-10T08:29:22.467Z" },
+    { url = "https://files.pythonhosted.org/packages/2e/a5/ddd508424bdfd5e6945765e9e2ffc687e2f6115972badc8ecf423076c407/pyarrow-25.0.0-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:0490a7f8b38ffe11cc26526b50c65d111cb54ddac3717cec781806793f1244dc", size = 50058654, upload-time = "2026-07-10T08:29:29.689Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/a4/324d0db203ff5eebe8694ec2d6ec5a23f9aaa5d02e5b8c692914c518c33c/pyarrow-25.0.0-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:e83916bbcf380866b4e14255850b33323ff678dc9758411d0409cdd2523880b0", size = 53140153, upload-time = "2026-07-10T08:29:36.041Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/8d/d236e9c82fe315f9128885c8be3ec719f41965a1eb6b6f4b42470904cd41/pyarrow-25.0.0-cp314-cp314t-win_amd64.whl", hash = "sha256:13240f0d3dc5932ccd0bfa90cd76d835680b9d94a7661c635df4b703d40ce849", size = 28743657, upload-time = "2026-07-10T08:29:42.742Z" },
 ]
 
 [[package]]
@@ -4436,28 +4301,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/41/51/a2308739af7876dc845d105a8d8ff49efec990eb4de6cb6310765daddbee/pymongoarrow-1.15.0-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:8d1f0fa163a34ef1c9247761aca77e76329fc6fa76c9bca56207f0167de01302", size = 231240, upload-time = "2026-07-16T22:04:13.289Z" },
     { url = "https://files.pythonhosted.org/packages/17/40/c1d1ad30797e1ad94561adfe9860c910f2a1bd2a4e82f2aba8e2de3531d8/pymongoarrow-1.15.0-cp314-cp314t-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:e471425e9b0364888d8c2fa1f4b419f012394306ce50acb1976b8403b288fede", size = 294854, upload-time = "2026-07-16T22:04:14.855Z" },
     { url = "https://files.pythonhosted.org/packages/c5/77/a18d076a4c789b5a2ae0a22af1dac4dbffb8f1027ca539f51e8c8965f22f/pymongoarrow-1.15.0-cp314-cp314t-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:752db2afa3fdd4f4b0b578b4e0e1ec6e86baa14321fcbf1eb0510703082b9f7a", size = 305737, upload-time = "2026-07-16T22:04:16.286Z" },
-]
-
-[[package]]
-name = "pymssql"
-version = "2.4.4"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ad/3f/5d66aa70242731bfc6b6c62b14e4c6e9db0cb2dca778f0d24411b32bf88a/pymssql-2.4.4.tar.gz", hash = "sha256:6cd20778ca0e01bb5783c6d65fd2d2f2f5ca520015a4f86930d2a58ac72a0e3e", size = 211055, upload-time = "2026-10-10T04:09:49.763Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d2/56/cc79d0f1c41c4ec5f70213bb1be60da1deab85c40ceaf36d4b9a4f8c271d/pymssql-2.4.4-cp314-cp314-macosx_14_0_arm64.whl", hash = "sha256:a8a35ffddbe3d5320fd5b113e9d3cf6f4876be2ca155c3618a048850c6d420b4", size = 3195642, upload-time = "2026-10-10T04:08:53.097Z" },
-    { url = "https://files.pythonhosted.org/packages/c7/bc/f56629a6c873d2d7a9737502c2544c4df43ced7a18982f71b11895bb3851/pymssql-2.4.4-cp314-cp314-macosx_15_0_x86_64.whl", hash = "sha256:c070f5b97466daaae2dbd55643fe3de9951bb736e80aaaf82a06e0e6d55a19fc", size = 3002116, upload-time = "2026-10-10T04:08:54.534Z" },
-    { url = "https://files.pythonhosted.org/packages/c1/36/185dca7f4bb691d77ff853258bd7c7d55cd44fb8f44a5b79ab4df09883ee/pymssql-2.4.4-cp314-cp314-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:4b7a5766d4b2898e791646196af4ad8618a601029396dd13bf1317280c525599", size = 3095511, upload-time = "2026-10-10T04:08:55.93Z" },
-    { url = "https://files.pythonhosted.org/packages/4f/1a/ea7c498f7736209d27eb99f63eaad6121d21b25b19ebfa5f559d27d37642/pymssql-2.4.4-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:cc0fa1e68694d15ac8fee064cf6674053eacd51892fb8538cf3a703cac0a561c", size = 3273070, upload-time = "2026-10-10T04:08:57.345Z" },
-    { url = "https://files.pythonhosted.org/packages/8e/9b/18d141d421bf28cd3ea39c24cac45610f26c448efbfcc1cb4723a4e4ceba/pymssql-2.4.4-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:3f039045feec1b0c60c9266fb27e3d39b4bcf8e69eee7485d7c4ead7adfc56b3", size = 4487159, upload-time = "2026-10-10T04:08:58.785Z" },
-    { url = "https://files.pythonhosted.org/packages/42/9b/87106c146316036a5cc19b2b2bf8d33d3b207f45f30f9525b6650e2ab05e/pymssql-2.4.4-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:f5731261eec9761ea76fbb517834c2ee5e3ae6f689e8bc517923264a4886a184", size = 4221646, upload-time = "2026-10-10T04:09:00.269Z" },
-    { url = "https://files.pythonhosted.org/packages/35/fa/f954af0ffd773731135c87add639ef01248b7646ad670f4db08db4c444f9/pymssql-2.4.4-cp314-cp314-win_amd64.whl", hash = "sha256:e86cb1d1ae4c6fc27fd0c0c3c2409d15c3bb9ba2dede52c4633eb8209f2081c4", size = 2375068, upload-time = "2026-10-10T04:09:02.149Z" },
-    { url = "https://files.pythonhosted.org/packages/3f/cc/523a6b9f7e6b26b86cf0ce9996f51c94082fc480a028ff9ed44e86b900f8/pymssql-2.4.4-cp314-cp314t-macosx_14_0_arm64.whl", hash = "sha256:7e6b0105dc5c3648095c528ab08704f49f0cdd3f3f6cbca8a3c317f11aeab281", size = 3223425, upload-time = "2026-10-10T04:09:03.782Z" },
-    { url = "https://files.pythonhosted.org/packages/ac/95/e45755d00a99299030ac2c17f09bb0cbad492b41c58f006a634246b90109/pymssql-2.4.4-cp314-cp314t-macosx_15_0_x86_64.whl", hash = "sha256:8dc95ccb06863883015e8340cfb2c7e1ca889ab789c7109326de3231412149a4", size = 3015996, upload-time = "2026-10-10T04:09:05.584Z" },
-    { url = "https://files.pythonhosted.org/packages/ad/ae/36e9ee73e1550bde1ebd106bca02df266758e939f9a9d3b1ec5932b338cb/pymssql-2.4.4-cp314-cp314t-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:4ef6906a637106141f316f3215b9772104da52409b3b1b860baecf086ef9365d", size = 3089543, upload-time = "2026-10-10T04:09:07.9Z" },
-    { url = "https://files.pythonhosted.org/packages/95/39/62da8c248f65b5914174d6380f4f61ba398a82303c0de24ae11c79a7da1c/pymssql-2.4.4-cp314-cp314t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:ae93ad536e7b0b912e0356354ffef7d0f2688251f37d28ec31906c59dae7e088", size = 3269139, upload-time = "2026-10-10T04:09:09.278Z" },
-    { url = "https://files.pythonhosted.org/packages/ea/02/3c2ebfe8ac54ef2eeac7e31b91133731497abed7ab2ef21276be04d5358e/pymssql-2.4.4-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:484f02d2ed27c47d90d72a2dde50afe6d1274e6698f38538dffbd53bc4701ca6", size = 4481795, upload-time = "2026-10-10T04:09:10.89Z" },
-    { url = "https://files.pythonhosted.org/packages/f1/0a/cd6e9364baa39fb4826e1bf563671fa12d50f39455bf14d3dc220c258c17/pymssql-2.4.4-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:8f9e423685beb39f8568c6bb5ef7b6945bc10289e0369e66e9498a85255924aa", size = 4219628, upload-time = "2026-10-10T04:09:12.495Z" },
-    { url = "https://files.pythonhosted.org/packages/76/43/e20c9cbc72aefa7f5111daa632a38f24ee05ab7c09b9d8f27171e87ae1a2/pymssql-2.4.4-cp314-cp314t-win_amd64.whl", hash = "sha256:4404ff0d9e7b0593ad7039b037a01d6a34d7b9797017187f197384ac24b981e0", size = 2393053, upload-time = "2026-10-10T04:09:13.99Z" },
 ]
 
 [[package]]
@@ -5191,9 +5034,7 @@ dependencies = [
     { name = "openlocationcode" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "prefeitura-rio", extra = ["actions"] },
     { name = "pydantic" },
-    { name = "python-dotenv" },
     { name = "ruamel-yaml" },
     { name = "simplejson" },
     { name = "unidecode" },
@@ -5215,9 +5056,7 @@ requires-dist = [
     { name = "openlocationcode" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "prefeitura-rio", extras = ["actions"], git = "https://github.com/prefeitura-rio/prefeitura-rio?rev=54593ddff444158b0ecbab5514c5cde4d44012c0" },
     { name = "pydantic" },
-    { name = "python-dotenv" },
     { name = "ruamel-yaml" },
     { name = "simplejson" },
     { name = "unidecode" },
@@ -5244,7 +5083,6 @@ version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__geolocalizacao_residencia" }
 dependencies = [
     { name = "aiohttp" },
-    { name = "basedosdados" },
     { name = "geopy" },
     { name = "google-cloud-bigquery" },
     { name = "google-cloud-storage" },
@@ -5253,8 +5091,6 @@ dependencies = [
     { name = "pandas" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "prefeitura-rio", extra = ["actions"] },
-    { name = "python-dotenv" },
     { name = "pytz" },
     { name = "requests" },
     { name = "unidecode" },
@@ -5272,7 +5108,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp" },
-    { name = "basedosdados" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
     { name = "flake8", marker = "extra == 'dev'", specifier = ">=6.0.0" },
     { name = "geopy" },
@@ -5284,10 +5119,8 @@ requires-dist = [
     { name = "pandas" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "prefeitura-rio", extras = ["actions"], git = "https://github.com/prefeitura-rio/prefeitura-rio?rev=54593ddff444158b0ecbab5514c5cde4d44012c0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
-    { name = "python-dotenv" },
     { name = "pytz" },
     { name = "requests" },
     { name = "unidecode" },
@@ -5300,16 +5133,12 @@ version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__get_history_data" }
 dependencies = [
     { name = "prefect-rj-iplanrio" },
-    { name = "prefeitura-rio", extra = ["actions"] },
-    { name = "python-dotenv" },
     { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "prefeitura-rio", extras = ["actions"], git = "https://github.com/prefeitura-rio/prefeitura-rio?rev=54593ddff444158b0ecbab5514c5cde4d44012c0" },
-    { name = "python-dotenv" },
     { name = "requests" },
 ]
 
@@ -5568,42 +5397,6 @@ dependencies = [
 requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
-name = "rj-iplanrio-1746-seconverva-salesforce-poc"
-version = "0.1.0"
-source = { virtual = "pipelines/rj_iplanrio__1746_seconverva_salesforce_poc" }
-dependencies = [
-    { name = "google-auth" },
-    { name = "gspread" },
-    { name = "prefect-rj-iplanrio" },
-    { name = "pymssql" },
-    { name = "pyproj" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "google-auth" },
-    { name = "gspread" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "pymssql" },
-    { name = "pyproj" },
-]
-
-[[package]]
-name = "rj-iplanrio-1746-ticket-capture"
-version = "0.1.0"
-source = { virtual = "pipelines/rj_iplanrio__1746_ticket_capture" }
-dependencies = [
-    { name = "prefect-rj-iplanrio" },
-    { name = "pymssql" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "pymssql" },
-]
-
-[[package]]
 name = "rj-iplanrio-alertario-previsao-24h"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__alertario_previsao_24h" }
@@ -5642,39 +5435,20 @@ name = "rj-iplanrio-cor-alerts-aggregator"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__cor_alerts_aggregator" }
 dependencies = [
-    { name = "basedosdados" },
     { name = "google-cloud-bigquery" },
     { name = "gspread" },
     { name = "httpx" },
     { name = "pandas" },
+    { name = "prefect-rj-iplanrio" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "basedosdados" },
     { name = "google-cloud-bigquery" },
     { name = "gspread" },
     { name = "httpx" },
     { name = "pandas" },
-]
-
-[[package]]
-name = "rj-iplanrio-cor-alerts-test-writer"
-version = "0.1.0"
-source = { virtual = "pipelines/rj_iplanrio__cor_alerts_test_writer" }
-dependencies = [
-    { name = "basedosdados" },
-    { name = "google-cloud-bigquery" },
-    { name = "httpx" },
-    { name = "pandas" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "basedosdados" },
-    { name = "google-cloud-bigquery" },
-    { name = "httpx" },
-    { name = "pandas" },
+    { name = "prefect-rj-iplanrio", editable = "." },
 ]
 
 [[package]]
@@ -5712,6 +5486,7 @@ name = "rj-iplanrio-eai-history"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__eai_history" }
 dependencies = [
+    { name = "google-cloud-bigquery" },
     { name = "langchain" },
     { name = "langchain-google-cloud-sql-pg" },
     { name = "langgraph" },
@@ -5720,6 +5495,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "google-cloud-bigquery" },
     { name = "langchain", specifier = ">=0.3.27" },
     { name = "langchain-google-cloud-sql-pg", specifier = ">=0.14.1" },
     { name = "langgraph", specifier = ">=1.0.1" },
@@ -5811,9 +5587,7 @@ dependencies = [
     { name = "openlocationcode" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "prefeitura-rio", extra = ["actions"] },
     { name = "pydantic" },
-    { name = "python-dotenv" },
     { name = "simplejson" },
     { name = "unidecode" },
 ]
@@ -5835,9 +5609,7 @@ requires-dist = [
     { name = "openlocationcode" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "prefeitura-rio", extras = ["actions"], git = "https://github.com/prefeitura-rio/prefeitura-rio?rev=54593ddff444158b0ecbab5514c5cde4d44012c0" },
     { name = "pydantic" },
-    { name = "python-dotenv" },
     { name = "simplejson" },
     { name = "unidecode" },
 ]
@@ -5848,31 +5620,14 @@ version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__taxirio" }
 dependencies = [
     { name = "prefect-rj-iplanrio" },
-    { name = "pyarrow" },
-    { name = "pymongo" },
-    { name = "pymongoarrow" },
-    { name = "pytz" },
+    { name = "toolkit", extra = ["mongodb"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "pyarrow" },
-    { name = "pymongo", specifier = ">=4.0.0" },
-    { name = "pymongoarrow", specifier = ">=1.0.0" },
-    { name = "pytz" },
+    { name = "toolkit", extras = ["mongodb"], editable = "packages/toolkit" },
 ]
-
-[[package]]
-name = "rj-iplanrio-test"
-version = "0.1.0"
-source = { virtual = "pipelines/rj_iplanrio__test" }
-dependencies = [
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-iplanrio-vigia-urbano"
@@ -5903,6 +5658,7 @@ source = { virtual = "pipelines/rj_pic__disparos_email" }
 dependencies = [
     { name = "google-cloud-bigquery" },
     { name = "jinja2" },
+    { name = "prefect-rj-iplanrio" },
     { name = "python-dotenv" },
     { name = "requests" },
 ]
@@ -5911,6 +5667,7 @@ dependencies = [
 requires-dist = [
     { name = "google-cloud-bigquery" },
     { name = "jinja2" },
+    { name = "prefect-rj-iplanrio", editable = "." },
     { name = "python-dotenv" },
     { name = "requests" },
 ]
@@ -6012,6 +5769,8 @@ name = "rj-smas-cadunico"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_smas__cadunico" }
 dependencies = [
+    { name = "google-cloud-bigquery" },
+    { name = "google-cloud-storage" },
     { name = "openpyxl" },
     { name = "prefect-rj-iplanrio" },
     { name = "setuptools" },
@@ -6020,6 +5779,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "google-cloud-bigquery" },
+    { name = "google-cloud-storage" },
     { name = "openpyxl" },
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "setuptools", specifier = ">=82.0.1" },
@@ -6044,9 +5805,7 @@ dependencies = [
     { name = "openlocationcode" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "prefeitura-rio", extra = ["actions"] },
     { name = "pydantic" },
-    { name = "python-dotenv" },
     { name = "simplejson" },
     { name = "unidecode" },
 ]
@@ -6066,9 +5825,7 @@ requires-dist = [
     { name = "openlocationcode" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "prefeitura-rio", extras = ["actions"], git = "https://github.com/prefeitura-rio/prefeitura-rio?rev=54593ddff444158b0ecbab5514c5cde4d44012c0" },
     { name = "pydantic" },
-    { name = "python-dotenv" },
     { name = "simplejson" },
     { name = "unidecode" },
 ]
@@ -6091,9 +5848,7 @@ dependencies = [
     { name = "openlocationcode" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "prefeitura-rio", extra = ["actions"] },
     { name = "pydantic" },
-    { name = "python-dotenv" },
     { name = "ruamel-yaml" },
     { name = "simplejson" },
     { name = "unidecode" },
@@ -6114,9 +5869,7 @@ requires-dist = [
     { name = "openlocationcode" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "prefeitura-rio", extras = ["actions"], git = "https://github.com/prefeitura-rio/prefeitura-rio?rev=54593ddff444158b0ecbab5514c5cde4d44012c0" },
     { name = "pydantic" },
-    { name = "python-dotenv" },
     { name = "ruamel-yaml" },
     { name = "simplejson" },
     { name = "unidecode" },
@@ -6249,48 +6002,15 @@ requires-dist = [
 ]
 
 [[package]]
-name = "rj-smfp-nota-carioca-oracle-probe"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_smfp__nota_carioca_oracle_probe" }
-dependencies = [
-    { name = "google-cloud-storage" },
-    { name = "numpy" },
-    { name = "oracledb" },
-    { name = "prefect-rj-iplanrio" },
-    { name = "pyarrow" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "google-cloud-storage" },
-    { name = "numpy" },
-    { name = "oracledb" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "pyarrow" },
-]
-
-[[package]]
 name = "rj-smfp-nota-carioca-oracle-to-bq"
 version = "1.0.0"
 source = { virtual = "pipelines/rj_smfp__nota_carioca_oracle_to_bq" }
 dependencies = [
-    { name = "google-cloud-bigquery" },
-    { name = "google-cloud-storage" },
-    { name = "numpy" },
-    { name = "oracledb" },
     { name = "prefect-rj-iplanrio" },
-    { name = "pyarrow" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "google-cloud-bigquery" },
-    { name = "google-cloud-storage" },
-    { name = "numpy" },
-    { name = "oracledb" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "pyarrow" },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-smfp-porte-empresa"
@@ -6330,7 +6050,6 @@ name = "rj-sms-sisreg-disparo-lembretes"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_sms__sisreg_disparo_lembretes" }
 dependencies = [
-    { name = "basedosdados" },
     { name = "dbt-bigquery" },
     { name = "dbt-core" },
     { name = "google-cloud-bigquery" },
@@ -6339,8 +6058,6 @@ dependencies = [
     { name = "pandas" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "prefeitura-rio", extra = ["actions"] },
-    { name = "python-dotenv" },
     { name = "pytz" },
     { name = "requests" },
     { name = "simplejson" },
@@ -6348,7 +6065,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "basedosdados" },
     { name = "dbt-bigquery" },
     { name = "dbt-core" },
     { name = "google-cloud-bigquery" },
@@ -6357,8 +6073,6 @@ requires-dist = [
     { name = "pandas" },
     { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "prefeitura-rio", extras = ["actions"], git = "https://github.com/prefeitura-rio/prefeitura-rio?rev=54593ddff444158b0ecbab5514c5cde4d44012c0" },
-    { name = "python-dotenv" },
     { name = "pytz" },
     { name = "requests" },
     { name = "simplejson" },
@@ -6923,15 +6637,6 @@ wheels = [
 ]
 
 [[package]]
-name = "tomlkit"
-version = "0.15.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/94/96/e07752635b98536177fa1f37671c8f3cdde2e724c6bcf6034b2cfb571565/tomlkit-0.15.1.tar.gz", hash = "sha256:e25bbf38843005246210a12982776f27f99cb9be67160e14434d0c0d21ee1e97", size = 180129, upload-time = "2026-07-17T01:48:04.562Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/13/bc/8c13eb66537dce1d2bd3a57132902f38d0e7f5bb46fa9f4daed9fe9d76ee/tomlkit-0.15.1-py3-none-any.whl", hash = "sha256:177a05aece5a8ca5266fd3c448abb47b8d352f09d477d3ca8332db4d89b24304", size = 49449, upload-time = "2026-07-17T01:48:05.728Z" },
-]
-
-[[package]]
 name = "toolkit"
 version = "1.0.0"
 source = { editable = "packages/toolkit" }
@@ -6963,6 +6668,7 @@ dependencies = [
 
 [package.optional-dependencies]
 mongodb = [
+    { name = "pyarrow" },
     { name = "pymongo" },
     { name = "pymongoarrow" },
 ]
@@ -7004,6 +6710,7 @@ requires-dist = [
     { name = "prefect-dbt", specifier = ">=0.7.5" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },
     { name = "pyarrow", specifier = ">=20.0.0" },
+    { name = "pyarrow", marker = "extra == 'mongodb'", specifier = "==25.0.0" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "pymongo", marker = "extra == 'mongodb'", specifier = ">=4.19" },
@@ -7303,15 +7010,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/57/37/56d0ab019ecd1cd418cdfc0e108ff55868071792949c3f91c2977b31e18b/whenever-0.10.5-cp314-cp314t-win32.whl", hash = "sha256:bc09cdb1a0480b2d003b1629f266ce387281cb288cd9848a8d6d66ad2b15b8e4", size = 580399, upload-time = "2026-08-07T15:02:38.074Z" },
     { url = "https://files.pythonhosted.org/packages/31/06/c969504aa9887010bac12484df2f03aa0e7ca5ada615a989da04e8f33046/whenever-0.10.5-cp314-cp314t-win_amd64.whl", hash = "sha256:06c32f8931bbc52b6b3f513e831aeb936e231f038b2a66cd11d4a00c131b82e6", size = 544821, upload-time = "2026-08-07T15:02:39.579Z" },
     { url = "https://files.pythonhosted.org/packages/f2/84/c937c7ec9de2aa59fbcdd60b52a8da60069636d2252c7461e43d389c04a4/whenever-0.10.5-py3-none-any.whl", hash = "sha256:193091633fc1dece4c86e7303cbd4039320b4f45c69dc5ae69b8f711bca82603", size = 129302, upload-time = "2026-08-07T15:03:29.285Z" },
-]
-
-[[package]]
-name = "win32-setctime"
-version = "1.2.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/b3/8f/705086c9d734d3b663af0e9bb3d4de6578d08f46b1b101c2442fd9aecaa2/win32_setctime-1.2.0.tar.gz", hash = "sha256:ae1fdf948f5640aae05c511ade119313fb6a30d7eabe25fef9764dca5873c4c0", size = 4867, upload-time = "2024-12-07T15:28:28.314Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e1/07/c6fe3ad3e685340704d314d765b7912993bcb8dc198f0e7a89382d37974b/win32_setctime-1.2.0-py3-none-any.whl", hash = "sha256:95d644c4e708aba81dc3704a116d8cbc974d70b3bdb8be1d150e36be6e9d1390", size = 4083, upload-time = "2024-12-07T15:28:26.465Z" },
 ]
 
 [[package]]

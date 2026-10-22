@@ -94,6 +94,7 @@ reportUnusedCallResult = false # side-effect calls (an upload, a delete) return 
 [[tool.basedpyright.executionEnvironments]]
 root = "tests/parity"
 extraPaths = ["src", "tests/parity"]
+reportMissingTypeStubs = false # pymongoarrow ships no stubs
 reportImplicitRelativeImport = false # the folder is on `pythonpath`, so the tests import the lab by name
 reportMissingParameterType = false # pytest fixtures and parametrized arguments arrive untyped
 reportUnknownParameterType = false # same cause as above
@@ -122,6 +123,10 @@ reportUnannotatedClassAttribute = false # small fake classes
 reportUnusedParameter = false # a fake follows the signature of the real API
 reportUnknownLambdaType = false # lambdas passed to fakes
 reportAny = false # values from untyped fakes
+
+[[tool.basedpyright.executionEnvironments]]
+root = "src/utils/utils.py"
+reportUnknownVariableType = false # google.auth types the request of `default` loosely
 
 [[tool.basedpyright.executionEnvironments]]
 root = "src/utils/tasks.py"
