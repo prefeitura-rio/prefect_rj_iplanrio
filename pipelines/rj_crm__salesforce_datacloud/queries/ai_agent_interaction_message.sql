@@ -1,6 +1,6 @@
 -- Agentforce (STDM). Colunas verificadas via SELECT * LIMIT 1 em 2026-07-23.
 -- Filtra por MessageSentTimestamp (não StartTimestamp como as outras 3).
--- Janela {data_inicio}/{data_fim}: hora-parede de SP com rótulo Z (ver utils/janela.py).
+-- Janela {{ start }}/{{ end }}: hora-parede de SP com rótulo Z (ver utils/janela.py).
 SELECT
     ssot__Id__c,
     ssot__AiAgentInteractionId__c,
@@ -21,5 +21,5 @@ SELECT
     ssot__ExternalSourceId__c,
     Modality__c
 FROM ssot__AiAgentInteractionMessage__dlm
-WHERE ssot__MessageSentTimestamp__c >= '{data_inicio}'
-  AND ssot__MessageSentTimestamp__c <  '{data_fim}'
+WHERE ssot__MessageSentTimestamp__c >= '{{ start }}'
+  AND ssot__MessageSentTimestamp__c <  '{{ end }}'

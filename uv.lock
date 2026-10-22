@@ -5136,19 +5136,13 @@ version = "0.2.0"
 source = { virtual = "pipelines/rj_crm__salesforce_datacloud" }
 dependencies = [
     { name = "google-cloud-bigquery" },
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio" },
-    { name = "pyyaml" },
-    { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "google-cloud-bigquery" },
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "requests" },
 ]
 
 [[package]]

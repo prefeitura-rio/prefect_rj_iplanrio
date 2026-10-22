@@ -1,5 +1,5 @@
 -- Agentforce (STDM). Colunas verificadas via SELECT * LIMIT 1 em 2026-07-23.
--- Janela {data_inicio}/{data_fim}: hora-parede de SP com rótulo Z (ver utils/janela.py).
+-- Janela {{ start }}/{{ end }}: hora-parede de SP com rótulo Z (ver utils/janela.py).
 SELECT
     ssot__Id__c,
     ssot__AiAgentSessionId__c,
@@ -19,5 +19,5 @@ SELECT
     ssot__ExternalSourceId__c,
     ssot__AttributeText__c
 FROM ssot__AiAgentInteraction__dlm
-WHERE ssot__StartTimestamp__c >= '{data_inicio}'
-  AND ssot__StartTimestamp__c <  '{data_fim}'
+WHERE ssot__StartTimestamp__c >= '{{ start }}'
+  AND ssot__StartTimestamp__c <  '{{ end }}'

@@ -1,5 +1,5 @@
 -- Tracing.
--- Janela {data_inicio}/{data_fim}: hora-parede de SP com rótulo Z (ver utils/janela.py).
+-- Janela {{ start }}/{{ end }}: hora-parede de SP com rótulo Z (ver utils/janela.py).
 SELECT
     ssot__Id__c,
     ssot__TelemetryTrace__c,
@@ -17,5 +17,5 @@ SELECT
     ssot__InternalOrganizationId__c,
     KQ_Id__c
 FROM ssot__TelemetryTraceSpan__dlm
-WHERE ssot__StartDateTime__c >= '{data_inicio}'
-  AND ssot__StartDateTime__c <  '{data_fim}'
+WHERE ssot__StartDateTime__c >= '{{ start }}'
+  AND ssot__StartDateTime__c <  '{{ end }}'

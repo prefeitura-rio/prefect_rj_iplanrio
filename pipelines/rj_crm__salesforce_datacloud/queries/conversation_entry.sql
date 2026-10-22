@@ -1,5 +1,5 @@
 -- Messaging (Data Cloud).
--- Janela {data_inicio}/{data_fim}: hora-parede de SP com rótulo Z (ver utils/janela.py).
+-- Janela {{ start }}/{{ end }}: hora-parede de SP com rótulo Z (ver utils/janela.py).
 SELECT
     ssot__Id__c,
     ssot__ConversationId__c,
@@ -20,5 +20,5 @@ SELECT
     ssot__DataSourceObjectId__c,
     KQ_Id__c
 FROM ssot__ConversationEntry__dlm
-WHERE ssot__CreatedDate__c >= '{data_inicio}'
-  AND ssot__CreatedDate__c <  '{data_fim}'
+WHERE ssot__CreatedDate__c >= '{{ start }}'
+  AND ssot__CreatedDate__c <  '{{ end }}'

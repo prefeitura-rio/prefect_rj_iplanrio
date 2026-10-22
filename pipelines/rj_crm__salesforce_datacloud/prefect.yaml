@@ -27,7 +27,7 @@ deployments:
       - severity:medium
       - code_owner:unassigned
     version: '{{ build-image.tag }}'
-    entrypoint: pipelines/rj_crm__salesforce_datacloud/flow.py:salesforce_datacloud
+    entrypoint: pipelines/rj_crm__salesforce_datacloud/flow.py:rj_crm__salesforce_datacloud
     work_pool:
       name: default-pool
       work_queue_name: default
@@ -38,7 +38,6 @@ deployments:
         image_pull_policy: Always
     parameters:
       dataset_id: brutos_salesforce_staging
-      environment: staging
     schedules:
       - cron: "*/15 * * * *"
         timezone: America/Sao_Paulo
@@ -51,7 +50,7 @@ deployments:
       - severity:medium
       - code_owner:unassigned
     version: '{{ get-commit-hash.stdout }}'
-    entrypoint: pipelines/rj_crm__salesforce_datacloud/flow.py:salesforce_datacloud
+    entrypoint: pipelines/rj_crm__salesforce_datacloud/flow.py:rj_crm__salesforce_datacloud
     work_pool:
       name: default-pool
       work_queue_name: default
@@ -61,7 +60,6 @@ deployments:
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
     parameters:
-      environment: prod
       dataset_id: brutos_salesforce_staging
     concurrency_limit:
       limit: 1
@@ -72,10 +70,12 @@ deployments:
         active: true
         slug: datacloud-producao-15min
         parameters:
-          modo: hora
+          window:
+            mode: hour
       - cron: "15 0 * * *"
         timezone: America/Sao_Paulo
         active: true
         slug: datacloud-producao-diaria
         parameters:
-          modo: dia
+          window:
+            mode: day

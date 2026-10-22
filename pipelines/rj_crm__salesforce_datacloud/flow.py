@@ -1,262 +1,101 @@
-"""
-Flow orquestrador — Salesforce Data Cloud → BigQuery.
+"""Flow for rj_crm__salesforce_datacloud."""
 
-Duas partes:
-  - salesforce_datacloud (o @flow): decide O QUE roda — janelas (hora, dia ou
-    reprocessamento), quais tabelas, e o que fazer se der errado. Tabela
-    crítica (as do Agentforce) que falhar aborta tudo; não-crítica avisa no
-    Discord e segue.
-  - processar_tabela: o COMO de uma tabela numa janela — extrair → transformar
-    → staging + MERGE. Não sabe de modo, reprocessamento nem Discord.
+from datetime import UTC, datetime
+from time import monotonic
 
-Até 2026-09-29 isso era dividido em "fases" (F1 como subflow separado,
-F2a/F3/F5 inline aqui) e a rotina de uma tabela ficava em flows/template.py
-(depois sf_to_bq.py) — a divisão em fases só servia pra dizer o que é crítico
-e filtrar o que roda, então virou atributo de cada tabela (tabelas.yaml).
+from prefect import Flow, flow
+from prefect.client.schemas.objects import FlowRun, State
+from toolkit.telemetry import logger
 
-Modo janela (desde 2026-09-08, ver utils/janela.py): substitui o watermark
-forward-only (nunca revisita o passado, não se recupera sozinho de um tick
-perdido — foi a causa raiz de um buraco de quase 100% num dia inteiro) por
-duas passadas com sobreposição intencional — `modo='hora'` roda de 15/15min
-com janela rolante de 1h, `modo='dia'` roda 1x/dia reconciliando o dia
-inteiro. As duas escrevem via staging + MERGE, nunca watermark. Ver
-prefect.yaml pros dois schedules e o concurrency_limit que impede as duas
-passadas de escreverem na mesma tabela ao mesmo tempo.
-"""
-
-import time
-from datetime import date
-
-from prefect import flow
-
-from pipelines.rj_crm__salesforce_datacloud.constants import DataCloudConstants
-from pipelines.rj_crm__salesforce_datacloud.helpers.janela import fmt_janela, janela_utc, janelas_do_run
-from pipelines.rj_crm__salesforce_datacloud.helpers.queries import ler_query
-from pipelines.rj_crm__salesforce_datacloud.helpers.tabelas import TABELAS, NomeTabela, Tabela
-from pipelines.rj_crm__salesforce_datacloud.helpers.transform import transform_dataframe
-from pipelines.rj_crm__salesforce_datacloud.tasks.auth import get_data_cloud_session
-from pipelines.rj_crm__salesforce_datacloud.tasks.bigquery import (
-    ensure_bq_tables,
-    load_chunk_to_staging,
-    merge_staging_to_target,
+from pipelines.rj_crm__salesforce_datacloud.constants import DEFAULT_DATASET_ID, DEFAULT_PROJECT_ID, FEEDS
+from pipelines.rj_crm__salesforce_datacloud.helpers.messages import build_feed_failure, build_run_failure, build_summary
+from pipelines.rj_crm__salesforce_datacloud.helpers.window import format_span, plan_spans
+from pipelines.rj_crm__salesforce_datacloud.tasks import (
+    create_tables_task,
+    extract_and_load_task,
+    log_in_task,
+    merge_task,
+    notify_task,
 )
-from pipelines.rj_crm__salesforce_datacloud.tasks.extract import (
-    extract_from_crm_rest,
-    extract_from_data_cloud,
-)
-from pipelines.rj_crm__salesforce_datacloud.tasks.notify import (
-    notify_falha_flow,
-    notify_falha_tabela,
-    notify_resumo,
-)
+from pipelines.rj_crm__salesforce_datacloud.types import Totals, Window
 
 
-def processar_tabela(
-    tabela: Tabela,
-    data_inicio: str,
-    data_fim: str,
-    partition_date: date,
-    project_id: str,
-    dataset_id: str,
-    session: dict,
-) -> dict[str, int]:
-    """
-    Extrai → transforma → carrega (staging + MERGE) UMA tabela numa janela.
-
-    Args:
-        tabela         : Configuração da tabela (tabelas.yaml).
-        data_inicio    : Início da janela (hora-parede de SP, ver utils/janela.py).
-        data_fim       : Fim da janela (exclusivo).
-        partition_date : data_particao carimbada nas linhas (dia de SP).
-        project_id     : Projeto GCP.
-        dataset_id     : Dataset BQ de destino.
-        session        : Sessão Salesforce (get_data_cloud_session) — serve pro
-                         Data Cloud e pro CRM REST.
-
-    Returns:
-        {"extraidas": n, "inseridas": n, "atualizadas": n} — extraídas da fonte
-        e o resultado do MERGE (ver merge_staging_to_target).
-    """
-    # Fonte que grava UTC de verdade (ex.: DLL de eventos WhatsApp) recebe a
-    # janela convertida + os limites de partição UTC; as DMOs usam direto.
-    if tabela.janela_utc:
-        (inicio_q, fim_q), extras = janela_utc(data_inicio, data_fim)
-    else:
-        (inicio_q, fim_q), extras = (data_inicio, data_fim), {}
-    query = ler_query(tabela.query).format(data_inicio=inicio_q, data_fim=fim_q, **extras)
-
-    # --- Extrair (única etapa que muda por source) ---
-    if tabela.source == "data_cloud":
-        df = extract_from_data_cloud(
-            dc_session=session,
-            query=query,
-            table_name=tabela.nome,
-            order_by_col=tabela.order_by_col,
-        )
-    else:  # crm_rest (source já validado em utils/tabelas.py)
-        df = extract_from_crm_rest(crm_session=session, soql=query, table_name=tabela.nome)
-
-    if df.empty:
-        return {"extraidas": 0, "inseridas": 0, "atualizadas": 0}
-    extraidas = len(df)
-
-    # --- Transformar ---
-    df = transform_dataframe(
-        df=df,
-        table_name=tabela.nome,
-        is_data_cloud=tabela.source == "data_cloud",
-        date_columns=tabela.date_columns,
-        partition_date=partition_date,
-        output_value_text_action_step_only=tabela.output_value_text_action_step_only,
-    )
-
-    # --- Carregar: staging + MERGE ---
-    load_chunk_to_staging(
-        df_chunk=df,
-        project_id=project_id,
-        dataset_id=dataset_id,
-        staging_table_id=tabela.staging,
-    )
-    merge = merge_staging_to_target(
-        project_id=project_id,
-        dataset_id=dataset_id,
-        staging_table_id=tabela.staging,
-        target_table_id=tabela.nome,
-        primary_key=tabela.primary_key,
-        partition_field="data_particao",
-    )
-
-    return {"extraidas": extraidas, **merge}
+async def notify_failure(flow: Flow[..., object], flow_run: FlowRun, state: State[object]) -> None:
+    """Post a failed run to the channel of the errors."""
+    await notify_task(build_run_failure(flow.name, flow_run.name, state.message), errors=True)
 
 
-@flow(name="salesforce-datacloud", log_prints=True, on_failure=[notify_falha_flow])
-def salesforce_datacloud(
-    project_id: str | None = None,
-    dataset_id: str | None = None,
-    partition_date: date | None = None,
-    modo: str = "hora",
-    tabelas: list[NomeTabela] | None = None,
-    reprocessar: bool = False,
-    reprocessar_de: date | None = None,
-    reprocessar_ate: date | None = None,
-    environment: str = "prod",
+@flow(log_prints=True, flow_run_name="salesforce-datacloud", on_failure=[notify_failure])
+async def rj_crm__salesforce_datacloud(
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    dataset_id: str = DEFAULT_DATASET_ID,
+    window: Window | None = None,
+    tables: list[str] | None = None,
 ) -> dict[str, dict[str, int]]:
+    """Extract the tables of Salesforce (Data Cloud and the CRM REST API) to BigQuery with a MERGE.
+
+    Each table loads into its staging table first.
+
+    - `window` says what to extract: the last hour (every 15 minutes), a whole day (once a day), or
+      each day of a reprocess. The MERGE does not duplicate, so a run can repeat.
+    - `tables` picks some of `FEEDS`, and all of them if empty.
+    - A critical table (the Agentforce ones) that fails stops the run. Any other one warns Discord and
+      lets the run go on.
+    - A day run and a reprocess post a summary.
+
+    Return the rows inserted and updated, by group and table, summed over the days.
     """
-    Extrai as tabelas de tabelas.yaml do Salesforce pro BigQuery.
+    window = window or {}
+    unknown = set(tables or []) - {feed.name for feed in FEEDS}
 
-    Args:
-        project_id      : ID do projeto GCP.
-        dataset_id      : Dataset BQ de destino.
-        partition_date  : Só relevante em modo='dia' — qual dia reconciliar.
-                          Padrão: ontem.
-        modo            : 'hora' (padrão, janela rolante de 1h — schedule de
-                          15/15min) ou 'dia' (dia inteiro — schedule 1x/dia,
-                          reconciliação funda). Ver utils/janela.py. Ignorado
-                          se reprocessar=True.
-        tabelas         : Quais tabelas atualizar — uma ou mais (seleção
-                          múltipla na UI do Prefect). Vazio/None = todas.
-        reprocessar     : Toggle de reprocessamento — refaz as `tabelas`
-                          selecionadas dia a dia, de reprocessar_de até
-                          reprocessar_ate. Via MERGE (igual ao normal), então
-                          rodar de novo não duplica: id existente é
-                          atualizado, id novo é inserido.
-        reprocessar_de  : 1º dia do reprocessamento (inclusivo). Obrigatório
-                          se reprocessar=True.
-        reprocessar_ate : Último dia (inclusivo). Padrão: = reprocessar_de.
-        environment     : Ambiente de execução ('prod' ou 'staging').
+    if unknown:
+        raise ValueError(f"Unknown tables: {sorted(unknown)}")
 
-    Returns:
-        Dict por grupo com {tabela: linhas inseridas + atualizadas no MERGE}
-        (somando todos os dias, se reprocessamento).
-    """
-    project_id = project_id or DataCloudConstants.BQ_PROJECT_ID.value
-    dataset_id = dataset_id or DataCloudConstants.DATASET_ID.value
-
-    # Vazio ([] na UI) = todas, igual a None. Nome inválido já é barrado pelo
-    # Prefect (NomeTabela é enum), a checagem abaixo cobre chamada direta.
-    desconhecidas = set(tabelas or []) - {t.nome for t in TABELAS}
-    if desconhecidas:
-        raise ValueError(f"Tabelas desconhecidas: {sorted(desconhecidas)}. Ver tabelas.yaml.")
-    selecionadas = [t for t in TABELAS if not tabelas or t.nome in tabelas]
-
-    # Valida antes de qualquer efeito colateral (credencial, ensure_tables)
-    janelas = janelas_do_run(modo, partition_date, reprocessar, reprocessar_de, reprocessar_ate)
-
-    if reprocessar:
-        rotulo = f"reprocessamento {janelas[0][2]} a {janelas[-1][2]} ({len(janelas)} dia(s))"
-    else:
-        rotulo = f"modo='{modo}'"
-
-    ensure_bq_tables(project_id=project_id, dataset_id=dataset_id)
-
-    t_pipeline_start = time.time()
-    resultados: dict[str, dict[str, int]] = {}
-    falhas: list[str] = []
-
-    print(f"[FLOW] {rotulo} | tabelas: {[t.nome for t in selecionadas]}")
-
-    # Uma sessão pra tudo — CRM REST usa a mesma credencial do Data Cloud.
-    # Sem pre-flight (removido 2026-09-29): tabela/credencial com problema
-    # falha na própria extração, com o erro real do Salesforce — crítica
-    # aborta (on_failure avisa no Discord), não-crítica avisa e segue.
-    session = get_data_cloud_session()
-
-    for data_inicio, data_fim, partition_date_efetivo in janelas:
-        if reprocessar:
-            print(f"[FLOW] === Reprocessando {partition_date_efetivo} ===")
-
-        for tabela in selecionadas:
-            t0 = time.time()
-            try:
-                r = processar_tabela(
-                    tabela=tabela,
-                    data_inicio=data_inicio,
-                    data_fim=data_fim,
-                    partition_date=partition_date_efetivo,
-                    project_id=project_id,
-                    dataset_id=dataset_id,
-                    session=session,
-                )
-                print(
-                    f"[FLOW] Tabela {tabela.nome} completa"
-                    f"{' (reprocessamento)' if reprocessar else ''} — "
-                    f"janela {fmt_janela(data_inicio, data_fim)}: "
-                    f"{r['extraidas']} extraídas, {r['inseridas']} linhas inseridas e "
-                    f"{r['atualizadas']} atualizadas após o MERGE ({time.time() - t0:.0f}s)"
-                )
-                linhas = r["inseridas"] + r["atualizadas"]
-            except Exception as exc:
-                if tabela.critica:
-                    raise  # aborta o flow — o hook on_failure avisa no Discord
-                print(f"[FLOW] WARN: '{tabela.nome}' falhou — {exc}. Continuando...")
-                notify_falha_tabela(
-                    tabela=tabela.nome,
-                    grupo=tabela.grupo,
-                    janela=fmt_janela(data_inicio, data_fim),
-                    erro=str(exc),
-                )
-                if tabela.nome not in falhas:
-                    falhas.append(tabela.nome)
-                linhas = 0
-
-            grupo = resultados.setdefault(tabela.grupo, {})
-            grupo[tabela.nome] = grupo.get(tabela.nome, 0) + linhas
-
-    total_elapsed = time.time() - t_pipeline_start
-    # Resumo no Discord só no diário e no reprocessamento — o de hora roda
-    # 96x/dia; falha dele já avisa sozinha (notify_falha_tabela/on_failure).
-    if reprocessar or modo == "dia":
-        notify_resumo(
-            rotulo=rotulo,
-            resultados=resultados,
-            falhas=falhas,
-            minutos=total_elapsed / 60,
-        )
-
-    total = sum(n for tabelas_grupo in resultados.values() for n in tabelas_grupo.values())
-    print(
-        f"[FLOW] Concluído em {total_elapsed:.0f}s — {total} linhas inseridas/atualizadas "
-        f"em {len(selecionadas)} tabela(s)"
-        + (f"; falharam: {', '.join(falhas)}" if falhas else "")
+    selected = [feed for feed in FEEDS if not tables or feed.name in tables]
+    spans = plan_spans(window, datetime.now(UTC))
+    reprocess = "reprocess_from" in window
+    label = (
+        f"reprocessamento {spans[0].partition_date} a {spans[-1].partition_date} ({len(spans)} dia(s))"
+        if reprocess
+        else f"modo='{window.get('mode', 'hour')}'"
     )
-    return resultados
+    started = monotonic()
+    totals = Totals()
+    logger.info("%s, tables: %s", label, [feed.name for feed in selected])
+    await create_tables_task(project_id, dataset_id)
+    session = await log_in_task()
+
+    for span in spans:
+        for feed in selected:
+            try:
+                await extract_and_load_task(feed, session, span, project_id, dataset_id)
+                merged = await merge_task(feed, project_id, dataset_id)
+                count = merged["inserted"] + merged["updated"]
+                logger.info(
+                    "Feed done: name=%s window=%s inserted=%d updated=%d",
+                    feed.name,
+                    format_span(span),
+                    merged["inserted"],
+                    merged["updated"],
+                )
+            except Exception as error:
+                if feed.critical:
+                    raise
+
+                logger.warning("A feed failed and the run goes on: name=%s error=%s", feed.name, error)
+                await notify_task(build_feed_failure(feed.name, feed.group, format_span(span), str(error)), errors=True)
+                totals.failed += [] if feed.name in totals.failed else [feed.name]
+                count = 0
+
+            group = totals.rows.setdefault(feed.group, {})
+            group[feed.name] = group.get(feed.name, 0) + count
+
+    minutes = (monotonic() - started) / 60
+
+    if reprocess or window.get("mode") == "day":
+        await notify_task(build_summary(label, totals.rows, totals.failed, minutes), errors=False)
+
+    logger.info("Done in %.1f minutes, failed: %s", minutes, totals.failed)
+
+    return totals.rows

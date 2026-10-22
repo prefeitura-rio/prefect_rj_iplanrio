@@ -12,6 +12,6 @@ SELECT
     CreatedDate,
     LastModifiedDate
 FROM MessagingEndUser
-WHERE LastModifiedDate >= {data_inicio}
-  AND LastModifiedDate < {data_fim}
+WHERE LastModifiedDate >= {{ start }}
+  AND LastModifiedDate < {{ end }}
 ORDER BY CreatedDate ASC

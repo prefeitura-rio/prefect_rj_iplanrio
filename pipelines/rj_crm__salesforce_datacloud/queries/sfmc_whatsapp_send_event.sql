@@ -4,7 +4,7 @@
 --
 -- Dois filtros de data, de propósito (mesmo padrão de messaging_events_whatsapp.sql):
 --   - cdp_sys_PartitionDate__c: partição da DLL (meia-noite UTC, 1 por dia) —
---     é o que faz pruning. {particao_inicio}/{particao_fim} são inclusivos.
+--     é o que faz pruning. {{ partition_start }}/{{ partition_end }} são inclusivos.
 --   - EngagementDateTime__c: recorta a janela exata dentro da(s) partição(ões).
 -- Checado em 2026-10-02 no histórico todo (36k linhas, desde 2026-07-09):
 -- EngagementDateTime__c nunca nulo e sempre dentro do dia da partição;
@@ -12,7 +12,7 @@
 -- da partição).
 --
 -- Grava UTC de verdade (EngagementDateTime__c bate com EventDateTime__c da
--- DLL de eventos pro mesmo MessageID) — {data_inicio}/{data_fim} chegam aqui
+-- DLL de eventos pro mesmo MessageID) — {{ start }}/{{ end }} chegam aqui
 -- já convertidos pra UTC (janela_utc em tabelas.yaml e em utils/janela.py).
 SELECT
     ID__c,
@@ -55,7 +55,7 @@ SELECT
     cdp_sys_SourceVersion__c,
     cdp_sys_PartitionDate__c
 FROM sfmc_whatsapp_send_event_534019838__dll
-WHERE cdp_sys_PartitionDate__c >= '{particao_inicio}'
-  AND cdp_sys_PartitionDate__c <= '{particao_fim}'
-  AND EngagementDateTime__c >= '{data_inicio}'
-  AND EngagementDateTime__c <  '{data_fim}'
+WHERE cdp_sys_PartitionDate__c >= '{{ partition_start }}'
+  AND cdp_sys_PartitionDate__c <= '{{ partition_end }}'
+  AND EngagementDateTime__c >= '{{ start }}'
+  AND EngagementDateTime__c <  '{{ end }}'

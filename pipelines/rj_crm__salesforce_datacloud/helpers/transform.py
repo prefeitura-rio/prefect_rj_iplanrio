@@ -1,135 +1,104 @@
-"""
-Transformações aplicadas a todos os DataFrames antes de carregar no BigQuery.
-Puro (sem I/O) — função comum, não task.
+"""The rows of Salesforce, ready for BigQuery."""
 
-Operações:
-  - snake_case nos nomes de colunas
-  - Remoção do prefixo ssot__ e sufixo __c dos campos do Data Cloud
-  - Conversão de datas
-  - Adição de coluna _loaded_at (timestamp de ingestão)
-  - Adição de coluna data_particao (data de execução, para particionamento)
-  - Cast de colunas para os tipos esperados pelo schema BQ
-"""
+from collections.abc import Mapping, Sequence
+from datetime import UTC, date, datetime
+from json import dumps
+from re import sub
 
-import json
-import re
-from datetime import date, datetime, timezone
+from pydantic import JsonValue
 
-import pandas as pd
-
-# ---------------------------------------------------------------------------
-# Funções utilitárias (internas)
-# ---------------------------------------------------------------------------
+from pipelines.rj_crm__salesforce_datacloud.constants import STEP_TYPE
+from pipelines.rj_crm__salesforce_datacloud.types import Feed, Row
 
 
-def _to_snake_case(name: str) -> str:
-    """Converte CamelCase ou PascalCase para snake_case."""
-    s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", name)
-    s = re.sub(r"([a-z\d])([A-Z])", r"\1_\2", s)
-    return s.lower()
+def to_snake_case(name: str) -> str:
+    """Return a CamelCase or PascalCase name in snake case.
 
-
-def _clean_dc_field_name(name: str) -> str:
+    ```python
+    to_snake_case("StartTimestamp")  # "start_timestamp"
+    ```
     """
-    Remove prefixo ssot__ e sufixo __c/__dlm/__dll dos campos do Data Cloud.
-    Ex: 'ssot__StartTime__c' → 'start_time'
-        'AiAgentSession__dlm' → 'ai_agent_session'
+    spaced = sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", name)
+
+    return sub(r"([a-z\d])([A-Z])", r"\1_\2", spaced).lower()
+
+
+def clean_data_cloud_name(name: str) -> str:
+    """Return a Data Cloud name without the `ssot__` prefix and the `__c`, `__dlm` or `__dll` suffix, in snake case.
+
+    ```python
+    clean_data_cloud_name("ssot__StartTime__c")  # "start_time"
+    ```
     """
-    cleaned = re.sub(r"^ssot__", "", name)
-    cleaned = re.sub(r"(__c|__dlm|__dll)$", "", cleaned)
-    return _to_snake_case(cleaned)
+    return to_snake_case(sub(r"(__c|__dlm|__dll)$", "", sub(r"^ssot__", "", name)))
 
 
-def _normalize_columns(df: pd.DataFrame, is_data_cloud: bool = False) -> pd.DataFrame:
-    """Renomeia colunas para snake_case, removendo prefixos DC se necessário."""
-    if is_data_cloud:
-        df.columns = [_clean_dc_field_name(c) for c in df.columns]
-    else:
-        df.columns = [_to_snake_case(c) for c in df.columns]
-    # Remover colunas duplicadas após normalização (edge case)
-    df = df.loc[:, ~df.columns.duplicated()]
-    return df
+def parse_utc(value: JsonValue) -> str | None:
+    """Return a date or time as an ISO text in UTC, or nothing if it is not one.
 
-
-def _filter_output_value_text_action_step_only(df: pd.DataFrame) -> pd.DataFrame:
+    A time with no zone counts as UTC.
     """
-    Zera output_value_text para registros que não são ACTION_STEP.
-    Serializa dicts para string nos que mantêm o valor.
+    if not isinstance(value, str):
+        return None
+
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+    return (moment if moment.tzinfo else moment.replace(tzinfo=UTC)).astimezone(UTC).isoformat()
+
+
+def build_rows(names: Sequence[str], values: Sequence[Sequence[JsonValue]], *, data_cloud: bool) -> list[Row]:
+    """Return the rows of a Data Cloud answer as objects with clean names.
+
+    If two names clean to the same one, the first stays.
     """
-    if "output_value_text" not in df.columns or "ai_agent_interaction_step_type" not in df.columns:
-        return df
-    mask = df["ai_agent_interaction_step_type"] == "ACTION_STEP"
-    df = df.copy()
-    df.loc[~mask, "output_value_text"] = None
-    df["output_value_text"] = df["output_value_text"].apply(
-        lambda v: json.dumps(v, ensure_ascii=False) if isinstance(v, dict) else v
-    )
-    action_count = mask.sum()
-    return df
+    cleaned = [clean_data_cloud_name(name) if data_cloud else to_snake_case(name) for name in names]
+    keep = [index for index, name in enumerate(cleaned) if name not in cleaned[:index]]
+
+    return [{cleaned[index]: row[index] for index in keep} for row in values]
 
 
-def _parse_dates(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
-    """Converte colunas de data/datetime para datetime com timezone UTC."""
-    for col in columns:
-        if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors="coerce", utc=True)
-    return df
+def clean_records(records: Sequence[Mapping[str, JsonValue]]) -> list[Row]:
+    """Return the records of the CRM REST API without `attributes`, with names in snake case."""
+    rows: list[Row] = []
+
+    for record in records:
+        row: Row = {}
+
+        for key, value in record.items():
+            if key != "attributes":
+                row.setdefault(to_snake_case(key), value)
+
+        rows.append(row)
+
+    return rows
 
 
-# ---------------------------------------------------------------------------
-# Task principal
-# ---------------------------------------------------------------------------
+def transform_rows(rows: Sequence[Row], feed: Feed, partition_date: date, loaded_at: datetime) -> list[Row]:
+    """Return the rows of a feed with its date columns in UTC, `_loaded_at` and `data_particao`.
 
-
-def transform_dataframe(
-    df: pd.DataFrame,
-    table_name: str = "desconhecida",
-    is_data_cloud: bool = False,
-    date_columns: list[str] | None = None,
-    partition_date: date | None = None,
-    output_value_text_action_step_only: bool = False,
-) -> pd.DataFrame:
+    A text with nothing in it becomes nothing, as the bulk API sends `""` for null. With
+    `step_output_only`, `output_value_text` is nothing unless the step is an `ACTION_STEP`, and an
+    object there is written as JSON.
     """
-    Aplica transformações padrão a um DataFrame antes do carregamento no BQ.
+    result: list[Row] = []
 
-    Args:
-        df              : DataFrame bruto da extração.
-        table_name      : Nome da tabela (para logs).
-        is_data_cloud   : Se True, remove prefixo ssot__ e sufixo __c dos campos.
-        date_columns    : Colunas para converter para datetime UTC.
-                          (após normalização de nomes, já em snake_case)
-        partition_date  : Data de partição. Padrão: hoje.
-        output_value_text_action_step_only: Se True, zera output_value_text para
-                          registros que não são ACTION_STEP.
-                          Usar apenas para ai_agent_interaction_step.
+    for row in rows:
+        new: Row = {key: None if value == "" else value for key, value in row.items()}
 
-    Returns:
-        DataFrame transformado, pronto para carga no BigQuery.
-    """
-    if df.empty:
-        return df
+        for column in feed.date_columns:
+            if column in new:
+                new[column] = parse_utc(new[column])
 
+        new["_loaded_at"] = loaded_at.astimezone(UTC).isoformat()
+        new["data_particao"] = partition_date.isoformat()
 
-    # 1. Normalizar nomes de colunas
-    df = _normalize_columns(df, is_data_cloud=is_data_cloud)
+        if feed.step_output_only and "output_value_text" in new and "ai_agent_interaction_step_type" in new:
+            output = new["output_value_text"] if new["ai_agent_interaction_step_type"] == STEP_TYPE else None
+            new["output_value_text"] = dumps(output, ensure_ascii=False) if isinstance(output, dict) else output
 
-    # 2. Converter datas
-    if date_columns:
-        df = _parse_dates(df, date_columns)
+        result.append(new)
 
-    # 3. Adicionar _loaded_at (timestamp de ingestão UTC)
-    df["_loaded_at"] = datetime.now(tz=timezone.utc)
-
-    # 4. Adicionar data_particao como tipo date (não string) para particionamento DATE no BQ
-    if partition_date is None:
-        partition_date = date.today()
-    df["data_particao"] = partition_date
-
-    # 5. Remover strings vazias (Bulk API retorna "" para NULL)
-    df = df.replace("", None)
-
-    # 6. Zerar output_value_text para registros que não são ACTION_STEP
-    if output_value_text_action_step_only:
-        df = _filter_output_value_text_action_step_only(df)
-
-    return df
+    return result

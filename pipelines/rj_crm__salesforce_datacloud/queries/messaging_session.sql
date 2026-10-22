@@ -10,6 +10,6 @@ SELECT
     CreatedDate,
     LastModifiedDate
 FROM MessagingSession
-WHERE LastModifiedDate >= {data_inicio}
-  AND LastModifiedDate < {data_fim}
+WHERE LastModifiedDate >= {{ start }}
+  AND LastModifiedDate < {{ end }}
 ORDER BY CreatedDate ASC

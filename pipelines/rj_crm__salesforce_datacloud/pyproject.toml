@@ -5,9 +5,6 @@ description = "Pipeline Salesforce Data Cloud (Agentforce, Messaging, eventos Wh
 dependencies = [
     "prefect_rj_iplanrio",
     "google-cloud-bigquery",
-    "requests",
-    "pandas",
-    "pyyaml>=6.0",
 ]
 
 [tool.uv.sources]

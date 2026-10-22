@@ -2,7 +2,7 @@
 --
 -- Dois filtros de data, de propósito:
 --   - cdp_sys_PartitionDate__c: partição da DLL (meia-noite UTC, 1 por dia) —
---     é o que faz pruning. {particao_inicio}/{particao_fim} são inclusivos.
+--     é o que faz pruning. {{ partition_start }}/{{ partition_end }} são inclusivos.
 --   - EventDateTime__c: recorta a janela exata dentro da(s) partição(ões).
 --     Sem ele, cada tick de 15min puxaria o dia UTC inteiro.
 -- Checado em 2026-09-29 no histórico todo (3,1M linhas): EventDateTime__c
@@ -10,7 +10,7 @@
 --
 -- Diferente das DMOs (Agentforce, conversation_entry, tracing), esta DLL
 -- grava UTC de verdade (não hora-parede de SP com rótulo Z) —
--- {data_inicio}/{data_fim} chegam aqui já convertidos pra UTC
+-- {{ start }}/{{ end }} chegam aqui já convertidos pra UTC
 -- (janela_utc em tabelas.yaml e em utils/janela.py).
 SELECT
     EventId__c,
@@ -57,7 +57,7 @@ SELECT
     cdp_sys_SourceVersion__c,
     cdp_sys_PartitionDate__c
 FROM MessagingEventsWhatsAppV2_00Das_4CAB1BC2__dll
-WHERE cdp_sys_PartitionDate__c >= '{particao_inicio}'
-  AND cdp_sys_PartitionDate__c <= '{particao_fim}'
-  AND EventDateTime__c >= '{data_inicio}'
-  AND EventDateTime__c <  '{data_fim}'
+WHERE cdp_sys_PartitionDate__c >= '{{ partition_start }}'
+  AND cdp_sys_PartitionDate__c <= '{{ partition_end }}'
+  AND EventDateTime__c >= '{{ start }}'
+  AND EventDateTime__c <  '{{ end }}'
