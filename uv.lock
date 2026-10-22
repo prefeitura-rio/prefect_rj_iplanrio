@@ -5241,17 +5241,11 @@ name = "rj-crm-wetalkie-atualiza-contato"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__wetalkie_atualiza_contato" }
 dependencies = [
-    { name = "google-cloud-bigquery" },
     { name = "prefect-rj-iplanrio" },
-    { name = "requests" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "google-cloud-bigquery" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "requests" },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-crm-whitelist-whatsapp"

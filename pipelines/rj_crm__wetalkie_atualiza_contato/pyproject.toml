@@ -4,8 +4,6 @@ version = "0.1.0"
 description = "Pipeline CRM Wetalkie para atualização de dados de contatos faltantes"
 dependencies = [
     "prefect_rj_iplanrio",
-    "google-cloud-bigquery",
-    "requests",
 ]
 [tool.uv.sources]
 prefect_rj_iplanrio = { workspace = true }

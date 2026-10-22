@@ -1,116 +1,58 @@
-"""
-Flow migrado do Prefect 1.4 para 3.0 - CRM Wetalkie Atualiza Contato
-"""
+"""Flow for rj_crm__wetalkie_atualiza_contato."""
 
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from prefect import flow
 from toolkit.dbt import DbtRun
+from toolkit.telemetry import logger
 
-from pipelines.rj_crm__wetalkie_atualiza_contato.constants import (
-    WetalkieAtualizaContatoConstants,
-)
-from pipelines.rj_crm__wetalkie_atualiza_contato.helpers.tasks import (
-    access_api,
-    skip_flow_if_empty,
-)
-from pipelines.rj_crm__wetalkie_atualiza_contato.tasks import (
-    download_missing_contacts,
-    get_contacts,
-    safe_export_df_to_parquet,
-)
-from utils.tasks import publish_table_in_bq, run_dbt, upload_files_to_gcs
-from utils.types import Cloud, Table
+from pipelines.rj_crm__wetalkie_atualiza_contato.constants import BILLING_PROJECT
+from pipelines.rj_crm__wetalkie_atualiza_contato.helpers import build_query
+from pipelines.rj_crm__wetalkie_atualiza_contato.tasks import fetch_contacts_task
+from utils.hooks import notify_failure
+from utils.tasks import publish_table_in_bq, read_bq, run_dbt, upload_files_to_gcs, write_records
+from utils.types import Cloud, DumpMode, Table
 from utils.utils import capture_options
 
 
-@flow(log_prints=True, flow_run_name="{table_id}_{dataset_id}")
+@flow(log_prints=True, flow_run_name="{table[table_id]}", on_failure=[notify_failure])
 async def rj_crm__wetalkie_atualiza_contato(
     *,
     cloud: Cloud,
-    # Parâmetros opcionais para override manual na UI
-    dataset_id: str | None = None,
-    table_id: str | None = None,
-    dump_mode: str | None = None,
-    materialize_after_dump: bool | None = None,
-):
+    table: Table,
+    dump_mode: DumpMode = "append",
+    dbt: DbtRun | None = None,
+) -> None:
+    """Fetch from the Wetalkie API the contacts that the table lacks, and add them to it.
+
+    The ids come from a query of the contacts without a phone. With `dbt` a dbt command runs
+    after the publish.
     """
-    Flow para atualizar dados de contatos faltantes via API Wetalkie.
+    missing = await read_bq(build_query(), project=BILLING_PROJECT)
 
-    Este flow busca contatos no BigQuery que não possuem telefone/WhatsApp,
-    consulta a API Wetalkie para obter esses dados e atualiza as informações.
+    if missing.is_empty():
+        logger.info("No contact is missing")
+        return
 
-    Args:
-        dataset_id: ID do dataset no BigQuery (default: brutos_wetalkie)
-        table_id: ID da tabela no BigQuery (default: contato)
-        dump_mode: Modo de dump (default: append)
-        materialize_after_dump: Se deve materializar após dump (default: False)
-    """
+    contacts = await fetch_contacts_task(missing["id_contato"].to_list())
 
-    # Usar valores dos constants como padrão para parâmetros
-    dataset_id = dataset_id or WetalkieAtualizaContatoConstants.DATASET_ID.value
-    table_id = table_id or WetalkieAtualizaContatoConstants.TABLE_ID.value
-    dump_mode = dump_mode or WetalkieAtualizaContatoConstants.DUMP_MODE.value
-    materialize_after_dump = (
-        materialize_after_dump
-        if materialize_after_dump is not None
-        else WetalkieAtualizaContatoConstants.MATERIALIZE_AFTER_DUMP.value
-    )
+    if not contacts:
+        logger.info("The API has no data for the missing contacts")
+        return
 
-    file_format = WetalkieAtualizaContatoConstants.FILE_FORMAT.value
-    root_folder = WetalkieAtualizaContatoConstants.ROOT_FOLDER.value
-    query = WetalkieAtualizaContatoConstants.CONTACTS_QUERY.value
-    billing_project_id = WetalkieAtualizaContatoConstants.BILLING_PROJECT_ID.value
-    bucket_name = WetalkieAtualizaContatoConstants.BUCKET_NAME.value
+    with TemporaryDirectory() as directory:
+        folder = await write_records(contacts, Path(directory))
+        await upload_files_to_gcs(
+            folder,
+            table,
+            bucket=cloud["bucket"],
+            dump_mode=dump_mode,
+            source_format="json",
+            options=capture_options(dump_mode),
+        )
 
-    # Renomear flow run para melhor identificação
-
-    # Injetar credenciais do BD
-
-    # Buscar contatos com dados faltantes do BigQuery
-    df_contacts = download_missing_contacts(query=query, billing_project_id=billing_project_id, bucket_name=bucket_name)
-
-    # Verificar se há contatos para processar
-    validated_contacts = skip_flow_if_empty(
-        data=df_contacts,
-        message="No contacts found with missing phone data. Skipping flow execution.",
-    )
-    if validated_contacts is None:
-        return  # flow termina aqui, nada downstream é agendado
-
-    # Acessar API Wetalkie
-    api = access_api(login_route=WetalkieAtualizaContatoConstants.API_LOGIN_ROUTE.value,
-    )
-
-    # Buscar dados dos contatos na API Wetalkie
-    updated_contacts = get_contacts(api, validated_contacts)
-    # Verificar se algum contato foi atualizado
-    final_contacts = skip_flow_if_empty(
-        data=updated_contacts,
-        message="No contacts were successfully updated from API. Skipping upload.",
-    )
-
-    if final_contacts is None:
-        return  # flow termina aqui, nada downstream é agendado
-
-    # Exportar dados para arquivo
-    exported_path = safe_export_df_to_parquet(
-        dfr=final_contacts,
-        output_path=root_folder,
-    )
-
-    # Upload para GCS e BigQuery
-    table = Table(dataset_id=dataset_id, table_id=table_id)
-    await upload_files_to_gcs(
-        Path(exported_path),
-        table,
-        bucket=cloud["bucket"],
-        dump_mode=dump_mode,
-        source_format="parquet",
-        options=capture_options(dump_mode),
-    )
     await publish_table_in_bq(table, cloud)
 
-    # Materializar com DBT se necessário
-    if materialize_after_dump:
-        await run_dbt(DbtRun(repository="https://github.com/prefeitura-rio/queries-rj-iplanrio", command="run", target="prod", select=table_id))
+    if dbt:
+        await run_dbt(dbt)
