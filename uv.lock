@@ -48,7 +48,6 @@ members = [
     "rj-iplanrio-betterstack-api",
     "rj-iplanrio-cor-alerts-aggregator",
     "rj-iplanrio-dados-mestres",
-    "rj-iplanrio-data-catalog",
     "rj-iplanrio-eai-history",
     "rj-iplanrio-equipamentos-arcgis",
     "rj-iplanrio-maintain-delta",
@@ -5461,25 +5460,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
-
-[[package]]
-name = "rj-iplanrio-data-catalog"
-version = "0.1.0"
-source = { virtual = "pipelines/rj_iplanrio__data_catalog" }
-dependencies = [
-    { name = "google-cloud-bigquery" },
-    { name = "google-cloud-storage" },
-    { name = "polars" },
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "google-cloud-bigquery" },
-    { name = "google-cloud-storage" },
-    { name = "polars", specifier = ">=2.0.0" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-]
 
 [[package]]
 name = "rj-iplanrio-eai-history"
