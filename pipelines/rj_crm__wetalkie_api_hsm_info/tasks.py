@@ -1,163 +1,51 @@
-"""
-Tasks for rj_crm__wetalkie_api_hsm_info pipeline
-"""
+"""Tasks of rj_crm__wetalkie_api_hsm_info."""
 
-from datetime import datetime
-from typing import Any, Dict, List
+from datetime import UTC, datetime
 
-import pandas as pd
-import requests
 from prefect import task
-from prefect.logging import get_logger
+from pydantic import JsonValue
+from toolkit.telemetry import logger
 
-from pipelines.rj_crm__wetalkie_api_hsm_info.constants import Constants
+from pipelines.rj_crm__wetalkie_api_hsm_info.constants import FIELDS, LOGIN_URL, MAX_PAGES, PAGE_SIZE, TEMPLATES_URL
+from pipelines.rj_crm__wetalkie_api_hsm_info.helpers import build_rows, read_page, read_token
 from utils.settings import WetalkieSettings
-
-logger = get_logger("toolkit")
+from utils.tasks import request_json
 
 
 @task
-def get_wetalkie_token() -> str:
-    """Return the token of the Wetalkie API."""
+async def login_task() -> str:
+    """Log in to the Wetalkie API and return the token."""
     settings = WetalkieSettings()
-    username = settings.WETALKIE_USERNAME
-    password = settings.WETALKIE_PASSWORD.get_secret_value()
-
-    url = f"{Constants.BASE_URL.value}/{Constants.LOGIN_ROUTE.value}"
-    payload = {"username": username, "password": password}
-
-    try:
-        logger.info(f"Authenticating to {url}")
-        response = requests.post(url, json=payload, timeout=Constants.TIMEOUT.value)
-        response.raise_for_status()
-        data = response.json()
-
-        # Token extraction logic matching check_api_schema.py and ApiHandler
-        token = None
-        if "token" in data:
-            token = data["token"]
-        elif "access_token" in data:
-            token = data["access_token"]
-        elif "authToken" in data:
-            token = data["authToken"]
-        elif "jwt" in data:
-            token = data["jwt"]
-        elif "data" in data and "item" in data["data"] and "token" in data["data"]["item"]:
-            token = data["data"]["item"]["token"]
-
-        if not token:
-            raise ValueError(f"Token not found in response: {data.keys()}")
-
-        return token
-    except Exception as e:
-        logger.error(f"Authentication failed: {e}")
-        raise
-
-
-@task(retries=3, retry_delay_seconds=60)
-def fetch_hsm_templates(token: str) -> List[Dict[str, Any]]:
-    """
-    Fetches all HSM templates (active and inactive) from WeTalkie API.
-    """
-    all_items = []
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
+    body: dict[str, JsonValue] = {
+        "username": settings.WETALKIE_USERNAME,
+        "password": settings.WETALKIE_PASSWORD.get_secret_value(),
     }
-    
-    fields = "id,name,message,metaMessageTemplateCategory,qualityScore,modelRejection,metaMessageTemplateStatus,metaMessageTemplateId,templateId,whatsappConfig"
 
-    for active_status in [True, False]:
-        status_str = "active" if active_status else "inactive"
-        url = f"{Constants.BASE_URL.value}/{Constants.HSM_ROUTE.value};active={str(active_status).lower()}"
-        
-        page = 0
-        has_next = True
-        
-        logger.info(f"Fetching {status_str} templates from {url}")
-
-        while has_next:
-            params = {
-                "fields": fields,
-                "pageNumber": page,
-                "pageSize": 100
-            }
-
-            try:
-                response = requests.get(url, headers=headers, params=params, timeout=Constants.TIMEOUT.value)
-                response.raise_for_status()
-                data = response.json()
-
-                # Extract items
-                items = []
-                if "data" in data and "item" in data["data"] and "elements" in data["data"]["item"]:
-                    items = data["data"]["item"]["elements"]
-                
-                # Tag items with status (backup, though metaMessageTemplateStatus might exist)
-                # Client requested to remove this column
-                # for item in items:
-                #     item["is_active_query"] = active_status
-
-                if items:
-                    all_items.extend(items)
-                    logger.info(f"  Page {page}: {len(items)} items")
-                else:
-                    logger.info(f"  Page {page}: No items")
-
-                # Pagination check
-                if "data" in data and "item" in data["data"] and "hasNextPage" in data["data"]["item"]:
-                    has_next = data["data"]["item"]["hasNextPage"]
-                else:
-                    has_next = False
-                
-                page += 1
-                
-                # Safety break avoids infinite loops
-                if page > 100:
-                    logger.warning("  Page limit reached (safety break)")
-                    break
-
-            except Exception as e:
-                logger.error(f"Error fetching {status_str} templates page {page}: {e}")
-                raise
-
-    logger.info(f"Total templates fetched: {len(all_items)}")
-    return all_items
+    return read_token(await request_json(LOGIN_URL, method="POST", body=body, timeout=30))
 
 
 @task
-def transform_hsm_templates(data: List[Dict[str, Any]]) -> pd.DataFrame:
-    """
-    Transforms the raw template data into a DataFrame for BigQuery.
-    """
-    if not data:
-        return pd.DataFrame()
+async def fetch_templates_task(token: str) -> list[dict[str, str | None]]:
+    """Fetch every HSM template, active and inactive, and return them as rows."""
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    templates: list[dict[str, JsonValue]] = []
 
-    df = pd.DataFrame(data)
+    for active in ("true", "false"):
+        for page in range(MAX_PAGES + 1):
+            data = await request_json(
+                f"{TEMPLATES_URL};active={active}",
+                params={"fields": FIELDS, "pageNumber": str(page), "pageSize": str(PAGE_SIZE)},
+                headers=headers,
+                timeout=30,
+            )
+            found, has_next = read_page(data)
+            templates += found
 
-    # List of columns to flatten (dict -> code, description)
-    cols_to_flatten = [
-        "modelRejection",
-        "metaMessageTemplateStatus",
-        "metaMessageTemplateCategory",
-        "qualityScore"
-    ]
+            if not has_next:
+                break
+        else:
+            logger.warning("Page limit reached: active=%s", active)
 
-    for col in cols_to_flatten:
-        if col in df.columns:
-            # Create new columns with _code and _description suffixes
-            # Handle cases where value might be None or not a dict
-            df[f"{col}_code"] = df[col].apply(lambda x: x.get("code") if isinstance(x, dict) else None)
-            df[f"{col}_description"] = df[col].apply(lambda x: x.get("description") if isinstance(x, dict) else None)
-            
-            # Drop original column
-            df = df.drop(columns=[col])
+    logger.info("Templates fetched: count=%d", len(templates))
 
-    # Convert all columns to string to ensure schema compatibility
-    for col in df.columns:
-        df[col] = df[col].astype(str)
-
-    # Add partition column (current date as it's a full snapshot)
-    df[Constants.PARTITION_COLUMN.value] = datetime.now().strftime("%Y-%m-%d")
-
-    return df
+    return build_rows(templates, datetime.now(UTC))
