@@ -16,4 +16,3 @@ def ler_destinatarios(bruto: str | None) -> list[str]:
     if not bruto:
         return []
     return [item.strip() for item in bruto.split(SEPARADOR_DESTINATARIOS) if item.strip()]
-

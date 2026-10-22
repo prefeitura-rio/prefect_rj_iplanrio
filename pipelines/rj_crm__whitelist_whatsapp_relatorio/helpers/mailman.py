@@ -9,6 +9,7 @@ from pathlib import Path
 
 import requests
 from jinja2 import Environment, FileSystemLoader
+from pydantic import JsonValue, TypeAdapter
 
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.janela import Janela
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.log import logger_da_pipeline
@@ -18,8 +19,10 @@ from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.ocorrencias import (
     para_template,
     urls_distintas,
 )
+from utils.utils import dig
 
 logger = logger_da_pipeline(__name__)
+JSON: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
 DIRETORIO_TEMPLATE = Path(__file__).resolve().parent.parent
 NOME_TEMPLATE = "email_template.html"
@@ -129,7 +132,7 @@ def enviar(conexao: ConexaoDataRelay, destinatarios: list[str], assunto: str, co
     if resposta.status_code != requests.codes.ok:
         raise ValueError(f"Falha ao enviar o e-mail: {resposta.status_code} - {resposta.text}")
 
-    conteudo = resposta.json()
-    if not conteudo.get("success", False):
-        raise ValueError(f"Data Relay recusou o envio: {conteudo.get('message')}")
+    conteudo = JSON.validate_json(resposta.content)
+    if not dig(conteudo, "success"):
+        raise ValueError(f"Data Relay recusou o envio: {dig(conteudo, 'message')}")
     logger.info("Relatório enviado para %d destinatário(s)", len(destinatarios))

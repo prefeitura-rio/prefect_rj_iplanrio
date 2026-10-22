@@ -80,10 +80,8 @@ def montar_mensagem(
     if destinatarios:
         linhas.append(f"Detalhamento enviado para: {', '.join(destinatarios)}")
     else:
-        linhas.append(
-            "⚠️ **O envio do e-mail falhou** — ninguém recebeu o detalhamento. "
-            "As URLs estão na execução acima; reprocesse a janela para reenviar."
-        )
+        linhas.append("⚠️ **O envio do e-mail falhou** — ninguém recebeu o detalhamento.")
+        linhas.append("As URLs estão na execução acima; reprocesse a janela para reenviar.")
     return "\n".join(linhas)
 
 

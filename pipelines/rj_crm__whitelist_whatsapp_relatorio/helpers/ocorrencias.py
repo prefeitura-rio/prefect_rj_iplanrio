@@ -1,15 +1,16 @@
 """Normalização das linhas devolvidas pela query de URLs redigidas."""
 
-import json
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 
-import pandas as pd
+from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.log import logger_da_pipeline
 
 logger = logger_da_pipeline(__name__)
+JSON: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
 
 @dataclass(frozen=True)
@@ -21,7 +22,7 @@ class Ocorrencia:
     urls: tuple[str, ...]
 
 
-def itens_validos(valores: object) -> tuple[str, ...]:
+def itens_validos(valores: Iterable[object]) -> tuple[str, ...]:
     """Converte uma sequência em URLs limpas, descartando vazios.
 
     :param valores: Sequência de valores brutos.
@@ -39,9 +40,9 @@ def extrair_urls(valor: object) -> tuple[str, ...]:
     :param valor: Valor bruto da coluna ``redacted_urls``.
     :returns: URLs encontradas, possivelmente vazia.
     """
-    if isinstance(valor, (list, tuple)):
+    if isinstance(valor, list | tuple):
         return itens_validos(valor)
-    if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+    if valor is None:
         return ()
 
     texto = str(valor).strip()
@@ -49,18 +50,18 @@ def extrair_urls(valor: object) -> tuple[str, ...]:
         return ()
 
     try:
-        decodificado = json.loads(texto)
-    except json.JSONDecodeError:
+        decodificado = JSON.validate_json(texto)
+    except ValidationError:
         decodificado = texto
 
-    if isinstance(decodificado, (list, tuple)):
+    if isinstance(decodificado, list):
         return itens_validos(decodificado)
     if decodificado is None:
         return ()
     return itens_validos([decodificado])
 
 
-def normalizar(dados: pd.DataFrame) -> list[Ocorrencia]:
+def normalizar(dados: list[dict[str, object]]) -> list[Ocorrencia]:
     """Converte o resultado da query em ocorrências tipadas.
 
     Linhas sem nenhuma URL utilizável são descartadas e contabilizadas no log: a query
@@ -70,23 +71,15 @@ def normalizar(dados: pd.DataFrame) -> list[Ocorrencia]:
         ``redacted_urls``.
     :returns: Ocorrências na ordem em que vieram.
     """
-    if dados.empty:
-        return []
-
     ocorrencias: list[Ocorrencia] = []
     descartadas = 0
-    for linha in dados.to_dict("records"):
+    for linha in dados:
         urls = extrair_urls(linha.get("redacted_urls"))
-        if not urls:
+        inicio = linha["inicio_datahora"]
+        if not urls or not isinstance(inicio, datetime):
             descartadas += 1
             continue
-        ocorrencias.append(
-            Ocorrencia(
-                id_passo=str(linha["id_passo"]),
-                datahora=pd.to_datetime(linha["inicio_datahora"]).to_pydatetime(),
-                urls=urls,
-            )
-        )
+        ocorrencias.append(Ocorrencia(id_passo=str(linha["id_passo"]), datahora=inicio, urls=urls))
 
     if descartadas:
         logger.warning("%d linha(s) com redacted_urls em formato inesperado foram descartadas", descartadas)
@@ -94,19 +87,17 @@ def normalizar(dados: pd.DataFrame) -> list[Ocorrencia]:
     return ocorrencias
 
 
-def ler_ultima_ocorrencia(dados: pd.DataFrame) -> datetime | None:
+def ler_ultima_ocorrencia(dados: list[dict[str, object]]) -> datetime | None:
     """Extrai o instante da última ocorrência conhecida do resultado da query.
 
     :param dados: Resultado de ``get_ultima_ocorrencia``, com a coluna
         ``ultima_ocorrencia``.
     :returns: Instante da última ocorrência, ou ``None`` se a fonte nunca registrou uma.
     """
-    if dados.empty:
+    if not dados:
         return None
-    valor = dados["ultima_ocorrencia"].iloc[0]
-    if pd.isna(valor):
-        return None
-    return pd.to_datetime(valor).to_pydatetime()
+    valor = dados[0]["ultima_ocorrencia"]
+    return valor if isinstance(valor, datetime) else None
 
 
 def descrever_ultima_ocorrencia(ultima: datetime | None, referencia: datetime) -> str:

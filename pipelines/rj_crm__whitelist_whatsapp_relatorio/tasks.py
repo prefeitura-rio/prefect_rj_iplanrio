@@ -8,7 +8,7 @@ A configuração vem de ``Settings``, que lê o que o Kubernetes Secret injeta n
 """
 
 from datetime import datetime
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from prefect import task
 from prefect.runtime import deployment, flow_run
@@ -37,10 +37,10 @@ class QueryParam(TypedDict):
     """
 
     name: str
-    replacements: dict[str, object]
+    replacements: dict[str, str]
 
 
-FONTE_PADRAO: dict[str, object] = {
+FONTE_PADRAO: dict[str, str] = {
     "project": "rj-crm-registry",
     "dataset_id": "brutos_salesforce",
     "table_id": "ai_agent_interaction_step",
@@ -81,18 +81,17 @@ def resolver_janela_task(start_datetime: str | None, end_datetime: str | None) -
     :param end_datetime: Fim explícito, ou ``None``.
     :returns: A janela resolvida.
     """
-    agendada = deployment.id is not None
+    agendada = cast("str | None", deployment.id) is not None
     janela = janela_utils.resolver(
         start_datetime=start_datetime,
         end_datetime=end_datetime,
-        ancora_agendada=flow_run.scheduled_start_time if agendada else None,
+        ancora_agendada=cast("datetime | None", flow_run.scheduled_start_time) if agendada else None,
         agora=janela_utils.agora_no_fuso(),
         config=janela_utils.CONFIG_PADRAO,
     )
     if janela.origem == "corte_local":
         logger.warning(
-            "Execução sem agendamento: janela deduzida do último corte das %dh. "
-            "Para um recorte exato, informe start_datetime e end_datetime.",
+            "Execução sem agendamento: janela deduzida do último corte das %dh. Informe start_datetime e end_datetime.",
             janela_utils.CONFIG_PADRAO.hora_corte,
         )
     logger.info("Janela [%s, %s) definida por %s", janela.inicio_sql, janela.fim_sql, janela.origem)
@@ -175,7 +174,7 @@ def enviar_email_task(janela: Janela, ocorrencias: list[Ocorrencia]) -> list[str
         destinatarios=destinatarios,
         janela=janela,
         ocorrencias=ocorrencias,
-        run_url=flow_run.ui_url or "",
+        run_url=cast("str | None", flow_run.ui_url) or "",
     )
     return destinatarios
 
@@ -204,7 +203,7 @@ def enviar_discord_task(
         janela=janela,
         ocorrencias=ocorrencias,
         destinatarios=destinatarios,
-        contexto=discord.Contexto(ambiente=ambiente, run_url=flow_run.ui_url or ""),
+        contexto=discord.Contexto(ambiente=ambiente, run_url=cast("str | None", flow_run.ui_url) or ""),
         ultima_ocorrencia=ultima_ocorrencia,
     )
     discord.enviar(webhook_url=Settings().DISCORD_WEBHOOK_URL.get_secret_value(), mensagem=mensagem)
