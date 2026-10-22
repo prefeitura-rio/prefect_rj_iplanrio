@@ -4,7 +4,16 @@ import pytest
 from httpx2 import AsyncClient, ConnectError, MockTransport, Request, Response
 from pydantic import JsonValue
 
-from utils.bifrost import Bifrost, BifrostError, parse_json_list, read_text, scale_output_tokens, strip_code_fence
+from utils.bifrost import (
+    Bifrost,
+    BifrostError,
+    parse_json_list,
+    parse_json_object,
+    read_answer,
+    read_text,
+    scale_output_tokens,
+    strip_code_fence,
+)
 
 
 def answer(*parts: dict[str, JsonValue]) -> JsonValue:
@@ -134,3 +143,26 @@ async def test_a_good_status_with_a_body_that_is_not_json_is_an_error() -> None:
 
     with pytest.raises(BifrostError, match="not JSON"):
         await bifrost.ask("q")
+
+
+def test_the_answer_carries_the_tokens_of_the_gateway() -> None:
+    """Read the usage next to the text, and give nothing for a count that is missing."""
+    body: JsonValue = {
+        "candidates": [{"content": {"parts": [{"text": "x"}]}}],
+        "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5, "totalTokenCount": True},
+    }
+
+    answer = read_answer(body)
+
+    assert (answer.text, answer.prompt_tokens, answer.output_tokens, answer.total_tokens) == ("x", 10, 5, None)
+
+
+def test_a_json_object_answer_is_parsed_and_a_list_is_refused() -> None:
+    """Strip the fence, and raise for what is not an object."""
+    assert parse_json_object('```json\n{"a": "x\ny"}\n```') == {"a": "x\ny"}
+
+    with pytest.raises(ValueError, match="object"):
+        parse_json_object("[1]")
+
+    with pytest.raises(ValueError, match="not JSON"):
+        parse_json_object("nope")

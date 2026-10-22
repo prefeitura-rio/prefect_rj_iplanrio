@@ -1,6 +1,7 @@
 """A client of the Bifrost AI gateway, which serves Gemini."""
 
 from asyncio import sleep
+from dataclasses import dataclass
 from json import JSONDecodeError, loads
 from math import ceil
 from re import IGNORECASE
@@ -65,8 +66,39 @@ def parse_json_list(text: str) -> list[dict[str, JsonValue]]:
     return [item for item in parsed if isinstance(item, dict)]
 
 
-def read_text(body: JsonValue) -> str:
-    """Return the text of an answer of the gateway: its parts that are not thoughts, joined.
+@dataclass(frozen=True)
+class Answer:
+    """What the model said, and the tokens that the question and the answer cost, when the gateway tells them."""
+
+    text: str
+    prompt_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
+
+
+def parse_json_object(text: str) -> dict[str, JsonValue]:
+    """Return the JSON object in an answer of the model, without its code fence.
+
+    Raise `ValueError` if the answer is not a JSON object.
+    """
+    try:
+        parsed = JSON.validate_python(loads(strip_code_fence(text), strict=False))
+    except (JSONDecodeError, ValidationError) as error:
+        raise ValueError(f"The answer is not JSON (raw: {text[:200]!r})") from error
+
+    if not isinstance(parsed, dict):
+        raise ValueError(f"The answer is not a JSON object (raw: {text[:200]!r})")
+
+    return parsed
+
+
+def read_count(value: JsonValue) -> int | None:
+    """Return a token count of the gateway as a whole number, or nothing if it is not one."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def read_answer(body: JsonValue) -> Answer:
+    """Return the answer of the gateway: the text of its parts that are not thoughts, and the usage.
 
     Raise `BifrostError` if the body is an error or has no part.
     """
@@ -80,11 +112,23 @@ def read_text(body: JsonValue) -> str:
     if not isinstance(parts, list):
         raise BifrostError("The answer of the gateway has no candidate with parts")
 
-    return "".join(
+    text = "".join(
         str(dig(part, "text"))
         for part in parts
         if isinstance(part, dict) and not part.get("thought") and "text" in part
     )
+
+    return Answer(
+        text,
+        read_count(dig(body, "usageMetadata", "promptTokenCount")),
+        read_count(dig(body, "usageMetadata", "candidatesTokenCount")),
+        read_count(dig(body, "usageMetadata", "totalTokenCount")),
+    )
+
+
+def read_text(body: JsonValue) -> str:
+    """Return the text of an answer of the gateway. Raise `BifrostError` if the body is an error or has no part."""
+    return read_answer(body).text
 
 
 @final
@@ -121,8 +165,8 @@ class Bifrost:
         """Close the HTTP client."""
         await self.client.aclose()
 
-    async def send(self, payload: dict[str, JsonValue]) -> str:
-        """Send one question and return the text of the answer.
+    async def send(self, payload: dict[str, JsonValue]) -> Answer:
+        """Send one question and return the answer.
 
         Raise `BifrostError` for a network error, an error status, an error in the body, or no text.
         """
@@ -142,17 +186,19 @@ class Bifrost:
         if response.is_error and not dig(body, "error"):
             raise BifrostError(f"The gateway answered {response.status_code}")
 
-        return read_text(body)
+        return read_answer(body)
 
-    async def ask(
+    async def answer(
         self,
         prompt: str,
         *,
         system: str = "Responda em PT-BR.",
         max_output_tokens: int = 512,
         thinking_budget: int = 0,
-    ) -> str:
-        """Ask the model and return its answer, trying `attempts` times with a wait that doubles between them.
+    ) -> Answer:
+        """Ask the model and return its answer with the usage, trying `attempts` times with a growing wait.
+
+        The wait doubles between the tries.
 
         The temperature is 0, so the same question gets the same answer as far as the model allows.
 
@@ -175,3 +221,7 @@ class Bifrost:
                 await sleep(self.wait * (1 << (attempt - 1)))
 
         return await self.send(payload)
+
+    async def ask(self, prompt: str, *, system: str = "Responda em PT-BR.", max_output_tokens: int = 512) -> str:
+        """Ask the model and return the text of its answer. See `answer` for the retries."""
+        return (await self.answer(prompt, system=system, max_output_tokens=max_output_tokens)).text
