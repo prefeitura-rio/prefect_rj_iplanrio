@@ -5,10 +5,7 @@ description = "Coleta dados de precipitação e meteorologia do AlertaRio via ar
 dependencies = [
     "prefect_rj_iplanrio",
     "google-cloud-storage",
-    "pyarrow",
     "defusedxml",
-    "pendulum",
-    "pandas",
 ]
 
 [tool.uv.sources]

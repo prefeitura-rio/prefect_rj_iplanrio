@@ -4818,20 +4818,14 @@ source = { virtual = "pipelines/rj_cor__precipitacao_alertario_sftp" }
 dependencies = [
     { name = "defusedxml" },
     { name = "google-cloud-storage" },
-    { name = "pandas" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "pyarrow" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "defusedxml" },
     { name = "google-cloud-storage" },
-    { name = "pandas" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "pyarrow" },
 ]
 
 [[package]]

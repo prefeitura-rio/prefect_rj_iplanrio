@@ -71,8 +71,10 @@ deployments:
         timezone: America/Sao_Paulo
         slug: precipitacao-alertario-5min-xml
         parameters:
-          dataset_id_pluviometric: "clima_pluviometro"
-          dataset_id_meteorological: "clima_estacao_meteorologica"
-          table_id_pluviometric: "taxa_precipitacao_alertario_5min"
-          table_id_meteorological: "meteorologia_alertario"
-          dump_mode: "append"
+          pluviometric:
+            dataset_id: clima_pluviometro
+            table_id: taxa_precipitacao_alertario_5min
+          meteorological:
+            dataset_id: clima_estacao_meteorologica
+            table_id: meteorologia_alertario
+          dump_mode: append
