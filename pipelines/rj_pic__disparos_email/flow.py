@@ -1,20 +1,15 @@
 """
 Flow para envio de e-mails em massa com templates HTML..
 """
-import logging
 
 from prefect import flow
+from toolkit.telemetry import logger
 
 from pipelines.rj_pic__disparos_email.settings import Settings
 from pipelines.rj_pic__disparos_email.tasks import (
     process_email_task,
     read_bigquery_task,
 )
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-
 
 @flow(log_prints=True)  # Decorador comentado temporariamente
 def rj_pic__disparos_email(
@@ -74,11 +69,11 @@ def rj_pic__disparos_email(
         print(f"  📝 Total: {len(rows)}")
 
     except FileNotFoundError as e:
-        logging.error(f"Arquivo não encontrado: {e}")
+        logger.error(f"Arquivo não encontrado: {e}")
         raise
     except ValueError as e:
-        logging.error(f"Erro de validação: {e}")
+        logger.error(f"Erro de validação: {e}")
         raise
     except Exception as e:
-        logging.error(f"Erro inesperado: {e}", exc_info=True)
+        logger.error(f"Erro inesperado: {e}", exc_info=True)
         raise

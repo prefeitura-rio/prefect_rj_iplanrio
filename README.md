@@ -318,7 +318,7 @@ O ambiente usa [`devenv`](https://devenv.sh) (Python 3.14, `uv`, `nushell`, `duc
 devenv --profile checks tasks run lint:all test:all   # o mesmo que o CI roda
 ```
 
-`nu scripts/checks.nu lint imports` lista os imports de módulos que saíram (`toolkit.pipelines_utils`, `prefect_rj_iplanrio` e outros) nas pipelines, e falha se achar algum. `nu scripts/checks.nu lint env` falha quando um campo de `Settings` foge da regra de nome (Seção 5.11 do `STYLEGUIDE.md`) ou quando uma pipeline lê uma variável de ambiente à mão. O `lint:all` roda os linters, os tipos, o SQL, as versões de dependência, os imports, as variáveis de ambiente e os workflows. O `test:all` roda os testes da raiz e do toolkit. O `devenv` roda em paralelo o que não depende um do outro e pula o que não mudou desde a última execução. As tasks chamam os scripts `Nushell` de `scripts/`.
+`nu scripts/checks.nu lint imports` lista os imports de módulos que saíram (`toolkit.pipelines_utils`, `prefect_rj_iplanrio` e outros) nas pipelines, e falha se achar algum. `nu scripts/checks.nu lint env` falha quando um campo de `Settings` foge da regra de nome (Seção 5.11 do `STYLEGUIDE.md`) ou quando uma pipeline lê uma variável de ambiente à mão. O `lint:all` roda os linters, os tipos, o SQL, as versões de dependência, os imports, as variáveis de ambiente, a telemetria e os workflows. O `test:all` roda os testes da raiz e do toolkit. O `devenv` roda em paralelo o que não depende um do outro e pula o que não mudou desde a última execução. As tasks chamam os scripts `Nushell` de `scripts/`.
 
 ## Testes
 

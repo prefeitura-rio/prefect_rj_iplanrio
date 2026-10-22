@@ -63,6 +63,12 @@
             "packages/toolkit/toolkit/settings.py"
           ];
         };
+        "lint:telemetry" = {
+          exec = "nu scripts/checks.nu lint telemetry";
+          execIfModified = [
+            "pipelines/**/*.py"
+          ];
+        };
         "lint:ci" = {
           exec = "actionlint .github/workflows/*.y*ml";
           execIfModified = [
@@ -97,6 +103,7 @@
           "lint:prefect"
           "lint:imports"
           "lint:env"
+          "lint:telemetry"
           "lint:ci"
         ];
         "test:all".after = [

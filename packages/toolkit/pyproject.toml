@@ -202,7 +202,7 @@ reportAny = false                         # values from untyped fakes
 
 [tool.vulture]
 ignore_decorators = ["@pytest.fixture", "@model_validator"]
-ignore_names = ["model_config", "params", "exc_type", "exc", "traceback"]
+ignore_names = ["model_config", "params", "exc_type", "exc", "traceback", "parent_context"]
 min_confidence = 80
 
 [tool.pytest.ini_options]

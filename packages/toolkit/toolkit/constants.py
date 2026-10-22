@@ -19,6 +19,9 @@ OTEL_HANDLER_NAME: Final = "toolkit-otel"
 SCOPE: Final = "toolkit"
 """The name of the tracer and of the meter of the toolkit."""
 
+RUN_TAGS: Final = ("environment", "severity", "code_owner")
+"""The tags of a deployment that every log, span and metric of its runs carries."""
+
 GCS_SCHEME: Final = "gcs://"
 GS_SCHEME: Final = "gs://"
 

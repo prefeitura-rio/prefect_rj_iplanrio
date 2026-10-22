@@ -190,11 +190,12 @@ A autenticação do Google é por workload identity (ADC), sem arquivo de servic
 ## Logs, traces e métricas
 
 ```python
-from toolkit.telemetry import configure_telemetry, logger
+from toolkit.telemetry import logger
 
-configure_telemetry()  # uma vez, depois de `import prefect`
 logger.info("Files uploaded: prefix=%s files=%d", "ds/tb", 3)
 ```
+
+Importar `toolkit.telemetry` já liga o envio, se `OTEL_EXPORTER_OTLP_ENDPOINT` existir. Toda pipeline importa o `toolkit` ou o `utils` (`nu scripts/checks.nu lint telemetry` confere), então todas enviam. Todo log, span e contador de um flow run leva três atributos, lidos das tags do deployment: `environment`, `severity` e `code_owner`. Fora de um flow run, ou sem a tag, o atributo não existe.
 
 O destino é o `SigNoz`, por `OTLP/HTTP`. O `toolkit` acrescenta `/v1/logs`, `/v1/traces` e `/v1/metrics` ao endpoint:
 

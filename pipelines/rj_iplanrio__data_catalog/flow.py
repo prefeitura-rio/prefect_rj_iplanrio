@@ -7,6 +7,7 @@ import polars as pl
 from google.cloud import bigquery, storage
 from google.oauth2 import service_account
 from prefect import flow
+from toolkit.telemetry import logger
 
 from pipelines.rj_iplanrio__data_catalog.settings import Settings
 
@@ -64,6 +65,7 @@ def upload_catalog_to_bucket():
     bucket = client.bucket(Settings().DATA_CATALOG_BUCKET_NAME)
     blob = bucket.blob("catalog.json")
     blob.upload_from_filename("/tmp/catalog.json")
+    logger.info("Catalog uploaded to the bucket")
 
 
 @flow(log_prints=True)

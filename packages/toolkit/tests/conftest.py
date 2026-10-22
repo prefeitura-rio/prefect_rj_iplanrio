@@ -1,5 +1,5 @@
 from asyncio import sleep
-from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
+from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator, Mapping
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -449,3 +449,21 @@ def batch():
         )
 
     return batch
+
+
+class Recorder:
+    """A counter that records what it was asked to add."""
+
+    def __init__(self) -> None:
+        """Start with no calls."""
+        self.calls: list[tuple[int, Mapping[str, str] | None]] = []
+
+    def add(self, amount: int, attributes: Mapping[str, str] | None = None) -> None:
+        """Record the call."""
+        self.calls.append((amount, attributes))
+
+
+@pytest.fixture
+def recorder() -> Recorder:
+    """Return a counter that records its calls."""
+    return Recorder()

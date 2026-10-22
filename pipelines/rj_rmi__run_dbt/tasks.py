@@ -1,14 +1,12 @@
 """Tasks for rj_rmi__run_dbt."""
 
 from prefect import task
-from prefect.logging import get_logger
 from prefect_dbt import PrefectDbtRunner
+from toolkit.telemetry import logger
 
 from pipelines.rj_rmi__run_dbt import utils
 from pipelines.rj_rmi__run_dbt.constants import REPOSITORY
 from pipelines.rj_rmi__run_dbt.settings import Settings
-
-logger = get_logger("toolkit")
 
 
 @task

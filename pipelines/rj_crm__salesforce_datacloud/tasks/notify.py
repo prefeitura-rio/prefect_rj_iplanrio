@@ -12,6 +12,7 @@ nunca derruba o flow.
 import requests
 from prefect import task
 from prefect.client.schemas.objects import Flow, FlowRun, State
+from toolkit.telemetry import logger
 
 from pipelines.rj_crm__salesforce_datacloud.helpers.discord import (
     mensagem_falha_flow,
@@ -23,13 +24,13 @@ from utils.settings import NoticeSettings
 
 def _enviar(url: str, mensagem: str) -> None:
     if not url:
-        print("[NOTIFY] webhook não configurado — notificação pulada.")
+        logger.warning("[NOTIFY] webhook não configurado — notificação pulada.")
         return
     try:
         resp = requests.post(url, json={"content": mensagem}, timeout=15)
         resp.raise_for_status()
     except Exception as exc:  # notificação nunca deve derrubar o flow
-        print(f"[NOTIFY] WARN: falha ao enviar notificação Discord: {exc}")
+        logger.warning(f"[NOTIFY] falha ao enviar notificação Discord: {exc}")
 
 
 @task(log_prints=True)

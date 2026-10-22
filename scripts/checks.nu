@@ -68,6 +68,19 @@ def 'main lint env' []: nothing -> nothing {
     }
 }
 
+# Fail when a pipeline imports nothing that starts the telemetry, so its runs would send no labels.
+def 'main lint telemetry' []: nothing -> nothing {
+    let starters = '^(from|import) (utils\.(tasks|utils|flows|hooks)|toolkit\.(telemetry|gcs|dbt|executor|oracle|delta|batches|chunks|bigquery))'
+    let silent = ls pipelines | where type == dir | get name | where {|folder|
+        let files = glob $'($folder)/**/*.py' | where {|file| not ($file | str contains '/tests/') }
+        $files | all {|file| not (open --raw $file | lines | any {|line| $line =~ $starters }) }
+    } | each {|folder| $'($folder): import toolkit.telemetry, utils.tasks, utils.utils or utils.flows' }
+
+    if ($silent | is-not-empty) {
+        fail $'Make these pipelines send telemetry:(char nl)($silent | str join (char nl))' {command: 'lint telemetry', span: (metadata $silent).span}
+    }
+}
+
 # Lint the SQL templates of the toolkit.
 def 'main lint sql' []: nothing -> nothing {
     in-project packages/toolkit sqlfluff lint toolkit/executor/templates

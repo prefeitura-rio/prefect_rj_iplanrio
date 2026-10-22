@@ -8,7 +8,7 @@ from prefect import flow
 from pydantic import JsonValue
 from toolkit.dbt import DbtRun
 from toolkit.settings import DiscordSettings
-from toolkit.telemetry import configure_telemetry, logger
+from toolkit.telemetry import logger
 
 from .hooks import notify_failure
 from .tasks import (
@@ -26,8 +26,6 @@ from .tasks import (
 )
 from .types import Cloud, Database, DatabaseDumpOptions, DumpMode, DumpOptions, FileFormat, Maintenance, Read, Table
 from .utils import capture_time, extract_records, load_records_schema, summarize_maintenance, validate_records
-
-configure_telemetry()
 
 
 @flow(
