@@ -74,7 +74,7 @@ Os flows ficam em `src/utils/flows.py`. Todos gravam em uma tabela do BigQuery e
 | `maintain_delta` | Junta os arquivos pequenos, grava o `checkpoint`, limpa e atualiza todas as tabelas `Delta`. |
 | `dbt_run`        | Clona o repositório de consultas e roda um comando `dbt`. `report` avisa o Discord.          |
 
-No `dbt_run`, `request` é o grupo `DbtRun`: `repository`, `command`, `target`, `select`, `exclude`, `flag` e `full_refresh`. Um repositório privado leva `GITHUB_TOKEN` no lugar do token na URL, como em `https://GITHUB_TOKEN@github.com/org/queries.git`, e a variável de ambiente `GITHUB_TOKEN` o preenche. `flag` são os demais argumentos do `dbt`, separados como no shell. Com `report: true`, o flow posta o resultado no Discord (nós que falharam ou avisaram), se `DISCORD_WEBHOOK_URL` existe.
+No `dbt_run`, `request` é o grupo `DbtRun`: `repository`, `branch`, `command`, `target`, `select`, `exclude`, `flag` e `full_refresh`. Um repositório privado leva `GITHUB_TOKEN` no lugar do token na URL, como em `https://GITHUB_TOKEN@github.com/org/queries.git`, e a variável de ambiente `GITHUB_TOKEN` o preenche. `flag` são os demais argumentos do `dbt`, separados como no shell. Com `report: true`, o flow posta o resultado no Discord (nós que falharam ou avisaram), se `DISCORD_WEBHOOK_URL` existe.
 
 Os parâmetros são grupos com tipo (`src/utils/types.py`). O `Prefect` recusa uma chave que falta ou um tipo errado antes de rodar.
 

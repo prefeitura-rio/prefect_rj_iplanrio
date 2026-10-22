@@ -866,7 +866,7 @@ def fake_runner(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     FakeRunner.error = None
     FakeRunner.result = SimpleNamespace(success=True)
     monkeypatch.setattr(tasks, "PrefectDbtRunner", FakeRunner)
-    monkeypatch.setattr(tasks, "clone_repository", lambda repository, destination: project)
+    monkeypatch.setattr(tasks, "clone_repository", lambda repository, destination, branch: project)
     return FakeRunner
 
 

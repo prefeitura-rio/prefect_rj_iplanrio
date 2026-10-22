@@ -1,4 +1,5 @@
 import pytest
+from git import Repo
 from pydantic import ValidationError
 
 from toolkit import dbt
@@ -85,6 +86,16 @@ def test_the_dbt_project_is_the_queries_folder_when_there_is_one(
     clone = dbt.clone_repository(str(origin), tmp_path / "clone")
 
     assert dbt.find_project_dir(clone) == tmp_path / expected
+
+
+def test_the_clone_has_the_branch_of_the_request(tmp_path, make_repository):
+    """Check out the branch that the request names."""
+    origin = make_repository(tmp_path / "origin", queries=False)
+    Repo(origin).git.branch("models")
+
+    clone = dbt.clone_repository(str(origin), tmp_path / "clone", "models")
+
+    assert Repo(clone).active_branch.name == "models"
 
 
 def test_a_failed_clone_is_reported(tmp_path):

@@ -23,6 +23,7 @@ class DbtRun(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
 
     repository: NonEmptyString
+    branch: str = ""
     command: DbtCommand = "run"
     target: str = "dev"
     select: str = ""
@@ -87,14 +88,15 @@ def fill_token(repository: str) -> str:
     return repository.replace(GITHUB_TOKEN_PLACEHOLDER, token)
 
 
-def clone_repository(repository: str, destination: Path) -> Path:
+def clone_repository(repository: str, destination: Path, branch: str = "") -> Path:
     """Clone the repository into `destination` and return its path.
 
+    The clone has the `branch`, or the default branch of the repository if it is empty.
     The destination must not exist. Raise `RuntimeError` if the clone fails. The error
     has no cause, because the message of git can hold the token of the URL.
     """
     try:
-        Repo.clone_from(repository, destination)
+        Repo.clone_from(repository, destination, branch=branch or None)
     except GitCommandError:
         raise RuntimeError("Repository clone failed") from None
 

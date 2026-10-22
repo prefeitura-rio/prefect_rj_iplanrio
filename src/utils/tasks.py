@@ -369,7 +369,7 @@ async def run_dbt(request: DbtRun, *, report: bool = False) -> None:
         """Run the command in a clone and return what it did."""
         with TemporaryDirectory(prefix="dbt_repository_") as directory:
             project_dir = find_project_dir(
-                clone_repository(fill_token(request.repository), Path(directory) / "repository")
+                clone_repository(fill_token(request.repository), Path(directory) / "repository", request.branch)
             )
 
             with use_profiles(project_dir):
