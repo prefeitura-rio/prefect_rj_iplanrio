@@ -1,34 +1,6 @@
-"""
-Constantes específicas para pipeline CRM API Wetalkie
-"""
+"""Constants of rj_crm__api_wetalkie."""
 
-from enum import Enum
+from typing import Final
 
-
-class WetalkieConstants(Enum):
-    """
-    Constantes para o pipeline de coleta da API Wetalkie
-    """
-
-    # Dataset e tabela do BigQuery
-    DATASET_ID = "brutos_wetalkie"
-    TABLE_ID = "fluxos_ura"
-    DUMP_MODE = "append"
-
-    # Configuração para materialização após dump
-    MATERIALIZE_AFTER_DUMP = True
-
-    # Configurações de particionamento
-    PARTITION_COLUMN = "begin_date"
-    FILE_FORMAT = "csv"
-    ROOT_FOLDER = "./data_attendances/"
-
-    # Configurações do BigQuery
-    BIGLAKE_TABLE = True
-
-    # Configurações da API Wetalkie
-    API_LOGIN_ROUTE = "users/login"
-    API_ATTENDANCES_ENDPOINT = "/callcenter/attendances/pull"
-
-    # DBT model para materialização
-    DBT_SELECT = "*crm_whatsapp*"
+ATTENDANCES_PATH: Final = "callcenter/attendances/pull"
+MAX_AUDIO_SECONDS: Final = 300

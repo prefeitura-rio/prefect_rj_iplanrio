@@ -4899,23 +4899,11 @@ name = "rj-crm-api-wetalkie"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__api_wetalkie" }
 dependencies = [
-    { name = "google-cloud-bigquery" },
-    { name = "google-cloud-speech" },
-    { name = "mutagen" },
     { name = "prefect-rj-iplanrio" },
-    { name = "pytz" },
-    { name = "requests" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "google-cloud-bigquery" },
-    { name = "google-cloud-speech" },
-    { name = "mutagen" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "pytz" },
-    { name = "requests" },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-crm-callcenter-attendances-weekly"

@@ -1,14 +1,10 @@
 [project]
 name = "rj_crm__api_wetalkie"
 version = "0.1.0"
-description = "Pipeline CRM API Wetalkie para coleta de dados de atendimentos"
+description = "Pipeline CRM para coletar os atendimentos da API Wetalkie"
 dependencies = [
     "prefect_rj_iplanrio",
-    "mutagen",
-    "google-cloud-speech",
-    "pytz",
-    "google-cloud-bigquery",
-    "requests",
 ]
+
 [tool.uv.sources]
 prefect_rj_iplanrio = { workspace = true }
