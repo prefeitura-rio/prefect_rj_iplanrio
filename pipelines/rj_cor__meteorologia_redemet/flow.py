@@ -1,103 +1,42 @@
-"""
-Flow para coleta de dados meteorológicos do REDEMET - COR.
-
-Este módulo contém o flow de coleta horária de dados meteorológicos
-das estações do REDEMET localizadas no município do Rio de Janeiro.
-
-Migrado de Prefect 1.4 para Prefect 3.0.
-"""
+"""Flow for rj_cor__meteorologia_redemet."""
 
 from pathlib import Path
-from typing import Optional
+from tempfile import TemporaryDirectory
 
 from prefect import flow
 
-from pipelines.rj_cor__meteorologia_redemet.tasks import (
-    download_meteorological_data_task,
-    get_dates_task,
-    save_data_to_partitions_task,
-    transform_meteorological_data_task,
-)
-from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from pipelines.rj_cor__meteorologia_redemet.helpers import read_dates
+from pipelines.rj_cor__meteorologia_redemet.tasks import build_rows_task, fetch_observations_task
+from utils.hooks import notify_failure
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs, write_records
 from utils.types import Cloud, Table
 from utils.utils import capture_options
 
 
-@flow(log_prints=True, flow_run_name="{dataset_id}_{table_id}")
+@flow(log_prints=True, flow_run_name="{table[table_id]}", on_failure=[notify_failure])
 async def rj_cor__meteorologia_redemet(
     *,
     cloud: Cloud,
-    dataset_id: str = "clima_estacao_meteorologica",
-    table_id: str = "meteorologia_redemet",
-    first_date: Optional[str] = None,
-    last_date: Optional[str] = None,
-):
+    table: Table,
+    first_date: str | None = None,
+    last_date: str | None = None,
+) -> None:
+    """Add the hourly measurements of the REDEMET stations of Rio to a BigQuery table.
+
+    Without dates the run reads yesterday and today in UTC, and keeps the measurements of
+    today in São Paulo. With a first date it is a backfill and keeps every measurement.
     """
-    Flow principal para coleta e carga de dados meteorológicos do REDEMET no BigQuery.
+    first, last, backfill = read_dates(first_date, last_date)
+    observations = await fetch_observations_task(first, last)
+    rows = build_rows_task(observations, backfill)
 
-    Este flow orquestra o processo completo de:
-    1. Determinação do período de coleta (padrão: ontem até hoje)
-    2. Download dos dados da API do REDEMET
-    3. Transformação e limpeza dos dados
-    4. Particionamento por data de medição
-    5. Salvamento em partições CSV
+    if not rows:
+        return
 
-    Os dados são coletados de 5 estações meteorológicas (aeródromos) do REDEMET
-    localizadas no município do Rio de Janeiro, com frequência horária.
+    with TemporaryDirectory() as directory:
+        folder = await write_records(rows, Path(directory))
+        await upload_files_to_gcs(
+            folder, table, bucket=cloud["bucket"], source_format="json", options=capture_options("append")
+        )
 
-    Args:
-        dataset_id: ID do dataset no BigQuery (padrão: 'clima_estacao_meteorologica')
-        table_id: ID da tabela no BigQuery (padrão: 'meteorologia_redemet')
-        first_date: Data de início no formato 'YYYY-MM-DD'. None usa ontem
-        last_date: Data de fim no formato 'YYYY-MM-DD'. None usa hoje
-
-    Returns:
-        None
-
-    Examples:
-        Execução padrão (coleta de ontem até hoje):
-        >>> rj_cor__meteorologia_redemet()
-
-        Backfill de período específico:
-        >>> rj_cor__meteorologia_redemet(
-        ...     first_date="2026-01-01",
-        ...     last_date="2026-01-31"
-        ... )
-
-    Notes:
-        - O flow é executado automaticamente a cada hora via schedule
-        - Em modo padrão, coleta dados das últimas 24h para evitar perda
-          de dados devido à diferença de timezone (UTC vs America/Sao_Paulo)
-        - As credenciais da API REDEMET são obtidas via variável de ambiente
-        - Os dados são salvos particionados por ano, mês e dia
-        - Estações monitoradas: SBAF, SBGL, SBJR, SBRJ, SBSC
-    """
-    # Renomear o flow run para facilitar identificação
-
-    # Injetar credenciais do BigQuery
-
-    # Determinar datas de coleta
-    first_date_, last_date_, backfill = get_dates_task(first_date, last_date)
-
-    # Download dos dados da API do REDEMET
-    dataframe = download_meteorological_data_task(first_date_, last_date_)
-
-    # Transformar e limpar os dados
-    dataframe = transform_meteorological_data_task(dataframe, backfill)
-
-    # Salvar dados em partições
-    path = save_data_to_partitions_task(dataframe=dataframe, partition_column="data_medicao")
-
-    print(f"✅ Pipeline executada com sucesso! Dados salvos para {dataset_id}.{table_id}")
-
-    table = Table(dataset_id=dataset_id, table_id=table_id)
-    await upload_files_to_gcs(
-        Path(path),
-        table,
-        bucket=cloud["bucket"],
-        dump_mode="append",
-        source_format="csv",
-        options=capture_options("append"),
-    )
     await publish_table_in_bq(table, cloud)
-
