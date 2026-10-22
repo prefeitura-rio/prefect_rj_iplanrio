@@ -1,225 +1,67 @@
-from datetime import datetime
+"""Flow for rj_smas__api_datametrica_agendamentos."""
+
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from tempfile import TemporaryDirectory
 
 from prefect import flow
-from prefect.deployments import run_deployment
 from toolkit.dbt import DbtRun
+from toolkit.telemetry import logger
 
-from pipelines.rj_smas__api_datametrica_agendamentos.constants import (
-    DatametricaConstants,
+from pipelines.rj_smas__api_datametrica_agendamentos.helpers import (
+    build_dispatch_parameters,
+    read_target_date,
+    today_in_sao_paulo,
 )
-from pipelines.rj_smas__api_datametrica_agendamentos.helpers.tasks import (
-    create_date_partitions,
-)
-from pipelines.rj_smas__api_datametrica_agendamentos.tasks import (
-    calculate_target_date,
-    convert_agendamentos_to_dataframe,
-    fetch_agendamentos_from_api,
-    get_bigquery_config,
-    get_datametrica_credentials,
-    transform_agendamentos_data,
-)
-from utils.tasks import publish_table_in_bq, run_dbt, upload_files_to_gcs
-from utils.types import Cloud, Table
+from pipelines.rj_smas__api_datametrica_agendamentos.tasks import fetch_appointments_task, trigger_dispatch_task
+from utils.hooks import notify_failure
+from utils.tasks import publish_table_in_bq, run_dbt, upload_files_to_gcs, write_records
+from utils.types import Cloud, DumpMode, Table
 from utils.utils import capture_options
 
 
-@flow(log_prints=True, flow_run_name="{table_id}_{dataset_id}")
+@flow(log_prints=True, flow_run_name="{table[table_id]}", on_failure=[notify_failure])
 async def rj_smas__api_datametrica_agendamentos(
     *,
     cloud: Cloud,
-    dataset_id: str | None = None,
-    table_id: str | None = None,
-    dump_mode: str | None = None,
-    materialize_after_dump: bool | None = None,
+    table: Table,
+    dump_mode: DumpMode = "append",
+    dbt: DbtRun | None = None,
     date: str | None = None,
-):
+) -> None:
+    """Load the Cadastro Único appointments of the Datametrica API to a BigQuery table, then start the reminders.
+
+    The date is `date`, or two days ahead, or four on Thursday and Friday, and nothing on a
+    weekend. With `dbt` a dbt command runs after the publish. The run ends by starting the
+    dispatch flow of the reminders for that date, which sends real messages.
     """
-    Flow para extrair agendamentos da API Datametrica e carregar no BigQuery.
+    today = today_in_sao_paulo()
+    target = read_target_date(today, date)
 
-    Regra de negócio para datas:
-    - Dias normais: busca dados para 2 dias à frente
-    - Quinta e sexta-feira: busca dados para 4 dias à frente (cobrindo fim de semana)
-
-    Args:
-        dataset_id: ID do dataset no BigQuery (default: None = obtém do Infisical)
-        table_id: ID da tabela no BigQuery (default: None = obtém do Infisical)
-        dump_mode: Modo de dump (default: append)
-        materialize_after_dump: Se deve materializar após dump (default: True)
-        date: Data para buscar agendamentos no formato YYYY-MM-DD (default: None = usa regra de negócio)
-    """
-
-    # Obter configuração do BigQuery do Infisical se não fornecida via parâmetros
-    if dataset_id is None or table_id is None:
-        bigquery_config = get_bigquery_config()
-        dataset_id = dataset_id or bigquery_config["dataset_id"]
-        table_id = table_id or bigquery_config["table_id"]
-
-    # Usar valores dos constants como padrão para outros parâmetros
-    dump_mode = dump_mode or DatametricaConstants.DUMP_MODE.value
-    materialize_after_dump = (
-        materialize_after_dump
-        if materialize_after_dump is not None
-        else DatametricaConstants.MATERIALIZE_AFTER_DUMP.value
-    )
-
-    partition_column = DatametricaConstants.PARTITION_COLUMN.value
-    file_format = DatametricaConstants.FILE_FORMAT.value
-    root_folder = DatametricaConstants.ROOT_FOLDER.value
-    biglake_table = DatametricaConstants.BIGLAKE_TABLE.value
-
-    # Renomear flow run para melhor identificação
-
-    # Injetar credenciais do BD
-
-    # Obter credenciais da API Datametrica
-    credentials = get_datametrica_credentials()
-
-    # Calcular data target baseada na regra de negócio (a menos que date seja fornecido explicitamente)
-    today_sp = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
-    target_date = date if date is not None else calculate_target_date()
-
-    if target_date is None:
-        print("Hoje é sábado ou domingo. Encerrando flow sem processamento.")
+    if target is None:
+        logger.info("Weekend: nothing to do")
         return
 
-    days_ahead = (datetime.strptime(target_date, "%Y-%m-%d").date() - today_sp).days
+    appointments = await fetch_appointments_task(target)
 
-    # Buscar dados da API
-    raw_data = fetch_agendamentos_from_api(credentials=credentials, date=target_date)
-
-    # Transformar os dados
-    processed_data = transform_agendamentos_data(raw_data)
-
-    # Converter para DataFrame
-    df = convert_agendamentos_to_dataframe(processed_data)
-
-    # Encerrar o flow sem erro se não houver agendamentos para a data
-    if df.empty:
-        print(f"Nenhum agendamento encontrado para a data {target_date}. Encerrando sem upload.")
+    if not appointments:
+        logger.info("No appointment for the date: date=%s", target)
         return
 
-    # Criar partições por data
-    partitions_path = create_date_partitions(
-        dataframe=df,
-        partition_column=partition_column,
-        file_format=file_format,
-        root_folder=root_folder,
-    )
+    with TemporaryDirectory() as directory:
+        folder = await write_records(appointments, Path(directory))
+        await upload_files_to_gcs(
+            folder,
+            table,
+            bucket=cloud["bucket"],
+            dump_mode=dump_mode,
+            source_format="json",
+            options=capture_options(dump_mode),
+        )
 
-    table = Table(dataset_id=dataset_id, table_id=table_id)
-    await upload_files_to_gcs(
-        Path(partitions_path),
-        table,
-        bucket=cloud["bucket"],
-        dump_mode=dump_mode,
-        source_format="csv",
-        options=capture_options(dump_mode),
-    )
     await publish_table_in_bq(table, cloud)
 
-    if materialize_after_dump:
-        dbt_select = "raw_cadunico_agendamentos"
-        await run_dbt(DbtRun(repository="https://github.com/prefeitura-rio/queries-rj-iplanrio", command="run", target="prod", select=dbt_select))
-    print("\n\n******* Triggering cadunico dispatch flow... *******")
+    if dbt:
+        await run_dbt(dbt)
 
-    cadunico_params = {
-        "campaign_name": "confirma_agendamento_cadunico_prod_v2",
-        "query_replacements": {"days_ahead_placeholder": days_ahead, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2",
-            "intervalo_filtro_disparados": 1, "id_hsm_legado_placeholder": 101},
-        "data_extension_filename": "whatsapp_cadunico_",
-        "de_columns": ["nome_sobrenome", "unidade_cras", "data", "hora", "endereco"],
-        "dataset_id": "brutos_salesforce",
-        "table_id": "disparos_efetuados",
-        "dump_mode": "append",
-        "test_mode": False,
-        # "chunk_size": 1000,
-        "sleep_minutes": 1,
-        "flow_environment": "production",
-        # "query_processor_name": "skip_weekends",
-        # "days_ahead": "2",
-        "filter_dispatched_phones_or_cpfs": None,
-        "filter_duplicated_phones": False,
-        "filter_duplicated_cpfs": True,
-        "whitelist_percentage": 0,
-        "query": """WITH
-                    segmentacao_original AS (
-                        SELECT
-                            LPAD(CAST(cpf AS STRING), 11, '0') AS cpf,
-                            `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
-                                REGEXP_REPLACE(telefone, r'[^\d]', '')
-                            ) AS celular_disparo,
-                            INITCAP(
-                                IF(
-                                    ARRAY_LENGTH(SPLIT(nome_completo, ' ')) > 1,
-                                    CONCAT(
-                                        SPLIT(nome_completo, ' ')[SAFE_OFFSET(0)],
-                                        ' ',
-                                        SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo, ' ')) - 1)]
-                                    ),
-                                    nome_completo
-                                )
-                            ) AS nome_sobrenome,
-                            unidade_nome AS unidade_cras,
-                            CONCAT(unidade_endereco, ' - ', unidade_bairro) AS endereco,
-                            FORMAT_DATETIME('%d/%m/%Y', CAST(data_hora AS DATETIME)) AS data,
-                            FORMAT_DATETIME('%H:%M', CAST(data_hora AS DATETIME)) AS hora
-                        FROM `rj-iplanrio.brutos_data_metrica_staging.cadunico_agendamentos`
-                        WHERE
-                            DATE(CAST(data_hora AS DATETIME)) = DATE_ADD(
-                                CURRENT_DATE('America/Sao_Paulo'),
-                                INTERVAL CAST({days_ahead_placeholder} AS int64) DAY
-                            )
-                            AND EXTRACT(DAYOFWEEK FROM current_date("America/Sao_Paulo")) NOT IN (1, 7)
-                    ),
-
-                    filtra_disparados AS (
-                        -- verifica se esse cpf já recebeu essa mesma mensagem nos últimos x dias
-                        SELECT segmentacao_original.*
-                        FROM segmentacao_original
-                        LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo` sd
-                            ON sd.cpf = segmentacao_original.cpf
-                            AND sd.nome_hsm = '{nome_hsm_placeholder}'
-                            AND sd.envio_datahora >= DATETIME_SUB(
-                                CURRENT_DATETIME('America/Sao_Paulo'),
-                                INTERVAL {intervalo_filtro_disparados} DAY
-                            )
-                            AND sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)
-                            AND sd.indicador_quarentena = FALSE
-                        LEFT JOIN `rj-crm-registry.crm_whatsapp.telefone_disparado` td
-                            ON td.contato_telefone = segmentacao_original.celular_disparo
-                            AND td.id_hsm = CAST({id_hsm_legado_placeholder} AS STRING)
-                            AND td.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)
-                        WHERE sd.cpf IS NULL AND td.contato_telefone IS NULL
-                    ),
-
-                    filtra_celulares_sem_whats AS (
-                        -- remove telefones em quarentena ou com qualidade inválida
-                        SELECT DISTINCT s.*
-                        FROM filtra_disparados AS s
-                        LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
-                            ON s.celular_disparo = tel.telefone_numero_completo
-                        LEFT JOIN UNNEST(tel.consentimento) AS c
-                        WHERE
-                            (c.indicador_quarentena = FALSE AND tel.telefone_qualidade != 'INVALIDO')
-                            OR tel.telefone_numero_completo IS NULL
-                    )
-
-                    SELECT
-                        celular_disparo AS telefone,
-                        cpf AS SubscriberKey,
-                        cpf AS externalId,
-                        nome_sobrenome,
-                        unidade_cras,
-                        data,
-                        hora,
-                        endereco
-                    FROM filtra_celulares_sem_whats
-                    WHERE celular_disparo IS NOT NULL"""
-    }
-    run_deployment(
-        name="rj-crm--disparo-template-sf/rj-crm--disparo-template-sf--prod",
-        parameters=cadunico_params,
-        timeout=0,
-    )
+    table_name = f"{cloud['project']}.{table['dataset_id']}.{table['table_id']}"
+    await trigger_dispatch_task(build_dispatch_parameters(table_name, (target - today).days))

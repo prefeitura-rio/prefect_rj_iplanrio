@@ -1,27 +1,12 @@
-"""
-Constantes específicas para pipeline API Datametrica Agendamentos SMAS
-"""
+"""Constants of rj_smas__api_datametrica_agendamentos."""
 
-from enum import Enum
+from typing import Final
+from zoneinfo import ZoneInfo
 
-
-class DatametricaConstants(Enum):
-    """
-    Constantes para o pipeline de API Datametrica Agendamentos SMAS
-    """
-
-    # Dataset e tabela do BigQuery
-    DATASET_ID = "brutos_data_metrica"
-    TABLE_ID = "cadunico_agendamentos"
-    DUMP_MODE = "append"
-
-    # Configuração para materialização após dump
-    MATERIALIZE_AFTER_DUMP = True
-
-    # Configurações de particionamento
-    PARTITION_COLUMN = "data_hora"
-    FILE_FORMAT = "csv"
-    ROOT_FOLDER = "./data_agendamentos/"
-
-    # Configurações do BigQuery
-    BIGLAKE_TABLE = False
+SP_TZ: Final = ZoneInfo("America/Sao_Paulo")
+WEEKEND: Final = (5, 6)
+"""The weekdays (Monday is 0) on which the flow does nothing."""
+LONG_AHEAD: Final = (3, 4)
+"""Thursday and Friday look four days ahead, to cover the weekend. Other days look two."""
+DISPATCH_DEPLOYMENT: Final = "rj-crm--disparo-template-sf/rj-crm--disparo-template-sf--prod"
+USER_AGENT: Final = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"

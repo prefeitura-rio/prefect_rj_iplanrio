@@ -5601,14 +5601,10 @@ version = "0.1.0"
 source = { virtual = "pipelines/rj_smas__api_datametrica_agendamentos" }
 dependencies = [
     { name = "prefect-rj-iplanrio" },
-    { name = "requests" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "requests" },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-smas-cadunico"
