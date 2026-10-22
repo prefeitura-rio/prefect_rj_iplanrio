@@ -28,7 +28,7 @@ def read_next_page(page: JsonValue) -> str | None:
 
 
 def build_rows(incidents: Sequence[Mapping[str, JsonValue]]) -> list[dict[str, str | None]]:
-    """Return each incident with every column as text, and its start date as `data_particao`.
+    """Return each incident with every column as text, and the day as `ano_`, `mes_` and `data_particao`.
 
     A nested value is JSON text. The start date is the day of `started_at`, or of
     `created_at`, or today.
@@ -42,7 +42,10 @@ def build_rows(incidents: Sequence[Mapping[str, JsonValue]]) -> list[dict[str, s
         row = {
             key: value if isinstance(value, str) or value is None else dumps(value) for key, value in incident.items()
         }
-        row["data_particao"] = started[:10] if isinstance(started, str) and started else today
+        day = started[:10] if isinstance(started, str) and started else today
+        row["ano_particao"] = day[:4]
+        row["mes_particao"] = day[5:7]
+        row["data_particao"] = day
         rows.append(row)
 
     return rows
