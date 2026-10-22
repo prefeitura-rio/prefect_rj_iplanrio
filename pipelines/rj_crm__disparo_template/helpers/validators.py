@@ -6,7 +6,6 @@ Funções centralizadas de validação para pipeline de template
 Implementa validação robusta com logs detalhados e métricas de qualidade
 """
 
-import os
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -22,6 +21,7 @@ from pipelines.rj_crm__disparo_template.helpers.schemas import (
     SfDispatchRow,
     ValidationStats,
 )
+from utils.settings import NoticeSettings
 
 logger = get_logger("toolkit")
 
@@ -296,9 +296,9 @@ def validate_campaign_name(
             {query}
         """
         logger.info(message)
-        webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+        webhook_url = NoticeSettings().DISCORD_ERRORS_WEBHOOK_URL.get_secret_value()
         if not webhook_url:
-            print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send notification.")
+            print("DISCORD_ERRORS_WEBHOOK_URL environment variable not set. Cannot send notification.")
         else:
             send_discord_notification(webhook_url, message)
         return None

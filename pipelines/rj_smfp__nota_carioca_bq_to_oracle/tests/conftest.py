@@ -13,5 +13,5 @@ def no_real_discord(monkeypatch: pytest.MonkeyPatch) -> None:
 
     Também não consulta a API do Prefect atrás do Secret block do webhook.
     """
-    monkeypatch.delenv("DISCORD_WEBHOOK_URL_NOTA_CARIOCA", raising=False)
+    monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
     monkeypatch.setattr(discord, "_load_secret_block", _no_secret_block)

@@ -1,19 +1,13 @@
 """
 Notificações no Discord da pipeline Salesforce Data Cloud → BigQuery.
 
-Webhooks (env var, via secret do work pool — mesmo secret do
-rj_crm__agentforce_classificacao_llm):
-  DISCORD_WEBHOOK_URL_ERRORS              : falhas — tabela não-crítica que
-                                            falhou e flow que abortou (canal de
-                                            erro já usado por outras pipelines)
-  DISCORD_WEBHOOK_URL_SALESFORCE_DATACLOUD: resumo de fim de run — só modo='dia'
-                                            e reprocessamento (o modo 'hora' roda
-                                            96x/dia, resumo lá seria spam)
+Webhooks (variáveis de ambiente de ``NoticeSettings``):
+  DISCORD_ERRORS_WEBHOOK_URL : falhas — tabela não-crítica que falhou e flow que abortou
+  DISCORD_WEBHOOK_URL        : resumo de fim de run — só modo='dia' e reprocessamento
+                               (o modo 'hora' roda 96x/dia, resumo lá seria spam)
 Webhook não configurado = notificação pulada com aviso no log. Notificação
 nunca derruba o flow.
 """
-
-import os
 
 import requests
 from prefect import task
@@ -24,15 +18,12 @@ from pipelines.rj_crm__salesforce_datacloud.helpers.discord import (
     mensagem_falha_tabela,
     mensagem_resumo,
 )
-
-_ENV_ERROS = "DISCORD_WEBHOOK_URL_ERRORS"
-_ENV_RESUMO = "DISCORD_WEBHOOK_URL_SALESFORCE_DATACLOUD"
+from utils.settings import NoticeSettings
 
 
-def _enviar(env_var: str, mensagem: str) -> None:
-    url = os.getenv(env_var)
+def _enviar(url: str, mensagem: str) -> None:
     if not url:
-        print(f"[NOTIFY] {env_var} não configurado — notificação pulada.")
+        print("[NOTIFY] webhook não configurado — notificação pulada.")
         return
     try:
         resp = requests.post(url, json={"content": mensagem}, timeout=15)
@@ -44,7 +35,10 @@ def _enviar(env_var: str, mensagem: str) -> None:
 @task(log_prints=True)
 def notify_falha_tabela(tabela: str, grupo: str, janela: str, erro: str) -> None:
     """Tabela não-crítica falhou (a crítica aborta o flow → notify_falha_flow)."""
-    _enviar(_ENV_ERROS, mensagem_falha_tabela(tabela, grupo, janela, erro))
+    _enviar(
+        NoticeSettings().DISCORD_ERRORS_WEBHOOK_URL.get_secret_value(),
+        mensagem_falha_tabela(tabela, grupo, janela, erro),
+    )
 
 
 @task(log_prints=True)
@@ -55,10 +49,15 @@ def notify_resumo(
     minutos: float,
 ) -> None:
     """Resumo de fim de run (o flow só chama em modo='dia' e reprocessamento)."""
-    _enviar(_ENV_RESUMO, mensagem_resumo(rotulo, resultados, falhas, minutos))
+    _enviar(
+        NoticeSettings().DISCORD_WEBHOOK_URL.get_secret_value(), mensagem_resumo(rotulo, resultados, falhas, minutos)
+    )
 
 
 def notify_falha_flow(flow: Flow, flow_run: FlowRun, state: State) -> None:
     """Hook `on_failure` do flow — assinatura fixa exigida pelo Prefect. Cobre
     tabela crítica e qualquer erro fora do loop de tabelas (auth, BigQuery)."""
-    _enviar(_ENV_ERROS, mensagem_falha_flow(flow_run.name, state.message))
+    _enviar(
+        NoticeSettings().DISCORD_ERRORS_WEBHOOK_URL.get_secret_value(),
+        mensagem_falha_flow(flow_run.name, state.message),
+    )

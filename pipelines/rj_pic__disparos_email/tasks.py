@@ -11,7 +11,7 @@ from google.cloud import bigquery
 from prefect import task
 
 from pipelines.rj_pic__disparos_email.engine import EmailSender, TemplateEngine
-from pipelines.rj_pic__disparos_email.env import FILTER_EMAILS
+from pipelines.rj_pic__disparos_email.settings import Settings
 
 
 @task(log_prints=True)
@@ -36,7 +36,7 @@ def read_bigquery_task(
     if not project_id or not dataset_id or not table_id:
         raise ValueError(
             "É necessário fornecer project_id, dataset_id e table_id, "
-            "ou definir BIGQUERY_PROJECT_ID, BIGQUERY_DATASET_ID e BIGQUERY_TABLE_ID no .env, "
+            "ou definir BIGQUERY_PROJECT_ID, BIGQUERY_DATASET_ID e BIGQUERY_TABLE_ID, "
             "ou fornecer uma query SQL customizada."
         )
     # Constrói query padrão para ler toda a tabela
@@ -46,8 +46,9 @@ def read_bigquery_task(
         FROM `{project_id}.{dataset_id}.{table_id}`
     """
 
-    if "@" in FILTER_EMAILS:
-        lista_emails = [f"'{email.strip()}'" for email in FILTER_EMAILS.split(",")]
+    filter_emails = Settings().FILTER_EMAILS
+    if "@" in filter_emails:
+        lista_emails = [f"'{email.strip()}'" for email in filter_emails.split(",")]
         separador = ",\n             "
         filters = separador.join(lista_emails)
         query += f"""    WHERE recipiente_email IN (

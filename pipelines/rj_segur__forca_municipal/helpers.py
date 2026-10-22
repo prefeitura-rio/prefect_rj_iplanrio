@@ -9,7 +9,6 @@ from typing import Generator, Iterator, Optional
 import pandas as pd
 from fastkml import Placemark
 from prefect.logging import get_logger
-from pydantic_settings import BaseSettings
 
 from pipelines.rj_segur__forca_municipal.constants import SP_TZ
 
@@ -106,16 +105,6 @@ def _cycle_prefix(cycle_num: Optional[int], total_cycles: Optional[int]) -> str:
         return f"[Ciclo {cycle_num}]"
     pct = round(cycle_num / total_cycles * 100)
     return f"[Ciclo {cycle_num}/{total_cycles} ({pct}%)]"
-
-
-class ForcaMunicipalSettings(BaseSettings):
-    """The login, the password and the address of the API, from the environment."""
-
-    API_FORCA_MUNICIPAL__API_LOGIN: str | None = None
-    API_FORCA_MUNICIPAL__API_PASSWORD: str | None = None
-    API_FORCA_MUNICIPAL__API_URL: str | None = None
-    API_FORCA_MUNICIPAL__USE_PROXY_URL: bool = False
-    API_FORCA_MUNICIPAL__PROXY_URL: str | None = None
 
 
 def add_date_columns(dataframe: pd.DataFrame, column: str) -> pd.DataFrame:

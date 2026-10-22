@@ -4,7 +4,6 @@ Extrai dados de Data Extensions com sufixo 'historico' do Salesforce Marketing C
 """
 
 import json
-import os
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -29,6 +28,7 @@ from pipelines.rj_crm__get_history_data.helpers.sfmc import (
     parse_field_types_soap_response,
     parse_soap_response,
 )
+from utils.settings import SfmcSettings
 
 logger = get_logger("toolkit")
 
@@ -39,26 +39,13 @@ def authenticate_sfmc() -> str:
     Autentica com Salesforce Marketing Cloud via OAuth2 e retorna o access token.
     POST {SFMC_AUTH_URI}/v2/token
     """
-    auth_uri = os.getenv("API_SFMC_AUTH_URL", "")
-    client_id = os.getenv("API_SFMC_CLIENT_ID", "")
-    client_secret = os.getenv("API_SFMC_CLIENT_SECRET", "")
+    settings = SfmcSettings()
 
-    missing = [
-        name for name, val in {
-            "API_SFMC_AUTH_URL": auth_uri,
-            "API_SFMC_CLIENT_ID": client_id,
-            "API_SFMC_CLIENT_SECRET": client_secret,
-        }.items()
-        if not val
-    ]
-    if missing:
-        raise ValueError(f"Variáveis de ambiente SFMC ausentes: {missing}")
-
-    url = f"{auth_uri.rstrip('/')}/v2/token"
+    url = f"{settings.SFMC_AUTH_URL.rstrip('/')}/v2/token"
     payload = {
         "grant_type": "client_credentials",
-        "client_id": client_id,
-        "client_secret": client_secret,
+        "client_id": settings.SFMC_CLIENT_ID,
+        "client_secret": settings.SFMC_CLIENT_SECRET.get_secret_value(),
     }
 
     logger.info(f"Autenticando no SFMC via {url}")

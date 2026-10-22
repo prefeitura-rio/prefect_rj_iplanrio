@@ -22,7 +22,7 @@ from prefect import task
 from prefect.logging import get_logger
 from pytz import timezone
 
-from utils.utils import read_env
+from utils.settings import WetalkieSettings
 
 logger = get_logger("toolkit")
 
@@ -305,22 +305,16 @@ def transcribe_audio(audio_path: str, language_code: str = "pt-BR") -> str:
 
 
 @task
-def access_api(
-    infisical_path: str,
-    infisical_url: str,
-    infisical_username: str,
-    infisical_password: str,
-    login_route: str = "users/login",
-) -> ApiHandler:
-    """
-    Access API and return authenticated handler to be used in other requests.
-    """
-    url = read_env(infisical_url)
-    username = read_env(infisical_username)
-    password = read_env(infisical_password)
+def access_api(login_route: str = "users/login") -> ApiHandler:
+    """Return an authenticated handler of the Wetalkie API."""
+    settings = WetalkieSettings()
 
-    api = ApiHandler(base_url=url, username=username, password=password, login_route=login_route)
-    return api
+    return ApiHandler(
+        base_url=settings.WETALKIE_URL,
+        username=settings.WETALKIE_USERNAME,
+        password=settings.WETALKIE_PASSWORD.get_secret_value(),
+        login_route=login_route,
+    )
 
 
 @task

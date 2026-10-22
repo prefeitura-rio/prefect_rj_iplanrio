@@ -45,7 +45,6 @@ deployments:
       dump_mode: append
       materialize_after_dump: true
       date:
-      infisical_secret_path: /api-datametrica
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio
@@ -71,7 +70,6 @@ deployments:
       dump_mode: append
       materialize_after_dump: true
       date:
-      infisical_secret_path: /api-datametrica
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio

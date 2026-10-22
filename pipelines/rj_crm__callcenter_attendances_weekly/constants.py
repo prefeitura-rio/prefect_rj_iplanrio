@@ -27,7 +27,6 @@ class CallCenterAttendancesConstants(Enum):
     BIGLAKE_TABLE = True
 
     # Configurações da API Wetalkie
-    INFISICAL_SECRET_PATH = "/wetalkie"
     API_LOGIN_ROUTE = "users/login"
     API_ATTENDANCES_ENDPOINT = "/callcenter/attendances"
 

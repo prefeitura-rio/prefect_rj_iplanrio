@@ -10,7 +10,6 @@ from pipelines.rj_crm__whitelist_whatsapp_relatorio.tasks import (
     buscar_ultima_ocorrencia_task,
     enviar_discord_task,
     enviar_email_task,
-    preparar_credenciais_task,
     resolver_janela_task,
     validar_configuracao_task,
 )
@@ -42,7 +41,6 @@ def rj_crm__whitelist_whatsapp_relatorio(
     :raises RuntimeError: Se o relatório foi publicado no Discord mas o e-mail falhou.
     """
     validar_configuracao_task()
-    preparar_credenciais_task()
 
     janela = resolver_janela_task(start_datetime=start_datetime, end_datetime=end_datetime)
     ocorrencias = buscar_ocorrencias_task(query=query_ocorrencias, janela=janela)

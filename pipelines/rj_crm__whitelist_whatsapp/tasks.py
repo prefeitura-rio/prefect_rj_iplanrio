@@ -10,7 +10,7 @@ from prefect import task
 from prefect.logging import get_logger
 
 from pipelines.rj_crm__whitelist_whatsapp.constants import WhitelistConstants
-from utils.utils import read_env
+from pipelines.rj_crm__whitelist_whatsapp.settings import Settings
 
 logger = get_logger("toolkit")
 
@@ -18,15 +18,15 @@ logger = get_logger("toolkit")
 @task
 def get_whitelist_credentials() -> Dict[str, str]:
     """
-    Retrieves credentials from environment variables (synced from Infisical).
+    Retrieves the credentials of the whitelist API from the settings.
     """
-    logger.info("Recuperando credenciais do ambiente (via Infisical)")
+    settings = Settings()
 
     return {
-        "auth_url": read_env("RMI_AUTH_URL"),
-        "client_id": read_env("RMI_CLIENT_ID"),
-        "client_secret": read_env("RMI_CLIENT_SECRET"),
-        "whitelist_url": read_env("RMI_WHITELIST_API_URL"),
+        "auth_url": settings.RMI_AUTH_URL,
+        "client_id": settings.RMI_CLIENT_ID,
+        "client_secret": settings.RMI_CLIENT_SECRET.get_secret_value(),
+        "whitelist_url": settings.RMI_WHITELIST_API_URL,
     }
 
 

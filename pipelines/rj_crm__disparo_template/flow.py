@@ -17,6 +17,7 @@ from toolkit.dbt import DbtRun
 from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
 
 # pylint: disable=E0611, E0401
+from utils.settings import NoticeSettings
 from pipelines.rj_crm__disparo_template.helpers.discord import (
     send_discord_notification,
     send_dispatch_no_destinations_found,
@@ -67,9 +68,9 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
         print(f"Flow failed in {flow_environment} environment. Skipping Discord notification.")
         return
 
-    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+    webhook_url = NoticeSettings().DISCORD_ERRORS_WEBHOOK_URL.get_secret_value()
     if not webhook_url:
-        print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set on Infisical. Cannot send notification.")
+        print("DISCORD_ERRORS_WEBHOOK_URL environment variable not set. Cannot send notification.")
         return
 
     campaign_name = flow_run.parameters.get("campaign_name", "N/A")
@@ -111,12 +112,10 @@ async def rj_crm__disparo_template_sf(
     sleep_minutes: int | None = 5,
     materialization_sleep_minutes: int | None = 20,
     max_dispatch_retries: int = 0,
-    infisical_secret_path: str = "/crm_disparo_template",
     data_extension_filename: str | None = None,
     de_columns: list[str] | None = None,
     csv_separator: str = ";",
     whitelist_percentage: int = 0,
-    whitelist_environment: str = "production",
     flow_environment: str = "staging",
     force_add_on_whitelist_group: bool = False,
     whitelist_replace_contacts: bool = False,
@@ -137,9 +136,9 @@ async def rj_crm__disparo_template_sf(
     disk, and uploads it to the configured SFTP server.
     Dispatch results are also logged to BigQuery.
 
-    SFTP credentials (sf_sftp_host, sf_sftp_user, sf_sftp_password, sf_sftp_host_key)
-    must be available as environment variables injected from Infisical at
-    infisical_secret_path. sf_sftp_host_key is the server's public host key
+    SFTP credentials (SFTP_HOST, SFTP_USERNAME, SFTP_PASSWORD, SFTP_HOST_KEY)
+    must be available as environment variables injected from Infisical.
+    SFTP_HOST_KEY is the server's public host key
     (format "ssh-rsa AAAA...", same as a known_hosts line) used to pin the SFTP
     server's identity and reject man-in-the-middle connections — it must be
     confirmed with Salesforce through a channel separate from the SSH connection
@@ -169,7 +168,6 @@ async def rj_crm__disparo_template_sf(
             função de enriquecimento selecionada (ex.: {"api_url": "..."}).
         sleep_minutes (int, optional): Minutes to sleep before dispatch. Defaults to 5.
         max_dispatch_retries (int): Maximum retry attempts with alternative phones. Defaults to 0.
-        infisical_secret_path (str, optional): Infisical path for SFTP credentials. Defaults to "/sftp".
         de_columns (list[str], optional): Lista de campos (além de telefone/SubscriberKey) que a
             Data Extension espera. Quando informada, o CSV enviado ao SFTP é restrito a essas
             colunas — qualquer coluna de controle interno da query (ex.: 'others', 'cpf')
@@ -177,7 +175,6 @@ async def rj_crm__disparo_template_sf(
         csv_separator (str, optional): Delimitador do CSV enviado ao SFTP. Defaults to ";".
         sftp_remote_path (str, optional): Remote directory on the SFTP server. Defaults to "/".
         whitelist_percentage (int, optional): Percentage of contacts to whitelist. Defaults to 0.
-        whitelist_environment (str, optional): Whitelist environment. Defaults to "production".
         flow_environment (str, optional): Flow environment ("staging" or "production"). Defaults to "staging".
         force_add_on_whitelist_group (bool, optional): Force add to whitelist group. Defaults to False.
         whitelist_replace_contacts (bool, optional): Remove contacts before adding to whitelist. Defaults to False.
@@ -467,12 +464,11 @@ async def rj_crm__disparo_template_sf(
             whitelist_group_name = f"citizen-hsm-{campaign_name}"
             whitelist_dests = [{"telefone": phone} for phone in current_df["telefone"].tolist()]
             if whitelist_replace_contacts:
-                remove_contacts_from_whitelist(destinations=whitelist_dests, environment=whitelist_environment)
+                remove_contacts_from_whitelist(destinations=whitelist_dests)
             add_contacts_to_whitelist(
                 destinations=whitelist_dests,
                 percentage_to_insert=whitelist_percentage,
                 group_name=whitelist_group_name,
-                environment=whitelist_environment,
                 force_add_on_whitelist_group=force_add_on_whitelist_group,
             )
 
@@ -512,7 +508,6 @@ async def rj_crm__disparo_template_sf(
 
             send_to_sftp(
                 csv_path=csv_path,
-                infisical_secret_path=infisical_secret_path,
                 sftp_remote_path=sftp_remote_path,
             )
 

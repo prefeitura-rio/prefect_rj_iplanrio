@@ -44,6 +44,13 @@ deployments:
         command: uv run --package rj_iplanrio__eai_history -- prefect flow-run execute
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
+    schedules:
+      - interval: 3600
+        anchor_date: "2025-01-01T00:05:00"
+        timezone: America/Sao_Paulo
+        slug: staging
+        parameters:
+          environment: staging
   - name: rj-iplanrio--eai_history--prod
     tags:
       - environment:prod
@@ -71,9 +78,3 @@ deployments:
         slug: prod
         parameters:
           environment: prod
-      - interval: 3600
-        anchor_date: "2025-01-01T00:05:00"
-        timezone: America/Sao_Paulo
-        slug: staging
-        parameters:
-          environment: staging

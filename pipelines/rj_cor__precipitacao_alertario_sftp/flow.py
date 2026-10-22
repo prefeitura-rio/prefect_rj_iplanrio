@@ -13,7 +13,8 @@ from tasks import (
 
 from utils.tasks import publish_table_in_bq, upload_files_to_gcs
 from utils.types import Cloud, Table
-from utils.utils import capture_options, read_env
+from pipelines.rj_cor__precipitacao_alertario_sftp.settings import Settings
+from utils.utils import capture_options
 
 logger = get_logger("toolkit")
 
@@ -70,8 +71,9 @@ async def rj_cor__precipitacao_alertario_sftp(
     """
     # Setup
 
-    bucket_name = read_env("bucket-nimbus")
-    prefix = read_env("prefix")
+    settings = Settings()
+    bucket_name = settings.NIMBUS_BUCKET_NAME
+    prefix = settings.NIMBUS_PREFIX
 
     logger.info("🌧️  Iniciando coleta de dados de precipitação AlertaRio via SFTP")
 

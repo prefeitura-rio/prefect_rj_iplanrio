@@ -6,7 +6,6 @@ Flow para o disparo do cartão pic
 import os
 import time
 from math import ceil
-from os import environ
 from pathlib import Path
 
 import pendulum
@@ -44,6 +43,7 @@ from prefect import flow
 
 # pylint: disable=E0611, E0401
 from pipelines.rj_smas__disparo_pic.constants import PicLembreteConstants
+from pipelines.rj_smas__disparo_pic.settings import Settings
 from utils.tasks import publish_table_in_bq, upload_files_to_gcs
 from utils.types import Cloud, Table
 from utils.utils import capture_options
@@ -73,9 +73,7 @@ async def rj_smas__disparo_pic(
     dispatch_approved_col: str | None = "APROVACAO_DISPARO_AVISO",
     dispatch_date_col: str | None = "DATA_DISPARO_AVISO",
     event_date_col: str | None = "DATA_ENTREGA",
-    infisical_secret_path: str = "/wetalkie",
     whitelist_percentage: int = 30,
-    whitelist_environment: str = "staging",
     flow_environment: str = "staging",
 ):
     dataset_id = dataset_id or PicLembreteConstants.PIC_DATASET_ID.value
@@ -112,7 +110,7 @@ async def rj_smas__disparo_pic(
     print(f"\nQuery citizen:\n{query}")
     print(f"\nQuery dispatch approval:\n{query_dispatch_approved}")
 
-    destinations = environ.get("PIC__DESTINATIONS", None)
+    destinations = Settings().DESTINATIONS
 
 
     flow_status = check_flow_status(
@@ -142,12 +140,7 @@ async def rj_smas__disparo_pic(
         print(f"Sleep {sleep_minutes} minutes to check")
         time.sleep(sleep_minutes * 60)
 
-        api = access_api(
-            infisical_secret_path,
-            "wetalkie_url",
-            "wetalkie_user",
-            "wetalkie_pass",
-            login_route="users/login",
+        api = access_api(login_route="users/login",
         )
 
         api_status = check_api_status(api)
@@ -179,11 +172,9 @@ async def rj_smas__disparo_pic(
                 destinations=unique_destinations,
                 percentage_to_insert=whitelist_percentage,
                 group_name=whitelist_group_name,
-                environment=whitelist_environment,
             )
             print(f"{whitelist_percentage}% ({len(unique_destinations)*whitelist_percentage/100}) \
-                of numbers where add to whitelist on group {whitelist_group_name} inside \
-                environment {whitelist_environment}.")
+                of numbers where add to whitelist on group {whitelist_group_name}.")
 
         if api_status:
             dispatch_payload = create_dispatch_payload(

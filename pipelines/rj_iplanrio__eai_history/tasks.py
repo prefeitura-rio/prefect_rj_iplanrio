@@ -7,7 +7,6 @@ from google.cloud.exceptions import NotFound
 from prefect import task
 from prefect.logging import get_logger
 
-from pipelines.rj_iplanrio__eai_history.helpers import EaiSettings
 from pipelines.rj_iplanrio__eai_history.history import GoogleAgentEngineHistory
 
 logger = get_logger("toolkit")
@@ -32,16 +31,6 @@ def get_last_update(
     if last_update:
         logger.info(f"'last_update' fornecido via parametro: {last_update}")
         return last_update
-
-    if environment == "staging":
-        project_id = EaiSettings().EAI__PROJECT_ID
-        logger.info(f"'environment' staging using project_id: {project_id}")
-
-    elif environment == "prod":
-        project_id = EaiSettings().EAI__PROJECT_ID_PROD
-        logger.info(f"'environment' prod using project_id: {project_id}")
-    else:
-        raise (ValueError("environment must be prod or staging"))
 
     logger.info(f"Buscando último 'last_update' para {dataset_id}.{table_id}")
     client = bigquery.Client(project="rj-iplanrio")

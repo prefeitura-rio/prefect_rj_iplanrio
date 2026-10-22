@@ -19,43 +19,22 @@ from prefect import task  # pylint: disable=E0611, E0401
 from prefect.logging import get_logger
 
 from pipelines.rj_crm__disparo_template.helpers.api_handler import ApiHandler  # pylint: disable=E0611, E0401
-from utils.utils import read_env
+from utils.settings import WetalkieSettings
 
 logger = get_logger("toolkit")
 
 
 @task
-def access_api(
-    infisical_path: str,
-    infisical_url: str,
-    infisical_username: str,
-    infisical_password: str,
-    login_route: str = "users/login",
-) -> ApiHandler:
-    """
-    Access API and return authenticated handler to be used in other requests.
-    Uses environment variables injected from Infisical secrets.
+def access_api(login_route: str = "users/login") -> ApiHandler:
+    """Return an authenticated handler of the Wetalkie API."""
+    settings = WetalkieSettings()
 
-    Args:
-        infisical_path: Path in Infisical (e.g., "/wetalkie")
-        infisical_url: Key name for URL in Infisical
-        infisical_username: Key name for username in Infisical
-        infisical_password: Key name for password in Infisical
-        login_route: API login endpoint path
-
-    Returns:
-        ApiHandler: Authenticated API handler instance
-    """
-
-    # Get credentials from environment variables
-    url = read_env(infisical_url)
-    username = read_env(infisical_username)
-    password = read_env(infisical_password)
-
-    # Create and return authenticated API handler
-    api = ApiHandler(base_url=url, username=username, password=password, login_route=login_route)
-
-    return api
+    return ApiHandler(
+        base_url=settings.WETALKIE_URL,
+        username=settings.WETALKIE_USERNAME,
+        password=settings.WETALKIE_PASSWORD.get_secret_value(),
+        login_route=login_route,
+    )
 
 
 @task

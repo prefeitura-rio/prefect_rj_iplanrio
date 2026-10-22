@@ -15,7 +15,7 @@ import urllib3
 from prefect import task  # pylint: disable=E0611, E0401
 from prefect.logging import get_logger
 
-from utils.utils import read_env
+from pipelines.rj_smas__api_datametrica_agendamentos.settings import Settings
 
 logger = get_logger("toolkit")
 
@@ -57,14 +57,9 @@ def calculate_target_date() -> str | None:
 
 
 @task
-def get_datametrica_credentials(
-    infisical_secret_path: str | None = None,
-) -> Dict[str, str]:
+def get_datametrica_credentials() -> Dict[str, str]:
     """
-    Recupera as credenciais da API da Datametrica e do proxy brasileiro usando toolkit.
-
-    Args:
-        infisical_secret_path: Caminho dos secrets no Infisical (usado pelo sidecar)
+    Recupera as credenciais da API da Datametrica e do proxy brasileiro.
 
     Returns:
         Dict com 'url', 'token', 'proxy_url' e 'proxy_token'
@@ -72,14 +67,14 @@ def get_datametrica_credentials(
 
     logger.info("Recuperando credenciais da Datametrica e do proxy brasileiro")
 
-    # Use getenv_or_action to get secrets from environment
-    url = read_env("dm_url")
+    settings = Settings()
+    url = settings.DATAMETRICA_URL
     if not url.startswith("http"):
         url = f"http://{url}"
 
-    token = read_env("dm_token")
-    proxy_url = read_env("proxy_url")
-    proxy_token = read_env("proxy_token")
+    token = settings.DATAMETRICA_TOKEN.get_secret_value()
+    proxy_url = settings.PROXY_URL
+    proxy_token = settings.PROXY_TOKEN.get_secret_value()
 
     logger.info("Credenciais recuperadas com sucesso")
 
@@ -197,23 +192,18 @@ def transform_agendamentos_data(
 
 
 @task
-def get_bigquery_config(
-    infisical_secret_path: str | None = None,
-) -> Dict[str, str]:
+def get_bigquery_config() -> Dict[str, str]:
     """
     Recupera dataset_id e table_id do BigQuery usando toolkit.
-
-    Args:
-        infisical_secret_path: Caminho dos secrets no Infisical (usado pelo sidecar)
 
     Returns:
         Dict com 'dataset_id' e 'table_id'
     """
     logger.info("Recuperando configuração do BigQuery do Infisical")
 
-    # Use getenv_or_action to get secrets from environment
-    dataset_id = read_env("dataset_id")
-    table_id = read_env("table_id")
+    settings = Settings()
+    dataset_id = settings.BIGQUERY_DATASET_ID
+    table_id = settings.BIGQUERY_TABLE_ID
 
     logger.info("Configuração do BigQuery recuperada com sucesso")
 

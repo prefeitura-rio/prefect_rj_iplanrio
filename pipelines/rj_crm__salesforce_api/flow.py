@@ -43,7 +43,6 @@ async def rj_crm__salesforce_api(
     query_params: dict | None = None,
     body_json: dict | None = None,
     page_size: int = 200,
-    infisical_secret_path: str | None = None,
 ):
     """
     Flow genérico para ingestão de qualquer rota da Salesforce Marketing Cloud REST API.
@@ -71,12 +70,9 @@ async def rj_crm__salesforce_api(
         body_json: Body JSON para POST. Não é necessário informar page/pageSize —
                    gerenciados automaticamente pela paginação.
         page_size: Registros por página. Padrão: 200.
-        infisical_secret_path: Path no Infisical para as credenciais da SFMC.
-                               Padrão: "/salesforce_marketing_cloud".
     """
     dataset_id = dataset_id or APIConstants.DATASET_ID.value
     dump_mode = dump_mode or APIConstants.DUMP_MODE.value
-    infisical_secret_path = infisical_secret_path or APIConstants.INFISICAL_SECRET_PATH.value
     root_folder = APIConstants.ROOT_FOLDER.value
     file_format = APIConstants.FILE_FORMAT.value
     partition_column = APIConstants.PARTITION_COLUMN.value

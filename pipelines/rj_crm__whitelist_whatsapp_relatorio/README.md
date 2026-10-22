@@ -56,25 +56,22 @@ uma e `load_query` levanta `KeyError` na hora, antes de qualquer consulta.
 
 ## Variáveis de ambiente
 
-Todas obrigatórias, lidas com `getenv_or_action` (`toolkit`) do que o Infisical injeta
-no container. São validadas na primeira task: faltando qualquer uma, o flow falha antes
-de qualquer envio, nomeando **todas** as que faltam de uma vez — a validação usa
-`action="ignore"` justamente para juntar as ausências, e rejeita também variável definida
-com valor vazio. Nos pontos de uso a leitura é `action="raise"`.
+Todas obrigatórias, lidas por `Settings` (`settings.py`) do que o Kubernetes Secret injeta
+no container. A primeira task valida a configuração: faltando qualquer uma, ou com valor
+vazio, o flow falha antes de qualquer envio e a mensagem nomeia **todas** as que faltam.
 
 | Variável | Conteúdo |
 | --- | --- |
-| `DISCORD_WEBHOOK_URL_WHITELIST_WHATSAPP_RELATORIO` | webhook do canal do relatório |
-| `CRM_WHITELIST_WHATSAPP_RELATORIO_DATA_RELAY_URL` | endpoint `/data/mailman` do Data Relay |
-| `CRM_WHITELIST_WHATSAPP_RELATORIO_DATA_RELAY_API_KEY` | chave do header `x-api-key`, escopada **apenas** a `/data/mailman` |
-| `CRM_WHITELIST_WHATSAPP_RELATORIO_DATA_RELAY_TO_ADDRESSES` | destinatários do e-mail, separados por vírgula |
+| `DISCORD_WEBHOOK_URL` | webhook do canal do relatório |
+| `DATA_RELAY_URL` | endpoint `/data/mailman` do Data Relay |
+| `DATA_RELAY_API_KEY` | chave do header `x-api-key`, escopada **apenas** a `/data/mailman` |
+| `DATA_RELAY_TO_ADDRESSES` | destinatários do e-mail, separados por vírgula |
 
-Cadastrar no conjunto do Infisical que sincroniza para
-`prefect-jobs-crm-registry-secrets` (prod) e `prefect-jobs-crm-registry-secrets-staging`.
-As `BASEDOSDADOS_*` já existem nos dois conjuntos e não precisam de ação.
+Cadastrar as variáveis na pasta do Infisical da pipeline, em cada ambiente (`staging` e
+`prod`). O BigQuery usa o ADC do pod, sem variável.
 
 Os dois ambientes usam o mesmo canal do Discord; a linha `Ambiente:` do cabeçalho é que
-distingue as mensagens. Para separar, basta apontar outro webhook no secret de staging.
+distingue as mensagens. Para separar, basta apontar outro webhook no ambiente `staging` do Infisical.
 
 ## Reprocessar uma janela
 

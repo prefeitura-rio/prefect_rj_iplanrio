@@ -13,7 +13,7 @@ from openlocationcode import openlocationcode as olc
 from prefect.logging import get_logger
 from unidecode import unidecode
 
-from utils.utils import read_env
+from pipelines.rj_crm__geolocalizacao_residencia.settings import Settings
 
 logger = get_logger("toolkit")
 
@@ -83,8 +83,9 @@ def geocode_nominatim(
     all_addresses = new_addresses[address_column].tolist()
     all_addresses = _prepare_addresses_for_nominatim(all_addresses)
 
-    user_agent = read_env("NOMINATIM")
-    domain = read_env("NOMINATIM_DOMAIN")
+    settings = Settings()
+    user_agent = settings.NOMINATIM_USER_AGENT
+    domain = settings.NOMINATIM_DOMAIN
     geolocator = Nominatim(user_agent=user_agent, domain=domain)
 
     logger.info(f"There are {len(all_addresses)} addresses to georeference")

@@ -169,8 +169,6 @@ schedules:
         test_mode: false
         sleep_minutes: 5
         whitelist_percentage: 0
-        infisical_secret_path: "/crm_disparo_template"
-        whitelist_environment: "production"
         filter_duplicated_phones: false
         filter_duplicated_cpfs: true
         query_file: queries/smtr_multa_pf.sql
@@ -195,8 +193,6 @@ schedules:
       test_mode: false
       sleep_minutes: 5
       whitelist_percentage: 0
-      infisical_secret_path: "/wetalkie"
-      whitelist_environment: "production"
       filter_duplicated_phones: true
       filter_duplicated_cpfs: true
       query: |
@@ -403,8 +399,6 @@ schedules:
       test_mode: false
       sleep_minutes: 5
       whitelist_percentage: 0
-      infisical_secret_path: "/wetalkie"
-      whitelist_environment: "production"
       filter_duplicated_phones: true
       filter_duplicated_cpfs: true
       query: |
@@ -613,8 +607,6 @@ schedules:
       filter_duplicated_phones: false
       filter_duplicated_cpfs: true
       whitelist_percentage: 0
-      infisical_secret_path: "/wetalkie"
-      whitelist_environment: "production"
       query: |
         -- ===================== 1) MATERIALIZA =====================
         -- ===================== 1.1) CELULARES VÁLIDOS (PF) E *MÓVEIS* =====================
@@ -855,8 +847,6 @@ schedules:
       filter_duplicated_phones: false
       filter_duplicated_cpfs: false
       whitelist_percentage: 0
-      infisical_secret_path: "/wetalkie"
-      whitelist_environment: "production"
       query: |
         with
             disparos_divida_ativa as (
@@ -1004,8 +994,6 @@ schedules:
       filter_duplicated_phones: true
       filter_duplicated_cpfs: true
       whitelist_percentage: 0
-      infisical_secret_path: "/wetalkie"
-      whitelist_environment: "production"
       query: |
         WITH
         disparos_divida_ativa as (
@@ -1153,8 +1141,6 @@ schedules:
         cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
-        infisical_secret_path: /wetalkie
-        whitelist_environment: production
         filter_duplicated_cpfs: true
         filter_duplicated_phones: false
         filter_dispatched_phones_or_cpfs: null
@@ -1328,8 +1314,6 @@ schedules:
         cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
-        infisical_secret_path: /wetalkie
-        whitelist_environment: production
         filter_duplicated_cpfs: true
         filter_duplicated_phones: false
         filter_dispatched_phones_or_cpfs: null
@@ -1501,8 +1485,6 @@ schedules:
         cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
-        infisical_secret_path: /wetalkie
-        whitelist_environment: production
         filter_duplicated_cpfs: true
         filter_duplicated_phones: false
         filter_dispatched_phones_or_cpfs: null
@@ -1536,8 +1518,6 @@ schedules:
         cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
-        infisical_secret_path: /wetalkie
-        whitelist_environment: production
         filter_duplicated_cpfs: true
         filter_duplicated_phones: false
         filter_dispatched_phones_or_cpfs: null
@@ -1574,8 +1554,6 @@ schedules:
         cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
-        infisical_secret_path: /wetalkie
-        whitelist_environment: production
         filter_duplicated_cpfs: true
         filter_duplicated_phones: false
         filter_dispatched_phones_or_cpfs: null
@@ -1609,8 +1587,6 @@ schedules:
         cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
-        infisical_secret_path: /wetalkie
-        whitelist_environment: production
         filter_duplicated_cpfs: true
         filter_duplicated_phones: false
         filter_dispatched_phones_or_cpfs: null
@@ -1646,8 +1622,6 @@ schedules:
         cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
-        infisical_secret_path: /wetalkie
-        whitelist_environment: production
         filter_duplicated_cpfs: true
         filter_duplicated_phones: false
         filter_dispatched_phones_or_cpfs: null
@@ -1681,8 +1655,6 @@ schedules:
         cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
-        infisical_secret_path: /wetalkie
-        whitelist_environment: production
         filter_duplicated_cpfs: true
         filter_duplicated_phones: false
         filter_dispatched_phones_or_cpfs: null
@@ -1716,8 +1688,6 @@ schedules:
         cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
-        infisical_secret_path: /wetalkie
-        whitelist_environment: production
         filter_duplicated_cpfs: true
         filter_duplicated_phones: false
         filter_dispatched_phones_or_cpfs: null
@@ -1749,8 +1719,6 @@ schedules:
       filter_duplicated_phones: false
       filter_duplicated_cpfs: false
       whitelist_percentage: 100
-      infisical_secret_path: "/wetalkie"
-      whitelist_environment: "production"
       filter_failed_phones: false
       force_add_on_whitelist_group: true
       whitelist_replace_contacts: true
@@ -1786,8 +1754,6 @@ schedules:
       filter_duplicated_phones: false
       filter_duplicated_cpfs: false
       whitelist_percentage: 0
-      infisical_secret_path: "/crm_disparo_template"
-      whitelist_environment: "production"
       filter_failed_phones: false
       force_add_on_whitelist_group: false
       whitelist_replace_contacts: false

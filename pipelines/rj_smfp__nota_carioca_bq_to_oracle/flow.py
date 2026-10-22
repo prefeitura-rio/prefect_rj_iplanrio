@@ -40,7 +40,6 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
     dataset_id: str = "nota_carioca_staging",
     table_ids: list[str] | None = None,
     gcs_bucket: str = "rj-iplanrio-dia-bq-to-oracle",
-    infisical_secret_path: str = "/db-oracle-nota-fiscal",
     sqlldr_sessions: int = 2,
     template_schema: str | None = None,
     excluded_template_columns: list[str] | None = None,
@@ -83,7 +82,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
         tables = list_tables_task(project=project, dataset_id=dataset_id, table_ids=table_ids)
         notifier.set_tables(dict.fromkeys(tables, 1))
         if mode == "synonyms_only":
-            refresh_synonyms_task(infisical_secret_path=infisical_secret_path, table_ids=tables)
+            refresh_synonyms_task(table_ids=tables)
             return
         notifier.enter(Step.EXPORT)
         snapshot = export_snapshot_task(
@@ -104,7 +103,6 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             exported = snapshot[table_id]
             notifier.table_step(table_id, TableStep.PREPARATION)
             plan = plan_load_task(
-                infisical_secret_path=infisical_secret_path,
                 template_schema=template_schema,
                 excluded_template_columns=excluded_template_columns,
                 table_id=table_id,
@@ -112,16 +110,14 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
                 raw_text_encoding=raw_text_encoding,
             )
             structure = plan_structure_task(
-                infisical_secret_path=infisical_secret_path,
                 template_schema=template_schema,
                 table_id=table_id,
                 plan=plan,
             )
-            slots = resolve_slots_task(infisical_secret_path=infisical_secret_path, table_id=table_id)
+            slots = resolve_slots_task(table_id=table_id)
             notifier.table_step(table_id, TableStep.PREPARATION, slot=slots.slot)
             notifier.set_physical_table(table_id, slots.inactive)
             oracle_table = ensure_oracle_table_task(
-                infisical_secret_path=infisical_secret_path,
                 project=project,
                 dataset_id=dataset_id,
                 table_id=table_id,
@@ -129,11 +125,10 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
                 plan=plan,
                 structure=structure,
             )
-            unindexed_table = drop_oracle_indexes_task(infisical_secret_path=infisical_secret_path, table=oracle_table)
-            empty_table = truncate_oracle_table_task(infisical_secret_path=infisical_secret_path, table=unindexed_table)
+            unindexed_table = drop_oracle_indexes_task(table=oracle_table)
+            empty_table = truncate_oracle_table_task(table=unindexed_table)
             notifier.table_step(table_id, TableStep.LOAD)
             loaded_rows = load_into_oracle_task(
-                infisical_secret_path=infisical_secret_path,
                 table=empty_table,
                 plan=plan,
                 bucket=gcs_bucket,
@@ -144,7 +139,6 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             notifier.table_loaded(table_id, loaded_rows)
             notifier.table_step(table_id, TableStep.VALIDATION)
             validated_rows = validate_row_count_task(
-                infisical_secret_path=infisical_secret_path,
                 table=empty_table,
                 table_schema=exported.schema,
                 loaded_rows=loaded_rows,
@@ -156,7 +150,6 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             cleanups.append(delete_gcs_files_task.submit(project=project, bucket=gcs_bucket, files=exported.files))
             notifier.table_step(table_id, TableStep.INDEXES)
             indexed_table = create_oracle_indexes_task(
-                infisical_secret_path=infisical_secret_path,
                 table=empty_table,
                 structure=structure,
                 slot=slots.slot,
@@ -165,12 +158,11 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             )
             notifier.table_step(table_id, TableStep.STATS)
             analyzed_table = gather_oracle_stats_task(
-                infisical_secret_path=infisical_secret_path, table=indexed_table, parallel_degree=index_parallel_degree
+                table=indexed_table, parallel_degree=index_parallel_degree
             )
             notifier.table_step(table_id, TableStep.ACCESS)
-            granted_table = grant_access_task(infisical_secret_path=infisical_secret_path, table=analyzed_table)
+            granted_table = grant_access_task(table=analyzed_table)
             ready = record_load_task(
-                infisical_secret_path=infisical_secret_path,
                 plan=slots,
                 table=granted_table,
                 source=f"{project}.{dataset_id}.{table_id}",
@@ -178,7 +170,6 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             )
             notifier.table_step(table_id, TableStep.INMEMORY)
             start_inmemory_population_task(
-                infisical_secret_path=infisical_secret_path,
                 table=granted_table,
                 structure=structure,
                 wait_minutes=inmemory_wait_minutes,
@@ -188,9 +179,9 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
 
         notifier.enter(Step.INMEMORY_WAIT)
         populated = wait_inmemory_task(
-            infisical_secret_path=infisical_secret_path, plans=loaded, wait_minutes=inmemory_wait_minutes
+            plans=loaded, wait_minutes=inmemory_wait_minutes
         )
         notifier.enter(Step.SWAP)
-        swap_synonyms_task(infisical_secret_path=infisical_secret_path, plans=populated)
+        swap_synonyms_task(plans=populated)
         for cleanup in cleanups:
             cleanup.result()

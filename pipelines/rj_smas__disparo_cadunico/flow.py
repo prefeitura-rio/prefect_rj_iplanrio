@@ -6,7 +6,6 @@ Dispatch Flow for agendamento cadunico
 import os
 import time
 from math import ceil
-from os import environ
 from pathlib import Path
 
 import pendulum
@@ -42,6 +41,8 @@ from prefect import flow  # pylint: disable=E0611, E0401
 from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
 
 from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants  # pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_cadunico.settings import Settings
+from utils.settings import NoticeSettings
 from utils.tasks import publish_table_in_bq, upload_files_to_gcs
 from utils.types import Cloud, Table
 from utils.utils import capture_options
@@ -51,9 +52,9 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
     """
     Sends a Discord notification when a flow run fails.
     """
-    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+    webhook_url = NoticeSettings().DISCORD_ERRORS_WEBHOOK_URL.get_secret_value()
     if not webhook_url:
-        print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set on Infisical. Cannot send notification.")
+        print("DISCORD_ERRORS_WEBHOOK_URL environment variable not set. Cannot send notification.")
         return
 
     campaign_name = flow_run.parameters.get("campaign_name", "N/A")
@@ -88,9 +89,7 @@ async def rj_smas__disparo_cadunico(
     query_processor_name: str | None = "skip_weekends",
     sleep_minutes: int | None = 5,
     days_ahead: str | None = 2,
-    infisical_secret_path: str = "/wetalkie",
     whitelist_percentage: int = 30,
-    whitelist_environment: str = "staging",
     flow_environment: str = "staging",
 ):
     dataset_id = dataset_id or CadunicoConstants.CADUNICO_DATASET_ID.value
@@ -107,7 +106,7 @@ async def rj_smas__disparo_cadunico(
     )
     billing_project_id = CadunicoConstants.CADUNICO_BILLING_PROJECT_ID.value
 
-    destinations = environ.get("CADUNICO__DESTINATIONS", None)
+    destinations = Settings().DESTINATIONS
 
 
     if test_mode:
@@ -115,12 +114,7 @@ async def rj_smas__disparo_cadunico(
         query = CadunicoConstants.QUERY_MOCK.value
         print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
 
-    api = access_api(
-        infisical_secret_path,
-        "wetalkie_url",
-        "wetalkie_user",
-        "wetalkie_pass",
-        login_route="users/login",
+    api = access_api(login_route="users/login",
     )
 
     api_status = check_api_status(api)
@@ -174,11 +168,9 @@ async def rj_smas__disparo_cadunico(
             destinations=unique_destinations,
             percentage_to_insert=whitelist_percentage,
             group_name=whitelist_group_name,
-            environment=whitelist_environment,
         )
         print(f"{whitelist_percentage}% ({int(len(unique_destinations)*whitelist_percentage/100)}) \
-             of numbers were added to whitelist on group {whitelist_group_name} inside \
-             environment {whitelist_environment}.")
+             of numbers were added to whitelist on group {whitelist_group_name}.")
 
     # Log destination counts for tracking
     print(f"Total unique destinations to dispatch: {len(unique_destinations)}")

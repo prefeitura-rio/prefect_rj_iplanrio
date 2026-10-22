@@ -24,14 +24,13 @@ def list_tables_task(project: str, dataset_id: str, table_ids: list[str] | None)
 
 
 @task(cache_policy=NO_CACHE)
-def log_session_task(infisical_secret_path: str) -> None:
+def log_session_task() -> None:
     """Registra no log com qual usuário, banco e versão a validação está conectada."""
-    logger.info("Sessão no Oracle\n" + describe_session(read_oracle_config(infisical_secret_path)))
+    logger.info("Sessão no Oracle\n" + describe_session(read_oracle_config()))
 
 
 @task(cache_policy=NO_CACHE)
 def validate_table_task(  # noqa: PLR0913
-    infisical_secret_path: str,
     project: str,
     dataset_id: str,
     table_id: str,
@@ -41,7 +40,7 @@ def validate_table_task(  # noqa: PLR0913
     raw_text_encoding: RawTextEncoding,
 ) -> dict[str, object]:
     """Valida uma tabela, registra o relatório no log e retorna o resumo."""
-    config = read_oracle_config(infisical_secret_path)
+    config = read_oracle_config()
     request = ValidationRequest(
         project=project,
         dataset_id=dataset_id,

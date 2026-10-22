@@ -33,7 +33,6 @@ async def rj_crm__callcenter_attendances_weekly(
     start_date: str | None = None,
     end_date: str | None = None,
     transcribe_audio: bool = True,
-    infisical_secret_path: str = "/wetalkie",
     date_interval: int = 7,
 ):
     """
@@ -49,7 +48,6 @@ async def rj_crm__callcenter_attendances_weekly(
         materialize_after_dump: Se deve materializar após dump (default from constants)
         start_date: Data de início no formato YYYY-MM-DD (None = calcular automaticamente)
         end_date: Data de fim no formato YYYY-MM-DD (None = calcular automaticamente)
-        infisical_secret_path: Caminho dos secrets no Infisical (default: /wetalkie)
     """
 
     dataset_id = dataset_id or CallCenterAttendancesConstants.DATASET_ID.value
@@ -74,12 +72,7 @@ async def rj_crm__callcenter_attendances_weekly(
         start_date=start_date, end_date=end_date, interval=date_interval
     )
 
-    api = access_api(
-        infisical_secret_path,
-        "wetalkie_url",
-        "wetalkie_user",
-        "wetalkie_pass",
-        login_route=CallCenterAttendancesConstants.API_LOGIN_ROUTE.value,
+    api = access_api(login_route=CallCenterAttendancesConstants.API_LOGIN_ROUTE.value,
     )
 
     raw_attendances = get_weekly_attendances(

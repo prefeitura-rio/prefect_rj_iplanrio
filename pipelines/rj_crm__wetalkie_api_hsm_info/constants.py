@@ -25,7 +25,6 @@ class Constants(Enum):
     BILLING_PROJECT_ID = "rj-crm-registry"
 
     # Wetalkie API Configuration
-    INFISICAL_SECRET_PATH = "/wetalkie" # reusing from rj_crm__api_wetalkie
     BASE_URL = "https://api.whatsapp.dados.rio/v1"
     LOGIN_ROUTE = "users/login"
     HSM_ROUTE = "callcenter/hsms"

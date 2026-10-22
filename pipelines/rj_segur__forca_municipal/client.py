@@ -30,7 +30,7 @@ from pipelines.rj_segur__forca_municipal.constants import (
     RETRY_MAX_WAIT,
     RETRY_MIN_WAIT,
 )
-from pipelines.rj_segur__forca_municipal.helpers import ForcaMunicipalSettings
+from pipelines.rj_segur__forca_municipal.settings import Settings
 
 logger = get_logger("toolkit")
 
@@ -72,15 +72,15 @@ class FMApi:
     )
 
     def __init__(self) -> None:
-        settings = ForcaMunicipalSettings()
-        self._base_url: str = (settings.API_FORCA_MUNICIPAL__API_URL or "").rstrip("/")
+        settings = Settings()
+        self._base_url: str = settings.FORCA_MUNICIPAL_URL.rstrip("/")
         self._proxy_url: Optional[str] = (
-            settings.API_FORCA_MUNICIPAL__PROXY_URL
-            if settings.API_FORCA_MUNICIPAL__USE_PROXY_URL
+            settings.FORCA_MUNICIPAL_PROXY_URL
+            if settings.FORCA_MUNICIPAL_USE_PROXY
             else None
         )
-        self._username: Optional[str] = settings.API_FORCA_MUNICIPAL__API_LOGIN
-        self._password: Optional[str] = settings.API_FORCA_MUNICIPAL__API_PASSWORD
+        self._username: Optional[str] = settings.FORCA_MUNICIPAL_USERNAME
+        self._password: Optional[str] = settings.FORCA_MUNICIPAL_PASSWORD.get_secret_value()
         self._token: Optional[str] = None
         self._lock: asyncio.Lock = asyncio.Lock()
         self._client: Optional[httpx.AsyncClient] = None

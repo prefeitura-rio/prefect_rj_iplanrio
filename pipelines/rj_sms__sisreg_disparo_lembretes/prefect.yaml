@@ -52,7 +52,6 @@ deployments:
       campaign_name: SISREG_AGENDAMENTOS
       cost_center_id: "71"
       chunk_size: 1000
-      infisical_secret_path: /wetalkie
 
       cloud:
         bucket: rj-iplanrio
@@ -86,7 +85,6 @@ deployments:
       campaign_name: SISREG_AGENDAMENTOS_STAGING
       cost_center_id: "71"
       chunk_size: 100
-      infisical_secret_path: /wetalkie
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio

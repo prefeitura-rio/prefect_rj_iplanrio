@@ -16,16 +16,18 @@ import requests
 from prefect import task
 
 from pipelines.rj_crm__salesforce_datacloud.helpers.retry import so_erro_temporario
-from utils.utils import read_env
+from pipelines.rj_crm__salesforce_datacloud.settings import Settings
 
 
 def _get_dc_credentials() -> dict[str, str]:
     """Lê credenciais Salesforce Data Cloud (Client Credentials) das env vars."""
+    settings = Settings()
+
     return {
-        "client_id": read_env("SF_DC_CLIENT_ID"),
-        "client_secret": read_env("SF_DC_CLIENT_SECRET"),
-        "instance_url": read_env("SF_DC_INSTANCE_URL").rstrip("/"),
-        "dataspace": read_env("SF_DC_DATASPACE") or "default",
+        "client_id": settings.SF_DC_CLIENT_ID,
+        "client_secret": settings.SF_DC_CLIENT_SECRET.get_secret_value(),
+        "instance_url": settings.SF_DC_INSTANCE_URL.rstrip("/"),
+        "dataspace": settings.SF_DC_DATASPACE or "default",
     }
 
 

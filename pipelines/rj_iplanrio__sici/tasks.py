@@ -6,37 +6,25 @@ from prefect.logging import get_run_logger
 from zeep import Client
 
 from pipelines.rj_iplanrio__sici.helpers import xml_to_dataframe
-from utils.utils import read_env
+from pipelines.rj_iplanrio__sici.settings import Settings
 
 
 @task
 def get_sici_api_credentials() -> dict:
     """
-    Busca as credenciais da API SICI no Infisical.
+    Retorna as credenciais da API SICI.
 
     Returns:
         Dicionário com parâmetros necessários para chamada da API SOAP
     """
-    logger = get_run_logger()
-
-    try:
-        consumidor = read_env("CONSUMIDOR")
-    except Exception as e:
-        logger.error(f"Erro ao buscar credencial CONSUMIDOR do Infisical: {e}")
-        raise
-
-    try:
-        chave_acesso = read_env("CHAVE_ACESSO")
-    except Exception as e:
-        logger.error(f"Erro ao buscar credencial CHAVE_ACESSO do Infisical: {e}")
-        raise
+    settings = Settings()
 
     return {
         "Codigo_UA": "",
         "Nivel": "",
         "Tipo_Arvore": "",
-        "consumidor": consumidor,
-        "chaveAcesso": chave_acesso,
+        "consumidor": settings.SICI_CONSUMIDOR,
+        "chaveAcesso": settings.SICI_CHAVE_ACESSO.get_secret_value(),
     }
 
 

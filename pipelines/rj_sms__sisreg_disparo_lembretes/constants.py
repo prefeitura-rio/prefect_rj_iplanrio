@@ -25,7 +25,6 @@ class SisregConstants(Enum):
     CHUNK_SIZE = 1000
 
     # Infisical configuration for Wetalkie credentials
-    INFISICAL_SECRET_PATH = "/wetalkie"
 
     # BigQuery query to get SISREG appointments for next day
     QUERY = """

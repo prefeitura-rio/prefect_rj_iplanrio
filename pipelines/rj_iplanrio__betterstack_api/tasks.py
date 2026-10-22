@@ -12,38 +12,21 @@ from prefect import task
 from prefect.logging import get_logger
 
 from pipelines.rj_iplanrio__betterstack_api.constants import BetterStackConstants
-from utils.utils import read_env
+from pipelines.rj_iplanrio__betterstack_api.settings import Settings
 
 logger = get_logger("toolkit")
 
 
 @task
 def get_betterstack_credentials() -> str:
-    """
-    Recupera as credenciais da API BetterStack do Infisical.
-    """
-    logger.info("Recuperando credenciais do BetterStack")
-
-    # Try with BETTERSTACK_TOKEN first, then legacy betterstack_token
-    token = read_env("BETTERSTACK_TOKEN")
-    if not token:
-        token = read_env("betterstack_token")
-
-    if not token:
-        raise ValueError("BetterStack token not found in environment")
-
-    return token
+    """Return the token of the Better Stack API."""
+    return Settings().BETTERSTACK_TOKEN.get_secret_value()
 
 
 @task
 def get_betterstack_monitor_id() -> str:
-    """
-    Recupera o ID do monitor da BetterStack do Infisical.
-    """
-    logger.info("Recuperando MONITOR_ID do BetterStack")
-    monitor_id = read_env("MONITOR_ID")
-    return monitor_id
-
+    """Return the id of the Better Stack monitor."""
+    return Settings().BETTERSTACK_MONITOR_ID
 
 
 @task

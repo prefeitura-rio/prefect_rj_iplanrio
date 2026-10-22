@@ -4,14 +4,10 @@ Fronteira entre o Prefect e o Python puro (§4.2 do styleguide): cada task lê o
 ambiente de execução sabe — variáveis de ambiente e contexto do flow run — e delega o
 trabalho para ``utils``. Nenhuma regra de negócio mora aqui.
 
-Variável de ambiente se lê com ``getenv_or_action`` (API pública do ``toolkit``), que é
-como o repo lê o que o Infisical injeta no container. ``action="raise"`` nos pontos de
-uso e ``action="ignore"`` na validação, que precisa juntar todas as ausências antes de
-falhar em vez de morrer na primeira.
+A configuração vem de ``Settings``, que lê o que o Kubernetes Secret injeta no container.
 """
 
 from datetime import datetime
-from os import environ
 from typing import TypedDict
 
 from prefect import task
@@ -19,7 +15,7 @@ from prefect.runtime import deployment, flow_run
 
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers import bigquery, discord, mailman
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers import janela as janela_utils
-from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.configuracao import ler_destinatarios, variaveis_ausentes
+from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.configuracao import ler_destinatarios
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.janela import Janela
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.log import logger_da_pipeline
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.ocorrencias import (
@@ -27,22 +23,10 @@ from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.ocorrencias import (
     ler_ultima_ocorrencia,
     normalizar,
 )
-from utils.utils import read_env, render_query
+from pipelines.rj_crm__whitelist_whatsapp_relatorio.settings import Settings
+from utils.utils import render_query
 
 logger = logger_da_pipeline(__name__)
-
-ENV_DISCORD_WEBHOOK = "DISCORD_WEBHOOK_URL_WHITELIST_WHATSAPP_RELATORIO"
-ENV_DATA_RELAY_URL = "CRM_WHITELIST_WHATSAPP_RELATORIO_DATA_RELAY_URL"
-ENV_DATA_RELAY_API_KEY = "CRM_WHITELIST_WHATSAPP_RELATORIO_DATA_RELAY_API_KEY"
-ENV_DATA_RELAY_TO_ADDRESSES = "CRM_WHITELIST_WHATSAPP_RELATORIO_DATA_RELAY_TO_ADDRESSES"
-
-ENV_OBRIGATORIAS = (
-    ENV_DISCORD_WEBHOOK,
-    ENV_DATA_RELAY_URL,
-    ENV_DATA_RELAY_API_KEY,
-    ENV_DATA_RELAY_TO_ADDRESSES,
-)
-"""Variáveis sem as quais o relatório não tem como ser entregue."""
 
 
 class QueryParam(TypedDict):
@@ -78,41 +62,11 @@ def validar_configuracao_task() -> None:
     Validar antes de qualquer envio evita o caso ruim: descobrir que falta destinatário
     depois de a mensagem do Discord já ter saído.
 
-    A leitura usa ``action="ignore"`` de propósito: ``action="raise"`` pararia na
-    primeira ausência, e a mensagem precisa nomear todas de uma vez. A checagem de
-    conteúdo continua em ``variaveis_ausentes`` porque ``getenv_or_action`` só reage a
-    variável **não definida** — string vazia passa por ela.
-
-    :raises ValueError: Se alguma variável obrigatória estiver ausente ou vazia.
+    :raises pydantic.ValidationError: Se alguma variável obrigatória estiver ausente ou
+        vazia. A mensagem nomeia todas de uma vez.
     """
-    lidas = {nome: environ.get(nome, None) for nome in ENV_OBRIGATORIAS}
-    ausentes = variaveis_ausentes(lidas)
-    if ausentes:
-        raise ValueError(f"Variáveis de ambiente ausentes: {', '.join(ausentes)}")
+    Settings()
     logger.info("Configuração validada")
-
-
-@task
-def preparar_credenciais_task() -> None:
-    """Grava a service account em disco e aponta ``GOOGLE_APPLICATION_CREDENTIALS``.
-
-    A consulta ao BigQuery passa a credencial explicitamente (``utils/bigquery.py``), mas
-    a injeção continua valendo para qualquer biblioteca que resolva por ADC. O modo é
-    ``prod`` mesmo no deployment de staging, pela mesma razão da ``MODE_CREDENCIAIS``.
-
-    Em execução local, sem as variáveis, o flow segue com as credenciais padrão do
-    ambiente — é a decisão D35, e o aviso deixa claro que nesse caminho as permissões da
-    service account não são exercitadas.
-    """
-    ausentes = bigquery.credenciais_ausentes()
-    if ausentes:
-        logger.warning(
-            "%s ausente(s): seguindo com as credenciais padrão do ambiente (ADC).",
-            ", ".join(ausentes),
-        )
-        return
-
-    logger.info("Credenciais do BigQuery injetadas a partir do modo %s", bigquery.MODE_CREDENCIAIS)
 
 
 @task
@@ -205,17 +159,18 @@ def enviar_email_task(janela: Janela, ocorrencias: list[Ocorrencia]) -> list[str
     :param janela: Recorte do relatório.
     :param ocorrencias: Ocorrências do período.
     :returns: Destinatários que receberam o relatório; vazio quando não houve envio.
-    :raises ValueError: Se alguma das variáveis do Data Relay não estiver definida.
+    :raises pydantic.ValidationError: Se alguma das variáveis do Data Relay não estiver definida.
     """
     if not ocorrencias:
         logger.info("Sem ocorrências no período: e-mail não será enviado")
         return []
 
-    destinatarios = ler_destinatarios(read_env(ENV_DATA_RELAY_TO_ADDRESSES))
+    settings = Settings()
+    destinatarios = ler_destinatarios(settings.DATA_RELAY_TO_ADDRESSES)
     mailman.enviar_relatorio(
         conexao=mailman.ConexaoDataRelay(
-            url=str(read_env(ENV_DATA_RELAY_URL)),
-            api_key=str(read_env(ENV_DATA_RELAY_API_KEY)),
+            url=settings.DATA_RELAY_URL,
+            api_key=settings.DATA_RELAY_API_KEY.get_secret_value(),
         ),
         destinatarios=destinatarios,
         janela=janela,
@@ -243,7 +198,7 @@ def enviar_discord_task(
     :param destinatarios: Quem recebeu o e-mail detalhado.
     :param ambiente: Ambiente de execução, ``staging`` ou ``prod``.
     :param ultima_ocorrencia: Última ocorrência conhecida na fonte, mostrada em dia vazio.
-    :raises ValueError: Se a variável do webhook não estiver definida.
+    :raises pydantic.ValidationError: Se a variável do webhook não estiver definida.
     """
     mensagem = discord.montar_mensagem(
         janela=janela,
@@ -252,4 +207,4 @@ def enviar_discord_task(
         contexto=discord.Contexto(ambiente=ambiente, run_url=flow_run.ui_url or ""),
         ultima_ocorrencia=ultima_ocorrencia,
     )
-    discord.enviar(webhook_url=str(read_env(ENV_DISCORD_WEBHOOK)), mensagem=mensagem)
+    discord.enviar(webhook_url=Settings().DISCORD_WEBHOOK_URL.get_secret_value(), mensagem=mensagem)

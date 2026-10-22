@@ -15,7 +15,7 @@ from prefect import task
 from pipelines.rj_cor__precipitacao_alertario.helpers import (
     parse_date_columns,
 )
-from utils.utils import read_env
+from pipelines.rj_cor__precipitacao_alertario.settings import Settings
 
 
 @task(retries=3, retry_delay_seconds=10)
@@ -37,9 +37,7 @@ def download_alertario_data_task() -> Tuple[pd.DataFrame, pd.DataFrame]:
         - A primeira tabela contém dados de pluviômetros
         - A segunda tabela contém dados meteorológicos
     """
-    # Obter URL da API do AlertaRio via variável de ambiente
-    # Em produção, usar: get_infisical_secret_task(secret_path="/", secret_name="ALERTARIO_API")["ALERTARIO_API"]
-    url = read_env("ALERTARIO_API")
+    url = Settings().ALERTARIO_URL
 
     http_ok = 200
 

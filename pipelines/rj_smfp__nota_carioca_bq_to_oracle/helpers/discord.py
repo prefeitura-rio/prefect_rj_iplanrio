@@ -9,7 +9,6 @@ do ar ao timeout de uma requisição (10 s) por tentativa. A URL do webhook é u
 """
 
 import logging
-import os
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -18,10 +17,12 @@ from functools import wraps
 import httpx
 from prefect.logging import get_logger
 
+from utils.settings import NoticeSettings
+
 logger = get_logger("toolkit")
 
 
-WEBHOOK_ENV = "DISCORD_WEBHOOK_URL_NOTA_CARIOCA"
+WEBHOOK_ENV = "DISCORD_WEBHOOK_URL"
 WEBHOOK_SECRET_BLOCK = "discord-webhook-nota-carioca"
 TIMEOUT_SECONDS = 10.0
 DEFAULT_MIN_INTERVAL_SECONDS = 20.0
@@ -85,13 +86,12 @@ def never_raises[**P](func: Callable[P, None]) -> Callable[P, None]:
     return wrapper
 
 
-def webhook_from_env(environ: Mapping[str, str] | None = None) -> str | None:
-    """Lê a URL do webhook de ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA``.
+def webhook_from_env() -> str | None:
+    """Lê a URL do webhook de ``DISCORD_WEBHOOK_URL``.
 
-    :param environ: Variáveis de ambiente; o padrão é ``os.environ``.
     :returns: A URL, ou ``None`` se a variável não existir ou estiver vazia.
     """
-    value = (environ if environ is not None else os.environ).get(WEBHOOK_ENV, "").strip()
+    value = NoticeSettings().DISCORD_WEBHOOK_URL.get_secret_value().strip()
     return value or None
 
 
@@ -116,14 +116,13 @@ def webhook_from_secret_block(load: Callable[[str], str] | None = None) -> str |
     return value or None
 
 
-def resolve_webhook(environ: Mapping[str, str] | None = None, load: Callable[[str], str] | None = None) -> str | None:
-    """URL do webhook: a variável ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA`` (Infisical) ou, sem ela, o Secret block.
+def resolve_webhook(load: Callable[[str], str] | None = None) -> str | None:
+    """URL do webhook: a variável ``DISCORD_WEBHOOK_URL`` (Infisical) ou, sem ela, o Secret block.
 
-    :param environ: Variáveis de ambiente; o padrão é ``os.environ``.
     :param load: Leitor do Secret block; o padrão consulta a API do Prefect.
     :returns: A URL, ou ``None`` se nenhuma das duas fontes tiver o webhook.
     """
-    return webhook_from_env(environ) or webhook_from_secret_block(load)
+    return webhook_from_env() or webhook_from_secret_block(load)
 
 
 class DiscordStatusMessage:

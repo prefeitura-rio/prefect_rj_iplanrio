@@ -53,7 +53,6 @@ deployments:
       dump_mode: "append"
       max_concurrent_nominatim: 100
       return_original_cols: true
-      infisical_secret_path: "/geocoding"
 
       cloud:
         bucket: rj-iplanrio
@@ -88,7 +87,6 @@ deployments:
       dump_mode: "append"
       max_concurrent_nominatim: 100
       return_original_cols: true
-      infisical_secret_path: "/geocoding"
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio
@@ -128,7 +126,6 @@ deployments:
       dump_mode: "append"
       max_concurrent_nominatim: 100
       return_original_cols: true
-      infisical_secret_path: "/geocoding"
 
       cloud:
         bucket: rj-iplanrio
@@ -163,7 +160,6 @@ deployments:
       dump_mode: "append"
       max_concurrent_nominatim: 100
       return_original_cols: true
-      infisical_secret_path: "/geocoding"
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio
@@ -203,7 +199,6 @@ deployments:
       dump_mode: "append"
       max_concurrent_nominatim: 100
       return_original_cols: true
-      infisical_secret_path: "/geocoding"
 
       cloud:
         bucket: rj-iplanrio
@@ -238,7 +233,6 @@ deployments:
       dump_mode: "append"
       max_concurrent_nominatim: 100
       return_original_cols: true
-      infisical_secret_path: "/geocoding"
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio

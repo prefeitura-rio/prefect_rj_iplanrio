@@ -11,6 +11,7 @@ from prefect.client.schemas.objects import Flow, FlowRun, State
 from pytz import timezone
 
 from pipelines.rj_crm__disparos_nao_efetuados.helpers import create_date_partitions
+from utils.settings import NoticeSettings
 from utils.tasks import notify_discord, publish_table_in_bq, read_bq, upload_files_to_gcs
 from utils.types import Cloud, Table
 from utils.utils import capture_options
@@ -27,9 +28,9 @@ async def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, st
     """
     Sends a Discord notification when a flow run fails.
     """
-    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+    webhook_url = NoticeSettings().DISCORD_ERRORS_WEBHOOK_URL.get_secret_value()
     if not webhook_url:
-        print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set on Infisical. Cannot send notification.")
+        print("DISCORD_ERRORS_WEBHOOK_URL environment variable not set. Cannot send notification.")
         return
 
     message = (
@@ -64,7 +65,7 @@ async def rj_crm__disparos_nao_efetuados(
 
     if df is None or df.empty:
         print("Todas as campanhas ativas tiveram disparo hoje.")
-        webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
+        webhook_url = NoticeSettings().DISCORD_WEBHOOK_URL.get_secret_value()
         if webhook_url:
             await notify_discord(
                 f"<@821121576455634955> <@1458456241683824744> <@302518123066556426> <@1524151359765479475>\n✅ **Todas as campanhas ativas tiveram disparo hoje ({hoje}).**",
@@ -83,7 +84,7 @@ async def rj_crm__disparos_nao_efetuados(
         f"{linhas}\n\n"
         f"Total: **{len(df)}** campanha(s) sem disparo."
     )
-    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+    webhook_url = NoticeSettings().DISCORD_ERRORS_WEBHOOK_URL.get_secret_value()
     if webhook_url:
         await notify_discord(message, webhook=webhook_url)
 

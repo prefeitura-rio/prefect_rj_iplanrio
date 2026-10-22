@@ -34,6 +34,5 @@ class AlertaRioConstants(Enum):
     TABLE_ALERT_LOG = "alertario_precipitacao_alerts_log"
 
     # Alerting
-    DISCORD_WEBHOOK_ENV_VAR = "DISCORD_WEBHOOK_URL_ALERTARIO"
     DEFAULT_MAX_DAILY_ALERTS = 2
     MIN_ALERT_INTERVAL_HOURS = 4

@@ -17,7 +17,6 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import (
     foreign_indexes,
     missing_privileges,
     oracle_table_name,
-    secret_env_key,
     validate_identifier,
 )
 import io
@@ -375,10 +374,6 @@ def test_inmemory_status_complete_and_description():
     assert not InMemoryStatus("T", 6, 5, 0, 0).complete
     assert not InMemoryStatus("T", 6, 6, 1024**3, 1).complete
     assert InMemoryStatus("T", 0, 0, 0, 0).complete
-
-
-def test_secret_env_key_follows_iplanrio_convention():
-    assert secret_env_key("/db-oracle-nota-fiscal", "DB_HOST") == "DB_ORACLE_NOTA_FISCAL__DB_HOST"
 
 
 def test_definition_differences_lists_changed_missing_and_extra_columns():

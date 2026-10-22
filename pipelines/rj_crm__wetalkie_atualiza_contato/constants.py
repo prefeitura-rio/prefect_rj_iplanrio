@@ -23,7 +23,6 @@ class WetalkieAtualizaContatoConstants(Enum):
     ROOT_FOLDER = "./data_contacts/"
 
     # Configurações da API Wetalkie
-    INFISICAL_SECRET_PATH = "/wetalkie"
     API_LOGIN_ROUTE = "users/login"
     API_CONTACTS_ENDPOINT = "/callcenter/contacts"
 

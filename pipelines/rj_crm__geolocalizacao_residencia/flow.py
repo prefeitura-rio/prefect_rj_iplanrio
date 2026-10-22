@@ -51,8 +51,6 @@ async def rj_crm__geolocalizacao_residencia(
     # Geocoding parameters
     max_concurrent_nominatim: int | None = None,
     return_original_cols: bool | None = None,
-    # Secrets path
-    infisical_secret_path: str = "/geocoding",
 ):
     """
     Flow para geolocalizar endereços residenciais usando múltiplas estratégias.

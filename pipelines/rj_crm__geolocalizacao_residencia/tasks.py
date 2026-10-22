@@ -23,7 +23,7 @@ from pipelines.rj_crm__geolocalizacao_residencia.helpers.async_utils import (
 from pipelines.rj_crm__geolocalizacao_residencia.helpers.geo_utils import (
     coordinates_to_pluscode,
 )
-from utils.utils import read_env
+from pipelines.rj_crm__geolocalizacao_residencia.settings import Settings
 
 logger = get_logger("toolkit")
 
@@ -98,8 +98,9 @@ def async_geocoding_dataframe(
     logger.info(f"Processing {total_addresses} addresses in one batch")
 
     logger.info("Geocoding with Nominatim")
-    user_agent = read_env("NOMINATIM")
-    domain = read_env("NOMINATIM_DOMAIN")
+    settings = Settings()
+    user_agent = settings.NOMINATIM_USER_AGENT
+    domain = settings.NOMINATIM_DOMAIN
 
     final_dataframe = run_geocode_nominatim_async(
         dataframe=dataframe,
@@ -232,9 +233,9 @@ def async_geocoding_dataframe_with_fallback(
         try:
             # Get API key if required
             if config["secret_key"]:
-                logger.info(f"Getting API key: {config['secret_key']}")
-                api_key = read_env(config["secret_key"])
-                logger.info(f"PD FOR {config['display_name']}: {api_key}")
+                api_key = getattr(Settings(), config["secret_key"]).get_secret_value()
+                if not api_key:
+                    raise ValueError(f"The environment variable {config['secret_key']} is not set")
 
                 # Process failed addresses with current geocoder (with API key)
                 geocoder_result = config["function"](
@@ -340,8 +341,7 @@ def geoapify_batch_geocoding_task(
     logger.info(f"Processing {total_addresses} addresses with Geoapify batch API")
 
     # Get API key from secrets
-    api_key = read_env("GEOAPIFY_API_TOKEN")
-    logger.info(f"Token: {api_key[:5] if api_key else 'None'}")
+    api_key = Settings().GEOAPIFY_API_KEY.get_secret_value()
 
     if not api_key:
         logger.info("No Geoapify API token found - returning empty results")

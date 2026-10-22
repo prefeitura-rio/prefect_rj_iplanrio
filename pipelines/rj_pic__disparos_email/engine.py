@@ -8,16 +8,7 @@ from typing import List, Optional
 import requests
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
-from pipelines.rj_pic__disparos_email.env import (
-    DATA_RELAY_API_KEY,
-    DATA_RELAY_FROM_ADDRESS,
-    DATA_RELAY_IS_HTML_BODY,
-    DATA_RELAY_URL,
-    DATA_RELAY_USE_GMAIL_API,
-    MAX_RETRIES,
-    RETRY_DELAY,
-    THROTTLE_DELAY,
-)
+from pipelines.rj_pic__disparos_email.settings import Settings
 
 # Configuração de logging
 logging.basicConfig(
@@ -37,28 +28,15 @@ class EmailSender:
     def __init__(self):
         """Inicializa o sender de e-mails."""
         self.last_send_time = 0
-        self._validate_credentials()
-
-    def _validate_credentials(self):
-        """Valida se as credenciais estão configuradas."""
-        if not DATA_RELAY_API_KEY:
-            raise ValueError(
-                "Credenciais Data Relay não configuradas. "
-                "Configure PIC_DISPAROS_EMAIL_DATA_RELAY_API_KEY no arquivo .env"
-            )
-        if not DATA_RELAY_URL:
-            raise ValueError(
-                "URL do Data Relay não configurada. "
-                "Configure PIC_DISPAROS_EMAIL_DATA_RELAY_URL no arquivo .env"
-            )
+        self.settings = Settings()
 
     def _throttle(self):
         """Aplica throttling entre envios."""
         current_time = time.time()
         time_since_last_send = current_time - self.last_send_time
 
-        if time_since_last_send < THROTTLE_DELAY:
-            sleep_time = THROTTLE_DELAY - time_since_last_send
+        if time_since_last_send < self.settings.THROTTLE_DELAY:
+            sleep_time = self.settings.THROTTLE_DELAY - time_since_last_send
             time.sleep(sleep_time)
 
         self.last_send_time = time.time()
@@ -97,13 +75,13 @@ class EmailSender:
                 "to_addresses": [to_email],
                 "subject": subject,
                 "body": html_body,
-                "is_html_body": DATA_RELAY_IS_HTML_BODY,
-                "use_gmail_api": DATA_RELAY_USE_GMAIL_API,
+                "is_html_body": self.settings.DATA_RELAY_IS_HTML_BODY,
+                "use_gmail_api": self.settings.DATA_RELAY_USE_GMAIL_API,
             }
 
             # Adiciona campos opcionais se fornecidos
-            if from_email or DATA_RELAY_FROM_ADDRESS:
-                payload["from_address"] = from_email or DATA_RELAY_FROM_ADDRESS
+            if from_email or self.settings.DATA_RELAY_FROM_ADDRESS:
+                payload["from_address"] = from_email or self.settings.DATA_RELAY_FROM_ADDRESS
 
             if cc_addresses:
                 payload["cc_addresses"] = cc_addresses
@@ -117,13 +95,13 @@ class EmailSender:
             # Configura headers
             headers = {
                 "accept": "application/json",
-                "x-api-key": DATA_RELAY_API_KEY,
+                "x-api-key": self.settings.DATA_RELAY_API_KEY.get_secret_value(),
                 "Content-Type": "application/json",
             }
 
             # Envia requisição para a API
             response = requests.post(
-                DATA_RELAY_URL,
+                self.settings.DATA_RELAY_URL,
                 headers=headers,
                 json=payload,
                 timeout=30,
@@ -188,7 +166,7 @@ class EmailSender:
         """
         display_name = recipient_name or to_email
 
-        for attempt in range(1, MAX_RETRIES + 1):
+        for attempt in range(1, self.settings.MAX_RETRIES + 1):
             try:
                 response = self._send_email_internal(
                     to_email=to_email,
@@ -215,34 +193,34 @@ class EmailSender:
                     logging.error(error_msg)
                     return False
                 # Outros erros HTTP podem ser retentados
-                if attempt < MAX_RETRIES:
+                if attempt < self.settings.MAX_RETRIES:
                     error_msg = (
-                        f"Tentativa {attempt}/{MAX_RETRIES} falhou para {display_name} "
-                        f"({to_email}): {e}. Tentando novamente em {RETRY_DELAY}s..."
+                        f"Tentativa {attempt}/{self.settings.MAX_RETRIES} falhou para {display_name} "
+                        f"({to_email}): {e}. Tentando novamente em {self.settings.RETRY_DELAY}s..."
                     )
                     logging.warning(error_msg)
-                    time.sleep(RETRY_DELAY)
+                    time.sleep(self.settings.RETRY_DELAY)
                 else:
                     error_msg = (
                         f"Falha ao enviar para {display_name} ({to_email}) após "
-                        f"{MAX_RETRIES} tentativas: {e}"
+                        f"{self.settings.MAX_RETRIES} tentativas: {e}"
                     )
                     logging.error(error_msg)
                     return False
 
             except Exception as e:
                 # Erros temporários - tenta novamente
-                if attempt < MAX_RETRIES:
+                if attempt < self.settings.MAX_RETRIES:
                     error_msg = (
-                        f"Tentativa {attempt}/{MAX_RETRIES} falhou para {display_name} "
-                        f"({to_email}): {e}. Tentando novamente em {RETRY_DELAY}s..."
+                        f"Tentativa {attempt}/{self.settings.MAX_RETRIES} falhou para {display_name} "
+                        f"({to_email}): {e}. Tentando novamente em {self.settings.RETRY_DELAY}s..."
                     )
                     logging.warning(error_msg)
-                    time.sleep(RETRY_DELAY)
+                    time.sleep(self.settings.RETRY_DELAY)
                 else:
                     error_msg = (
                         f"Falha ao enviar para {display_name} ({to_email}) após "
-                        f"{MAX_RETRIES} tentativas: {e}"
+                        f"{self.settings.MAX_RETRIES} tentativas: {e}"
                     )
                     logging.error(error_msg)
                     return False

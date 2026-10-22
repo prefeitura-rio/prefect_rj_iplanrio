@@ -9,6 +9,7 @@ from pathlib import Path
 import oracledb
 from prefect.logging import get_logger
 
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.settings import Settings
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import OracleColumn, oracle_column
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import (
     IndexDefinition,
@@ -21,7 +22,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import (
     partitioning_from_dictionary,
     storage_clause,
 )
-from utils.utils import read_env, render_query
+from utils.utils import render_query
 
 logger = get_logger("toolkit")
 
@@ -75,20 +76,6 @@ class OracleConfig:
         return f"{self.host}:{self.port}/{self.service_name}"
 
 
-def secret_env_key(infisical_secret_path: str, key: str) -> str:
-    """Monta o nome da variável de ambiente de uma chave do Infisical.
-
-    Segue a convenção da lib ``toolkit``: ``/db-oracle-x`` e ``DB_HOST`` viram
-    ``DB_ORACLE_X__DB_HOST``.
-
-    :param infisical_secret_path: Pasta do segredo no Infisical.
-    :param key: Nome da chave sem o prefixo da pasta.
-    :returns: Nome da variável de ambiente.
-    """
-    prefix = infisical_secret_path.upper().replace("-", "_").replace("/", "")
-    return f"{prefix}__{key}"
-
-
 def validate_identifier(name: str) -> str:
     """Normaliza e valida um identificador do Oracle.
 
@@ -102,25 +89,22 @@ def validate_identifier(name: str) -> str:
     return upper
 
 
-def read_oracle_config(infisical_secret_path: str) -> OracleConfig:
-    """Lê do ambiente a configuração do Oracle cadastrada no Infisical.
+def read_oracle_config() -> OracleConfig:
+    """Lê do ambiente a configuração do Oracle.
 
-    :param infisical_secret_path: Pasta do segredo no Infisical.
     :returns: Configuração da conexão.
-    :raises ValueError: Se alguma variável estiver ausente ou o schema for
-        inválido.
+    :raises pydantic.ValidationError: Se alguma variável estiver ausente.
+    :raises ValueError: Se o schema for inválido.
     """
-
-    def read(key: str) -> str:
-        return str(read_env(secret_env_key(infisical_secret_path, key)))
+    settings = Settings()
 
     return OracleConfig(
-        user=read("DB_USERNAME"),
-        password=read("DB_PASSWORD"),
-        host=read("DB_HOST"),
-        port=read("DB_PORT"),
-        service_name=read("DB_SERVICE_NAME"),
-        schema=validate_identifier(read("DB_SCHEMA")),
+        user=settings.DB_USERNAME,
+        password=settings.DB_PASSWORD.get_secret_value(),
+        host=settings.DB_HOST,
+        port=settings.DB_PORT,
+        service_name=settings.DB_SERVICE_NAME,
+        schema=validate_identifier(settings.DB_SCHEMA),
     )
 
 

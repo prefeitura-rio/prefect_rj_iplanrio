@@ -12,10 +12,10 @@ import random
 import time
 from datetime import datetime
 from math import ceil
-from os import environ
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import asyncssh
+from pydantic import ValidationError
 import pandas as pd
 from prefect import task  # pylint: disable=E0611, E0401
 from prefect.exceptions import PrefectException  # pylint: disable=E0611, E0401
@@ -38,12 +38,12 @@ from pipelines.rj_crm__disparo_template.helpers.validators import (
 )
 from pipelines.rj_crm__disparo_template.helpers.whitelist import (
     BetaGroupManager,
-    get_environment_config,
+    get_whitelist_config,
     normalize_numbers,
-    validate_environment_config,
 )
+from pipelines.rj_crm__disparo_template.settings import SftpSettings
+from utils.settings import NoticeSettings
 from utils.tasks import run_dbt
-from utils.utils import read_env
 
 logger = get_logger("toolkit")
 
@@ -53,7 +53,6 @@ def add_contacts_to_whitelist(
     destinations: List[Dict],
     percentage_to_insert: int,
     group_name: str,
-    environment: str,
     force_add_on_whitelist_group: bool = False,
 ) -> None:
     """
@@ -63,7 +62,6 @@ def add_contacts_to_whitelist(
         destinations (List[str]): List of destination data as JSON strings.
         percentage_to_insert (int): The percentage of contacts to insert (0-100).
         group_name (str): The name of the group to add contacts to.
-        environment (str): The environment to run on ('staging' or 'production').
     """
     if not destinations:
         print("\n⚠️  No destinations to add on whitelist.")
@@ -101,10 +99,8 @@ def add_contacts_to_whitelist(
     print(f"Selected {len(selected_numbers)} contacts to add to group '{group_name}'.")
 
     try:
-        config = get_environment_config(environment)
-        validate_environment_config(config)
-        print(f"Whitelist config {config}")
-    except ValueError as err:
+        config = get_whitelist_config()
+    except ValidationError as err:
         print(f"\n⚠️  Configuration error: {err}")
         return
 
@@ -164,14 +160,12 @@ def add_contacts_to_whitelist(
 @task
 def remove_contacts_from_whitelist(
     destinations: List[Dict],
-    environment: str,
 ) -> None:
     """
     Removes all contacts from the destinations list from the whitelist.
 
     Args:
         destinations (List[Dict]): List of destination data.
-        environment (str): The environment to run on ('staging' or 'production').
     """
     if not destinations:
         print("\n⚠️  No destinations to remove from whitelist.")
@@ -205,9 +199,8 @@ def remove_contacts_from_whitelist(
     print(f"Selected {len(selected_numbers)} contacts to remove from whitelist.")
 
     try:
-        config = get_environment_config(environment)
-        validate_environment_config(config)
-    except ValueError as err:
+        config = get_whitelist_config()
+    except ValidationError as err:
         print(f"\n⚠️  Configuration error: {err}")
         return
 
@@ -847,9 +840,9 @@ def check_flow_status(
 
     row = dfr.iloc[0]
 
-    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+    webhook_url = NoticeSettings().DISCORD_ERRORS_WEBHOOK_URL.get_secret_value()
     if not webhook_url:
-        print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send notification.")
+        print("DISCORD_ERRORS_WEBHOOK_URL environment variable not set. Cannot send notification.")
 
     ativo_raw = row.get("ativo")
     is_ativo = str(ativo_raw).strip().lower() in ("1", "true", "yes", "sim", "ativo") if ativo_raw is not None else False
@@ -1083,7 +1076,7 @@ def monitor_dispatch_status(
     Aguarda initial_wait_minutes, depois materializa int_crm_status_disparo e checa se há
     sucesso confirmado para a campanha a cada check_interval_minutes, até max_wait_minutes.
     Considera sucesso quando pelo menos 20% de total_dispatched tiverem envio_datahora ou
-    falha_datahora preenchidos. Alerta no Discord (DISCORD_WEBHOOK_URL_ERRORS) se nenhum
+    falha_datahora preenchidos. Alerta no Discord (DISCORD_ERRORS_WEBHOOK_URL) se nenhum
     sucesso for confirmado dentro do prazo.
 
     Returns:
@@ -1123,7 +1116,7 @@ def monitor_dispatch_status(
         elapsed_minutes += check_interval_minutes
 
     if not campaign_found:
-        webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+        webhook_url = NoticeSettings().DISCORD_ERRORS_WEBHOOK_URL.get_secret_value()
         message = f"""
 <@821121576455634955> <@1458456241683824744> <@302518123066556426>
 🚨 **Nenhum webhook de sucesso recebido!**
@@ -1133,7 +1126,7 @@ def monitor_dispatch_status(
         if webhook_url:
             send_discord_notification(webhook_url, message)
         else:
-            logger.warning("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send alert.")
+            logger.warning("DISCORD_ERRORS_WEBHOOK_URL environment variable not set. Cannot send alert.")
 
     return campaign_found
 
@@ -1312,7 +1305,6 @@ def save_csv_for_sftp(
 @task
 def send_to_sftp(
     csv_path: str,
-    infisical_secret_path: str = None,
     sftp_host: str = None,
     sftp_user: str = None,
     sftp_password: str = None,
@@ -1342,7 +1334,6 @@ def send_to_sftp(
 
     Args:
         csv_path: Caminho local do CSV a ser enviado
-        infisical_secret_path: Caminho no Infisical para buscar as credenciais
         sftp_host: Endereço do servidor SFTP
         sftp_user: Usuário SFTP
         sftp_password: Senha SFTP
@@ -1354,13 +1345,13 @@ def send_to_sftp(
             conexão SSH (suporte, documentação oficial) antes de ser
             cadastrada — nunca aceitar só o que a primeira conexão apresentar.
     """
-    if infisical_secret_path:
-        sftp_host = sftp_host or read_env("sf_sftp_host")
-        sftp_user = sftp_user or read_env("sf_sftp_user")
-        sftp_password = sftp_password or read_env("sf_sftp_password")
-        sftp_port = int(environ.get("sf_sftp_port", sftp_port))
-        sftp_remote_path = environ.get("sf_sftp_path", sftp_remote_path)
-        sftp_host_key = sftp_host_key or read_env("sf_sftp_host_key")
+    settings = SftpSettings()
+    sftp_host = sftp_host or settings.SFTP_HOST
+    sftp_user = sftp_user or settings.SFTP_USERNAME
+    sftp_password = sftp_password or settings.SFTP_PASSWORD.get_secret_value()
+    sftp_port = settings.SFTP_PORT or sftp_port
+    sftp_remote_path = settings.SFTP_PATH or sftp_remote_path
+    sftp_host_key = sftp_host_key or settings.SFTP_HOST_KEY
 
     SFTP_TIMEOUT_SECONDS = 30
     SFTP_KEEPALIVE_SECONDS = 15

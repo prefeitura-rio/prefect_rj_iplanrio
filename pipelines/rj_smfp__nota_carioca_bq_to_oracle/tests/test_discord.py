@@ -272,11 +272,16 @@ def client(server: Server) -> DiscordStatusMessage:
     return DiscordStatusMessage(URL, min_interval_seconds=20.0, transport=server.transport)
 
 
-def test_missing_or_empty_webhook_disables_the_client_without_requests(warnings: list[str]) -> None:
+def test_missing_or_empty_webhook_disables_the_client_without_requests(
+    warnings: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     # Given an empty and an absent environment variable
-    assert webhook_from_env({}) is None
-    assert webhook_from_env({"DISCORD_WEBHOOK_URL_NOTA_CARIOCA": "  "}) is None
-    assert webhook_from_env({"DISCORD_WEBHOOK_URL_NOTA_CARIOCA": f" {URL} "}) == URL
+    monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
+    assert webhook_from_env() is None
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "  ")
+    assert webhook_from_env() is None
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", f" {URL} ")
+    assert webhook_from_env() == URL
     server = Server()
     message = DiscordStatusMessage(None, transport=server.transport)
     # When it is used
@@ -503,7 +508,7 @@ def test_many_long_validation_lines_stay_inside_the_discord_limits() -> None:
     assert total_chars(embed) <= 6000
 
 
-def test_webhook_prefers_the_environment_variable_over_the_secret_block() -> None:
+def test_webhook_prefers_the_environment_variable_over_the_secret_block(monkeypatch: pytest.MonkeyPatch) -> None:
     # Given both sources holding a webhook
     loaded: list[str] = []
 
@@ -512,21 +517,23 @@ def test_webhook_prefers_the_environment_variable_over_the_secret_block() -> Non
         return "https://discord.test/block"
 
     # When the webhook is resolved, Then the variable wins and the block is not read
-    assert resolve_webhook({"DISCORD_WEBHOOK_URL_NOTA_CARIOCA": URL}, load) == URL
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", URL)
+    assert resolve_webhook(load) == URL
     assert loaded == []
 
 
-def test_webhook_falls_back_to_the_secret_block_without_the_variable() -> None:
+def test_webhook_falls_back_to_the_secret_block_without_the_variable(monkeypatch: pytest.MonkeyPatch) -> None:
     # Given no variable and a Secret block with surrounding spaces
     def load(name: str) -> str:
         assert name == "discord-webhook-nota-carioca"
         return f"  {URL} "
 
     # When the webhook is resolved, Then the block value is used
-    assert resolve_webhook({}, load) == URL
+    monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
+    assert resolve_webhook(load) == URL
 
 
-def test_unreadable_or_empty_secret_block_disables_notifications() -> None:
+def test_unreadable_or_empty_secret_block_disables_notifications(monkeypatch: pytest.MonkeyPatch) -> None:
     # Given a block that fails to load and one that is empty
     def missing(name: str) -> str:
         raise ValueError(f"block {name} not found")
@@ -534,4 +541,5 @@ def test_unreadable_or_empty_secret_block_disables_notifications() -> None:
     # When it is read, Then no webhook is returned and nothing is raised
     assert webhook_from_secret_block(missing) is None
     assert webhook_from_secret_block(lambda _name: "   ") is None
-    assert resolve_webhook({}, missing) is None
+    monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
+    assert resolve_webhook(missing) is None

@@ -14,7 +14,7 @@ from prefect import task
 from pipelines.rj_cor__precipitacao_inea.helpers import (
     parse_date_columns,
 )
-from utils.utils import read_env
+from pipelines.rj_cor__precipitacao_inea.settings import Settings
 
 
 @task(retries=3, retry_delay_seconds=10)
@@ -70,7 +70,7 @@ def download_inea_data_task() -> pd.DataFrame:
     print("📥 Iniciando download dos dados do INEA...")
     print(f"   Total de estações: {len(stations)}")
 
-    url_base = read_env("URL-ALERTA-CHEIAS")
+    url_base = Settings().INEA_URL
     for key, value in stations.items():
         url = f"{url_base}/{value}.xlsx"
         print(f"   Baixando estação {key} - {value}...")

@@ -21,28 +21,21 @@ import pandas as pd
 import requests
 from prefect import task
 
-from utils.utils import read_env
+from utils.settings import SfmcSettings
 
 # ---------------------------------------------------------------------------
 # Credenciais e autenticação
 # ---------------------------------------------------------------------------
 
 def _get_sfmc_credentials() -> dict[str, str]:
-    """
-    Lê as credenciais da SFMC a partir das variáveis de ambiente
-    injetadas pelo Infisical (via secretName no job do Kubernetes).
+    """Return the credentials of the SFMC API."""
+    settings = SfmcSettings()
 
-    As variáveis são lidas com getenv_or_action, que lança erro claro
-    caso a variável não esteja definida no ambiente.
-
-    Returns:
-        dict com as chaves: client_id, client_secret, auth_url, rest_base_url
-    """
     return {
-        "client_id": read_env("API_SFMC_CLIENT_ID"),
-        "client_secret": read_env("API_SFMC_CLIENT_SECRET"),
-        "auth_url": read_env("API_SFMC_AUTH_URL").rstrip("/"),
-        "rest_base_url": read_env("API_SFMC_REST_BASE_URL").rstrip("/"),
+        "client_id": settings.SFMC_CLIENT_ID,
+        "client_secret": settings.SFMC_CLIENT_SECRET.get_secret_value(),
+        "auth_url": settings.SFMC_AUTH_URL.rstrip("/"),
+        "rest_base_url": settings.SFMC_REST_BASE_URL.rstrip("/"),
     }
 
 

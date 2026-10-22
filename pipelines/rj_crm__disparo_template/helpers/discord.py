@@ -7,7 +7,6 @@ Módulo de notificações Discord para pipeline de disparo PIC lembrete.
 
 import asyncio
 import json
-import os
 from datetime import datetime
 
 import aiohttp  # pylint: disable=E0611, E0401
@@ -20,6 +19,7 @@ from pytz import timezone
 from pipelines.rj_crm__disparo_template.helpers.tasks import (
     download_data_from_bigquery,
 )
+from utils.settings import NoticeSettings
 
 logger = get_logger("toolkit")
 
@@ -87,7 +87,7 @@ def send_dispatch_no_destinations_found(
 
 """
 
-    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
+    webhook_url = NoticeSettings().DISCORD_WEBHOOK_URL.get_secret_value()
     send_discord_notification(webhook_url, message)
 
 
@@ -140,7 +140,7 @@ def send_dispatch_success_notification(
 {_format_sample_destination(sample_destination)}
 ```
 """
-    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
+    webhook_url = NoticeSettings().DISCORD_WEBHOOK_URL.get_secret_value()
     send_discord_notification(webhook_url, message)
 
 
@@ -165,7 +165,7 @@ def send_dispatch_result_notification(
         test_mode: Indica se é um disparo de teste (opcional)
     """
 
-    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
+    webhook_url = NoticeSettings().DISCORD_WEBHOOK_URL.get_secret_value()
 
     # Query sobre rj-crm-registry.brutos_salesforce.status_disparo
     results_query = f"""
@@ -252,7 +252,7 @@ def send_retry_dispatch_result_notification(
     """
     Envia notificação com resultados finais considerando retentativas.
     """
-    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
+    webhook_url = NoticeSettings().DISCORD_WEBHOOK_URL.get_secret_value()
 
     # Query que agrupa por CPF e pega o status mais recente
     results_query = f"""
@@ -360,9 +360,9 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
     """
     Sends a Discord notification when a flow run fails.
     """
-    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+    webhook_url = NoticeSettings().DISCORD_ERRORS_WEBHOOK_URL.get_secret_value()
     if not webhook_url:
-        print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send notification.")
+        print("DISCORD_ERRORS_WEBHOOK_URL environment variable not set. Cannot send notification.")
         return
 
     message = f"""

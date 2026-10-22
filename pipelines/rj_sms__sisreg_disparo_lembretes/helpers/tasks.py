@@ -10,7 +10,7 @@ from prefect import task
 from prefect.logging import get_logger
 
 from pipelines.rj_sms__sisreg_disparo_lembretes.helpers.api_handler import ApiHandler
-from utils.utils import read_env
+from utils.settings import WetalkieSettings
 
 logger = get_logger("toolkit")
 
@@ -49,15 +49,12 @@ def download_data_from_bigquery(query: str, billing_project_id: str, bucket_name
 
 @task
 def access_api(login_route: str = "users/login") -> ApiHandler:
-    """
-    Access Wetalkie API and return authenticated API handler
-    Credentials are injected via environment variables by sidecar container
-    """
-    # Get credentials from environment (injected by sidecar)
-    url = read_env("URL")
-    username = read_env("USERNAME")
-    password = read_env("PASSWORD")
+    """Return an authenticated handler of the Wetalkie API."""
+    settings = WetalkieSettings()
 
-    api = ApiHandler(base_url=url, username=username, password=password, login_route=login_route)
-
-    return api
+    return ApiHandler(
+        base_url=settings.WETALKIE_URL,
+        username=settings.WETALKIE_USERNAME,
+        password=settings.WETALKIE_PASSWORD.get_secret_value(),
+        login_route=login_route,
+    )

@@ -360,7 +360,7 @@ def test_load_task_feeds_the_active_notifier_without_receiving_it(monkeypatch: p
     snap = snapshot(25 * GIB)
     monkeypatch.setattr(tasks_module, "create_progress_artifact", lambda **_: "artifact")
     monkeypatch.setattr(tasks_module, "update_progress_artifact", lambda **_: None)
-    monkeypatch.setattr(tasks_module.oracle, "read_oracle_config", lambda _: None)
+    monkeypatch.setattr(tasks_module.oracle, "read_oracle_config", lambda: None)
 
     def fake_load(
         config: object, job: object, on_progress: object, progress_interval_seconds: float
@@ -376,7 +376,7 @@ def test_load_task_feeds_the_active_notifier_without_receiving_it(monkeypatch: p
         notifier.enter(Step.TABLES)
         notifier.table_step("A", TableStep.LOAD)
         rows = tasks_module.load_into_oracle_task.fn(
-            "/secret", "BQLOAD_A_B", plan, "bucket", [ExportedFile("f.csv.gz", 10)], 2, 30
+            "BQLOAD_A_B", plan, "bucket", [ExportedFile("f.csv.gz", 10)], 2, 30
         )
     # Then the tick reached the table state
     assert rows == 5

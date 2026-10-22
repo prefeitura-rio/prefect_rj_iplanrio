@@ -102,7 +102,6 @@ COLUNAS DO CSV classificacoes_<...>.csv (1 linha por conversa classificada)
   - juiz_justificativa: explicação do juiz pra esse veredito.
 """
 
-import os
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -128,6 +127,7 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.report import (
     monta_e_publica_relatorio,
 )
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.trigger import carrega_disparos_pendentes
+from utils.settings import BifrostSettings
 
 logger = get_logger("toolkit")
 
@@ -189,12 +189,7 @@ def rj_crm__relatorio_engajamento_hsm(
             no .docx final — só afeta o relatório, não o custo de LLM.
     """
 
-    bf_key = os.environ.get("BF_KEY")
-    if not bf_key:
-        raise ValueError(
-            "BF_KEY não encontrada nas variáveis de ambiente — adicionar ao secret do work "
-            "pool (mesmo secretName usado por rj_crm__agentforce_classificacao_llm)."
-        )
+    bf_key = BifrostSettings().BIFROST_API_KEY.get_secret_value()
 
     ref = date.fromisoformat(data_referencia) if data_referencia else _hoje_brt()
 

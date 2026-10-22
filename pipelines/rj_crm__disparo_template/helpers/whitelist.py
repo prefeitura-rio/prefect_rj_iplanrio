@@ -7,58 +7,26 @@ from typing import Dict, List, Optional
 
 import requests
 
-from utils.utils import read_env
+from pipelines.rj_crm__disparo_template.settings import WhitelistSettings
 
 TIMEOUT_SECONDS = 60
 
 
-def get_environment_config(env: str = "staging") -> Dict[str, str]:
+def get_whitelist_config() -> Dict[str, str]:
     """
-    Returns the configuration for the specified environment.
-
-    Args:
-        env (str): Environment ("staging" or "production")
-
-    Returns:
-        Dict[str, str]: Environment configuration
+    Returns the issuer, the client and the address of the whitelist API.
 
     Raises:
-        ValueError: If the environment is not valid
+        pydantic.ValidationError: If a variable is missing or empty
     """
-    # pylint: disable='no-else-return'
-    if env == "staging":
-        return {
-            "api_base_url": read_env("WHITELIST_API_BASE_URL_STAGING"),
-            "issuer": read_env("WHITELIST_ISSUER_STAGING"),
-            "client_id": read_env("WHITELIST_CLIENT_ID_STAGING"),
-            "client_secret": read_env("WHITELIST_CLIENT_SECRET_STAGING"),
-        }
-    elif env == "production":
-        return {
-            "api_base_url": read_env("WHITELIST_API_BASE_URL_PROD"),
-            "issuer": read_env("WHITELIST_ISSUER_PROD"),
-            "client_id": read_env("WHITELIST_CLIENT_ID_PROD"),
-            "client_secret": read_env("WHITELIST_CLIENT_SECRET_PROD"),
-        }
-    else:
-        raise ValueError(f"Invalid environment: {env}. Use 'staging' or 'production'.")
+    settings = WhitelistSettings()
 
-
-def validate_environment_config(config: Dict[str, str]) -> None:
-    """
-    Validates if all necessary configurations are present.
-
-    Args:
-        config (Dict[str, str]): Environment configuration
-
-    Raises:
-        ValueError: If any configuration is missing
-    """
-    required_keys = ["api_base_url", "issuer", "client_id", "client_secret"]
-    missing_keys = [key for key in required_keys if not config.get(key)]
-
-    if missing_keys:
-        raise ValueError(f"\n⚠️  Missing configurations: {missing_keys}. Check your environment variables.")
+    return {
+        "api_base_url": settings.WHITELIST_API_BASE_URL,
+        "issuer": settings.WHITELIST_ISSUER,
+        "client_id": settings.WHITELIST_CLIENT_ID,
+        "client_secret": settings.WHITELIST_CLIENT_SECRET.get_secret_value(),
+    }
 
 
 class BetaGroupManager:

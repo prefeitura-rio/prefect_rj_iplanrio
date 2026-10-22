@@ -2,19 +2,19 @@
 Notificação Discord de resumo/falha da pipeline — mesmo padrão de
 pipelines/rj_crm__disparo_template/utils/discord.py (webhook simples via discord.py + aiohttp).
 
-Credenciais esperadas (env var, via secret do work pool):
-  DISCORD_WEBHOOK_URL_AGENTFORCE_CLASSIFICACAO : resumo diário (sucesso/parcial)
-  DISCORD_WEBHOOK_URL_ERRORS                    : falha crítica do flow (mesmo canal
-                                                    de erro já usado por outras pipelines)
+Variáveis de ambiente (``NoticeSettings``, via Kubernetes Secret):
+  DISCORD_WEBHOOK_URL        : resumo diário (sucesso/parcial)
+  DISCORD_ERRORS_WEBHOOK_URL : falha crítica do flow
 """
 
 import asyncio
-import os
 
 import aiohttp
 from discord import Webhook
 from prefect import task
 from prefect.client.schemas.objects import Flow, FlowRun, State
+
+from utils.settings import NoticeSettings
 
 
 async def _send_discord_webhook(webhook_url: str, message: str) -> None:
@@ -51,7 +51,7 @@ def notify_resumo(
 ❌ **Falhas (retry automático amanhã):** {n_falhas}
 📊 **Linhas carregadas no BQ:** {linhas_carregadas}
 """
-    _send(os.getenv("DISCORD_WEBHOOK_URL_AGENTFORCE_CLASSIFICACAO"), message)
+    _send(NoticeSettings().DISCORD_WEBHOOK_URL.get_secret_value(), message)
 
 
 def notify_falha_flow(flow: Flow, flow_run: FlowRun, state: State) -> None:
@@ -63,4 +63,4 @@ Flow: {flow.name}
 Flow Run: {flow_run.name}
 Mensagem: {state.message}
 """
-    _send(os.getenv("DISCORD_WEBHOOK_URL_ERRORS"), message)
+    _send(NoticeSettings().DISCORD_ERRORS_WEBHOOK_URL.get_secret_value(), message)

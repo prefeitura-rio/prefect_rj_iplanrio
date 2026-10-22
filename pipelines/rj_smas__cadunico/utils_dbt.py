@@ -3,6 +3,7 @@ import os
 import shutil
 
 import git
+from pipelines.rj_smas__cadunico.settings import Settings
 from pipelines.rj_smas__cadunico.utils_logging import log_git_operation_result, log_dbt_execution_result
 from prefect_dbt import PrefectDbtRunner
 from prefect.logging import get_logger
@@ -12,18 +13,15 @@ logger = get_logger("toolkit")
 
 def get_github_token() -> str:
     """
-    Obtém o GitHub token da variável de ambiente.
+    Obtém o GitHub token das configurações.
 
     Returns:
         str: GitHub token
 
     Raises:
-        ValueError: Se o token não for encontrado
+        pydantic.ValidationError: Se o token não for encontrado
     """
-    token = os.getenv("GITHUB_TOKEN")
-    if not token:
-        raise ValueError("GITHUB_TOKEN environment variable is required but not set")
-    return token
+    return Settings().GITHUB_TOKEN.get_secret_value()
 
 
 def download_repository(git_repository_path: str, branch: str = "master") -> str:

@@ -15,7 +15,7 @@ from langchain_google_cloud_sql_pg.version import __version__ as gc_sql_pg_versi
 from langgraph.version import __version__ as langraph_version
 from prefect.logging import get_logger
 
-from pipelines.rj_iplanrio__eai_history.helpers import EaiSettings
+from pipelines.rj_iplanrio__eai_history.settings import Settings
 from pipelines.rj_iplanrio__eai_history.message_formatter import to_gateway_format
 
 logger = get_logger("toolkit")
@@ -29,35 +29,19 @@ class GoogleAgentEngineHistory:
     @classmethod
     async def create(cls, environment: str) -> "GoogleAgentEngineHistory":
         """Factory method para criar uma instância com checkpointer inicializado"""
-        settings = EaiSettings()
-        if environment == "staging":
-            project_id = settings.EAI__PROJECT_ID or ""
-            region = settings.EAI__LOCATION or ""
-            instance = settings.EAI__INSTANCE or ""
-            database = settings.EAI__DATABASE or ""
-            user = settings.EAI__DATABASE_USER or ""
-            password = settings.EAI__DATABASE_PASSWORD or ""
-        elif environment == "prod":
-            project_id = settings.EAI__PROJECT_ID_PROD or ""
-            region = settings.EAI__LOCATION_PROD or ""
-            instance = settings.EAI__INSTANCE_PROD or ""
-            database = settings.EAI__DATABASE_PROD or ""
-            user = settings.EAI__DATABASE_USER_PROD or ""
-            password = settings.EAI__DATABASE_PASSWORD_PROD or ""
-        else:
-            raise (ValueError("enviromet must be prod or staging"))
+        settings = Settings()
 
         engine = await PostgresEngine.afrom_instance(
-            project_id=project_id,
-            region=region,
-            instance=instance,
-            database=database,
-            user=user,
-            password=password,
+            project_id=settings.EAI_PROJECT_ID,
+            region=settings.EAI_LOCATION,
+            instance=settings.EAI_INSTANCE,
+            database=settings.EAI_DATABASE,
+            user=settings.EAI_DATABASE_USER,
+            password=settings.EAI_DATABASE_PASSWORD.get_secret_value(),
             engine_args={"pool_pre_ping": True, "pool_recycle": 300},
         )
         checkpointer = await PostgresSaver.create(engine=engine)
-        logger.info(f"Checkpointer inicializado para project_id: {environment} | {project_id}")
+        logger.info(f"Checkpointer inicializado para project_id: {environment} | {settings.EAI_PROJECT_ID}")
         logger.info(
             f"Version Control\nlanggraph: {langraph_version}\nlangchain-google-cloud-sql-pg: {gc_sql_pg_version}\nlangchain: {langchain_version}"
         )

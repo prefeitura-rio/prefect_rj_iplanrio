@@ -17,7 +17,6 @@ class APIConstants(Enum):
     DUMP_MODE = "append"
 
     # Path padrão no Infisical para credenciais da Salesforce Marketing Cloud
-    INFISICAL_SECRET_PATH = "/salesforce_marketing_cloud"
 
     # Pasta temporária para armazenar os dados antes do upload
     ROOT_FOLDER = "/tmp/data_salesforce_api"

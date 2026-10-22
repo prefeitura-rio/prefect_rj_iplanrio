@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import subprocess
 from json import dumps, loads
-from os import environ
 from pathlib import Path
 
 import polars as pl
@@ -9,10 +8,12 @@ from google.cloud import bigquery, storage
 from google.oauth2 import service_account
 from prefect import flow
 
+from pipelines.rj_iplanrio__data_catalog.settings import Settings
+
 
 def pull_secret_to_file() -> None:
     """Pull the service account JSON from an environment variable and save it to a file."""
-    Path("/tmp/sa.json").write_text(environ["DATA_CATALOG__SERVICE_ACCOUNT"])
+    Path("/tmp/sa.json").write_text(Settings().DATA_CATALOG_SERVICE_ACCOUNT.get_secret_value())
 
 
 def get_credentials() -> service_account.Credentials:
@@ -60,7 +61,7 @@ def upload_catalog_to_bucket():
     """Upload the transformed catalog JSON to a Google Cloud Storage bucket."""
     credentials = get_credentials()
     client = storage.Client(credentials=credentials)
-    bucket = client.bucket(environ["DATA_CATALOG__BUCKET_NAME"])
+    bucket = client.bucket(Settings().DATA_CATALOG_BUCKET_NAME)
     blob = bucket.blob("catalog.json")
     blob.upload_from_filename("/tmp/catalog.json")
 

@@ -6,6 +6,7 @@ from prefect_dbt import PrefectDbtRunner
 
 from pipelines.rj_rmi__run_dbt import utils
 from pipelines.rj_rmi__run_dbt.constants import REPOSITORY
+from pipelines.rj_rmi__run_dbt.settings import Settings
 
 logger = get_logger("toolkit")
 
@@ -17,10 +18,9 @@ def setup_credentials_task() -> None:
     O ``profiles.yml`` do queries-rj-rmi usa ``method: oauth``, que lê
     ``GOOGLE_APPLICATION_CREDENTIALS``.
 
-    :raises ValueError: Se ``RJ_RMI_SA`` não existir ou estiver vazia.
+    :raises pydantic.ValidationError: Se ``RMI_SERVICE_ACCOUNT`` não existir ou estiver vazia.
     """
-    key = utils.read_secret("RJ_RMI_SA")
-    utils.set_application_credentials(key)
+    utils.set_application_credentials(Settings().RMI_SERVICE_ACCOUNT.get_secret_value())
 
 
 @task(retries=3, retry_delay_seconds=60)
@@ -32,10 +32,9 @@ def clone_repository_task() -> str:
     antes de falhar o flow, inclusive a falta do token.
 
     :returns: O caminho do clone.
-    :raises ValueError: Se ``GITHUB_TOKEN`` não existir ou estiver vazia.
+    :raises pydantic.ValidationError: Se ``GITHUB_TOKEN`` não existir ou estiver vazia.
     """
-    token = utils.read_secret("GITHUB_TOKEN")
-    path, commit = utils.clone_repository(token)
+    path, commit = utils.clone_repository(Settings().GITHUB_TOKEN.get_secret_value())
     logger.info("Repositório clonado: repository=%s commit=%s", REPOSITORY, commit)
     return path
 

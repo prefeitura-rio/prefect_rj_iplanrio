@@ -5,11 +5,7 @@ import logging
 
 from prefect import flow
 
-from pipelines.rj_pic__disparos_email.env import (
-    BIGQUERY_DATASET_ID,
-    BIGQUERY_PROJECT_ID,
-    BIGQUERY_TABLE_ID,
-)
+from pipelines.rj_pic__disparos_email.settings import Settings
 from pipelines.rj_pic__disparos_email.tasks import (
     process_email_task,
     read_bigquery_task,
@@ -35,15 +31,17 @@ def rj_pic__disparos_email(
     """
     # Injetar credenciais do BD
 
+    settings = Settings()
+
     try:
         # Lê dados do BigQuery
         print(
-            f"📖 Lendo dados do BigQuery: {BIGQUERY_PROJECT_ID}.{BIGQUERY_DATASET_ID}.{BIGQUERY_TABLE_ID}"
+            f"📖 Lendo dados do BigQuery: {settings.BIGQUERY_PROJECT_ID}.{settings.BIGQUERY_DATASET_ID}.{settings.BIGQUERY_TABLE_ID}"
         )
         rows = read_bigquery_task(
-            project_id=BIGQUERY_PROJECT_ID,
-            dataset_id=BIGQUERY_DATASET_ID,
-            table_id=BIGQUERY_TABLE_ID,
+            project_id=settings.BIGQUERY_PROJECT_ID,
+            dataset_id=settings.BIGQUERY_DATASET_ID,
+            table_id=settings.BIGQUERY_TABLE_ID,
         )
         print(f"✅ {len(rows)} registros encontrados no BigQuery")
 

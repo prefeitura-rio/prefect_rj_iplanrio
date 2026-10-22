@@ -43,7 +43,6 @@ async def rj_sms__sisreg_disparo_lembretes(
     campaign_name: str | None = None,
     cost_center_id: str | None = None,
     chunk_size: int | None = None,
-    infisical_secret_path: str = "/wetalkie",
 ):
     """
     SISREG SMS Dispatch Pipeline

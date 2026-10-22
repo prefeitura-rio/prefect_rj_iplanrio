@@ -11,28 +11,17 @@ from prefect import task
 from prefect.logging import get_logger
 
 from pipelines.rj_crm__wetalkie_api_hsm_info.constants import Constants
-from utils.utils import read_env
+from utils.settings import WetalkieSettings
 
 logger = get_logger("toolkit")
 
 
 @task
-def get_wetalkie_token(infisical_secret_path: str = None) -> str:
-    """
-    Retrieves the WeTalkie API token using credentials from Infisical (or env vars).
-    """
-    # Keys used in rj_crm__api_wetalkie
-    username = read_env("wetalkie_user")
-    password = read_env("wetalkie_pass")
-    
-    # Also check specific keys if the generic ones fail or just to be safe
-    if not username:
-         username = read_env("WETALKIE_USERNAME")
-    if not password:
-         password = read_env("WETALKIE_PASSWORD")
-
-    if not username or not password:
-        raise ValueError("WeTalkie credentials not found.")
+def get_wetalkie_token() -> str:
+    """Return the token of the Wetalkie API."""
+    settings = WetalkieSettings()
+    username = settings.WETALKIE_USERNAME
+    password = settings.WETALKIE_PASSWORD.get_secret_value()
 
     url = f"{Constants.BASE_URL.value}/{Constants.LOGIN_ROUTE.value}"
     payload = {"username": username, "password": password}

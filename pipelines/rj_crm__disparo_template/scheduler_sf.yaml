@@ -20,8 +20,6 @@ schedules:
       sleep_minutes: 5
       flow_environment: staging
       whitelist_percentage: 0
-      infisical_secret_path: "/crm_disparo_template"
-      whitelist_environment: "production"
       filter_duplicated_phones: true
       filter_duplicated_cpfs: true
       query_file: queries/cvl_pesquisa_1746.sql
@@ -50,8 +48,6 @@ schedules:
       filter_duplicated_phones: false
       filter_duplicated_cpfs: true
       whitelist_percentage: 0
-      infisical_secret_path: "/crm_disparo_template"
-      whitelist_environment: "production"
       query_file: queries/pgm_divida_ativa_cobranca.sql
 
   # Daily schedule para flow pgmdividaativalembreteprodv1
@@ -75,8 +71,6 @@ schedules:
       filter_duplicated_phones: false
       filter_duplicated_cpfs: false
       whitelist_percentage: 0
-      infisical_secret_path: "/crm_disparo_template"
-      whitelist_environment: "production"
       query_file: queries/pgm_divida_ativa_lembrete.sql
 
   # Daily schedule para flow pgmdividaativaconfirmapgtoprodv1
@@ -100,8 +94,6 @@ schedules:
       filter_duplicated_phones: true
       filter_duplicated_cpfs: true
       whitelist_percentage: 0
-      infisical_secret_path: "/crm_disparo_template"
-      whitelist_environment: "production"
       query_file: queries/pgm_divida_ativa_agradecimento.sql
 
   # Disparo SMS Puérperas Confirmação agendamento
@@ -126,8 +118,6 @@ schedules:
         sleep_minutes: 5
         flow_environment: staging
         whitelist_percentage: 0
-        infisical_secret_path: /crm_disparo_template
-        whitelist_environment: production
         filter_duplicated_cpfs: true
         filter_duplicated_phones: false
         filter_dispatched_phones_or_cpfs: null
@@ -158,8 +148,6 @@ schedules:
         sleep_minutes: 5
         flow_environment: staging
         whitelist_percentage: 0
-        infisical_secret_path: /crm_disparo_template
-        whitelist_environment: production
         filter_duplicated_cpfs: true
         filter_duplicated_phones: false
         filter_dispatched_phones_or_cpfs: null
@@ -204,8 +192,6 @@ schedules:
         sleep_minutes: 5
         flow_environment: staging
         whitelist_percentage: 0
-        infisical_secret_path: /crm_disparo_template
-        whitelist_environment: production
         filter_duplicated_cpfs: true
         filter_duplicated_phones: false
         filter_dispatched_phones_or_cpfs: null
@@ -285,8 +271,6 @@ schedules:
         sleep_minutes: 5
         flow_environment: staging
         whitelist_percentage: 0
-        infisical_secret_path: /crm_disparo_template
-        whitelist_environment: production
         filter_duplicated_cpfs: true
         filter_duplicated_phones: false
         filter_dispatched_phones_or_cpfs: null
@@ -325,8 +309,6 @@ schedules:
         sleep_minutes: 5
         flow_environment: staging
         whitelist_percentage: 0
-        infisical_secret_path: /crm_disparo_template
-        whitelist_environment: production
         filter_duplicated_cpfs: true
         filter_duplicated_phones: false
         filter_dispatched_phones_or_cpfs: null
@@ -401,8 +383,6 @@ schedules:
         sleep_minutes: 5
         flow_environment: staging
         whitelist_percentage: 0
-        infisical_secret_path: /crm_disparo_template
-        whitelist_environment: production
         filter_duplicated_cpfs: true
         filter_duplicated_phones: false
         filter_dispatched_phones_or_cpfs: null
@@ -432,8 +412,6 @@ schedules:
       filter_duplicated_phones: false
       filter_duplicated_cpfs: true
       whitelist_percentage: 0
-      infisical_secret_path: "/crm_disparo_template"
-      whitelist_environment: "production"
       query_file: queries/cadunico_confirma_agendamento.sql
 
   # Disparo SMAS Cartão Primeira Infância - Aviso (evento)
@@ -458,8 +436,6 @@ schedules:
       filter_duplicated_phones: false
       filter_duplicated_cpfs: false
       whitelist_percentage: 0
-      infisical_secret_path: "/crm_disparo_template"
-      whitelist_environment: "production"
       filter_failed_phones: false
       force_add_on_whitelist_group: true
       whitelist_replace_contacts: true
@@ -488,6 +464,4 @@ schedules:
       filter_duplicated_phones: false
       filter_duplicated_cpfs: false
       whitelist_percentage: 0
-      infisical_secret_path: "/crm_disparo_template"
-      whitelist_environment: "production"
       query_file: queries_dev/smas_cartaopic_lembrete.sql

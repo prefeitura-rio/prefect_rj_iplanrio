@@ -9,10 +9,6 @@ class WhitelistConstants(Enum):
     Constants used in the WhatsApp Whitelist pipeline.
     """
 
-    # Infisical Paths
-    INFISICAL_PATH_AUTH = "/api-rmi-identidade-carioca"
-    INFISICAL_PATH_DATA = "/api-rmi-whitelist"
-
     # Dataset and Tables
     DATASET_ID = "brutos_rmi_whitelist"
     BILLING_PROJECT_ID = "rj-iplanrio"

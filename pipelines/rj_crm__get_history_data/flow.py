@@ -1,10 +1,10 @@
 
-import os
 from typing import Any, Dict, List, Optional
 
 from prefect import flow
 
 from pipelines.rj_crm__get_history_data.constants import GetHistoryDataConstants
+from pipelines.rj_crm__get_history_data.settings import Settings
 from pipelines.rj_crm__get_history_data.tasks import (
     authenticate_sfmc,
     build_historico_dataframe,
@@ -41,19 +41,15 @@ def rj_crm__get_history_data(
            de_nome + telefone + entrada_data) — nunca apaga dados da tabela final
 
     Args:
-        rest_uri: URI REST do SFMC. Se não fornecido, usa env API_SFMC_REST_BASE_URL.
-        soap_uri: URI SOAP do SFMC. Se não fornecido, usa env API_SFMC_SOAP_BASE_URL.
+        rest_uri: URI REST do SFMC. Se não fornecido, usa env SFMC_REST_BASE_URL.
+        soap_uri: URI SOAP do SFMC. Se não fornecido, usa env SFMC_SOAP_BASE_URL.
         window_days: Quantos dias de entrada_data considerar a cada execução.
             Se não fornecido, usa GetHistoryDataConstants.WINDOW_DAYS.
     """
-    rest_uri = rest_uri or os.getenv("API_SFMC_REST_BASE_URL", "")
-    soap_uri = soap_uri or os.getenv("API_SFMC_SOAP_BASE_URL", "")
+    settings = Settings()
+    rest_uri = rest_uri or settings.SFMC_REST_BASE_URL
+    soap_uri = soap_uri or settings.SFMC_SOAP_BASE_URL
     window_days = window_days or GetHistoryDataConstants.WINDOW_DAYS.value
-
-    if not rest_uri:
-        raise ValueError("API_SFMC_REST_BASE_URL não definida. Passe via parâmetro ou variável de ambiente.")
-    if not soap_uri:
-        raise ValueError("API_SFMC_SOAP_BASE_URL não definida. Passe via parâmetro ou variável de ambiente.")
 
     project_id = GetHistoryDataConstants.GCP_SFMC_DESTINATION_PROJECT_ID.value
     dataset_id = GetHistoryDataConstants.GCP_SFMC_DESTINATION_DATASET_ID.value

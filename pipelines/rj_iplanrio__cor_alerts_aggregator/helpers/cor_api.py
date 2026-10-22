@@ -2,7 +2,6 @@
 Cliente para COR OnCall API (versao para Prefect)
 """
 
-import os
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -12,6 +11,7 @@ from prefect.logging import get_logger
 from pipelines.rj_iplanrio__cor_alerts_aggregator.constants import (
     CORAlertAggregatorConstants,
 )
+from pipelines.rj_iplanrio__cor_alerts_aggregator.settings import Settings
 
 logger = get_logger("toolkit")
 
@@ -25,17 +25,17 @@ class COROnCallClient:
     def __init__(self, environment: str = "staging"):
         self.environment = environment
 
-        # Credenciais via variaveis de ambiente (configuradas no secret do k8s)
-        self.base_url = os.getenv("CHATBOT_COR_EVENTS_API_BASE_URL")
-        self.username = os.getenv("CHATBOT_COR_EVENTS_API_USERNAME")
-        self.password = os.getenv("CHATBOT_COR_EVENTS_API_PASSWORD")
+        settings = Settings()
+        self.base_url = settings.COR_EVENTS_BASE_URL
+        self.username = settings.COR_EVENTS_USERNAME
+        self.password = settings.COR_EVENTS_PASSWORD.get_secret_value()
 
         self._access_token = None
 
     def _authenticate(self) -> str:
         """Obtem token de acesso da API COR"""
         if not self.base_url:
-            raise ValueError("CHATBOT_COR_EVENTS_API_BASE_URL nao configurado")
+            raise ValueError("COR_EVENTS_BASE_URL nao configurado")
 
         login_url = f"{self.base_url}/hxgnEvents/api/Events/Login"
 

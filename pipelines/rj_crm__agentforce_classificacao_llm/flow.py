@@ -21,8 +21,6 @@ tabelas mart do dbt (chatbot/v2_chatbot_conversas). Usar quando a taxonomia muda
 sessões já classificadas precisarem refletir isso — ver tasks/taxonomia.py.
 """
 
-import os
-
 import pandas as pd
 from prefect import flow
 
@@ -49,6 +47,7 @@ from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import (
     extrai_sessoes_para_recalculo_taxonomia,
     propaga_tema_causa_chatbot,
 )
+from utils.settings import BifrostSettings
 
 
 @flow(log_prints=True, on_failure=[notify_falha_flow], flow_run_name="classificacao_llm_{dest_dataset_id}_{dest_table_id}")
@@ -78,7 +77,7 @@ def rj_crm__agentforce_classificacao_llm(
     # Modo alternativo do flow: a taxonomia (catálogo de regras) mudou e as sessões já
     # classificadas precisam refletir isso em tema_nome/causa_nome — sem rechamar a LLM
     # (custo zero) e sem sobrescrever nenhuma outra coluna (classificacao, resumo, motivo
-    # etc. ficam intactos). Não usa BF_KEY, não faz extração/classificação — é só reler o
+    # etc. ficam intactos). Não usa BIFROST_API_KEY, não faz extração/classificação — é só reler o
     # que já está na tabela destino, reavaliar as regras, e propagar via MERGE parcial pra
     # tabela destino e pras 2 tabelas mart do dbt (ver docstrings em tasks/taxonomia.py).
     if recalcula_taxonomia:
@@ -121,12 +120,7 @@ def rj_crm__agentforce_classificacao_llm(
         return
 
 
-    bf_key = os.environ.get("BF_KEY")
-    if not bf_key:
-        raise ValueError(
-            "BF_KEY não encontrada nas variáveis de ambiente — adicionar ao secret do work pool "
-            "(mesmo secretName usado por rj_crm__salesforce_datacloud)."
-        )
+    bf_key = BifrostSettings().BIFROST_API_KEY.get_secret_value()
 
     # Não precisa de try/except aqui: on_failure=[notify_falha_flow] no decorator acima já
     # notifica o Discord em qualquer exceção não tratada, e o flow run continua marcado

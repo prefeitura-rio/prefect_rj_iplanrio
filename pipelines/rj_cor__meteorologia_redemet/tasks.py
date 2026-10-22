@@ -14,7 +14,7 @@ from prefect import task
 from pipelines.rj_cor__meteorologia_redemet.helpers import (
     parse_date_columns,
 )
-from utils.utils import read_env
+from pipelines.rj_cor__meteorologia_redemet.settings import Settings
 
 
 @task
@@ -89,7 +89,7 @@ def download_meteorological_data_task(first_date: str, last_date: str) -> pd.Dat
         "SBSC",  # Santa Cruz
     ]
 
-    redemet_token = read_env("REDEMET_TOKEN")
+    redemet_token = Settings().REDEMET_TOKEN.get_secret_value()
     # Constante para HTTP status code de sucesso
     http_ok = 200
 

@@ -34,7 +34,6 @@ async def rj_smas__api_datametrica_agendamentos(
     dump_mode: str | None = None,
     materialize_after_dump: bool | None = None,
     date: str | None = None,
-    infisical_secret_path: str | None = "/api-datametrica",
 ):
     """
     Flow para extrair agendamentos da API Datametrica e carregar no BigQuery.
@@ -49,12 +48,11 @@ async def rj_smas__api_datametrica_agendamentos(
         dump_mode: Modo de dump (default: append)
         materialize_after_dump: Se deve materializar após dump (default: True)
         date: Data para buscar agendamentos no formato YYYY-MM-DD (default: None = usa regra de negócio)
-        infisical_secret_path: Caminho dos secrets no Infisical (default: /api-datametrica)
     """
 
     # Obter configuração do BigQuery do Infisical se não fornecida via parâmetros
     if dataset_id is None or table_id is None:
-        bigquery_config = get_bigquery_config(infisical_secret_path=infisical_secret_path)
+        bigquery_config = get_bigquery_config()
         dataset_id = dataset_id or bigquery_config["dataset_id"]
         table_id = table_id or bigquery_config["table_id"]
 
@@ -76,7 +74,7 @@ async def rj_smas__api_datametrica_agendamentos(
     # Injetar credenciais do BD
 
     # Obter credenciais da API Datametrica
-    credentials = get_datametrica_credentials(infisical_secret_path=infisical_secret_path)
+    credentials = get_datametrica_credentials()
 
     # Calcular data target baseada na regra de negócio (a menos que date seja fornecido explicitamente)
     today_sp = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
@@ -145,8 +143,6 @@ async def rj_smas__api_datametrica_agendamentos(
         "filter_duplicated_phones": False,
         "filter_duplicated_cpfs": True,
         "whitelist_percentage": 0,
-        "infisical_secret_path": "/crm_disparo_template",
-        "whitelist_environment": "production",
         "query": """WITH
                     segmentacao_original AS (
                         SELECT

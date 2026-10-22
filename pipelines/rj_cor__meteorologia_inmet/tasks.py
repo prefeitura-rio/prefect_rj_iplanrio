@@ -15,7 +15,7 @@ from prefect import task
 from pipelines.rj_cor__meteorologia_inmet.helpers import (
     parse_date_columns,
 )
-from utils.utils import read_env
+from pipelines.rj_cor__meteorologia_inmet.settings import Settings
 
 
 @task
@@ -98,7 +98,7 @@ def download_meteorological_data_task(data_inicio: str, data_fim: str) -> pd.Dat
         "A656",
     ]
 
-    token = read_env("INMET_API")
+    token = Settings().INMET_TOKEN.get_secret_value()
 
     # Constante para HTTP status code de sucesso
     http_ok = 200

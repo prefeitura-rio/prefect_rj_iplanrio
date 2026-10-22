@@ -46,7 +46,7 @@ async def rj_crm__wetalkie_api_hsm_info(
 
     # 2. Extract
     logger.info("Starting extraction...")
-    token = get_wetalkie_token(infisical_secret_path=Constants.INFISICAL_SECRET_PATH.value)
+    token = get_wetalkie_token()
     raw_data = fetch_hsm_templates(token=token)
 
     if not raw_data:

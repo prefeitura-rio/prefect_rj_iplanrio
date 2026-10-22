@@ -14,7 +14,7 @@ from unidecode import unidecode
 from pipelines.rj_cor__meteorologia_redemet_estacoes.helpers import (
     parse_date_columns,
 )
-from utils.utils import read_env
+from pipelines.rj_cor__meteorologia_redemet_estacoes.settings import Settings
 
 
 @task
@@ -33,7 +33,7 @@ def download_stations_data_task() -> pd.DataFrame:
         - Dados incluem: código, nome, latitude, longitude, altitude
     """
 
-    redemet_token = read_env("REDEMET_TOKEN")
+    redemet_token = Settings().REDEMET_TOKEN.get_secret_value()
 
     base_url = f"https://api-redemet.decea.mil.br/aerodromos/?api_key={redemet_token}"
     url = f"{base_url}&pais=Brasil"

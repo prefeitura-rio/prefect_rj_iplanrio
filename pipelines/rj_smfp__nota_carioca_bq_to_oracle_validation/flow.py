@@ -17,19 +17,17 @@ def rj_smfp__nota_carioca_bq_to_oracle_validation(  # noqa: PLR0913
     project: str = "rj-iplanrio-dia",
     dataset_id: str = "nota_carioca_staging",
     table_ids: list[str] | None = None,
-    infisical_secret_path: str = "/db-oracle-nota-fiscal",
     compute_column_metrics: bool = True,
     fail_on_divergence: bool = True,
     template_schema: str | None = None,
     excluded_template_columns: list[str] | None = None,
     raw_text_encoding: Literal["base64", "hex"] = "base64",
 ) -> None:
-    log_session_task(infisical_secret_path=infisical_secret_path)
+    log_session_task()
     tables = list_tables_task(project=project, dataset_id=dataset_id, table_ids=table_ids)
 
     results = [
         validate_table_task(
-            infisical_secret_path=infisical_secret_path,
             project=project,
             dataset_id=dataset_id,
             table_id=table_id,

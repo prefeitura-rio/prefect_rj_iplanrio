@@ -30,7 +30,6 @@ async def rj_crm__api_wetalkie(
     table_id: str | None = None,
     dump_mode: str | None = None,
     materialize_after_dump: bool | None = None,
-    infisical_secret_path: str = "/wetalkie",
 ):
     """
     Flow para extrair dados de atendimentos da API Wetalkie e carregar no BigQuery.
@@ -43,7 +42,6 @@ async def rj_crm__api_wetalkie(
         table_id: ID da tabela no BigQuery (default: fluxos_ura)
         dump_mode: Modo de dump (default: append)
         materialize_after_dump: Se deve materializar após dump (default: True)
-        infisical_secret_path: Caminho dos secrets no Infisical (default: /wetalkie)
     """
 
     # Usar valores dos constants como padrão para parâmetros
@@ -65,12 +63,7 @@ async def rj_crm__api_wetalkie(
 
     # Injetar credenciais do BD
 
-    api = access_api(
-        infisical_secret_path,
-        "wetalkie_url",
-        "wetalkie_user",
-        "wetalkie_pass",
-        login_route=WetalkieConstants.API_LOGIN_ROUTE.value,
+    api = access_api(login_route=WetalkieConstants.API_LOGIN_ROUTE.value,
     )
 
     raw_attendances = get_attendances(api)

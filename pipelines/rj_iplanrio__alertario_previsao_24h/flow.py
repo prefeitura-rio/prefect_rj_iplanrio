@@ -2,7 +2,6 @@
 Flow para extrair previsões meteorológicas do AlertaRio e carregar no BigQuery
 """
 
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -32,6 +31,7 @@ from pipelines.rj_iplanrio__alertario_previsao_24h.tasks import (
     fetch_xml_from_url,
     parse_xml_to_dict,
 )
+from utils.settings import NoticeSettings
 from utils.tasks import publish_table_in_bq, upload_files_to_gcs
 from utils.types import Cloud, Table
 from utils.utils import capture_options
@@ -47,7 +47,6 @@ async def rj_iplanrio__alertario_previsao_24h(
     dump_mode: str | None = None,
     materialize_after_dump: bool | None = None,
     send_discord_alerts: bool = False,
-    discord_webhook_env_var: str | None = None,
     max_daily_alerts: int | None = None,
     min_alert_interval_hours: int | None = None,
 ):
@@ -67,7 +66,6 @@ async def rj_iplanrio__alertario_previsao_24h(
         dump_mode: Modo de dump (default: append)
         materialize_after_dump: Se deve materializar após dump (default: False)
         send_discord_alerts: Ativa/desativa envio automático de alerta no Discord.
-        discord_webhook_env_var: Nome da env var com o webhook (default: DISCORD_WEBHOOK_URL_ALERTARIO).
         max_daily_alerts: Limite de mensagens por dia (default: 2).
         min_alert_interval_hours: Intervalo mínimo em horas entre alertas.
     """
@@ -83,9 +81,6 @@ async def rj_iplanrio__alertario_previsao_24h(
     file_format = AlertaRioConstants.FILE_FORMAT.value
     biglake_table = AlertaRioConstants.BIGLAKE_TABLE.value
     partition_column = AlertaRioConstants.PARTITION_COLUMN.value
-    discord_webhook_env_var = (
-        discord_webhook_env_var or AlertaRioConstants.DISCORD_WEBHOOK_ENV_VAR.value
-    )
     max_daily_alerts = (
         max_daily_alerts
         if max_daily_alerts is not None
@@ -148,10 +143,10 @@ async def rj_iplanrio__alertario_previsao_24h(
         )
 
     if send_discord_alerts and precipitation_alerts and discord_message:
-        webhook_url = os.getenv(discord_webhook_env_var or "")
+        webhook_url = NoticeSettings().DISCORD_WEBHOOK_URL.get_secret_value()
         if not webhook_url:
             logger.warning(
-                f"Variável {discord_webhook_env_var} não configurada. Alerta não será enviado.",
+                "DISCORD_WEBHOOK_URL não configurada. Alerta não será enviado.",
             )
         else:
             try:
