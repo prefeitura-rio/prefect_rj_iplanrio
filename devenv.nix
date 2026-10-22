@@ -1,10 +1,6 @@
+{ inputs, ... }:
 {
-  imports = [
-    ./nix/profiles/base.nix
-    ./nix/profiles/checks.nix
-    ./nix/profiles/default.nix
-    ./nix/profiles/deploy.nix
-  ];
+  imports = [ (inputs.import-tree ./nix/profiles) ];
 
   name = "prefect-rj-iplanrio";
 }
