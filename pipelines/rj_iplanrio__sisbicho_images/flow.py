@@ -1,18 +1,14 @@
 """Flow for rj_iplanrio__sisbicho_images."""
 
-from pathlib import Path
-from tempfile import TemporaryDirectory
-
 from prefect import flow
 from toolkit.telemetry import logger
 
 from pipelines.rj_iplanrio__sisbicho_images.constants import DEFAULT_BATCH_SIZE
 from pipelines.rj_iplanrio__sisbicho_images.tasks import list_pending_task, process_batch_task
 from pipelines.rj_iplanrio__sisbicho_images.types import Limits, Row, Storage
+from utils.flows import load_records
 from utils.hooks import notify_failure
-from utils.tasks import publish_table_in_bq, upload_files_to_gcs, write_records
 from utils.types import Cloud, DumpMode, Table
-from utils.utils import capture_options
 
 
 @flow(log_prints=True, flow_run_name="sisbicho-images-{table[table_id]}", on_failure=[notify_failure])
@@ -46,15 +42,4 @@ async def rj_iplanrio__sisbicho_images(
     for start in range(0, len(ids), size):
         rows += await process_batch_task(cloud["project"], source, identifier, ids[start : start + size], storage)
 
-    with TemporaryDirectory() as directory:
-        folder = await write_records(rows, Path(directory))
-        await upload_files_to_gcs(
-            folder,
-            table,
-            bucket=cloud["bucket"],
-            dump_mode=dump_mode,
-            source_format="json",
-            options=capture_options(dump_mode),
-        )
-
-    await publish_table_in_bq(table, cloud)
+    await load_records(rows, table, cloud, dump_mode=dump_mode)

@@ -1,16 +1,12 @@
 """Flow for rj_cor__meteorologia_redemet."""
 
-from pathlib import Path
-from tempfile import TemporaryDirectory
-
 from prefect import flow
 
 from pipelines.rj_cor__meteorologia_redemet.helpers import read_dates
 from pipelines.rj_cor__meteorologia_redemet.tasks import build_rows_task, fetch_observations_task
+from utils.flows import load_records
 from utils.hooks import notify_failure
-from utils.tasks import publish_table_in_bq, upload_files_to_gcs, write_parquet_records
 from utils.types import Cloud, Table
-from utils.utils import capture_options
 
 
 @flow(log_prints=True, flow_run_name="{table[table_id]}", on_failure=[notify_failure])
@@ -33,10 +29,4 @@ async def rj_cor__meteorologia_redemet(
     if not rows:
         return
 
-    with TemporaryDirectory() as directory:
-        folder = await write_parquet_records(rows, Path(directory))
-        await upload_files_to_gcs(
-            folder, table, bucket=cloud["bucket"], source_format="parquet", options=capture_options("append")
-        )
-
-    await publish_table_in_bq(table, cloud)
+    await load_records(rows, table, cloud, parquet=True)

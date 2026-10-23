@@ -1,16 +1,12 @@
 """Flow for rj_crm__wetalkie_api_hsm_info."""
 
-from pathlib import Path
-from tempfile import TemporaryDirectory
-
 from prefect import flow
 from toolkit.telemetry import logger
 
 from pipelines.rj_crm__wetalkie_api_hsm_info.tasks import fetch_templates_task, login_task
+from utils.flows import load_records
 from utils.hooks import notify_failure
-from utils.tasks import publish_table_in_bq, upload_files_to_gcs, write_records
 from utils.types import Cloud, DumpMode, Table
-from utils.utils import capture_options
 
 
 @flow(log_prints=True, flow_run_name="hsm_templates_info_{table[table_id]}", on_failure=[notify_failure])
@@ -22,15 +18,4 @@ async def rj_crm__wetalkie_api_hsm_info(*, cloud: Cloud, table: Table, dump_mode
         logger.warning("The API has no template")
         return
 
-    with TemporaryDirectory() as directory:
-        folder = await write_records(templates, Path(directory))
-        await upload_files_to_gcs(
-            folder,
-            table,
-            bucket=cloud["bucket"],
-            dump_mode=dump_mode,
-            source_format="json",
-            options=capture_options(dump_mode),
-        )
-
-    await publish_table_in_bq(table, cloud)
+    await load_records(templates, table, cloud, dump_mode=dump_mode)

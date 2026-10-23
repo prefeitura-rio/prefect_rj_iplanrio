@@ -1,8 +1,5 @@
 """Flow for rj_crm__callcenter_attendances_weekly."""
 
-from pathlib import Path
-from tempfile import TemporaryDirectory
-
 from prefect import flow
 from toolkit.dbt import DbtRun
 from toolkit.telemetry import logger
@@ -15,10 +12,10 @@ from pipelines.rj_crm__callcenter_attendances_weekly.tasks import (
     transcribe_task,
 )
 from pipelines.rj_crm__callcenter_attendances_weekly.types import Options
+from utils.flows import load_records
 from utils.hooks import notify_failure
-from utils.tasks import publish_table_in_bq, run_dbt, upload_files_to_gcs, write_records
+from utils.tasks import run_dbt
 from utils.types import Cloud, DumpMode, Table
-from utils.utils import capture_options
 from utils.wetalkie import build_attendance_rows
 
 
@@ -60,18 +57,7 @@ async def rj_crm__callcenter_attendances_weekly(
         await transcribe_task(new_items, MAX_AUDIO_SECONDS) if chosen.get("transcribe_audio", True) else new_items
     )
 
-    with TemporaryDirectory() as directory:
-        folder = await write_records(build_attendance_rows(processed), Path(directory))
-        await upload_files_to_gcs(
-            folder,
-            table,
-            bucket=cloud["bucket"],
-            dump_mode=dump_mode,
-            source_format="json",
-            options=capture_options(dump_mode),
-        )
-
-    await publish_table_in_bq(table, cloud)
+    await load_records(build_attendance_rows(processed), table, cloud, dump_mode=dump_mode)
 
     if dbt:
         await run_dbt(dbt)

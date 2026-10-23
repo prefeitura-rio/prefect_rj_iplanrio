@@ -1,6 +1,6 @@
 """Prefect flows that more than one pipeline uses, built on the shared tasks."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -22,10 +22,49 @@ from .tasks import (
     request_json,
     run_dbt,
     upload_files_to_gcs,
+    write_parquet_records,
     write_records,
 )
 from .types import Cloud, Database, DatabaseDumpOptions, DumpMode, DumpOptions, FileFormat, Maintenance, Read, Table
-from .utils import capture_time, extract_records, load_records_schema, summarize_maintenance, validate_records
+from .utils import (
+    capture_options,
+    capture_time,
+    extract_records,
+    load_records_schema,
+    summarize_maintenance,
+    validate_records,
+)
+
+
+async def load_records(
+    records: Sequence[Mapping[str, JsonValue]],
+    table: Table,
+    cloud: Cloud,
+    *,
+    dump_mode: DumpMode = "append",
+    options: DumpOptions | None = None,
+    parquet: bool = False,
+) -> None:
+    """Load the records of a pipeline into a Delta table, and publish the BigQuery table.
+
+    The records go through a temporary folder, as JSON lines or, with `parquet`, as a Parquet
+    file that keeps a text such as `2026-10-22 20:00:00` as text. Without `options` an
+    `append` run adds its rows under its capture time, so a retry of it adds nothing.
+    """
+    write = write_parquet_records if parquet else write_records
+
+    with TemporaryDirectory() as directory:
+        folder = await write(records, Path(directory))
+        await upload_files_to_gcs(
+            folder,
+            table,
+            bucket=cloud["bucket"],
+            dump_mode=dump_mode,
+            source_format="parquet" if parquet else "json",
+            options=capture_options(dump_mode) if options is None else options,
+        )
+
+    await publish_table_in_bq(table, cloud)
 
 
 @flow(
@@ -174,13 +213,7 @@ async def ingest_api(
     if dump_mode == "append":
         chosen["capture"] = capture_time()
 
-    with TemporaryDirectory() as directory:
-        folder = await write_records(records, Path(directory))
-        await upload_files_to_gcs(
-            folder, table, bucket=cloud["bucket"], dump_mode=dump_mode, source_format="json", options=chosen
-        )
-
-    await publish_table_in_bq(table, cloud)
+    await load_records(records, table, cloud, dump_mode=dump_mode, options=chosen)
 
 
 @flow(log_prints=True, on_failure=[notify_failure])
