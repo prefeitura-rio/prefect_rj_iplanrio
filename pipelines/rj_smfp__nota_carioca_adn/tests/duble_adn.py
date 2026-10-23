@@ -29,6 +29,7 @@ from pipelines.rj_smfp__nota_carioca_adn.tests.certificados import Pki
 FimComo = Literal["404", "200_vazio", "200_status"]
 Corrupcao = Literal["gzip", "base64", "utf8"]
 FUSO_BRASILIA = timezone(timedelta(hours=-3))
+PARTES_DA_ROTA = 3
 
 
 @dataclass(frozen=True)
@@ -155,7 +156,7 @@ class DubleAdn:
             def log_message(self, *_args: object) -> None:
                 return
 
-            def do_GET(self) -> None:  # noqa: N802 - nome exigido pelo http.server
+            def do_GET(self) -> None:
                 duble._atender(self)
 
         self._servidor = Servidor(("127.0.0.1", 0), Manipulador)
@@ -182,7 +183,11 @@ class DubleAdn:
             self._em_voo += 1
             self.max_concorrencia = max(self.max_concorrencia, self._em_voo)
         try:
-            if len(segmentos) != 3 or segmentos[0].lower() != "municipios" or segmentos[1].lower() != "dfe":
+            if (
+                len(segmentos) != PARTES_DA_ROTA
+                or segmentos[0].lower() != "municipios"
+                or segmentos[1].lower() != "dfe"
+            ):
                 self._responder(manipulador, 404, {"Erros": [{"Codigo": "E0000", "Descricao": "rota"}]})
                 return
             nsu = int(segmentos[2])
@@ -215,14 +220,18 @@ class DubleAdn:
                 case "200_status":
                     self._responder(manipulador, 200, _envelope("NENHUM_DOCUMENTO_LOCALIZADO", []))
             return
-        self._responder(manipulador, 200, _envelope("DOCUMENTOS_LOCALIZADOS", [item_do_nsu(n, comportamento) for n in proximos]))
+        self._responder(
+            manipulador, 200, _envelope("DOCUMENTOS_LOCALIZADOS", [item_do_nsu(n, comportamento) for n in proximos])
+        )
 
     def _candidatos(self, nsu: int, lote: bool) -> list[int]:
         """NSUs devolvidos: a partir do cursor (exclusivo ou inclusivo); no lote, sem as lacunas e até ``lote_max``."""
         comportamento = self.comportamento
         inicio = nsu if comportamento.cursor_inclusivo else nsu + 1
         if not lote:
-            primeiro = next((n for n in range(max(inicio, 1), comportamento.total_nsu + 1) if comportamento.existe(n)), None)
+            primeiro = next(
+                (n for n in range(max(inicio, 1), comportamento.total_nsu + 1) if comportamento.existe(n)), None
+            )
             return [] if primeiro is None else [primeiro]
         achados: list[int] = []
         for n in range(max(inicio, 1), comportamento.total_nsu + 1):
