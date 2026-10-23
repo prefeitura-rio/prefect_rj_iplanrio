@@ -1,4 +1,4 @@
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 
 import pytest
 from prefect import tags
@@ -6,7 +6,11 @@ from prefect.testing.utilities import prefect_test_harness
 
 from pipelines.rj_smfp__nota_carioca_carga_completa import flow as flow_module
 from pipelines.rj_smfp__nota_carioca_carga_completa import tasks as tasks_module
-from pipelines.rj_smfp__nota_carioca_carga_completa.constants import BQ_TO_ORACLE_DEPLOYMENT, ORACLE_TO_BQ_DEPLOYMENT
+from pipelines.rj_smfp__nota_carioca_carga_completa.constants import (
+    BQ_TO_ORACLE_DEPLOYMENT,
+    BQ_TO_POSTGRES_DEPLOYMENT,
+    ORACLE_TO_BQ_DEPLOYMENT,
+)
 from pipelines.rj_smfp__nota_carioca_carga_completa.utils import runs
 from pipelines.rj_smfp__nota_carioca_carga_completa.utils.chain import ChainStoppedError, ChildRun
 from pipelines.rj_smfp__nota_carioca_carga_completa.utils.discord import Environment
@@ -26,12 +30,20 @@ class FakePrefect:
         self.outcomes = outcomes
         self.active: dict[str, list[runs.ActiveRun]] = {}
         self.launched: list[tuple[str, int, Sequence[str]]] = []
+        self.launched_parameters: list[Mapping[str, object]] = []
 
     def list_deployment_runs(self, deployment: str) -> list[runs.ActiveRun]:
         return self.active.get(deployment, [])
 
-    def run_and_wait(self, deployment: str, timeout_seconds: int, run_tags: Sequence[str]) -> ChildRun:
+    def run_and_wait(
+        self,
+        deployment: str,
+        timeout_seconds: int,
+        run_tags: Sequence[str],
+        parameters: Mapping[str, object] | None = None,
+    ) -> ChildRun:
         self.launched.append((deployment, timeout_seconds, run_tags))
+        self.launched_parameters.append(parameters or {})
         return self.outcomes[deployment]
 
 
@@ -45,6 +57,7 @@ def fake_prefect(monkeypatch: pytest.MonkeyPatch) -> FakePrefect:
         {
             ORACLE_TO_BQ_DEPLOYMENT: child("oracle-run", "COMPLETED", "Completed"),
             BQ_TO_ORACLE_DEPLOYMENT: child("bq-run", "COMPLETED", "Completed"),
+            BQ_TO_POSTGRES_DEPLOYMENT: child("pg-run", "COMPLETED", "Completed"),
         }
     )
     monkeypatch.setattr(runs, "list_deployment_runs", fake.list_deployment_runs)
@@ -115,3 +128,57 @@ def test_flow_notifies_in_the_environment_of_its_deployment(
 
     # Then: o notificador nasce com o ambiente derivado do nome do deployment
     assert created == [(True, expected)]
+
+
+def test_flow_does_not_ask_bq_to_oracle_to_preserve_the_export_by_default(fake_prefect: FakePrefect) -> None:
+    # Given / When: o flow roda com os padrões (incluir_postgres desligado)
+    flow_module.rj_smfp__nota_carioca_carga_completa(discord_notifications=False)
+
+    # Then: só os dois filhos de sempre, e o bq_to_oracle recebe a preservação desligada
+    assert [launched[0] for launched in fake_prefect.launched] == [ORACLE_TO_BQ_DEPLOYMENT, BQ_TO_ORACLE_DEPLOYMENT]
+    assert fake_prefect.launched_parameters == [{}, {"preservar_export_para_postgres": False}]
+
+
+def test_flow_with_incluir_postgres_preserves_the_export_and_loads_postgres_from_its_manifest(
+    fake_prefect: FakePrefect,
+) -> None:
+    # When: a carga completa inclui o Postgres
+    flow_module.rj_smfp__nota_carioca_carga_completa(incluir_postgres=True, discord_notifications=False)
+
+    # Then: o bq_to_oracle preserva o export e o Postgres carrega o manifesto do run dele (4 h de limite)
+    assert [(launched[0], launched[1]) for launched in fake_prefect.launched] == [
+        (ORACLE_TO_BQ_DEPLOYMENT, 4 * 3600),
+        (BQ_TO_ORACLE_DEPLOYMENT, 8 * 3600),
+        (BQ_TO_POSTGRES_DEPLOYMENT, 4 * 3600),
+    ]
+    assert fake_prefect.launched_parameters == [
+        {},
+        {"preservar_export_para_postgres": True},
+        {"manifesto_uri": "gs://rj-iplanrio-dia-bq-to-oracle/nota_carioca/id-bq-run/manifesto.json"},
+    ]
+
+
+def test_flow_staging_parameters_point_to_the_staging_deployment_and_dataset(fake_prefect: FakePrefect) -> None:
+    fake_prefect.outcomes["flow/staging"] = child("pg-run", "COMPLETED", "Completed")
+
+    flow_module.rj_smfp__nota_carioca_carga_completa(
+        incluir_postgres=True,
+        bq_to_postgres_deployment="flow/staging",
+        export_bucket="outro-bucket",
+        export_dataset_id="nota_carioca_staging",
+        discord_notifications=False,
+    )
+
+    assert fake_prefect.launched[-1][0] == "flow/staging"
+    assert fake_prefect.launched_parameters[-1] == {
+        "manifesto_uri": "gs://outro-bucket/nota_carioca_staging/id-bq-run/manifesto.json"
+    }
+
+
+def test_flow_does_not_load_postgres_when_bq_to_oracle_fails(fake_prefect: FakePrefect) -> None:
+    fake_prefect.outcomes[BQ_TO_ORACLE_DEPLOYMENT] = child("bq-run", "FAILED", "Failed")
+
+    with pytest.raises(ChainStoppedError, match="BigQuery → Postgres não foi disparado"):
+        flow_module.rj_smfp__nota_carioca_carga_completa(incluir_postgres=True, discord_notifications=False)
+
+    assert BQ_TO_POSTGRES_DEPLOYMENT not in [launched[0] for launched in fake_prefect.launched]

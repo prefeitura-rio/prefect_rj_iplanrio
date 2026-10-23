@@ -44,3 +44,17 @@ def test_to_child_run_keeps_the_state_of_a_run_still_active_after_the_timeout() 
     child = runs.to_child_run(flow_run)
 
     assert (child.state_type, child.state_name) == ("RUNNING", "Running")
+
+
+def test_run_and_wait_forwards_the_parameters_the_chain_asks_for(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_run_deployment(**kwargs: object) -> FlowRun:
+        calls.append(kwargs)
+        return make_flow_run(StateType.COMPLETED, "Completed")
+
+    monkeypatch.setattr(runs, "run_deployment", fake_run_deployment)
+
+    runs.run_and_wait("flow/deployment", 60, ("disparo:carga-completa",), {"preservar_export_para_postgres": True})
+
+    assert calls[0]["parameters"] == {"preservar_export_para_postgres": True}
