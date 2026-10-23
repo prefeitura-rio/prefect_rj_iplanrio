@@ -1,4 +1,6 @@
 **/**/test*
+!pipelines/rj_crm__agent_quality_registry/tests/
+!pipelines/rj_crm__agent_quality_registry/tests/**
 **/**/api.pdf
 /data/
 test.py
@@ -27,6 +29,7 @@ __pypackages__/
 # Environments
 .env
 .env.local
+tmp/agent-quality-export/
 .venv
 env/
 venv/
