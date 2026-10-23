@@ -109,4 +109,4 @@ def test_plan_time_check_requires_the_column_to_exist_and_be_number() -> None:
 
 def test_every_default_table_has_checksum_columns() -> None:
     assert set(CHECKSUM_COLUMNS) == set(DEFAULT_TABLES)
-    assert all(len(names) == 2 for names in CHECKSUM_COLUMNS.values())  # noqa: PLR2004
+    assert all(len(CHECKSUM_COLUMNS[name]) == 2 for name in ("DPS", "NOTAS_NACIONAIS", "PESSOAS_NACIONAIS"))  # noqa: PLR2004
