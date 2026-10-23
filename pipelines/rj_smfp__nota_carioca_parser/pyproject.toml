@@ -1,0 +1,13 @@
+[project]
+name = "rj_smfp__nota_carioca_parser"
+version = "1.0.0"
+description = "Parses the NFS-e Nacional XML documents that the ADN extractor stored in GCS (sanitization, tolerant XSD validation, quarantine with return) into the raw_nfse_nacional BigQuery tables that the Nota Carioca dbt models consume."
+dependencies = [
+    "prefect_rj_iplanrio",
+    "google-cloud-bigquery>=3.41.0",
+    "google-cloud-storage>=2.10.0",
+    "lxml>=6.0.0",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
