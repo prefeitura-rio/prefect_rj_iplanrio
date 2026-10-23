@@ -36,13 +36,13 @@ def test_flow_deployments_staging_e_prod_com_agenda_inativa_ate_o_gate():
         assert deployment["concurrency_limit"]["limit"] == 1
 
 
-def test_flow_staging_le_a_producao_restrita_e_prod_a_producao():
+def test_flow_staging_e_prod_usam_o_ambiente_e_o_dataset_da_convencao():
     por_nome = {d["name"]: d["parameters"] for d in deployments()}
     assert por_nome["rj-smfp--nota-carioca-parser--staging"] == {
         "dataset_id": "raw_nfse_nacional_staging",
-        "ambiente": "producao_restrita",
+        "ambiente": "staging",
     }
-    assert por_nome["rj-smfp--nota-carioca-parser--prod"] == {"dataset_id": "raw_nfse_nacional", "ambiente": "producao"}
+    assert por_nome["rj-smfp--nota-carioca-parser--prod"] == {"dataset_id": "raw_nfse_nacional", "ambiente": "prod"}
 
 
 def test_flow_estrutura_do_pacote_igual_a_dos_irmaos():
