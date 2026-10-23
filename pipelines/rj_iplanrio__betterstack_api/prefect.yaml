@@ -46,6 +46,12 @@ deployments:
       table:
         dataset_id: brutos_betterstack
         table_id: eai_gateway_incidents
+      dump:
+        mode: merge
+        options:
+          merge:
+            key: [id]
+            prune: data_particao
   - name: rj-iplanrio--betterstack-api--prod
     tags:
       - environment:prod
@@ -68,6 +74,12 @@ deployments:
       table:
         dataset_id: brutos_betterstack
         table_id: eai_gateway_incidents
+      dump:
+        mode: merge
+        options:
+          merge:
+            key: [id]
+            prune: data_particao
     schedules:
       - cron: "0 3 * * *"
         timezone: America/Sao_Paulo
