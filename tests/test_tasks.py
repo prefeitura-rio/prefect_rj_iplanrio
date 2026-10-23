@@ -9,7 +9,7 @@ from pyarrow import table as arrow_table
 from toolkit.dbt import DbtRun
 
 from utils import tasks
-from utils.constants import DISCORD_LIMIT
+from utils.constants import DISCORD_LIMIT, USER_AGENT
 from utils.tasks import (
     dump_arcgis_to_gcs,
     maintain_delta_table,
@@ -31,6 +31,21 @@ async def test_a_get_sends_the_params_and_the_headers_and_returns_the_json(fake_
     [seen] = fake_api.requests
     assert data == {"items": [1, 2]}
     assert (seen.method, seen.path, seen.query, seen.headers["x-token"]) == ("GET", "/list", {"page": ["2"]}, "abc")
+
+
+@pytest.mark.parametrize(
+    ("headers", "expected"),
+    [
+        pytest.param(None, USER_AGENT, id="the_shared_user_agent_by_default"),
+        pytest.param({"User-Agent": "mine"}, "mine", id="the_user_agent_of_the_caller_wins"),
+    ],
+)
+async def test_a_request_sends_a_browser_user_agent_unless_the_caller_sets_one(fake_api, headers, expected):
+    """Send the shared User-Agent, which servers such as INMET do not reset."""
+    await request_json.fn(f"{fake_api.url}/list", headers=headers)
+
+    [seen] = fake_api.requests
+    assert seen.headers["user-agent"] == expected
 
 
 async def test_a_post_sends_its_body_as_json(fake_api):

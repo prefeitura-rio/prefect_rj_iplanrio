@@ -68,4 +68,7 @@ BIFROST_CALIBRATED_BATCH: Final = 50
 BIFROST_CALIBRATED_TOKENS: Final = 8192
 """The batch size for which 8192 output tokens were enough, so the limit scales with the batch."""
 
+USER_AGENT: Final = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+"""The User-Agent of an API request. INMET resets the connection of a library User-Agent such as `python-httpx`."""
+
 DRIVE_FOLDER_MIME: Final = "application/vnd.google-apps.folder"

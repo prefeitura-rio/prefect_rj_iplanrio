@@ -31,7 +31,7 @@ from toolkit.gcs import create_store
 from toolkit.settings import DatabaseSettings, DiscordSettings
 from toolkit.telemetry import logger
 
-from .constants import DBT_FAILED, RETRIES, RETRY_DELAY_SECONDS
+from .constants import DBT_FAILED, RETRIES, RETRY_DELAY_SECONDS, USER_AGENT
 from .dispatch import Switch, decide_switch, post_notice
 from .hooks import retry_on_transient_error
 from .hsm import Hsm, HsmRun, Recipient, Sent, build_rows, results_notice, send_batches, success_notice
@@ -290,7 +290,7 @@ async def request_json(
     safe to send twice. A 4xx fails at once. The pipeline picks the records out of the
     JSON, or `ingest_api` does.
     """
-    async with AsyncClient(timeout=timeout) as client:
+    async with AsyncClient(timeout=timeout, headers={"User-Agent": USER_AGENT}) as client:
         response = await client.request(method, url, params=params, headers=headers, json=body)
         response.raise_for_status()
 
