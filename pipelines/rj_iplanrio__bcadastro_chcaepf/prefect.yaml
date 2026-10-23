@@ -1,0 +1,83 @@
+name: rj_iplanrio__bcadastro_chcaepf
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_iplanrio__bcadastro_chcaepf-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_iplanrio__bcadastro_chcaepf/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-iplanrio--bcadastro-chcaepf--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ build-image.tag }}'
+    entrypoint: pipelines/rj_iplanrio__bcadastro_chcaepf/flow.py:rj_iplanrio__bcadastro_chcaepf
+    work_pool:
+      name: onprem-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: uv run --package rj_iplanrio__bcadastro_chcaepf -- prefect flow-run execute
+        namespace: pipelines-staging
+        secretName: pipelines-rj-iplanrio--bcadastro-chcaepf
+        image_pull_policy: Always
+  - name: rj-iplanrio--bcadastro-chcaepf--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ get-commit-hash.stdout }}'
+    entrypoint: pipelines/rj_iplanrio__bcadastro_chcaepf/flow.py:rj_iplanrio__bcadastro_chcaepf
+    work_pool:
+      name: onprem-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: uv run --package rj_iplanrio__bcadastro_chcaepf -- prefect flow-run execute
+        namespace: pipelines-prod
+        secretName: pipelines-rj-iplanrio--bcadastro-chcaepf
+        image_pull_policy: Always
+    schedules:
+      - cron: "30 4 * * *"
+        timezone: America/Sao_Paulo
+        slug: chcaepf-daily
+        parameters:
+          database:
+            type: couchdb
+            host: 10.2.231.241
+            port: 6984
+            database: chcaepf_bcadastros
+            options:
+              shape: utils.couchdb:BCADASTRO
+          table:
+            dataset_id: brutos_bcadastro
+            table_id: chcaepf_bcadastros
+          read:
+            table: chcaepf_bcadastros
+          options:
+            chunks:
+              column: id
+              width: 1000000000000
+              begin: 0
+              end: 99999999999999
+            columns:
+              add_timestamp: true

@@ -45,6 +45,8 @@ members = [
     "rj-cvl-arquivo-virtual",
     "rj-cvl-osinfo",
     "rj-iplanrio-alertario-previsao-24h",
+    "rj-iplanrio-bcadastro-chcaepf",
+    "rj-iplanrio-bcadastro-chcno",
     "rj-iplanrio-bcadastro-chcnpj",
     "rj-iplanrio-bcadastro-chcpf",
     "rj-iplanrio-betterstack-api",
@@ -4958,6 +4960,36 @@ dependencies = [
 requires-dist = [
     { name = "defusedxml" },
     { name = "prefect-rj-iplanrio", editable = "." },
+]
+
+[[package]]
+name = "rj-iplanrio-bcadastro-chcaepf"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_iplanrio__bcadastro_chcaepf" }
+dependencies = [
+    { name = "prefect-rj-iplanrio" },
+    { name = "toolkit" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "toolkit", editable = "packages/toolkit" },
+]
+
+[[package]]
+name = "rj-iplanrio-bcadastro-chcno"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_iplanrio__bcadastro_chcno" }
+dependencies = [
+    { name = "prefect-rj-iplanrio" },
+    { name = "toolkit" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "toolkit", editable = "packages/toolkit" },
 ]
 
 [[package]]
