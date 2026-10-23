@@ -77,7 +77,7 @@ class Indice(Protocol):
         ...
 
     def documentos_na_faixa(self, ambiente: str, nsu_ini: int, nsu_fim: int) -> list[DocumentoIndexado]:
-        """NSU, hash do XML e origem de cada linha indexada em ``[nsu_ini, nsu_fim]``."""
+        """NSU, hash do XML, origem e posição no raw de cada linha indexada em ``[nsu_ini, nsu_fim]``."""
         ...
 
     def carregar_documentos(self, linhas: Sequence[LinhaIndice]) -> None:
@@ -163,9 +163,14 @@ class BigQueryIndice:
         return {int(linha["nsu"]) for linha in linhas}
 
     def documentos_na_faixa(self, ambiente: str, nsu_ini: int, nsu_fim: int) -> list[DocumentoIndexado]:
-        """NSU, hash e origem das linhas indexadas na faixa."""
+        """NSU, hash, origem e posição no raw das linhas indexadas na faixa."""
         linhas = self._consultar("documentos_na_faixa", ambiente=ambiente, nsu_ini=nsu_ini, nsu_fim=nsu_fim)
-        return [DocumentoIndexado(int(linha["nsu"]), linha["xml_sha256"], linha["origem"]) for linha in linhas]
+        return [
+            DocumentoIndexado(
+                int(linha["nsu"]), linha["xml_sha256"], linha["origem"], linha["gcs_uri"], int(linha["linha"])
+            )
+            for linha in linhas
+        ]
 
     def carregar_documentos(self, linhas: Sequence[LinhaIndice]) -> None:
         """Load job das linhas de índice."""

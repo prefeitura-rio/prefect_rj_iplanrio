@@ -9,10 +9,12 @@ from pipelines.rj_smfp__nota_carioca_adn.constants import AMBIENTES
 from pipelines.rj_smfp__nota_carioca_adn.utils.adn_client import AdnClient, AdnConfig
 from pipelines.rj_smfp__nota_carioca_adn.utils.adn_errors import ConfiguracaoAdnInvalida
 from pipelines.rj_smfp__nota_carioca_adn.utils.armazenamento import GcsArmazenamento
+from pipelines.rj_smfp__nota_carioca_adn.utils.backfill import ServicosBackfill
 from pipelines.rj_smfp__nota_carioca_adn.utils.discord import Environment
 from pipelines.rj_smfp__nota_carioca_adn.utils.extrator import Servicos
 from pipelines.rj_smfp__nota_carioca_adn.utils.indice import BigQueryIndice
 from pipelines.rj_smfp__nota_carioca_adn.utils.notify import ExtracaoNotificador
+from pipelines.rj_smfp__nota_carioca_adn.utils.oracle import LeitorOracle, OracleConfig
 from pipelines.rj_smfp__nota_carioca_adn.utils.relogio import RelogioReal
 
 HOST_PRODUCAO = "adn.nfse.gov.br"
@@ -73,5 +75,32 @@ def construir_servicos(parametros: ParametrosServicos) -> Servicos:
         notificador=ExtracaoNotificador.criar(
             Environment(parametros.ambiente), parametros.discord_notifications, run_url=parametros.run_url
         ),
+        relogio=RelogioReal(),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class ParametrosBackfill:
+    """Parâmetros do flow de backfill que escolhem as portas reais.
+
+    :param projeto: Projeto do GCP.
+    :param bucket: Bucket do raw.
+    :param dataset_id: Dataset do índice.
+    """
+
+    projeto: str
+    bucket: str
+    dataset_id: str
+
+
+def construir_servicos_backfill(parametros: ParametrosBackfill) -> ServicosBackfill:
+    """Cria as portas reais do backfill: Oracle somente leitura (``DB_ORACLE_NC_LEITURA__*``), GCS e BigQuery.
+
+    A sessão do Oracle só abre na primeira leitura, depois da checagem da janela horária.
+    """
+    return ServicosBackfill(
+        fonte=LeitorOracle(OracleConfig.do_ambiente()),
+        armazenamento=GcsArmazenamento(storage.Client(project=parametros.projeto), parametros.bucket),
+        indice=BigQueryIndice(bigquery.Client(project=parametros.projeto), parametros.projeto, parametros.dataset_id),
         relogio=RelogioReal(),
     )

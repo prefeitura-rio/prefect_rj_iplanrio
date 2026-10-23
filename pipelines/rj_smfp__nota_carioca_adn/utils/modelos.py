@@ -123,11 +123,13 @@ class LinhaIndice:
 
 @dataclass(frozen=True, slots=True)
 class DocumentoIndexado:
-    """O que o índice sabe de um NSU: o hash do XML guardado e a origem."""
+    """O que o índice sabe de um NSU: hash do XML guardado, origem e onde ele está no raw (objeto e linha)."""
 
     nsu: int
     xml_sha256: str | None
     origem: str
+    gcs_uri: str
+    linha: int
 
 
 @dataclass(frozen=True, slots=True)

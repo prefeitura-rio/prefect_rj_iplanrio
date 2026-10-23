@@ -99,3 +99,38 @@ deployments:
     timezone: America/Sao_Paulo
     active: false
     slug: adn-extracao-prod-60min
+# Backfill do histórico a partir do XML já gravado no Oracle (usuário somente leitura, só na janela noturna).
+- name: rj-smfp--nota-carioca-adn-backfill--prod
+  tags:
+  - environment:prod
+  - severity:medium
+  - code_owner:fredzolio
+  version: "{{ get-commit-hash.stdout }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_adn/flow_backfill.py:rj_smfp__nota_carioca_adn_backfill
+  # Duas leituras simultâneas somariam carga no Oracle da app.
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  # nsu_inicio e nsu_fim são obrigatórios e vêm de cada disparo (faixas aprovadas pela DBA).
+  parameters:
+    ambiente: prod
+    modo: backfill
+    linhas_por_minuto: 20000
+    janela_horaria: "20:00-06:00"
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_adn -- prefect flow-run execute
+      secretName: prefect-jobs-secrets
+      image_pull_policy: Always
+      cpu_request: 500m
+      cpu_limit: "2"
+      memory_request: 1Gi
+      memory_limit: 2Gi
+  schedules:
+  - cron: "0 20 * * *"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: adn-backfill-noturno

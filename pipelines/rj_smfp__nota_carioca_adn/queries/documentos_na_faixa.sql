@@ -1,4 +1,4 @@
-SELECT nsu, xml_sha256, origem
+SELECT nsu, xml_sha256, origem, gcs_uri, linha
 FROM `${projeto}.${dataset}.documentos`
 WHERE ambiente = @ambiente
   AND nsu BETWEEN @nsu_ini AND @nsu_fim
