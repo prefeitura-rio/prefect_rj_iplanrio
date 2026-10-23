@@ -2,12 +2,13 @@
 
 from prefect import flow
 
+from pipelines.rj_cor__meteorologia_inmet.constants import MERGE
 from pipelines.rj_cor__meteorologia_inmet.helpers import read_dates
 from pipelines.rj_cor__meteorologia_inmet.tasks import build_rows_task, fetch_measurements_task
 from utils.constants import DEFAULT_CLOUD
 from utils.flows import load_records
 from utils.hooks import notify_failure
-from utils.types import Cloud, Dump, Table
+from utils.types import Cloud, DumpMode, Table
 
 
 @flow(log_prints=True, flow_run_name="{table[table_id]}", on_failure=[notify_failure])
@@ -15,7 +16,7 @@ async def rj_cor__meteorologia_inmet(
     *,
     cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
-    dump: Dump | None = None,
+    dump_mode: DumpMode = "append",
     data_inicio: str | None = None,
     data_fim: str | None = None,
 ) -> None:
@@ -32,8 +33,4 @@ async def rj_cor__meteorologia_inmet(
     if not rows:
         return
 
-    chosen = dump or {}
-
-    await load_records(
-        rows, table, cloud, dump_mode=chosen.get("mode", "append"), options=chosen.get("options"), parquet=True
-    )
+    await load_records(rows, table, cloud, dump_mode=dump_mode, merge=MERGE, parquet=True)

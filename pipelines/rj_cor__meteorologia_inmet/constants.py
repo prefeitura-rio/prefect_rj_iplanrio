@@ -3,6 +3,8 @@
 from typing import Final
 from zoneinfo import ZoneInfo
 
+from toolkit.types import MergeSpec
+
 STATIONS_URL: Final = "https://apitempo.inmet.gov.br/token/estacao"
 STATIONS: Final = ("A602", "A621", "A636", "A651", "A652", "A653", "A654", "A655", "A656")
 """The stations in the city of Rio de Janeiro."""
@@ -28,3 +30,6 @@ MEASURES: Final = {
     "UMD_INS": "umidade",
 }
 """The measures of the API that the table keeps, with their names in the table."""
+
+MERGE: Final = MergeSpec(key=["id_estacao", "data", "horario"], update=True, prune="data")
+"""How a `merge` run matches the rows: a measurement is a station, a date and an hour."""
