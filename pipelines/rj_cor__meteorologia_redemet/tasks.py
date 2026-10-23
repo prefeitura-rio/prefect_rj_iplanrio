@@ -3,7 +3,7 @@
 from asyncio import Semaphore, gather
 from datetime import date, datetime
 
-from httpx2 import AsyncClient, HTTPError
+from httpx2 import AsyncClient, HTTPStatusError
 from prefect import task
 from pydantic import JsonValue
 from toolkit.telemetry import logger
@@ -17,7 +17,11 @@ from utils.records import read_json
 async def fetch_observation(
     client: AsyncClient, limit: Semaphore, token: str, station: str, stamp: str
 ) -> dict[str, JsonValue] | None:
-    """Fetch the observation of one station and hour, or nothing if the API has none."""
+    """Fetch the observation of one station and hour, or nothing if the API has none.
+
+    An error status means that the API has none for the hour. A network error fails the task,
+    so a run that cannot reach the API does not finish as an empty success.
+    """
     async with limit:
         try:
             response = await client.get(
@@ -25,7 +29,7 @@ async def fetch_observation(
             )
             response.raise_for_status()
             body = read_json(response)
-        except HTTPError as error:
+        except HTTPStatusError as error:
             logger.warning("Observation failed: station=%s stamp=%s error=%s", station, stamp, type(error).__name__)
             return None
 
