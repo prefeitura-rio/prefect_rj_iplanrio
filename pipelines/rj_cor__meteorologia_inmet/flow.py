@@ -8,7 +8,7 @@ from prefect import flow
 from pipelines.rj_cor__meteorologia_inmet.helpers import read_dates
 from pipelines.rj_cor__meteorologia_inmet.tasks import build_rows_task, fetch_measurements_task
 from utils.hooks import notify_failure
-from utils.tasks import publish_table_in_bq, upload_files_to_gcs, write_records
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs, write_parquet_records
 from utils.types import Cloud, DumpMode, Table
 from utils.utils import capture_options
 
@@ -35,13 +35,13 @@ async def rj_cor__meteorologia_inmet(
         return
 
     with TemporaryDirectory() as directory:
-        folder = await write_records(rows, Path(directory))
+        folder = await write_parquet_records(rows, Path(directory))
         await upload_files_to_gcs(
             folder,
             table,
             bucket=cloud["bucket"],
             dump_mode=dump_mode,
-            source_format="json",
+            source_format="parquet",
             options=capture_options(dump_mode),
         )
 
