@@ -40,6 +40,13 @@ deployments:
         namespace: pipelines-staging
         secretName: pipelines-rj-cor--meteorologia-inmet
         image_pull_policy: Always
+    parameters:
+      dump:
+        mode: merge
+        options:
+          merge:
+            key: [id_estacao, data, horario]
+            prune: data
 
   - name: rj-cor--meteorologia-inmet--prod
     tags:
@@ -66,6 +73,11 @@ deployments:
           table:
             dataset_id: clima_estacao_meteorologica
             table_id: meteorologia_inmet
-          dump_mode: append
+          dump:
+            mode: merge
+            options:
+              merge:
+                key: [id_estacao, data, horario]
+                prune: data
           data_inicio: ""
           data_fim: ""

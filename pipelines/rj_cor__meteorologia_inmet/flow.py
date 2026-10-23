@@ -7,7 +7,7 @@ from pipelines.rj_cor__meteorologia_inmet.tasks import build_rows_task, fetch_me
 from utils.constants import DEFAULT_CLOUD
 from utils.flows import load_records
 from utils.hooks import notify_failure
-from utils.types import Cloud, DumpMode, Table
+from utils.types import Cloud, Dump, Table
 
 
 @flow(log_prints=True, flow_run_name="{table[table_id]}", on_failure=[notify_failure])
@@ -15,7 +15,7 @@ async def rj_cor__meteorologia_inmet(
     *,
     cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
-    dump_mode: DumpMode = "append",
+    dump: Dump | None = None,
     data_inicio: str | None = None,
     data_fim: str | None = None,
 ) -> None:
@@ -23,6 +23,7 @@ async def rj_cor__meteorologia_inmet(
 
     Without dates the run reads yesterday and today in UTC, and keeps the measurements of
     today in São Paulo. With `data_inicio` it is a backfill and keeps every measurement.
+    In `merge` a measurement that the table has is not added again.
     """
     first, last, backfill = read_dates(data_inicio, data_fim)
     measurements = await fetch_measurements_task(first, last)
@@ -31,4 +32,8 @@ async def rj_cor__meteorologia_inmet(
     if not rows:
         return
 
-    await load_records(rows, table, cloud, dump_mode=dump_mode, parquet=True)
+    chosen = dump or {}
+
+    await load_records(
+        rows, table, cloud, dump_mode=chosen.get("mode", "append"), options=chosen.get("options"), parquet=True
+    )
