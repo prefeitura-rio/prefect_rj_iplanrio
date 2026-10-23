@@ -15,6 +15,7 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task  # pylint: d
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
 from prefect import flow  # pylint: disable=E0611, E0401
 from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
+from prefect.runtime import flow_run as prefect_flow_run
 from pytz import timezone
 
 from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
@@ -42,12 +43,14 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
         print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set on Infisical. Cannot send notification.")
         return
 
+    run_url = flow_run.ui_url or "URL indisponível"
     message = (
         "<@821121576455634955> <@1458456241683824744> <@302518123066556426>\n"
         "Prefect flow de verificação de disparos não efetuados falhou! 🚨\n"
         f"Flow: {flow.name}\n"
         f"Flow Run: {flow_run.name}\n"
-        f"State: {state.name}"
+        f"State: {state.name}\n"
+        f"🔗 Link: {run_url}"
     )
     send_discord_notification(webhook_url, message)
 
@@ -84,7 +87,7 @@ def rj_crm__disparos_nao_efetuados(
         webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
         send_discord_notification(
             webhook_url,
-            f"<@821121576455634955> <@1458456241683824744> <@302518123066556426> <@1524151359765479475>\n✅ **Todas as campanhas ativas tiveram disparo hoje ({hoje}).**",
+            f"<@821121576455634955> <@1458456241683824744> <@302518123066556426> <@1524151359765479475>\n✅ **Todas as campanhas ativas tiveram disparo hoje ({hoje}).**\n🔗 {prefect_flow_run.ui_url or 'URL indisponível'}",
         )
         return
 
@@ -97,7 +100,8 @@ def rj_crm__disparos_nao_efetuados(
         "<@821121576455634955> <@1458456241683824744> <@302518123066556426> <@1524151359765479475>\n"
         f"⚠️ **Campanhas ativas SEM disparo hoje ({hoje}):**\n\n"
         f"{linhas}\n\n"
-        f"Total: **{len(df)}** campanha(s) sem disparo."
+        f"Total: **{len(df)}** campanha(s) sem disparo.\n"
+        f"🔗 {prefect_flow_run.ui_url or 'URL indisponível'}"
     )
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
     send_discord_notification(webhook_url, message)
