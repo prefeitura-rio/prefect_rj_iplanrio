@@ -228,3 +228,14 @@ def mutar_atributo(xml: str, xpath: str, nome: str, valor: str) -> str:
         raise LookupError(f"XPath sem resultado: {xpath}")
     nos[0].set(nome, valor)
     return etree.tostring(arvore, encoding="unicode")
+
+
+def cnc_xml() -> str:
+    """Um CNC (cadastro nacional de contribuintes) sintético, válido pelo XSD v1.00."""
+    return (
+        f'<?xml version="1.0" encoding="UTF-8"?><CNC xmlns="{NS}" versao="1.00"><infCNC Id="CNC33045570SINTETICO">'
+        f"<cMun>3304557</cMun><cnpjMun>{CNPJ_PRESTADOR}</cnpjMun><CPFAgTrib>{CPF_AUTOR}</CPFAgTrib>"
+        "<tpAmb>2</tpAmb><verAplic>sintetico-1.0</verAplic><infContrib>"
+        f"<CNPJ>{CNPJ_TOMADOR}</CNPJ><IM>12345</IM><dIM>2026-01-01</dIM><dAutEmiss>2026-01-01</dAutEmiss>"
+        "<cStatEmiss>1</cStatEmiss><cSitCNC>1</cSitCNC></infContrib></infCNC></CNC>"
+    )
