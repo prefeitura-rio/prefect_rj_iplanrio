@@ -3,10 +3,11 @@
 -- Espelha o schema de rj-crm-registry.brutos_wetalkie.disparos_ativos,
 -- mas no dataset novo do Salesforce.
 --
--- Como funciona a checagem (check_flow_status):
---   SELECT ativo, data_limite_disparo, nome_campanha
+-- Como funciona a checagem (check_flow_status, query em queries/check_flow_status.sql,
+-- hoje sobre brutos_salesforce_staging.disparos_ativos):
+--   SELECT ativo, data_limite_disparo, nome_hsm, nome_campanha
 --   FROM disparos_ativos
---   WHERE nome_campanha = '{campaign_name}' AND ambiente = '{flow_environment}'
+--   WHERE nome_hsm = '$campaign_name' AND ambiente = '$flow_environment'
 --   LIMIT 1
 -- - Se não achar linha -> flow termina (campanha tratada como inativa).
 -- - ativo precisa ser a STRING '1' (qualquer outro valor conta como inativo).

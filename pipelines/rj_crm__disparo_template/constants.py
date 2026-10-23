@@ -5,6 +5,9 @@ Constantes específicas para pipeline de template
 
 from enum import Enum
 
+# Âncora do load_query: resolve queries/ da raiz da pipeline.
+QUERIES_ANCHOR = __file__
+
 
 class TemplateConstants(Enum):
     """

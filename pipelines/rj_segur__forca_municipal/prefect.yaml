@@ -101,7 +101,7 @@ deployments:
           table_id: qmd_plano
           dump_mode: append
 
-      # ── Downstream (dependem de upstream acima, janela mín. 2h) ──────────
+      # ── Downstream (dependem de upstream acima, janela mín. 2h) ─────────
       # unit_positions depende de unidades_historico (01:00 → 03:00 = 2h)
       - interval: 86400
         anchor_date: "2025-01-01T03:00:00-03:00"
