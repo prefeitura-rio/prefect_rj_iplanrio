@@ -1,0 +1,13 @@
+{
+  "staging": [
+    "rj_cor__meteorologia_inmet",
+    "rj_cor__meteorologia_redemet",
+    "rj_cor__meteorologia_redemet_estacoes",
+    "rj_iplanrio__bcadastro_chcaepf",
+    "rj_iplanrio__bcadastro_chcno",
+    "rj_iplanrio__bcadastro_chcnpj",
+    "rj_iplanrio__bcadastro_chcpf",
+    "rj_iplanrio__betterstack_api"
+  ],
+  "prod": []
+}

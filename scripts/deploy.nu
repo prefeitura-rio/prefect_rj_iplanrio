@@ -1,9 +1,9 @@
-use lib.nu [fail]
+use lib.nu [fail find-deployments read-allowed]
 use std/log
 
 const RETRYABLE_ERRORS = [timeout connection network 'read timed out']
 const ZERO_SHA = '0000000000000000000000000000000000000000'
-const SHARED_PATHS = [src packages pyproject.toml uv.lock]
+const SHARED_PATHS = [src packages pyproject.toml uv.lock .allow.json]
 const ROOT_IMAGE_FILES = [Dockerfile openssl.cnf]
 
 # Write one output for the next job of the workflow, or print it when run by hand.
@@ -18,23 +18,6 @@ def write-output [name: string, value: string]: nothing -> nothing {
             } catch {|err| fail $'Cannot write the output ($name): ($err.msg)' {command: write-output, span: (metadata $name).span} }
         }
     }
-}
-
-# Return the deployments of a pipeline for one environment. A pipeline without a `prefect.yaml` has none.
-def find-deployments [pipeline: string, environment: string]: nothing -> list<string> {
-    let file = $'pipelines/($pipeline)/prefect.yaml'
-    if not ($file | path exists) { return [] }
-
-    let config = try { open $file } catch {|err|
-        fail $'Cannot read ($file): ($err.msg)' {command: find-deployments, span: (metadata $file).span}
-    }
-
-    $config
-    | get --optional deployments
-    | default []
-    | each {|deployment| $deployment.name? }
-    | compact
-    | where ($it | str ends-with $'--($environment)')
 }
 
 # List the files that changed between two commits, except Markdown files.
@@ -113,7 +96,13 @@ def 'main plan' [
         $changed | list-pipelines
     }
 
-    let chosen = $candidates | where (find-deployments $it $environment | is-not-empty) | sort
+    let allowed = read-allowed $environment
+
+    if ($pipeline != null) and ($pipeline not-in $allowed) {
+        fail $'The pipeline ($pipeline) is not in .allow.json for ($environment)' {command: plan, span: (metadata $pipeline).span}
+    }
+
+    let chosen = $candidates | where $it in $allowed | where (find-deployments $it $environment | is-not-empty) | sort
 
     if ($pipeline != null) and ($chosen | is-empty) {
         fail $'The pipeline ($pipeline) has no ($environment) deployment' {command: plan, span: (metadata $pipeline).span}

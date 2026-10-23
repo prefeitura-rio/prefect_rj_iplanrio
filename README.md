@@ -359,17 +359,26 @@ O `GitHub Actions` roda as tasks do `devenv` e os scripts `Nushell` de `scripts/
 | Workflow                | Quando roda                                                                                                                                          | O que faz                                                                                                                                                                                             |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ci.yaml`               | `pull request` e `push` na `master`, na `main` e em `staging/**`                                                                                     | Dois jobs: `devenv --profile checks tasks run lint:all test:all` e os testes de paridade com `Postgres`, `MySQL`, `CouchDB` e `MongoDB` reais. O `devenv` já roda as tasks independentes em paralelo. |
-| `deploy.yaml`           | `push` na `master` (prod) ou em `staging/*` (staging), quando `pipelines/**`, `src/**`, `packages/**`, `pyproject.toml` ou `uv.lock` muda; ou manual | Escolhe as pipelines com `scripts/deploy.nu plan` e registra cada uma no `Prefect` com `scripts/deploy.nu run`, quatro por vez.                                                                       |
+| `deploy.yaml`           | `push` na `master` (prod) ou em `staging/*` (staging), quando `pipelines/**`, `src/**`, `packages/**`, `pyproject.toml`, `uv.lock` ou `.allow.json` muda; ou manual | Escolhe as pipelines com `scripts/deploy.nu plan` e registra cada uma no `Prefect` com `scripts/deploy.nu run`, quatro por vez.                                                                       |
 | `build-root-image.yaml` | Mudança no `Dockerfile` ou no `openssl.cnf` da raiz, na `master`; ou manual                                                                          | Publica `ghcr.io/<repositório>:latest` e chama `deploy.yaml` para todas as pipelines, em staging e em prod (os dois ambientes em paralelo). Os dois ambientes não esperam um `pull request`.          |
 | `sast.yaml`             | `pull request` e `push` na `master`                                                                                                                  | Análise de segurança.                                                                                                                                                                                 |
 
 O `deploy.yaml` só roda quando a variável do repositório `DEPLOY_ENABLED` vale `true`. Sem ela, nada faz deploy: nem um `push`, nem a execução manual, nem o `build-root-image.yaml`. Crie a variável em _Settings > Secrets and variables > Actions > Variables_ para ligar o deploy, e apague-a para desligar.
 
+O `.allow.json` da raiz é a lista das pipelines que podem fazer deploy, por ambiente. Todo gatilho obedece a ele: `push`, execução manual, `all` e o `build-root-image.yaml`. Uma pipeline fora da lista nunca entra, e uma execução manual dela falha. A lista da `prod` fica vazia de propósito: nada vai para a `prod` até alguém incluir a pipeline. Para liberar uma pipeline, ponha o nome (em ordem alfabética) na lista do ambiente e faça o merge: a mudança do `.allow.json` registra todas as pipelines da lista. `nu scripts/checks.nu lint prefect` confere que cada nome tem pasta e um `deployment` do ambiente.
+
+```json
+{
+  "staging": ["rj_cor__meteorologia_inmet", "rj_iplanrio__betterstack_api"],
+  "prod": []
+}
+```
+
 Como o `deploy.yaml` funciona:
 
-- **`plan`:** escolhe as pipelines que têm um `deployment` do ambiente, isto é, um `name` que termina em `--prod` ou `--staging`. O `plan` lê o `prefect.yaml` como YAML.
+- **`plan`:** escolhe as pipelines que estão no `.allow.json` do ambiente e têm um `deployment` do ambiente, isto é, um `name` que termina em `--prod` ou `--staging`. O `plan` lê o `prefect.yaml` como YAML.
   - Se mudou um arquivo de `pipelines/<nome>/`, só essa pipeline entra.
-  - Se mudou `src/`, `packages/`, `pyproject.toml` ou `uv.lock`, todas as pipelines entram, porque cada imagem tem esse código dentro. Arquivos `.md` não contam.
+  - Se mudou `src/`, `packages/`, `pyproject.toml`, `uv.lock` ou `.allow.json`, todas as pipelines candidatas entram (a lista filtra), porque cada imagem tem esse código dentro. Arquivos `.md` não contam.
   - Em `staging/*`, só segue se a branch tem um `pull request` aberto para a `master`.
   - Na `master`, se o mesmo `push` muda o `Dockerfile` ou o `openssl.cnf`, o `plan` não faz nada. O `build-root-image.yaml` publica a imagem nova e depois faz o deploy de todas as pipelines.
 - **`deploy`:** um job por pipeline, cada um no próprio runner, com quatro em paralelo. Uma falha não cancela as outras. O script tenta de novo (duas vezes) só quando o erro é de rede.
@@ -380,8 +389,8 @@ Como o `deploy.yaml` funciona:
 Para testar o plano na sua máquina:
 
 ```sh
-devenv --profile deploy shell -- nu scripts/deploy.nu plan --environment prod --all
-devenv --profile deploy shell -- nu scripts/deploy.nu run rj_smdue__dump_db_sislic --environment prod --dry-run
+devenv --profile deploy shell -- nu scripts/deploy.nu plan --environment staging --all
+devenv --profile deploy shell -- nu scripts/deploy.nu run rj_cor__meteorologia_inmet --environment staging --dry-run
 ```
 
 ## Problemas comuns

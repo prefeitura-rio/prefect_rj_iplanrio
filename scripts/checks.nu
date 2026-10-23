@@ -1,4 +1,4 @@
-use lib.nu [fail]
+use lib.nu [fail find-deployments]
 
 # Run one command in a folder and fail with its name if it exits with an error.
 def --wrapped in-project [folder: path, command: string, ...arguments: string]: nothing -> nothing {
@@ -183,15 +183,36 @@ def 'main lint deps' []: nothing -> nothing {
     }
 }
 
-# Fail when a pipeline `prefect.yaml` has a comment or cannot be read by Nushell, which the deploy script uses.
+# List the problems of `.allow.json`: a missing list, an unsorted or repeated name, or a pipeline without a deployment.
+def allow-problems []: nothing -> list<string> {
+    let allowed = try { open .allow.json } catch { return ['.allow.json: cannot be read'] }
+
+    ['staging' 'prod'] | each {|environment|
+        let names = try { $allowed | get $environment } catch { null }
+
+        if not (($names | describe) starts-with 'list') {
+            [$'.allow.json: ($environment) is not a list']
+        } else {
+            [(if $names != ($names | sort) { $'.allow.json: ($environment) is not sorted' })]
+            | append (if ($names | uniq | length) != ($names | length) { [$'.allow.json: ($environment) has a repeated name'] } else { [] })
+            | append ($names | where {|name| find-deployments $name $environment | is-empty } | each {|name| $'.allow.json: ($name) has no ($environment) deployment' })
+            | compact
+        }
+    } | flatten
+}
+
+# Fail when a pipeline `prefect.yaml` has a comment or cannot be read by Nushell, which the deploy script uses, or when `.allow.json` is wrong.
 def 'main lint prefect' []: nothing -> nothing {
     let files = glob pipelines/*/prefect.yaml
     let unreadable = $files | where (try { open $it | ignore; false } catch { true })
     let commented = $files | where (try { open --raw $it | lines | any {|line| $line | str trim --left | str starts-with '#' } } catch { true })
-    let problems = $unreadable | each { $'($in): cannot be read' } | append ($commented | each { $'($in): has a comment' })
+    let problems = $unreadable
+    | each { $'($in): cannot be read' }
+    | append ($commented | each { $'($in): has a comment' })
+    | append (allow-problems)
 
     if ($problems | is-not-empty) {
-        fail $'Fix the prefect.yaml files:(char nl)($problems | str join (char nl))' {command: 'lint prefect', span: (metadata $problems).span}
+        fail $'Fix the prefect.yaml files and .allow.json:(char nl)($problems | str join (char nl))' {command: 'lint prefect', span: (metadata $problems).span}
     }
 }
 
