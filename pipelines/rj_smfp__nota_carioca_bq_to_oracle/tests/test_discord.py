@@ -15,23 +15,8 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import (
     resolve_webhook,
     webhook_from_env,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import (
-    COLOR_CANCELLED,
-    COLOR_FAILURE,
-    COLOR_RUNNING,
-    COLOR_SUCCESS,
-    ChecklistItem,
-    CountSide,
-    Fact,
-    ItemStatus,
-    RunStatus,
-    RunView,
-    TableView,
-    ValidationLine,
-    build_announcement,
-    build_payload,
-    format_validation_line,
-)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import build_announcement, build_payload, format_validation_line
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import COLOR_CANCELLED, COLOR_FAILURE, COLOR_RUNNING, COLOR_SUCCESS, ChecklistItem, CountSide, Fact, ItemStatus, RunStatus, RunView, TableView, ValidationLine
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_format import (
     flow_run_url,
     format_short_duration,

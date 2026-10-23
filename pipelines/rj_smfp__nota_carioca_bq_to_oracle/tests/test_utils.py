@@ -7,7 +7,7 @@ from typing import final
 import pytest
 from google.cloud import storage
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import bigquery, oracle, slots
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import bigquery, oracle, oracle_ddl, slots_oracle
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import changed_tables, quiet_wait_seconds
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import (
     LoaderField,
@@ -17,19 +17,9 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import (
     oracle_column,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.inmemory import InMemoryStatus
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import (
-    CROSS_SCHEMA_PRIVILEGES,
-    MANAGED_TABLE_MARKER,
-    QUERIES_ANCHOR,
-    OracleConfig,
-    assert_managed_table,
-    column_definitions,
-    definition_differences,
-    foreign_indexes,
-    missing_privileges,
-    oracle_table_name,
-    validate_identifier,
-)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import CROSS_SCHEMA_PRIVILEGES, MANAGED_TABLE_MARKER, OracleConfig, assert_managed_table, missing_privileges, oracle_table_name, validate_identifier
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_ddl import definition_differences, foreign_indexes
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_query import QUERIES_ANCHOR, column_definitions
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import (
     CONSUMER_GRANTS,
     SlotPlan,
@@ -40,34 +30,11 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import (
     synonym_owners,
     synonyms_to_realign,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr import (
-    CountingReader,
-    ProgressSnapshot,
-    SessionProgress,
-    build_control_file,
-    format_count,
-    format_duration,
-    format_progress,
-    format_size,
-    progress_percent,
-    split_round_robin,
-)
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import (
-    IndexDefinition,
-    IndexExpression,
-    Partitioning,
-    TableLayout,
-    TablePartition,
-    index_from_dictionary,
-    index_key,
-    index_statement_parts,
-    inmemory_from_dictionary,
-    layout_differences,
-    partitioning_from_dictionary,
-    plan_structure,
-    slot_indexes,
-    storage_clause,
-)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr import build_control_file, split_round_robin
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr_progress import CountingReader, ProgressSnapshot, SessionProgress, format_count, format_duration, format_progress, format_size, progress_percent
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import index_from_dictionary, index_key, inmemory_from_dictionary, layout_differences, partitioning_from_dictionary, plan_structure, slot_indexes
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_ddl import index_statement_parts, storage_clause
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import IndexDefinition, IndexExpression, Partitioning, TableLayout, TablePartition
 from utils.utils import render_query
 
 
@@ -862,7 +829,7 @@ def fake_database(
 
         return FakeConnection(cursor)
 
-    monkeypatch.setattr(slots, "connect", connect)
+    monkeypatch.setattr(slots_oracle, "connect", connect)
 
     return cursor
 
@@ -880,7 +847,7 @@ def test_swap_migrates_partitioned_legacy_table_after_repointing_consumers(monke
         objects={"BQLOAD_X": ["TABLE", "TABLE PARTITION"]},
         comments={"BQLOAD_X": MARKED, "BQLOAD_X_A": MARKED},
     )
-    slots.swap_synonyms(slots_config(), PLAN_A)
+    slots_oracle.swap_synonyms(slots_config(), PLAN_A)
     assert cursor.ddl == [
         'CREATE OR REPLACE SYNONYM "NFSE_SIGA"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_A"',
         'CREATE OR REPLACE SYNONYM "NFSE_USER"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_A"',
@@ -892,7 +859,7 @@ def test_swap_migrates_partitioned_legacy_table_after_repointing_consumers(monke
 
 def test_swap_after_migration_only_repoints_synonyms(monkeypatch: pytest.MonkeyPatch) -> None:
     cursor = fake_database(monkeypatch, objects={"BQLOAD_X": ["SYNONYM"]}, comments={"BQLOAD_X_B": MARKED})
-    slots.swap_synonyms(slots_config(), SlotPlan("BQLOAD_X", "BQLOAD_X_A", "BQLOAD_X_B"))
+    slots_oracle.swap_synonyms(slots_config(), SlotPlan("BQLOAD_X", "BQLOAD_X_A", "BQLOAD_X_B"))
     assert [statement.split()[4] for statement in cursor.ddl] == [
         '"NFSE_SIGA"."BQLOAD_X"',
         '"NFSE_USER"."BQLOAD_X"',
@@ -913,7 +880,7 @@ def test_swap_changes_nothing_when_the_name_cannot_become_a_synonym(
 ) -> None:
     cursor = fake_database(monkeypatch, objects=objects, comments=comments)
     with pytest.raises(PermissionError, match=message):
-        slots.swap_synonyms(slots_config(), PLAN_A)
+        slots_oracle.swap_synonyms(slots_config(), PLAN_A)
     assert cursor.ddl == []
 
 
@@ -925,7 +892,7 @@ def test_resolve_slots_stops_before_loading_when_legacy_table_is_not_managed(mon
         synonyms=[("NFSE_SIGA", "DFEN", "BQLOAD_X_B"), ("DFEN", "DFEN", "BQLOAD_X_A")],
     )
     with pytest.raises(PermissionError, match="não foi criada"):
-        slots.resolve_slots(slots_config(), "BQLOAD_X")
+        slots_oracle.resolve_slots(slots_config(), "BQLOAD_X")
     assert cursor.ddl == []
 
 
@@ -936,7 +903,7 @@ def test_refresh_synonyms_points_every_owner_to_the_active_table(monkeypatch: py
         comments={"BQLOAD_X_A": MARKED, "BQLOAD_X_B": MARKED},
         synonyms=[("DFEN", "DFEN", "BQLOAD_X_B"), ("NFSE_SIGA", "DFEN", "BQLOAD_X_B")],
     )
-    actions = slots.refresh_synonyms(slots_config(), "BQLOAD_X")
+    actions = slots_oracle.refresh_synonyms(slots_config(), "BQLOAD_X")
     assert [statement for statement in cursor.ddl if statement.startswith("GRANT")] == [
         f'GRANT {privileges} ON "DFEN"."BQLOAD_X_B" TO "{grantee}"' for grantee, privileges in CONSUMER_GRANTS
     ]
@@ -963,7 +930,7 @@ def test_refresh_synonyms_changes_nothing_without_an_active_a_b_table(
 ) -> None:
     cursor = fake_database(monkeypatch, objects=objects, comments=comments, synonyms=synonyms)
     with pytest.raises(error):
-        slots.refresh_synonyms(slots_config(), "BQLOAD_X")
+        slots_oracle.refresh_synonyms(slots_config(), "BQLOAD_X")
     assert cursor.ddl == []
 
 
@@ -1248,8 +1215,8 @@ def test_count_rows_sends_the_parallel_hint_to_oracle(
         return CountConnection(executed)
 
     config = oracle.OracleConfig("DFEN", "p", "h", "1", "s", "DFEN")
-    monkeypatch.setattr(oracle, "connect", connect)
-    assert oracle.count_rows(config, "BQLOAD_X_A", parallel_degree=requested) == 7
+    monkeypatch.setattr(oracle_ddl, "connect", connect)
+    assert oracle_ddl.count_rows(config, "BQLOAD_X_A", parallel_degree=requested) == 7
     assert executed == [f'SELECT /*+ PARALLEL({hinted}) */ COUNT(*)\nFROM "DFEN"."BQLOAD_X_A"\n']
 
 

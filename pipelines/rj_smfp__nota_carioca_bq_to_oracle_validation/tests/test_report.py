@@ -1,21 +1,9 @@
 from decimal import Decimal
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import OracleColumn
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import IndexDefinition, Partitioning, TablePartition
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.report import (
-    compare_columns,
-    compare_grants,
-    compare_indexes,
-    compare_metrics,
-    compare_partitions,
-    compare_synonyms,
-    count_divergences,
-    describe_column,
-    format_text_table,
-    metric_specs,
-    normalize_metric,
-    short_bound,
-)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import IndexDefinition, Partitioning, TablePartition
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.report import compare_metrics, count_divergences, format_text_table, metric_specs, normalize_metric
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.report_compare import compare_columns, compare_grants, compare_indexes, compare_partitions, compare_synonyms, describe_column, short_bound
 
 
 def field(name: str, type_: str, mode: str = "NULLABLE") -> dict[str, str]:

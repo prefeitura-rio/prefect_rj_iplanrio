@@ -6,14 +6,10 @@ from dataclasses import dataclass
 
 import oracledb
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import (
-    QUERIES_ANCHOR,
-    OracleConfig,
-    assert_managed_existing_table,
-    connect,
-    fetch_rows,
-    to_int,
-)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import OracleConfig, connect
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_ddl import assert_managed_existing_table
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_query import QUERIES_ANCHOR, to_int
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_read import fetch_rows
 from utils.utils import render_query
 
 

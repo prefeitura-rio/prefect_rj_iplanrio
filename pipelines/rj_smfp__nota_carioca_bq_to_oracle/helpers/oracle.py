@@ -1,34 +1,24 @@
 """Acesso ao Oracle de destino: configuração, criação protegida e contagem de tabelas."""
 
 import re
-from collections.abc import Mapping
 from dataclasses import dataclass
-from decimal import Decimal
-from pathlib import Path
-from typing import cast
 
 import oracledb
-from toolkit.telemetry import logger
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import OracleColumn, oracle_column
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import (
-    IndexDefinition,
-    TableLayout,
-    index_from_dictionary,
-    index_key,
-    index_statement_parts,
-    inmemory_from_dictionary,
-    layout_differences,
-    partitioning_from_dictionary,
-    storage_clause,
-)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_query import QUERIES_ANCHOR, fetch_all
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.settings import Settings
 from utils.utils import render_query
 
 TABLE_PREFIX = "BQLOAD_"
+
+
 MANAGED_TABLE_MARKER = "rj_smfp__nota_carioca_bq_to_oracle"
+
+
 # Os sinônimos ficam também nos schemas dos consumidores, o que exige CREATE ANY SYNONYM até do dono.
 OWNER_PRIVILEGES = ("CREATE ANY SYNONYM",)
+
+
 CROSS_SCHEMA_PRIVILEGES = (
     *OWNER_PRIVILEGES,
     "ALTER ANY INDEX",
@@ -43,11 +33,13 @@ CROSS_SCHEMA_PRIVILEGES = (
     "LOCK ANY TABLE",
     "SELECT ANY TABLE",
 )
+
+
 # Um CREATE INDEX grande passa minutos sem tráfego na rede; a sonda evita que um firewall derrube a conexão ociosa.
 KEEPALIVE_MINUTES = 2
+
+
 IDENTIFIER_PATTERN = re.compile(r"^[A-Z][A-Z0-9_$#]{0,127}$")
-# load_query resolve queries/ no diretório pai do caminho recebido; a pasta utils/ aponta para a raiz da pipeline.
-QUERIES_ANCHOR = str(Path(__file__).parent)
 
 
 @dataclass(frozen=True)
@@ -173,151 +165,6 @@ def assert_privileges(cursor: oracledb.Cursor, schema: str) -> None:
         )
 
 
-type Row = tuple[object, ...]
-
-
-def fetch_all(cursor: oracledb.Cursor) -> list[Row]:
-    """Return every row that the cursor has left."""
-    return cast("list[Row]", cursor.fetchall())
-
-
-def fetch_one(cursor: oracledb.Cursor) -> Row | None:
-    """Return the next row of the cursor, or nothing if it has none."""
-    return cast("Row | None", cursor.fetchone())
-
-
-def fetch_scalar(cursor: oracledb.Cursor) -> object:
-    """Return the first value of the next row, or nothing if there is no row."""
-    row = fetch_one(cursor)
-
-    return row[0] if row else None
-
-
-def column_names(cursor: oracledb.Cursor) -> list[str]:
-    """Return the names of the columns of the last query, in lower case."""
-    return [str(description[0]).lower() for description in cursor.description or []]
-
-
-def column_definitions(columns: list[OracleColumn]) -> str:
-    """Monta a lista de colunas do ``CREATE TABLE``.
-
-    :param columns: Colunas da tabela.
-    :returns: Fragmento SQL com uma coluna por linha.
-    """
-    return ",\n".join(f"  {column.definition}" for column in columns)
-
-
-def read_column_definitions(cursor: oracledb.Cursor, owner: str, table: str) -> list[OracleColumn]:
-    """Lê as colunas de uma tabela no dicionário do Oracle, na ordem da tabela.
-
-    :param cursor: Cursor de uma conexão aberta.
-    :param owner: Dono da tabela.
-    :param table: Nome da tabela.
-    :returns: Colunas da tabela, ou lista vazia se ela não existir ou não estiver
-        visível para a sessão.
-    """
-    cursor.execute(render_query(QUERIES_ANCHOR, "get_column_definitions"), {"owner": owner, "table_name": table})
-    names = column_names(cursor)
-    return [oracle_column(dict(zip(names, row, strict=True))) for row in fetch_all(cursor)]
-
-
-def fetch_template_columns(config: OracleConfig, template_schema: str, table: str) -> list[OracleColumn]:
-    """Lê a definição da tabela original, que serve de modelo para a de destino.
-
-    :param config: Configuração da conexão.
-    :param template_schema: Schema da tabela original.
-    :param table: Nome da tabela original (o mesmo da tabela no BigQuery).
-    :returns: Colunas da tabela original, na ordem dela.
-    :raises LookupError: Se a tabela original não existir ou não estiver visível.
-    """
-    with connect(config) as connection, connection.cursor() as cursor:
-        columns = read_column_definitions(cursor, template_schema, table)
-    if not columns:
-        raise LookupError(
-            f"Tabela original {template_schema}.{table} não encontrada; ela define os tipos da tabela de destino."
-        )
-    return columns
-
-
-def to_int(value: object) -> int:
-    """Converte para inteiro um número lido do banco, tratando nulo como zero.
-
-    :param value: Valor de uma coluna numérica.
-    :returns: O valor inteiro.
-    :raises TypeError: Se o valor não for numérico.
-    """
-    if value is None:
-        return 0
-    if isinstance(value, int | float | Decimal | str):
-        return int(value)
-    raise TypeError(f"Valor não numérico: {value!r}")
-
-
-def fetch_rows(cursor: oracledb.Cursor, query: str, binds: Mapping[str, object]) -> list[dict[str, object]]:
-    """Executa uma consulta e retorna as linhas como dicionários.
-
-    :param cursor: Cursor de uma conexão aberta.
-    :param query: Nome do arquivo em ``queries/``, sem a extensão.
-    :param binds: Valores das variáveis de bind.
-    :returns: Linhas com as colunas em minúsculas.
-    """
-    cursor.execute(render_query(QUERIES_ANCHOR, query), dict(binds))
-    names = column_names(cursor)
-    return [dict(zip(names, row, strict=True)) for row in fetch_all(cursor)]
-
-
-def read_table_layout(cursor: oracledb.Cursor, owner: str, table: str) -> TableLayout | None:
-    """Lê tablespace, particionamento, índices e In-Memory de uma tabela no dicionário do Oracle.
-
-    :param cursor: Cursor de uma conexão aberta.
-    :param owner: Dono da tabela.
-    :param table: Nome da tabela.
-    :returns: Estrutura da tabela, ou ``None`` se ela não existir ou não estiver
-        visível para a sessão.
-    """
-    binds = {"owner": owner, "table_name": table}
-    storage = fetch_rows(cursor, "get_table_tablespace", binds)
-    if not storage:
-        return None
-    partitioning = None
-    part_table = fetch_rows(cursor, "get_partitioning", binds)
-    if part_table:
-        keys = [str(row["column_name"]) for row in fetch_rows(cursor, "get_partition_key_columns", binds)]
-        partitions = fetch_rows(cursor, "get_table_partitions", binds)
-        partitioning = partitioning_from_dictionary(part_table[0], keys, partitions)
-
-    columns: dict[tuple[object, object], list[str]] = {}
-    for row in fetch_rows(cursor, "get_index_columns", binds):
-        columns.setdefault((row["index_owner"], row["index_name"]), []).append(index_key(row))
-    indexes = tuple(
-        index_from_dictionary(row, columns.get((row["owner"], row["index_name"]), []))
-        for row in fetch_rows(cursor, "get_indexes", binds)
-    )
-    tablespace = storage[0]["tablespace_name"] or storage[0]["def_tablespace_name"]
-    return TableLayout(
-        tablespace=None if tablespace is None else str(tablespace),
-        partitioning=partitioning,
-        indexes=indexes,
-        inmemory=inmemory_from_dictionary(storage[0]),
-    )
-
-
-def fetch_template_layout(config: OracleConfig, template_schema: str, table: str) -> TableLayout:
-    """Lê tablespace, particionamento e índices da tabela original.
-
-    :param config: Configuração da conexão.
-    :param template_schema: Schema da tabela original.
-    :param table: Nome da tabela original.
-    :returns: Estrutura da tabela original.
-    :raises LookupError: Se a tabela original não existir ou não estiver visível.
-    """
-    with connect(config) as connection, connection.cursor() as cursor:
-        layout = read_table_layout(cursor, template_schema, table)
-    if layout is None:
-        raise LookupError(f"Tabela original {template_schema}.{table} não encontrada.")
-    return layout
-
-
 def connect(config: OracleConfig) -> oracledb.Connection:
     """Abre uma conexão em modo thick com o Oracle.
 
@@ -332,224 +179,3 @@ def connect(config: OracleConfig) -> oracledb.Connection:
         oracledb.init_oracle_client()
     dsn = f"{config.dsn}?expire_time={KEEPALIVE_MINUTES}"
     return oracledb.connect(user=config.user, password=config.password, dsn=dsn)
-
-
-def definition_differences(existing: list[str], expected: list[str]) -> list[str]:
-    """Lista, posição a posição, as colunas cuja definição difere da original.
-
-    :param existing: Definições das colunas da tabela existente.
-    :param expected: Definições das colunas da tabela original.
-    :returns: Diferenças no formato ``atual → esperada``; vazia se forem iguais.
-    """
-    size = max(len(existing), len(expected))
-    padded_existing = existing + [""] * (size - len(existing))
-    padded_expected = expected + [""] * (size - len(expected))
-    return [
-        f"{found or '(ausente)'} → {wanted or '(ausente)'}"
-        for found, wanted in zip(padded_existing, padded_expected, strict=True)
-        if found != wanted
-    ]
-
-
-@dataclass(frozen=True)
-class TableDefinition:
-    """Definição completa da tabela de destino.
-
-    :param columns: Colunas, na ordem da tabela original.
-    :param layout: Tablespace e particionamento da tabela original.
-    :param source: Tabela de origem, gravada no comentário.
-    """
-
-    columns: list[OracleColumn]
-    layout: TableLayout
-    source: str
-
-
-def create_managed_table(cursor: oracledb.Cursor, schema: str, table: str, definition: TableDefinition) -> None:
-    """Cria a tabela de destino e grava a marca da pipeline no comentário.
-
-    :param cursor: Cursor de uma conexão aberta.
-    :param schema: Schema da tabela.
-    :param table: Nome da tabela.
-    :param definition: Colunas, tablespace, particionamento e origem.
-    """
-    cursor.execute(
-        render_query(
-            QUERIES_ANCHOR,
-            "create_table",
-            schema=schema,
-            table=table,
-            columns=column_definitions(definition.columns),
-            storage=storage_clause(definition.layout),
-        )
-    )
-    comment = f"{MANAGED_TABLE_MARKER}: carga a partir de {definition.source}".replace("'", "''")
-    cursor.execute(render_query(QUERIES_ANCHOR, "comment_on_table", schema=schema, table=table, comment=comment))
-
-
-def ensure_table(config: OracleConfig, table: str, definition: TableDefinition) -> str:
-    """Deixa a tabela de destino com a mesma definição da tabela original.
-
-    Cria a tabela se ela não existir. Se existir e tiver sido criada pela
-    pipeline (prefixo e marca no comentário), é reaproveitada quando colunas,
-    tablespace e partições são iguais aos da original, ou apagada e recriada
-    quando divergem. Tabelas sem a marca da pipeline nunca são alteradas.
-
-    :param config: Configuração da conexão.
-    :param table: Nome da tabela no Oracle.
-    :param definition: Colunas, tablespace, particionamento e origem.
-    :returns: O que foi feito, em texto, para registrar no log.
-    :raises PermissionError: Se a sessão não tiver os privilégios necessários ou
-        se a tabela existir sem a marca da pipeline.
-    """
-    target = f"{config.schema}.{table}"
-    binds = {"owner": config.schema, "table_name": table}
-    with connect(config) as connection, connection.cursor() as cursor:
-        assert_privileges(cursor, config.schema)
-        cursor.execute(render_query(QUERIES_ANCHOR, "get_table_comment"), binds)
-        row = fetch_one(cursor)
-        if row is None:
-            create_managed_table(cursor, config.schema, table, definition)
-            return f"Tabela {target} criada com a definição da original ({len(definition.columns)} colunas)."
-
-        assert_managed_table(table, comment_of(row))
-        existing = [column.definition for column in read_column_definitions(cursor, config.schema, table)]
-        differences = definition_differences(existing, [column.definition for column in definition.columns])
-        existing_layout = read_table_layout(cursor, config.schema, table)
-        if existing_layout is not None:
-            differences += layout_differences(existing_layout, definition.layout)
-        if not differences:
-            return f"Tabela {target} já existe com a definição da original e será recarregada."
-
-        cursor.execute(render_query(QUERIES_ANCHOR, "drop_table", schema=config.schema, table=table))
-        create_managed_table(cursor, config.schema, table, definition)
-        return f"Tabela {target} divergia da original e foi apagada e recriada. Diferenças: {differences}"
-
-
-def comment_of(row: Row) -> str | None:
-    """Return the comment of a table from the row of `get_table_comment`."""
-    return None if row[1] is None else str(row[1])
-
-
-def assert_managed_existing_table(cursor: oracledb.Cursor, schema: str, table: str) -> None:
-    """Confirma que a tabela existe e pertence à pipeline antes de alterá-la.
-
-    :param cursor: Cursor de uma conexão aberta.
-    :param schema: Schema da tabela.
-    :param table: Nome da tabela.
-    :raises PermissionError: Se a tabela não existir ou não pertencer à pipeline.
-    """
-    cursor.execute(render_query(QUERIES_ANCHOR, "get_table_comment"), {"owner": schema, "table_name": table})
-    row = fetch_one(cursor)
-    if row is None:
-        raise PermissionError(f"{schema}.{table} não existe.")
-    assert_managed_table(table, comment_of(row))
-
-
-def truncate_table(config: OracleConfig, table: str) -> None:
-    """Esvazia a tabela de destino, após confirmar que ela pertence à pipeline.
-
-    :param config: Configuração da conexão.
-    :param table: Nome da tabela no Oracle.
-    :raises PermissionError: Se a tabela não existir ou não pertencer à pipeline.
-    """
-    with connect(config) as connection, connection.cursor() as cursor:
-        assert_managed_existing_table(cursor, config.schema, table)
-        cursor.execute(render_query(QUERIES_ANCHOR, "truncate_table", schema=config.schema, table=table))
-    logger.info("Tabela %s.%s esvaziada", config.schema, table)
-
-
-def foreign_indexes(indexes: list[IndexDefinition], schema: str) -> list[str]:
-    """Lista os índices que a pipeline não criou e, por isso, não pode apagar.
-
-    :param indexes: Índices da tabela de destino.
-    :param schema: Schema da tabela de destino.
-    :returns: Nomes, no formato ``dono.índice``, dos índices fora do schema ou sem
-        o prefixo da pipeline.
-    """
-    return [
-        f"{index.owner}.{index.name}"
-        for index in indexes
-        if index.owner != schema or not index.name.startswith(TABLE_PREFIX)
-    ]
-
-
-def drop_managed_indexes(config: OracleConfig, table: str) -> list[str]:
-    """Apaga os índices da tabela de destino, que a carga paralela não aceita.
-
-    Só apaga índices com o prefixo da pipeline, no schema de destino e em tabela
-    criada pela pipeline. Se houver qualquer outro índice, nada é apagado.
-
-    :param config: Configuração da conexão.
-    :param table: Nome da tabela no Oracle.
-    :returns: Nomes dos índices apagados.
-    :raises PermissionError: Se a tabela não pertencer à pipeline ou tiver índice
-        que a pipeline não criou.
-    """
-    with connect(config) as connection, connection.cursor() as cursor:
-        assert_managed_existing_table(cursor, config.schema, table)
-        layout = read_table_layout(cursor, config.schema, table)
-        indexes = list(layout.indexes) if layout else []
-        others = foreign_indexes(indexes, config.schema)
-        if others:
-            raise PermissionError(
-                f"{config.schema}.{table} tem índices que a pipeline não criou: {others}. Nada foi alterado; "
-                + "a carga em paralelo exige a tabela sem índices."
-            )
-        for index in indexes:
-            cursor.execute(render_query(QUERIES_ANCHOR, "drop_index", schema=config.schema, index=index.name))
-    return [index.name for index in indexes]
-
-
-def create_index(config: OracleConfig, table: str, index: IndexDefinition, parallel_degree: int) -> None:
-    """Cria um índice na tabela de destino e depois tira o paralelismo dele.
-
-    O ``PARALLEL`` acelera a criação, mas, se ficasse gravado no índice, faria o
-    otimizador usar consultas paralelas em quem lê a tabela.
-
-    :param config: Configuração da conexão.
-    :param table: Nome da tabela no Oracle.
-    :param index: Índice a criar, já com o nome da tabela de destino.
-    :param parallel_degree: Grau de paralelismo da criação.
-    :raises PermissionError: Se a tabela não pertencer à pipeline.
-    """
-    with connect(config) as connection, connection.cursor() as cursor:
-        assert_managed_existing_table(cursor, config.schema, table)
-        parts = index_statement_parts(index, parallel_degree)
-        cursor.execute(
-            render_query(QUERIES_ANCHOR, "create_index", schema=config.schema, table=table, index=index.name, **parts)
-        )
-        cursor.execute(render_query(QUERIES_ANCHOR, "disable_index_parallel", schema=config.schema, index=index.name))
-
-
-def gather_table_stats(config: OracleConfig, table: str, parallel_degree: int) -> None:
-    """Coleta as estatísticas da tabela de destino para o otimizador.
-
-    As estatísticas dos índices já são calculadas no ``CREATE INDEX``.
-
-    :param config: Configuração da conexão.
-    :param table: Nome da tabela no Oracle.
-    :param parallel_degree: Grau de paralelismo da coleta.
-    """
-    with connect(config) as connection, connection.cursor() as cursor:
-        cursor.execute(
-            render_query(QUERIES_ANCHOR, "gather_table_stats"),
-            {"owner": config.schema, "table_name": table, "degree": parallel_degree},
-        )
-
-
-def count_rows(config: OracleConfig, table: str, parallel_degree: int = 1) -> int:
-    """Conta as linhas da tabela de destino, com varredura paralela.
-
-    :param config: Configuração da conexão.
-    :param table: Nome da tabela no Oracle.
-    :param parallel_degree: Grau da dica ``PARALLEL`` do ``COUNT(*)``; 1 equivale a varredura serial.
-    :returns: Número de linhas.
-    """
-    query = render_query(
-        QUERIES_ANCHOR, "count_rows", schema=config.schema, table=table, degree=max(int(parallel_degree), 1)
-    )
-    with connect(config) as connection, connection.cursor() as cursor:
-        cursor.execute(query)
-        row = fetch_one(cursor)
-    return to_int(row[0] if row else 0)

@@ -13,7 +13,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_format import (
+    format_count,
+    format_duration,
+    format_size,
+)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import (
     ChecklistItem,
     CountSide,
     Fact,
@@ -23,12 +28,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import (
     TableView,
     ValidationLine,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_format import (
-    format_count,
-    format_duration,
-    format_size,
-)
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr import ProgressSnapshot
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr_progress import ProgressSnapshot
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.stages import (
     STEP_LABELS,
     STEP_WEIGHTS,

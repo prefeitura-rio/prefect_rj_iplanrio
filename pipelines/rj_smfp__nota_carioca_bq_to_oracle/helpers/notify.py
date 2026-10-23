@@ -29,18 +29,15 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import (
     never_raises,
     resolve_webhook,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import (
-    RunStatus,
-    build_announcement,
-    build_payload,
-)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import build_announcement, build_payload
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import RunStatus
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify_view import (
     RunState,
     TableState,
     build_view,
     stage_key,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr import ProgressSnapshot
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr_progress import ProgressSnapshot
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.stages import Step, TableStep
 
 CANCELLATIONS = (KeyboardInterrupt, SystemExit, asyncio.CancelledError)
