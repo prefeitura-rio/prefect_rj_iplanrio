@@ -86,6 +86,7 @@ members = [
     "rj-smfp-nota-carioca-carga-completa",
     "rj-smfp-nota-carioca-oracle-probe",
     "rj-smfp-nota-carioca-oracle-to-bq",
+    "rj-smfp-nota-carioca-paridade-f1",
     "rj-smfp-porte-empresa",
     "rj-smfp-sigma",
     "rj-smi-siscob",
@@ -5532,6 +5533,21 @@ requires-dist = [
     { name = "oracledb", specifier = ">=4.0.1" },
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "pyarrow", specifier = ">=24.0.0" },
+]
+
+[[package]]
+name = "rj-smfp-nota-carioca-paridade-f1"
+version = "1.0.0"
+source = { virtual = "pipelines/rj_smfp__nota_carioca_paridade_f1" }
+dependencies = [
+    { name = "google-cloud-bigquery" },
+    { name = "prefect-rj-iplanrio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "google-cloud-bigquery", specifier = ">=3.41.0" },
+    { name = "prefect-rj-iplanrio", editable = "." },
 ]
 
 [[package]]
