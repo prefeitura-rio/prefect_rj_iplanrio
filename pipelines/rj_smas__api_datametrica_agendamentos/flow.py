@@ -143,7 +143,7 @@ def rj_smas__api_datametrica_agendamentos(
         "whitelist_percentage": 0,
         "infisical_secret_path": "/crm_disparo_template",
         "whitelist_environment": "production",
-        "query": "queries/smas_cadunico_confirma_agendamento.sql"
+        "query_file": "queries/smas_cadunico_confirma_agendamento.sql"
     }
     run_deployment(
         name="rj-crm--disparo-template-sf/rj-crm--disparo-template-sf--prod",
