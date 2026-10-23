@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # ruff: noqa: PLR0913
 """
-Dump CADUNICO TO BQ..
+Dump CADUNICO TO BQ...
 """
 
 from iplanrio.pipelines_utils.env import inject_bd_credentials
@@ -23,7 +23,7 @@ from pipelines.rj_smas__cadunico.tasks import (
 def rj_smas__cadunico(
     raw_bucket: str = "rj-smas",
     raw_prefix_area: str = "raw/protecao_social_cadunico/registro_familia",
-    staging_bucket: str = "rj-iplanrio",
+    staging_bucket: str = "rj-smas-cadunico",
     table_id: str = "registro_familia",
     layout_table_id: str = "layout",
     dataset_id: str = "brutos_cadunico",
@@ -66,6 +66,7 @@ def rj_smas__cadunico(
             bucket_name=raw_bucket,
             dataset_id=dataset_id,
             table_id=table_id,
+            staging_bucket=staging_bucket,
             max_concurrent=max_concurrent,
             wait_for=[need_to_ingest],
         )
