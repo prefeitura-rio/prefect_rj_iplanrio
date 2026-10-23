@@ -1,0 +1,12 @@
+[project]
+name = "rj_iplanrio__bcadastro_chcpf"
+version = "0.1.0"
+description = "Dumps the people (CPF) database of the bcadastro CouchDB to BigQuery."
+dependencies = [
+    "prefect_rj_iplanrio",
+    "toolkit",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
+toolkit = { workspace = true }
