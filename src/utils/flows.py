@@ -11,6 +11,7 @@ from toolkit.dbt import DbtRun
 from toolkit.functions.native import now_sao_paulo
 from toolkit.settings import DiscordSettings
 from toolkit.telemetry import logger
+from toolkit.types import MergeSpec
 
 from .constants import DEFAULT_CLOUD
 from .delta import summarize_maintenance
@@ -48,15 +49,24 @@ async def load_records(
     *,
     dump_mode: DumpMode = "append",
     options: DumpOptions | None = None,
+    merge: MergeSpec | None = None,
     parquet: bool = False,
 ) -> None:
     """Load the records of a pipeline into a Delta table, and publish the BigQuery table.
 
     The records go through a temporary folder, as JSON lines or, with `parquet`, as a Parquet
     file that keeps a text such as `2026-10-22 20:00:00` as text. Without `options` an
-    `append` run adds its rows under its capture time, so a retry of it adds nothing.
+    `append` run adds its rows under its capture time, so a retry of it adds nothing. In
+    `merge` mode the `merge` key of the table decides which rows are new, and it is ignored
+    in the other modes. A merge reads the records into memory, so it suits records and not
+    large tables.
     """
     write = write_parquet_records if parquet else write_records
+
+    if dump_mode == "merge" and merge is not None:
+        chosen: DumpOptions = {**(options or {}), "merge": merge}
+    else:
+        chosen = capture_options(dump_mode) if options is None else options
 
     with TemporaryDirectory() as directory:
         folder = await write(records, Path(directory))
@@ -66,7 +76,7 @@ async def load_records(
             bucket=cloud["bucket"],
             dump_mode=dump_mode,
             source_format="parquet" if parquet else "json",
-            options=capture_options(dump_mode) if options is None else options,
+            options=chosen,
         )
 
     await publish_table_in_bq(table, cloud)

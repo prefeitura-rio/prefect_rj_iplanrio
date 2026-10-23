@@ -251,24 +251,28 @@ schedules:
 
 ### Modo `merge`
 
-O `merge` usa o `MERGE` do `Delta Lake`: uma execução só adiciona as chaves que a tabela não tem e, com `update`, troca a linha que mudou. As opções vão em `options.merge`:
+O `merge` usa o `MERGE` do `Delta Lake`: uma execução só adiciona as chaves que a tabela não tem e, com `update`, troca a linha que mudou. A chave é uma propriedade dos dados, então fica no código da pipeline, em `constants.py`, e o `prefect.yaml` só liga o modo:
 
-```yaml
-dump:
-  mode: merge
-  options:
-    merge:
-      key: [id_estacao, data, horario]
-      prune: data
+```python
+MERGE: Final = MergeSpec(key=["id_estacao", "data", "horario"], update=True, prune="data")
 ```
 
-- `key` são as colunas que identificam uma linha. Os dados novos precisam ter uma linha só para cada chave, senão a execução falha.
+```yaml
+parameters:
+  dump_mode: merge
+```
+
+O flow passa `merge=MERGE` para `load_records`, que só usa a chave no modo `merge`. Num flow que chama `dump_to_delta` direto, ponha `merge` em `options`.
+
+- `key` são as colunas que identificam uma linha. Os dados novos precisam ter uma linha só para cada chave e nenhum `NULL` nela, senão a execução falha.
 - `update` vale `true` se não for dito. Com `false`, uma linha que a tabela já tem fica como está. Com `true`, ela muda só se alguma coluna for diferente, então os mesmos dados não reescrevem arquivo.
 - `prune` é uma coluna que nunca muda para uma chave, como a data da medição. O `merge` lê só os arquivos que chegam ao menor valor dela nos dados novos. Sem `prune`, ele lê a tabela inteira.
 - O modo `merge` não aceita `chunks` nem `capture`, e as opções de `merge` não valem para `append` nem para `overwrite`.
-- A primeira execução cria a tabela. Uma execução sem linhas não muda nada. Os dados novos precisam caber na memória.
+- A primeira execução cria a tabela. Uma execução sem linhas não muda nada.
+- Os dados novos precisam caber na memória: o `merge` serve para registros de uma API, não para tabelas grandes.
 - Uma coluna nova nos dados falha como em `append`. Rode uma vez com `overwrite`.
-- Os flows de `rj_cor__meteorologia_inmet`, `rj_cor__meteorologia_redemet` e `rj_iplanrio__betterstack_api` recebem o grupo `dump` com `mode` e `options`. O `rj_cor__meteorologia_redemet_estacoes`, que é uma foto das estações, usa `dump_mode: overwrite`.
+- Cada execução registra no log as linhas inseridas e atualizadas e os arquivos lidos e pulados.
+- Usam o `merge`: `rj_cor__meteorologia_inmet`, `rj_cor__meteorologia_redemet` e `rj_iplanrio__betterstack_api`. O `rj_cor__meteorologia_redemet_estacoes`, que é uma foto das estações, usa `dump_mode: overwrite`.
 
 ## Tasks prontas
 

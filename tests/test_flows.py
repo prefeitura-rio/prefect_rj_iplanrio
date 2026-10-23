@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from toolkit.telemetry import logger
+from toolkit.types import MergeSpec
 
 from utils import flows
 from utils.flows import dispatch_hsm, load_records, send_alerts
@@ -12,6 +13,7 @@ from utils.types import Cloud, Table
 TABLE = Table(dataset_id="ds", table_id="tb")
 CLOUD = Cloud(bucket="b", project="p", connection="p.us.biglake")
 RECORDS = [{"id": "1"}]
+MERGE = MergeSpec(key=["id"])
 
 
 @pytest.fixture
@@ -73,6 +75,24 @@ def settings(source_format, dump_mode, options):
             "write_records",
             settings("json", "append", {"select": ["id"]}),
             id="the_options_of_the_caller_win",
+        ),
+        pytest.param(
+            {"dump_mode": "merge", "merge": MERGE},
+            "write_records",
+            settings("json", "merge", {"merge": MERGE}),
+            id="a_merge_gets_its_key_and_no_capture",
+        ),
+        pytest.param(
+            {"dump_mode": "merge", "merge": MERGE, "options": {"select": ["id"]}},
+            "write_records",
+            settings("json", "merge", {"select": ["id"], "merge": MERGE}),
+            id="a_merge_keeps_the_options_of_the_caller",
+        ),
+        pytest.param(
+            {"merge": MERGE},
+            "write_records",
+            settings("json", "append", {"capture": "append"}),
+            id="the_key_is_ignored_in_an_append",
         ),
     ],
 )

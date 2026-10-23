@@ -112,16 +112,6 @@ class DatabaseDumpOptions(DumpOptions, total=False):
     concurrency: int
 
 
-class Dump(TypedDict, total=False):
-    """How a flow of records loads its table: the dump mode and the dump options.
-
-    `mode` is `append` unless it is set. One group keeps the parameters of a flow few.
-    """
-
-    mode: DumpMode
-    options: DumpOptions
-
-
 class Maintenance(TypedDict):
     """What the maintenance of one Delta table did: its state before and after."""
 
