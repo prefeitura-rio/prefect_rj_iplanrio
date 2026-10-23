@@ -95,7 +95,7 @@ def montar(
     """Cria o índice e os objetos para ``(nsu, tipo_documento, xml, chave_acesso)``, ``por_objeto`` por arquivo."""
     armazem, leitor = ArmazemLocal(), LeitorLocal()
     for posicao, (nsu, tipo, xml, chave) in enumerate(documentos):
-        uri = f"gs://bucket/adn/producao/dt=2026-02-10/lote_{posicao // por_objeto:04d}.ndjson.gz"
+        uri = f"gs://bucket/adn/prod/dt=2026-02-10/lote_{posicao // por_objeto:04d}.ndjson.gz"
         armazem.entradas.append(
             EntradaIndice(
                 nsu=nsu,
@@ -105,7 +105,7 @@ def montar(
                 data_hora_geracao=GERACAO,
                 gcs_uri=uri,
                 linha=posicao % por_objeto,
-                ambiente="producao",
+                ambiente="prod",
             )
         )
         if nsu not in sem_linha:

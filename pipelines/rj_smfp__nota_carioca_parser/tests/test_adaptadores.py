@@ -33,8 +33,8 @@ def test_gcs_leitor_baixa_o_objeto_certo():
     blob = SimpleNamespace(download_as_bytes=lambda: gzip.compress(ndjson({"nsu": 9, "xml": "<x/>"})))
     bucket = SimpleNamespace(blob=lambda nome: pedidos.append(nome) or blob)
     cliente = SimpleNamespace(bucket=lambda nome: pedidos.append(nome) or bucket)
-    assert LeitorGcs(cliente).ler_linhas("gs://rj-bucket/adn/producao/lote_1.ndjson.gz")[9]["xml"] == "<x/>"
-    assert pedidos == ["rj-bucket", "adn/producao/lote_1.ndjson.gz"]
+    assert LeitorGcs(cliente).ler_linhas("gs://rj-bucket/adn/prod/lote_1.ndjson.gz")[9]["xml"] == "<x/>"
+    assert pedidos == ["rj-bucket", "adn/prod/lote_1.ndjson.gz"]
 
 
 def test_bigquery_id_do_job_e_deterministico_e_so_tem_caracteres_validos():
@@ -73,7 +73,7 @@ class ClienteBq:
 
 
 def armazem(cliente: ClienteBq) -> ArmazemBigQuery:
-    return ArmazemBigQuery(cliente, "proj", "ds", "producao")
+    return ArmazemBigQuery(cliente, "proj", "ds", "prod")
 
 
 def test_bigquery_carga_envia_ndjson_com_job_id_deterministico_e_nao_repete_o_lote():

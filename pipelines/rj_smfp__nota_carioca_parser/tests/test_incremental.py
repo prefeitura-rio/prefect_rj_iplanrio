@@ -109,7 +109,7 @@ def test_incremental_so_le_o_que_esta_acima_da_marca():
     armazem, leitor = lote_basico()
     rodar(armazem, leitor)
     armazem.entradas.append(montar([(104, "EVENTO", CANCELAMENTO, CHAVE)])[0].entradas[0])
-    leitor.objetos["gs://bucket/adn/producao/dt=2026-02-10/lote_0000.ndjson.gz"][104] = {"nsu": 104, "xml": CANCELAMENTO}
+    leitor.objetos["gs://bucket/adn/prod/dt=2026-02-10/lote_0000.ndjson.gz"][104] = {"nsu": 104, "xml": CANCELAMENTO}
     rodar(armazem, leitor)
     assert armazem.nsus("eventos") == [102, 103, 104]
     assert armazem.nsus("nfse") == [101]

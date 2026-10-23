@@ -46,7 +46,7 @@ deployments:
   # Staging lê a produção restrita do ADN e grava no dataset de staging.
   parameters:
     dataset_id: raw_nfse_nacional_staging
-    ambiente: producao_restrita
+    ambiente: staging
   work_pool:
     name: onprem-pool
     work_queue_name: default
@@ -76,7 +76,7 @@ deployments:
     active: false
   parameters:
     dataset_id: raw_nfse_nacional
-    ambiente: producao
+    ambiente: prod
   work_pool:
     name: onprem-pool
     work_queue_name: default

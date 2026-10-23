@@ -1,7 +1,7 @@
 """Flow for rj_smfp__nota_carioca_parser.
 
-Lê do índice ``raw_nfse_nacional.documentos`` (escrito pelo extrator do ADN) os NSUs acima da marca
-``raw_nfse_nacional.parser_marca(versao_parser, ultimo_nsu)``, abre os objetos NDJSON.gz no GCS, sanitiza, detecta a
+Lê do índice ``documentos`` (escrito pelo extrator do ADN) do dataset do ambiente os NSUs acima da marca
+``parser_marca(versao_parser, ultimo_nsu)``, abre os objetos NDJSON.gz no GCS, sanitiza, detecta a
 versão, valida contra os XSDs oficiais (com as tolerâncias portadas do .NET) e grava por load job (nunca streaming) as
 tabelas ``nfse``, ``dps``, ``pessoas`` e ``eventos``; o que não passa vai para ``quarentena`` com prioridade P1 a P5.
 A marca só avança depois de todos os loads do lote, e repetir um lote não duplica (o id do load job é determinístico).
@@ -61,7 +61,7 @@ eventos (29 colunas):
     VERSAO_PARSER, INGERIDO_EM
 
 Parâmetros: ``dataset_id`` e ``ambiente`` escolhem o dataset (índice, tabelas, marca, quarentena) e as entradas do
-índice daquele ambiente (``producao`` ou ``producao_restrita``); ``max_lotes`` limita a execução (nulo vai até
+índice daquele ambiente (``prod`` ou ``staging``); ``max_lotes`` limita a execução (nulo vai até
 esgotar o índice).
 
 Kill switch: pause o deployment (os deployments nascem com a agenda INATIVA, até o gate dos todos 38 e 39).
@@ -72,7 +72,7 @@ from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_smfp__nota_carioca_parser.constants import (
-    AMBIENTE_PRODUCAO,
+    AMBIENTE_PROD,
     DATASET_RAW,
     NSUS_POR_LOTE,
     PROJECT_ID,
@@ -86,7 +86,7 @@ from pipelines.rj_smfp__nota_carioca_parser.utils.bigquery import DESDE_PADRAO
 @flow(log_prints=True)
 def rj_smfp__nota_carioca_parser(  # noqa: PLR0913, PLR0917
     dataset_id: str = DATASET_RAW,
-    ambiente: str = AMBIENTE_PRODUCAO,
+    ambiente: str = AMBIENTE_PROD,
     project_id: str = PROJECT_ID,
     versao_parser: str = VERSAO_PARSER,
     nsus_por_lote: int = NSUS_POR_LOTE,
