@@ -40,6 +40,8 @@ deployments:
         namespace: pipelines-staging
         secretName: pipelines-rj-cor--meteorologia-redemet-estacoes
         image_pull_policy: Always
+    parameters:
+      dump_mode: overwrite
 
   - name: rj-cor--meteorologia-redemet-estacoes--prod
     tags:
@@ -66,3 +68,4 @@ deployments:
           table:
             dataset_id: clima_estacao_meteorologica
             table_id: estacoes_redemet
+          dump_mode: overwrite
