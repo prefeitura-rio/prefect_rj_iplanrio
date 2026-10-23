@@ -8,12 +8,16 @@ sem autenticação.
 """
 
 import json
+import os
 import time
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import requests
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
+from prefect.runtime import flow_run as prefect_flow_run
+
+from pipelines.rj_crm__disparo_template.utils.discord import send_discord_notification
 
 DEFAULT_API_URL = "https://services.pref.rio/mcp/consulta_debitos"
 
@@ -26,6 +30,12 @@ DEFAULT_API_URL = "https://services.pref.rio/mcp/consulta_debitos"
 # passadas como `raw_columns` pro save_csv_for_sftp, pra o pandas não tentar
 # re-escapar/aspar essas aspas de novo na hora de escrever o CSV.
 ESCAPED_JSON_FIELDS = ["lista_cdas", "lista_guias", "dicionario_itens", "itens_informados"]
+
+# Limiar de falhas da API para disparo de alerta no Discord (canal de erros).
+# Só começa a checar após FAILURE_RATE_MIN_SAMPLE CPFs consultados, para evitar
+# falso positivo logo no início quando a amostra ainda é muito pequena.
+FAILURE_RATE_ALERT_THRESHOLD = 0.30  # alerta ao atingir 30% de falhas
+FAILURE_RATE_MIN_SAMPLE = 50  # só começa a checar após 50 CPFs consultados
 
 # Campos da resposta da API que viram colunas no DataFrame (nomes iguais aos
 # do payload, pra rastreabilidade direta). `debitos_msg` é substituído pela
@@ -113,7 +123,7 @@ def formatar_debitos_msg(debitos: Any) -> Optional[str]:
     return "\n".join(linhas)
 
 
-def consultar_debitos(cpf: str, api_url: str, timeout: int = 30, max_retries: int = 3) -> Optional[Dict[str, Any]]:
+def consultar_debitos(cpf: str, api_url: str, timeout: int = 90, max_retries: int = 3) -> Optional[Dict[str, Any]]:
     """
     Consulta débitos de um CPF/CNPJ na API consulta_debitos, com retentativas
     em caso de erro de rede/timeout/5xx.
@@ -184,9 +194,33 @@ def enrich_with_debitos_api(df: pd.DataFrame, params: dict = {}) -> pd.DataFrame
     log(f"Consultando débitos para {len(cpfs)} CPFs únicos em {api_url}")
 
     rows = []
+    consultados = 0
+    falhas = 0
+    alerta_enviado = False
+
     for cpf in cpfs:
         response = consultar_debitos(cpf=str(cpf), api_url=api_url)
+        consultados += 1
+
         if response is None or not _is_sucesso(response.get("api_resposta_sucesso")):
+            falhas += 1
+
+            if (
+                not alerta_enviado
+                and consultados >= FAILURE_RATE_MIN_SAMPLE
+                and falhas / consultados >= FAILURE_RATE_ALERT_THRESHOLD
+            ):
+                taxa = falhas / consultados
+                run_url = prefect_flow_run.ui_url or "URL indisponível"
+                webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+                message = (
+                    f"⚠️ **consulta_debitos: alta taxa de falha na API de dívida ativa**\n"
+                    f"📊 {falhas}/{consultados} CPFs sem retorno ({taxa:.0%})\n"
+                    f"🔗 {run_url}"
+                )
+                send_discord_notification(webhook_url=webhook_url, message=message)
+                alerta_enviado = True
+
             continue
 
         row = {cpf_column: cpf, "cpfCnpj": cpf}

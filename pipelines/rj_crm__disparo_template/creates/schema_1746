@@ -843,7 +843,7 @@
   "table_schema": "brutos_salesforce",
   "table_name": "status_disparo",
   "ordinal_position": "11",
-  "column_name": "envio_datahora",
+  "column_name": "processado_datahora",
   "data_type": "DATETIME",
   "is_nullable": "YES"
 }, {
@@ -851,7 +851,7 @@
   "table_schema": "brutos_salesforce",
   "table_name": "status_disparo",
   "ordinal_position": "12",
-  "column_name": "entrega_datahora",
+  "column_name": "envio_meta_datahora",
   "data_type": "DATETIME",
   "is_nullable": "YES"
 }, {
@@ -859,7 +859,7 @@
   "table_schema": "brutos_salesforce",
   "table_name": "status_disparo",
   "ordinal_position": "13",
-  "column_name": "leitura_datahora",
+  "column_name": "entrega_meta_datahora",
   "data_type": "DATETIME",
   "is_nullable": "YES"
 }, {
@@ -867,7 +867,7 @@
   "table_schema": "brutos_salesforce",
   "table_name": "status_disparo",
   "ordinal_position": "14",
-  "column_name": "falha_datahora",
+  "column_name": "leitura_meta_datahora",
   "data_type": "DATETIME",
   "is_nullable": "YES"
 }, {
@@ -875,6 +875,14 @@
   "table_schema": "brutos_salesforce",
   "table_name": "status_disparo",
   "ordinal_position": "15",
+  "column_name": "falha_meta_datahora",
+  "data_type": "DATETIME",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "16",
   "column_name": "descricao_falha",
   "data_type": "STRING",
   "is_nullable": "YES"
@@ -882,7 +890,7 @@
   "table_catalog": "rj-crm-registry",
   "table_schema": "brutos_salesforce",
   "table_name": "status_disparo",
-  "ordinal_position": "16",
+  "ordinal_position": "17",
   "column_name": "indicador_falha",
   "data_type": "BOOL",
   "is_nullable": "YES"
@@ -890,7 +898,7 @@
   "table_catalog": "rj-crm-registry",
   "table_schema": "brutos_salesforce",
   "table_name": "status_disparo",
-  "ordinal_position": "17",
+  "ordinal_position": "18",
   "column_name": "indicador_quarentena",
   "data_type": "BOOL",
   "is_nullable": "YES"
@@ -898,7 +906,7 @@
   "table_catalog": "rj-crm-registry",
   "table_schema": "brutos_salesforce",
   "table_name": "status_disparo",
-  "ordinal_position": "18",
+  "ordinal_position": "19",
   "column_name": "status_disparo",
   "data_type": "STRING",
   "is_nullable": "YES"
@@ -906,7 +914,7 @@
   "table_catalog": "rj-crm-registry",
   "table_schema": "brutos_salesforce",
   "table_name": "status_disparo",
-  "ordinal_position": "19",
+  "ordinal_position": "20",
   "column_name": "id_status_disparo",
   "data_type": "INT64",
   "is_nullable": "YES"
@@ -914,7 +922,7 @@
   "table_catalog": "rj-crm-registry",
   "table_schema": "brutos_salesforce",
   "table_name": "status_disparo",
-  "ordinal_position": "20",
+  "ordinal_position": "21",
   "column_name": "id_hsm",
   "data_type": "STRING",
   "is_nullable": "YES"
@@ -922,7 +930,7 @@
   "table_catalog": "rj-crm-registry",
   "table_schema": "brutos_salesforce",
   "table_name": "status_disparo",
-  "ordinal_position": "21",
+  "ordinal_position": "22",
   "column_name": "id_waba",
   "data_type": "STRING",
   "is_nullable": "YES"
@@ -930,7 +938,7 @@
   "table_catalog": "rj-crm-registry",
   "table_schema": "brutos_salesforce",
   "table_name": "status_disparo",
-  "ordinal_position": "22",
+  "ordinal_position": "23",
   "column_name": "categoria_hsm",
   "data_type": "STRING",
   "is_nullable": "YES"
@@ -938,7 +946,7 @@
   "table_catalog": "rj-crm-registry",
   "table_schema": "brutos_salesforce",
   "table_name": "status_disparo",
-  "ordinal_position": "23",
+  "ordinal_position": "24",
   "column_name": "canal",
   "data_type": "STRING",
   "is_nullable": "YES"
@@ -946,7 +954,7 @@
   "table_catalog": "rj-crm-registry",
   "table_schema": "brutos_salesforce",
   "table_name": "status_disparo",
-  "ordinal_position": "24",
+  "ordinal_position": "25",
   "column_name": "texto_hsm",
   "data_type": "STRING",
   "is_nullable": "YES"
@@ -954,7 +962,7 @@
   "table_catalog": "rj-crm-registry",
   "table_schema": "brutos_salesforce",
   "table_name": "status_disparo",
-  "ordinal_position": "25",
+  "ordinal_position": "26",
   "column_name": "rodape_hsm",
   "data_type": "STRING",
   "is_nullable": "YES"
@@ -962,8 +970,64 @@
   "table_catalog": "rj-crm-registry",
   "table_schema": "brutos_salesforce",
   "table_name": "status_disparo",
-  "ordinal_position": "26",
+  "ordinal_position": "27",
   "column_name": "data_particao",
   "data_type": "DATE",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "28",
+  "column_name": "dados_disparo",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "29",
+  "column_name": "message_id",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "30",
+  "column_name": "envio_iplan_datahora",
+  "data_type": "DATETIME",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "31",
+  "column_name": "falha_plataforma_datahora",
+  "data_type": "DATETIME",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "32",
+  "column_name": "falha_plataforma_descricao",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "33",
+  "column_name": "indicador_falha_meta",
+  "data_type": "BOOL",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "34",
+  "column_name": "indicador_falha_plataforma",
+  "data_type": "BOOL",
   "is_nullable": "YES"
 }]
