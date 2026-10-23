@@ -37,10 +37,6 @@ deployments:
         host: 10.3.23.158
         port: 1433
         database: DBINAD
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default

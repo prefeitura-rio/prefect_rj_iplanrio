@@ -19,6 +19,7 @@ from pipelines.rj_crm__disparo_template.tasks import (
     watch_task,
 )
 from pipelines.rj_crm__disparo_template.types import Audience, Campaign, Delivery
+from utils.constants import DEFAULT_CLOUD
 from utils.hooks import notify_failure
 from utils.types import Cloud, Table
 
@@ -31,7 +32,7 @@ PIPELINE_FOLDER = Path(__file__).parent
 @flow(log_prints=True, flow_run_name="crm_disparo_{campaign.name}_{campaign.environment}", on_failure=[notify_failure])
 async def rj_crm__disparo_template(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table = DEFAULT_TABLE,
     campaign: Campaign = DEFAULT_CAMPAIGN,
     audience: Audience = DEFAULT_AUDIENCE,

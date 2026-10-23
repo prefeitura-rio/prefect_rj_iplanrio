@@ -5,6 +5,7 @@ from prefect import flow
 from pipelines.rj_segur__forca_municipal.constants import TABLE_CONFIG
 from pipelines.rj_segur__forca_municipal.tasks import run_qmd_task, run_standard_endpoint_task, run_unit_positions_task
 from pipelines.rj_segur__forca_municipal.types import Limits, Window
+from utils.constants import DEFAULT_CLOUD
 from utils.hooks import notify_failure
 from utils.tasks import publish_table_in_bq
 from utils.types import Cloud, DumpMode, Table
@@ -13,7 +14,7 @@ from utils.types import Cloud, DumpMode, Table
 @flow(log_prints=True, flow_run_name="{table[dataset_id]}.{table[table_id]}", on_failure=[notify_failure])
 async def rj_segur__forca_municipal(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
     dump_mode: DumpMode = "append",
     limits: Limits | None = None,

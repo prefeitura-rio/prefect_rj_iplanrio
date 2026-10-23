@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from prefect import flow
 
 from pipelines.rj_cor__precipitacao_alertario.tasks import fetch_readings_task
+from utils.constants import DEFAULT_CLOUD
 from utils.hooks import notify_failure
 from utils.tasks import publish_table_in_bq, upload_files_to_gcs, write_records
 from utils.types import Cloud, DumpMode, Table
@@ -15,7 +16,7 @@ from utils.utils import capture_options
 @flow(log_prints=True, flow_run_name="{pluviometric[table_id]}", on_failure=[notify_failure])
 async def rj_cor__precipitacao_alertario(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     pluviometric: Table,
     meteorological: Table | None = None,
     dump_mode: DumpMode = "append",

@@ -6,6 +6,7 @@ from toolkit.telemetry import logger
 
 from pipelines.rj_crm__api_wetalkie.constants import MAX_AUDIO_SECONDS
 from pipelines.rj_crm__api_wetalkie.tasks import build_rows_task, fetch_attendances_task
+from utils.constants import DEFAULT_CLOUD
 from utils.flows import load_records
 from utils.hooks import notify_failure
 from utils.tasks import run_dbt
@@ -15,7 +16,7 @@ from utils.types import Cloud, DumpMode, Table
 @flow(log_prints=True, flow_run_name="{table[table_id]}", on_failure=[notify_failure])
 async def rj_crm__api_wetalkie(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
     dump_mode: DumpMode = "append",
     dbt: DbtRun | None = None,

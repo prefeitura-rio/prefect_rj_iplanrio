@@ -37,10 +37,6 @@ deployments:
         secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
     parameters:
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
       campaign:
         name: disparo-template-sf
       table:
@@ -486,10 +482,6 @@ deployments:
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
     parameters:
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
       campaign:
         name: disparo-template-sf
       table:

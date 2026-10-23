@@ -15,6 +15,7 @@ from pipelines.rj_crm__geolocalizacao_residencia.tasks import (
     read_addresses_task,
 )
 from pipelines.rj_crm__geolocalizacao_residencia.types import Strategy
+from utils.constants import DEFAULT_CLOUD
 from utils.hooks import notify_failure
 from utils.tasks import publish_table_in_bq, upload_files_to_gcs
 from utils.types import Cloud, DumpMode, Table
@@ -24,7 +25,7 @@ from utils.utils import capture_options
 @flow(log_prints=True, flow_run_name="geo-{strategy}-{table[table_id]}", on_failure=[notify_failure])
 async def rj_crm__geolocalizacao_residencia(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
     strategy: Strategy = "fallback",
     dump_mode: DumpMode = "append",

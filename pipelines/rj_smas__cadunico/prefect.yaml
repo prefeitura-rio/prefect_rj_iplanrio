@@ -32,10 +32,6 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_smas__cadunico/flow.py:rj_smas__cadunico
     parameters:
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
       dbt:
         repository: https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-iplanrio.git
         branch: cadunico
@@ -57,10 +53,6 @@ deployments:
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smas__cadunico/flow.py:rj_smas__cadunico
     parameters:
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
       dbt:
         repository: https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-iplanrio.git
         branch: cadunico

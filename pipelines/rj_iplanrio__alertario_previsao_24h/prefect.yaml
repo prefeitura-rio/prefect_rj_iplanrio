@@ -34,10 +34,6 @@ deployments:
     parameters:
       alerts:
         send: true
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -57,10 +53,6 @@ deployments:
     parameters:
       alerts:
         send: true
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default

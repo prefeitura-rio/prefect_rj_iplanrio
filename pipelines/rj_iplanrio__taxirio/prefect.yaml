@@ -39,11 +39,6 @@ deployments:
         command: uv run --package rj_iplanrio__taxirio -- prefect flow-run execute
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
-    parameters:
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
   - name: rj-iplanrio--taxirio--prod
     tags:
       - environment:prod
@@ -59,11 +54,6 @@ deployments:
         command: uv run --package rj_iplanrio__taxirio -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-    parameters:
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     schedules:
       - interval: 604800
         anchor_date: '2024-09-01T07:00:00'

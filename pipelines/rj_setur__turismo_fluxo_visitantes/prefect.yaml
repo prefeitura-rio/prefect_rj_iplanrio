@@ -31,11 +31,6 @@ deployments:
       - code_owner:unassigned
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_setur__turismo_fluxo_visitantes/flow.py:rj_setur__turismo_fluxo_visitantes
-    parameters:
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: default-pool
       work_queue_name: default
@@ -52,11 +47,6 @@ deployments:
       - code_owner:unassigned
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_setur__turismo_fluxo_visitantes/flow.py:rj_setur__turismo_fluxo_visitantes
-    parameters:
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: default-pool
       work_queue_name: default

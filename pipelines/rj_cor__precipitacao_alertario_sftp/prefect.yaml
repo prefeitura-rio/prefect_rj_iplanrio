@@ -31,11 +31,6 @@ deployments:
       - code_owner:tricktx
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_cor__precipitacao_alertario_sftp/flow.py:rj_cor__precipitacao_alertario_sftp
-    parameters:
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -52,11 +47,6 @@ deployments:
       - code_owner:tricktx
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_cor__precipitacao_alertario_sftp/flow.py:rj_cor__precipitacao_alertario_sftp
-    parameters:
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default

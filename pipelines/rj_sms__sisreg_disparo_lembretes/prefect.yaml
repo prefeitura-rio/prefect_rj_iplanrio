@@ -52,10 +52,6 @@ deployments:
         cost_center_id: 71
         chunk_size: 1000
       dump_mode: append
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
   - name: rj-sms--sisreg-disparo-lembretes--staging
     tags:
       - environment:staging
@@ -84,7 +80,3 @@ deployments:
         cost_center_id: 71
         chunk_size: 100
       dump_mode: append
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake

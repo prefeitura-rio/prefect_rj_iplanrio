@@ -37,10 +37,6 @@ deployments:
         host: 10.70.1.34
         port: 1433
         database: SDI
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default

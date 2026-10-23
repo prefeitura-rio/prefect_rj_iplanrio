@@ -50,10 +50,6 @@ deployments:
         bucket: portal-do-cidadao
         prefix: animal/fotos_staging
         project: rj-iplanrio-dia
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
   - name: rj_iplanrio__sisbicho_imagem--prod
     tags:
       - environment:prod
@@ -80,10 +76,6 @@ deployments:
         bucket: portal-do-cidadao
         prefix: animal/fotos
         project: rj-iplanrio-dia
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     schedule:
       cron: "0 6 * * *"
       timezone: America/Sao_Paulo

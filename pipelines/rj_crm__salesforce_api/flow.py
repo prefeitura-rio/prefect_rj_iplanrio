@@ -5,6 +5,7 @@ from toolkit.telemetry import logger
 
 from pipelines.rj_crm__salesforce_api.tasks import fetch_rows_task
 from pipelines.rj_crm__salesforce_api.types import SfmcRequest
+from utils.constants import DEFAULT_CLOUD
 from utils.flows import load_records
 from utils.hooks import notify_failure
 from utils.types import Cloud, DumpMode, Table
@@ -13,7 +14,7 @@ from utils.types import Cloud, DumpMode, Table
 @flow(log_prints=True, flow_run_name="sfmc_api__{table[table_id]}", on_failure=[notify_failure])
 async def rj_crm__salesforce_api(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     request: SfmcRequest,
     table: Table,
     dump_mode: DumpMode = "append",

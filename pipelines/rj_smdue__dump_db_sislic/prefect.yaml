@@ -37,10 +37,6 @@ deployments:
         host: 10.2.221.101
         port: 1433
         database: SMU_PRD
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -61,10 +57,6 @@ deployments:
         host: 10.2.221.101
         port: 1433
         database: SMU_PRD
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default

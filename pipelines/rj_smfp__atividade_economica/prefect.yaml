@@ -37,10 +37,6 @@ deployments:
         host: 10.70.15.11
         port: 1433
         database: DW_BI_ALVARAS
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -62,10 +58,6 @@ deployments:
         host: 10.70.15.11
         port: 1433
         database: DW_BI_ALVARAS
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default

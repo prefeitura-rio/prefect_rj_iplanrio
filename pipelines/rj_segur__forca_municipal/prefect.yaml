@@ -31,11 +31,6 @@ deployments:
       - code_owner:unassigned
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_segur__forca_municipal/flow.py:rj_segur__forca_municipal
-    parameters:
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -52,11 +47,6 @@ deployments:
       - code_owner:unassigned
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_segur__forca_municipal/flow.py:rj_segur__forca_municipal
-    parameters:
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default

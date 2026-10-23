@@ -46,10 +46,6 @@ deployments:
         table_id: enderecos_geolocalizados
       dump_mode: append
       max_concurrent: 100
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
   - name: rj-crm--geolocalizacao-residencia--nominatim--prod
     tags:
       - environment:prod
@@ -72,10 +68,6 @@ deployments:
         table_id: enderecos_geolocalizados
       dump_mode: append
       max_concurrent: 100
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     schedules:
       - interval: 180
         anchor_date: "2021-01-01T00:06:00"
@@ -104,10 +96,6 @@ deployments:
         table_id: enderecos_geolocalizados
       dump_mode: append
       max_concurrent: 100
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
   - name: rj-crm--geolocalizacao-residencia--fallback--prod
     tags:
       - environment:prod
@@ -130,10 +118,6 @@ deployments:
         table_id: enderecos_geolocalizados
       dump_mode: append
       max_concurrent: 100
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     schedules:
       - interval: 3600
         anchor_date: "2021-01-01T00:00:00"
@@ -162,10 +146,6 @@ deployments:
         table_id: enderecos_geolocalizados
       dump_mode: append
       max_concurrent: 100
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
   - name: rj-crm--geolocalizacao-residencia--geoapify--prod
     tags:
       - environment:prod
@@ -188,10 +168,6 @@ deployments:
         table_id: enderecos_geolocalizados
       dump_mode: append
       max_concurrent: 100
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     schedules:
       - interval: 1800
         anchor_date: "2021-01-01T00:00:00"

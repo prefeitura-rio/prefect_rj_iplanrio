@@ -10,6 +10,7 @@ from pipelines.rj_iplanrio__alertario_previsao_24h.constants import ALERT_LOG_TA
 from pipelines.rj_iplanrio__alertario_previsao_24h.helpers import find_alerts
 from pipelines.rj_iplanrio__alertario_previsao_24h.tasks import alert_task, build_tables_task, fetch_forecast_task
 from pipelines.rj_iplanrio__alertario_previsao_24h.types import Alerts
+from utils.constants import DEFAULT_CLOUD
 from utils.hooks import notify_failure
 from utils.tasks import publish_table_in_bq, upload_files_to_gcs, write_records
 from utils.types import Cloud, DumpMode, Table
@@ -19,7 +20,7 @@ from utils.utils import capture_options
 @flow(log_prints=True, flow_run_name="alertario-previsao-24h-{dataset_id}", on_failure=[notify_failure])
 async def rj_iplanrio__alertario_previsao_24h(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     dataset_id: str = "brutos_alertario",
     dump_mode: DumpMode = "append",
     alerts: Alerts | None = None,

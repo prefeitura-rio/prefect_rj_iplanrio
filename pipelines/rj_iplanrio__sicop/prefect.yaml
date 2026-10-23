@@ -37,10 +37,6 @@ deployments:
         host: srv000761.infra.rio.gov.br
         port: 1521
         database: CP01.SMF
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -62,10 +58,6 @@ deployments:
         host: srv000761.infra.rio.gov.br
         port: 1521
         database: CP01.SMF
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default

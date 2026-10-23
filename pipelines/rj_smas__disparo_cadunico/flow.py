@@ -8,6 +8,7 @@ from pipelines.rj_smas__disparo_cadunico.constants import DEFAULT_TABLE
 from pipelines.rj_smas__disparo_cadunico.helpers import build_query, today
 from pipelines.rj_smas__disparo_cadunico.tasks import read_recipients_task
 from pipelines.rj_smas__disparo_cadunico.types import Audience, Campaign, Waits
+from utils.constants import DEFAULT_CLOUD
 from utils.dispatch import post_notice
 from utils.flows import dispatch_hsm
 from utils.hooks import notify_failure
@@ -26,7 +27,7 @@ PIPELINE_FOLDER = Path(__file__).parent
 @flow(log_prints=True, flow_run_name="cadunico-{campaign.name}", on_failure=[notify_failure])
 async def rj_smas__disparo_cadunico(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table = DEFAULT_TABLE,
     campaign: Campaign = DEFAULT_CAMPAIGN,
     audience: Audience = DEFAULT_AUDIENCE,

@@ -4,6 +4,8 @@ from pathlib import Path
 from re import compile as compile_pattern
 from typing import Final
 
+from .types import Cloud
+
 STAGING_PREFIX: Final = "staging"
 """The bucket folder that holds the files of every external table."""
 
@@ -75,3 +77,6 @@ DRIVE_FOLDER_MIME: Final = "application/vnd.google-apps.folder"
 
 TEST_PREFIX: Final = "teste-"
 """The prefix of the name of a campaign that runs in test mode."""
+
+DEFAULT_CLOUD: Final = Cloud(bucket="rj-iplanrio", project="rj-iplanrio", connection="rj-iplanrio.us.biglake")
+"""The bucket and the BigQuery project of a flow that does not set its own `cloud`."""

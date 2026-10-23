@@ -16,6 +16,7 @@ from pipelines.rj_crm__disparos_nao_efetuados.helpers import (
     format_today,
 )
 from pipelines.rj_crm__disparos_nao_efetuados.tasks import notify_task, write_campaigns_task
+from utils.constants import DEFAULT_CLOUD
 from utils.tasks import publish_table_in_bq, read_bq, upload_files_to_gcs
 from utils.types import Cloud, DumpMode, Table
 from utils.utils import capture_options
@@ -27,7 +28,9 @@ async def notify_failure(flow: Flow[..., object], flow_run: FlowRun, state: Stat
 
 
 @flow(log_prints=True, flow_run_name="{table[table_id]}", on_failure=[notify_failure])
-async def rj_crm__disparos_nao_efetuados(*, cloud: Cloud, table: Table, dump_mode: DumpMode = "append") -> None:
+async def rj_crm__disparos_nao_efetuados(
+    *, cloud: Cloud = DEFAULT_CLOUD, table: Table, dump_mode: DumpMode = "append"
+) -> None:
     """Check the active campaigns that sent nothing today, save the result and tell Discord.
 
     The result is always saved, for the history. A list of campaigns with no dispatch goes to

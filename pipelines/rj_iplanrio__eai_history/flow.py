@@ -7,6 +7,7 @@ from toolkit.telemetry import logger
 from pipelines.rj_iplanrio__eai_history.constants import DBT_REPOSITORY, DEFAULT_DBT_SELECT
 from pipelines.rj_iplanrio__eai_history.tasks import fetch_history_task, read_last_update_task
 from pipelines.rj_iplanrio__eai_history.types import Environment, Options
+from utils.constants import DEFAULT_CLOUD
 from utils.flows import load_records
 from utils.hooks import notify_failure
 from utils.tasks import run_dbt
@@ -16,7 +17,7 @@ from utils.types import Cloud, Table
 @flow(log_prints=True, flow_run_name="eai-history-{environment}", on_failure=[notify_failure])
 async def rj_iplanrio__eai_history(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
     environment: Environment = "staging",
     options: Options | None = None,

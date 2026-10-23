@@ -9,6 +9,7 @@ from toolkit.telemetry import logger
 from pipelines.rj_crm__relatorio_cvl.constants import BILLING_PROJECT
 from pipelines.rj_crm__relatorio_cvl.helpers import build_query, read_report_dates
 from pipelines.rj_crm__relatorio_cvl.tasks import build_sessions_task, write_sessions_task
+from utils.constants import DEFAULT_CLOUD
 from utils.hooks import notify_failure
 from utils.tasks import publish_table_in_bq, read_bq, upload_files_to_gcs
 from utils.types import Cloud, DumpMode, Table
@@ -18,7 +19,7 @@ from utils.utils import capture_options
 @flow(log_prints=True, flow_run_name="{table[table_id]}", on_failure=[notify_failure])
 async def rj_crm__relatorio_cvl(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
     dump_mode: DumpMode = "append",
     start_date: str | None = None,

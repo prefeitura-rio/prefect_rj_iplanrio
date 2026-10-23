@@ -37,10 +37,6 @@ deployments:
         host: 10.90.31.22
         port: 1521
         database: CP01.SMF
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -62,10 +58,6 @@ deployments:
         host: 10.90.31.22
         port: 1521
         database: CP01.SMF
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default

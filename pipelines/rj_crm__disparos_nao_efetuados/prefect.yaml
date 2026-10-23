@@ -32,10 +32,6 @@ deployments:
       table:
         dataset_id: brutos_salesforce
         table_id: campanhas_sem_disparo
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: default-pool
       work_queue_name: default
@@ -62,10 +58,6 @@ deployments:
       table:
         dataset_id: brutos_salesforce
         table_id: campanhas_sem_disparo
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: default-pool
       work_queue_name: default

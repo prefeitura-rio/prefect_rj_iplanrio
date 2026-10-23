@@ -11,6 +11,7 @@ from pipelines.rj_setur__turismo_fluxo_visitantes.tasks import (
     list_spreadsheets_in_folder,
 )
 from pipelines.rj_setur__turismo_fluxo_visitantes.types import ExtractionJob
+from utils.constants import DEFAULT_CLOUD
 from utils.hooks import notify_failure
 from utils.tasks import publish_table_in_bq, upload_files_to_gcs
 from utils.types import Cloud, DumpMode, Table
@@ -19,7 +20,7 @@ from utils.types import Cloud, DumpMode, Table
 @flow(log_prints=True, flow_run_name="{dataset_id}_geodata_batch", on_failure=[notify_failure])
 async def rj_setur__turismo_fluxo_visitantes(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     folder_id: str = "1d_SxiMsXQd2JH1Ttik3OQDRJy7wLtX6S",
     dataset_id: str = "brutos_turismo_fluxo_visitante",
     dump_mode: DumpMode = "overwrite",

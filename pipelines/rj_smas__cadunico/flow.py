@@ -13,6 +13,7 @@ from pipelines.rj_smas__cadunico.tasks import (
     sync_layouts_task,
 )
 from pipelines.rj_smas__cadunico.types import RawFolders, Tables
+from utils.constants import DEFAULT_CLOUD
 from utils.hooks import notify_failure
 from utils.tasks import run_dbt
 from utils.types import Cloud
@@ -21,7 +22,7 @@ from utils.types import Cloud
 @flow(log_prints=True, flow_run_name="cadunico-{tables[dataset_id]}", on_failure=[notify_failure])
 async def rj_smas__cadunico(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     dbt: DbtRun,
     raw: RawFolders = DEFAULT_RAW,
     tables: Tables = DEFAULT_TABLES,

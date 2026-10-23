@@ -12,6 +12,7 @@ from toolkit.functions.native import now_sao_paulo
 from toolkit.settings import DiscordSettings
 from toolkit.telemetry import logger
 
+from .constants import DEFAULT_CLOUD
 from .delta import summarize_maintenance
 from .dispatch import no_destinations_notice, post_notice
 from .hooks import notify_failure
@@ -43,7 +44,7 @@ from .whitelist import Selection
 async def load_records(
     records: Sequence[Mapping[str, JsonValue]],
     table: Table,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     *,
     dump_mode: DumpMode = "append",
     options: DumpOptions | None = None,
@@ -109,7 +110,7 @@ async def dispatch_hsm(
     whitelist_percentage: int,
     waits: Waits,
     table: Table,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
 ) -> None:
     """Send an HSM to the recipients, record what went out, and report the status later.
 
@@ -150,7 +151,7 @@ async def dispatch_hsm(
 async def dump_database(
     *,
     database: Database,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
     read: Read,
     dump_mode: DumpMode = "append",
@@ -181,7 +182,7 @@ async def dump_database(
 )
 async def dump_arcgis(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
     url: str,
     where: str = "1=1",
@@ -208,7 +209,7 @@ async def dump_arcgis(
 )
 async def dump_gsheet(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
     spreadsheet_id: str,
     sheet: str | None = None,
@@ -229,7 +230,7 @@ async def dump_gsheet(
 )
 async def load_files(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
     data_path: Path,
     source_format: FileFormat = "parquet",
@@ -250,7 +251,7 @@ async def load_files(
 )
 async def ingest_api(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
     url: str,
     method: str = "GET",
@@ -292,7 +293,7 @@ async def ingest_api(
 
 
 @flow(log_prints=True, on_failure=[notify_failure])
-async def maintain_delta(*, cloud: Cloud, exclude: list[str] | None = None) -> None:
+async def maintain_delta(*, cloud: Cloud = DEFAULT_CLOUD, exclude: list[str] | None = None) -> None:
     """Keep the Delta tables of the bucket fast, and report what looks wrong.
 
     It finds every Delta table under `staging/`, merges its small files, writes a

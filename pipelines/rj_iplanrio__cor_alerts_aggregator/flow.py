@@ -26,6 +26,7 @@ from pipelines.rj_iplanrio__cor_alerts_aggregator.tasks import (
     write_sheet_task,
 )
 from pipelines.rj_iplanrio__cor_alerts_aggregator.types import Destination, Environment, Row, Rules, Sheet
+from utils.constants import DEFAULT_CLOUD
 from utils.hooks import notify_failure
 from utils.types import Cloud
 
@@ -33,7 +34,7 @@ from utils.types import Cloud
 @flow(log_prints=True, flow_run_name="cor-alerts-aggregator-{environment}", on_failure=[notify_failure])
 async def rj_iplanrio__cor_alerts_aggregator(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     environment: Environment = "staging",
     destination: Destination = "google_sheets",
     rules: Rules | None = None,

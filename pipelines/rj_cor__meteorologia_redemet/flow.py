@@ -4,6 +4,7 @@ from prefect import flow
 
 from pipelines.rj_cor__meteorologia_redemet.helpers import read_dates
 from pipelines.rj_cor__meteorologia_redemet.tasks import build_rows_task, fetch_observations_task
+from utils.constants import DEFAULT_CLOUD
 from utils.flows import load_records
 from utils.hooks import notify_failure
 from utils.types import Cloud, Table
@@ -12,7 +13,7 @@ from utils.types import Cloud, Table
 @flow(log_prints=True, flow_run_name="{table[table_id]}", on_failure=[notify_failure])
 async def rj_cor__meteorologia_redemet(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
     first_date: str | None = None,
     last_date: str | None = None,

@@ -6,6 +6,7 @@ from toolkit.telemetry import logger
 from pipelines.rj_iplanrio__sisbicho_images.constants import DEFAULT_BATCH_SIZE
 from pipelines.rj_iplanrio__sisbicho_images.tasks import list_pending_task, process_batch_task
 from pipelines.rj_iplanrio__sisbicho_images.types import Limits, Row, Storage
+from utils.constants import DEFAULT_CLOUD
 from utils.flows import load_records
 from utils.hooks import notify_failure
 from utils.types import Cloud, DumpMode, Table
@@ -14,7 +15,7 @@ from utils.types import Cloud, DumpMode, Table
 @flow(log_prints=True, flow_run_name="sisbicho-images-{table[table_id]}", on_failure=[notify_failure])
 async def rj_iplanrio__sisbicho_images(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     source: Table,
     table: Table,
     storage: Storage,

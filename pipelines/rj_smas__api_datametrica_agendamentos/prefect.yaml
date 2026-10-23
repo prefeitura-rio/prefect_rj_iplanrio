@@ -50,10 +50,6 @@ deployments:
         target: prod
         select: raw_cadunico_agendamentos
       date:
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
   - name: rj-smas--api-datametrica-agendamentos--prod
     tags:
       - environment:prod
@@ -80,10 +76,6 @@ deployments:
         target: prod
         select: raw_cadunico_agendamentos
       date:
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     schedules:
       - cron: "0 12 * * 1-5"
         timezone: UTC

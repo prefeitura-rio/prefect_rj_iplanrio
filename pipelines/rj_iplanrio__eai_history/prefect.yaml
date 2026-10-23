@@ -35,10 +35,6 @@ deployments:
       table:
         dataset_id: brutos_eai_logs
         table_id: history
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: default-pool
       work_queue_name: default
@@ -65,10 +61,6 @@ deployments:
       table:
         dataset_id: brutos_eai_logs
         table_id: history
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: default-pool
       work_queue_name: default

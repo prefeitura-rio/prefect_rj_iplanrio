@@ -4,6 +4,7 @@ from prefect import flow
 from toolkit.telemetry import logger
 
 from pipelines.rj_crm__whitelist_whatsapp.tasks import build_rows_task, fetch_whitelist_task
+from utils.constants import DEFAULT_CLOUD
 from utils.flows import load_records
 from utils.hooks import notify_failure
 from utils.types import Cloud, DumpMode, Table
@@ -12,7 +13,7 @@ from utils.types import Cloud, DumpMode, Table
 @flow(log_prints=True, flow_run_name="whitelist_whatsapp_{table[table_id]}", on_failure=[notify_failure])
 async def rj_crm__whitelist_whatsapp(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
     backfill: bool = False,
     dump_mode: DumpMode = "append",

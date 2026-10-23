@@ -37,10 +37,6 @@ deployments:
         host: clustersqlsme2.rio.rj.gov.br
         port: 1433
         database: GestaoEscolar
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -62,10 +58,6 @@ deployments:
         host: clustersqlsme2.rio.rj.gov.br
         port: 1433
         database: GestaoEscolar
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default

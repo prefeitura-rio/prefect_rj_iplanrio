@@ -12,6 +12,7 @@ from pipelines.rj_crm__callcenter_attendances_weekly.tasks import (
     transcribe_task,
 )
 from pipelines.rj_crm__callcenter_attendances_weekly.types import Options
+from utils.constants import DEFAULT_CLOUD
 from utils.flows import load_records
 from utils.hooks import notify_failure
 from utils.tasks import run_dbt
@@ -22,7 +23,7 @@ from utils.wetalkie import build_attendance_rows
 @flow(log_prints=True, flow_run_name="{table[table_id]}_weekly", on_failure=[notify_failure])
 async def rj_crm__callcenter_attendances_weekly(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
     dbt: DbtRun | None = None,
     options: Options | None = None,

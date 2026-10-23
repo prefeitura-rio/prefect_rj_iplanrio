@@ -36,10 +36,6 @@ deployments:
       destination: dry_run
       sheet:
         spreadsheet_id: 1ewoRPUvPRdmdy-jrwPGLIVyd0DAQuiNsKxXDR3CwC-Q
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -61,10 +57,6 @@ deployments:
       destination: google_sheets
       sheet:
         spreadsheet_id: 1ewoRPUvPRdmdy-jrwPGLIVyd0DAQuiNsKxXDR3CwC-Q
-      cloud:
-        bucket: rj-iplanrio
-        project: rj-iplanrio
-        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default

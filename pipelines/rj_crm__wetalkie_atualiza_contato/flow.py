@@ -7,6 +7,7 @@ from toolkit.telemetry import logger
 from pipelines.rj_crm__wetalkie_atualiza_contato.constants import BILLING_PROJECT
 from pipelines.rj_crm__wetalkie_atualiza_contato.helpers import build_query
 from pipelines.rj_crm__wetalkie_atualiza_contato.tasks import fetch_contacts_task
+from utils.constants import DEFAULT_CLOUD
 from utils.flows import load_records
 from utils.hooks import notify_failure
 from utils.tasks import read_bq, run_dbt
@@ -16,7 +17,7 @@ from utils.types import Cloud, DumpMode, Table
 @flow(log_prints=True, flow_run_name="{table[table_id]}", on_failure=[notify_failure])
 async def rj_crm__wetalkie_atualiza_contato(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
     dump_mode: DumpMode = "append",
     dbt: DbtRun | None = None,

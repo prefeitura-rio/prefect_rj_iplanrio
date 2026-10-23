@@ -10,6 +10,7 @@ from pipelines.rj_smas__api_datametrica_agendamentos.helpers import (
     today_in_sao_paulo,
 )
 from pipelines.rj_smas__api_datametrica_agendamentos.tasks import fetch_appointments_task, trigger_dispatch_task
+from utils.constants import DEFAULT_CLOUD
 from utils.flows import load_records
 from utils.hooks import notify_failure
 from utils.tasks import run_dbt
@@ -19,7 +20,7 @@ from utils.types import Cloud, DumpMode, Table
 @flow(log_prints=True, flow_run_name="{table[table_id]}", on_failure=[notify_failure])
 async def rj_smas__api_datametrica_agendamentos(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
     dump_mode: DumpMode = "append",
     dbt: DbtRun | None = None,

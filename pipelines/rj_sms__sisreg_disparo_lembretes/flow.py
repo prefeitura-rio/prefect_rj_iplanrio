@@ -9,6 +9,7 @@ from toolkit.telemetry import logger
 from pipelines.rj_sms__sisreg_disparo_lembretes.constants import DEFAULT_TABLE
 from pipelines.rj_sms__sisreg_disparo_lembretes.tasks import read_recipients_task, send_batches_task
 from pipelines.rj_sms__sisreg_disparo_lembretes.types import Dispatch
+from utils.constants import DEFAULT_CLOUD
 from utils.hooks import notify_failure
 from utils.hsm import Recipient
 from utils.tasks import publish_table_in_bq, upload_files_to_gcs, write_records
@@ -21,7 +22,7 @@ DEFAULT_DISPATCH = Dispatch()
 @flow(log_prints=True, flow_run_name="sisreg-{table[table_id]}", on_failure=[notify_failure])
 async def rj_sms__sisreg_disparo_lembretes(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     table: Table = DEFAULT_TABLE,
     dispatch: Dispatch = DEFAULT_DISPATCH,
     dump_mode: DumpMode = "append",

@@ -8,6 +8,7 @@ from toolkit.telemetry import logger
 
 from pipelines.rj_cor__precipitacao_alertario_sftp.settings import Settings
 from pipelines.rj_cor__precipitacao_alertario_sftp.tasks import build_rows_task, fetch_files_task, read_watermark_task
+from utils.constants import DEFAULT_CLOUD
 from utils.hooks import notify_failure
 from utils.tasks import publish_table_in_bq, upload_files_to_gcs, write_records
 from utils.types import Cloud, DumpMode, Table
@@ -17,7 +18,7 @@ from utils.utils import capture_options
 @flow(log_prints=True, flow_run_name="precipitacao-alertario-sftp", on_failure=[notify_failure])
 async def rj_cor__precipitacao_alertario_sftp(
     *,
-    cloud: Cloud,
+    cloud: Cloud = DEFAULT_CLOUD,
     pluviometric: Table,
     meteorological: Table | None = None,
     dump_mode: DumpMode = "append",
