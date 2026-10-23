@@ -1,7 +1,6 @@
 """Cliente do ADN contra o dublê de contrato: percurso do cursor, mTLS, TLS mínimo e segredos."""
 
 import logging
-import os
 import ssl
 import stat
 from collections.abc import Callable
@@ -133,8 +132,9 @@ def test_cliente_lote_maior_que_o_esperado_levanta_contrato_violado(
     duble.comportamento = Comportamento(lote_max=100)
 
     # When / Then
-    with AdnClient(config_adn(tamanho_lote_esperado=50), dormir=dormir) as adn, pytest.raises(
-        ContratoAdnViolado, match="lote"
+    with (
+        AdnClient(config_adn(tamanho_lote_esperado=50), dormir=dormir) as adn,
+        pytest.raises(ContratoAdnViolado, match="lote"),
     ):
         adn.buscar_lote(0)
 
@@ -168,7 +168,7 @@ def test_cliente_pem_temporario_tem_permissao_0600_e_e_apagado(
 
     def espiao(self: ssl.SSLContext, certfile: str, keyfile: str | None = None, password: object = None) -> None:
         arquivo = Path(certfile)
-        vistos.append((arquivo, stat.S_IMODE(os.stat(arquivo).st_mode), arquivo.read_text()))
+        vistos.append((arquivo, stat.S_IMODE(arquivo.stat().st_mode), arquivo.read_text()))
         original(self, certfile, keyfile, password)  # type: ignore[arg-type]
 
     monkeypatch.setattr(ssl.SSLContext, "load_cert_chain", espiao)
@@ -202,7 +202,11 @@ def test_cliente_pem_temporario_tambem_e_apagado_quando_o_carregamento_falha(
 
 
 def test_cliente_nao_registra_pfx_nem_senha_em_log_nem_no_repr(
-    duble: DubleAdn, config_adn: Callable[..., AdnConfig], dormir: Dorminhoco, pki: Pki, caplog: pytest.LogCaptureFixture
+    duble: DubleAdn,
+    config_adn: Callable[..., AdnConfig],
+    dormir: Dorminhoco,
+    pki: Pki,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     # Given: logs em DEBUG de tudo
     caplog.set_level(logging.DEBUG)
@@ -220,7 +224,11 @@ def test_cliente_nao_registra_pfx_nem_senha_em_log_nem_no_repr(
 
 def test_cliente_configuracao_vem_das_variaveis_de_ambiente(pki: Pki) -> None:
     # Given: as três variáveis do contrato
-    ambiente = {"ADN_PFX_BASE64": pki.pfx_base64, "ADN_PFX_SENHA": pki.senha, "ADN_BASE_URL": "https://adn.exemplo.test"}
+    ambiente = {
+        "ADN_PFX_BASE64": pki.pfx_base64,
+        "ADN_PFX_SENHA": pki.senha,
+        "ADN_BASE_URL": "https://adn.exemplo.test",
+    }
 
     # When
     configuracao = AdnConfig.do_ambiente(ambiente)
@@ -235,7 +243,11 @@ def test_cliente_configuracao_vem_das_variaveis_de_ambiente(pki: Pki) -> None:
 @pytest.mark.parametrize("ausente", ["ADN_PFX_BASE64", "ADN_PFX_SENHA", "ADN_BASE_URL"])
 def test_cliente_configuracao_sem_variavel_obrigatoria_falha_com_o_nome_dela(ausente: str, pki: Pki) -> None:
     # Given: o ambiente sem uma das variáveis
-    ambiente = {"ADN_PFX_BASE64": pki.pfx_base64, "ADN_PFX_SENHA": pki.senha, "ADN_BASE_URL": "https://adn.exemplo.test"}
+    ambiente = {
+        "ADN_PFX_BASE64": pki.pfx_base64,
+        "ADN_PFX_SENHA": pki.senha,
+        "ADN_BASE_URL": "https://adn.exemplo.test",
+    }
     del ambiente[ausente]
 
     # When / Then

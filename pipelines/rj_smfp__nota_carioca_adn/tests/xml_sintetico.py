@@ -1,8 +1,9 @@
 """XML sintético de NFS-e e de evento no leiaute nacional v1.01, sem nenhum dado real.
 
-Cada documento é determinístico em função do NSU. O leiaute de ``nfse_xml`` foi validado contra
-``NFSe_v1.01.xsd`` (zip público ``nfse-esquemas_xsd-v1-01-20260209``) durante o desenvolvimento; CNPJ, nomes e
-endereços são inventados e não existem de verdade.
+Cada documento é determinístico em função do NSU. ``nfse_xml`` e ``evento_xml`` foram validados com lxml contra
+``NFSe_v1.01.xsd`` e ``evento_v1.01.xsd`` (zip público ``nfse-esquemas_xsd-v1-01-20260209``). O único ajuste foi numa
+cópia local do XSD: o padrão de ``TSSerieDPS`` (``^0{0,4}\\d{1,5}$``) traz ``^`` e ``$`` literais, que o libxml2 trata
+como caracteres; sem eles, a série ``00001`` valida. CNPJ, nomes e endereços são inventados e a assinatura é fictícia.
 """
 
 from datetime import UTC, datetime, timedelta

@@ -46,9 +46,7 @@ def test_cliente_fim_de_dados_em_qualquer_das_tres_formas(
 
 
 @pytest.mark.parametrize("codigo", ["E2020", "E2040", "E2070"])
-def test_cliente_codigos_de_nenhum_documento_sao_fim_de_dados(
-    codigo: str, duble: DubleAdn, cliente: AdnClient
-) -> None:
+def test_cliente_codigos_de_nenhum_documento_sao_fim_de_dados(codigo: str, duble: DubleAdn, cliente: AdnClient) -> None:
     # Given: rejeição "nenhum documento localizado" (Anexo IV)
     duble.comportamento.roteiro.extend([erro_adn(404, codigo), erro_adn(404, codigo)])
 
@@ -201,9 +199,7 @@ def test_cliente_busca_bruta_entrega_os_itens_para_quem_trata_o_ilegivel(duble: 
 
 
 @pytest.mark.parametrize("campo", ["arquivo_xml_ausente", "sem_data_geracao"])
-def test_cliente_item_sem_xml_ou_sem_data_e_ilegivel(
-    campo: str, duble: DubleAdn, cliente: AdnClient
-) -> None:
+def test_cliente_item_sem_xml_ou_sem_data_e_ilegivel(campo: str, duble: DubleAdn, cliente: AdnClient) -> None:
     # Given: o documento 2 sem ArquivoXml (ou sem DataHoraGeracao)
     setattr(duble.comportamento, campo, frozenset({2}))
 

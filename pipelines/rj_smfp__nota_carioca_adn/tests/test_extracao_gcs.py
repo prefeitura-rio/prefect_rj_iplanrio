@@ -27,11 +27,10 @@ def gcs() -> Iterator[GcsArmazenamento]:
     # O fake-gcs-server monta os links de download com a URL externa; ela precisa ser a que o teste alcança.
     porta = _porta_livre()
     endpoint = f"http://127.0.0.1:{porta}"
-    container = (
-        DockerContainer(IMAGEM)
-        .with_command(f"-scheme http -port {PORTA_INTERNA} -backend memory -external-url {endpoint}")
-        .with_bind_ports(PORTA_INTERNA, porta)
+    container = DockerContainer(IMAGEM).with_command(
+        f"-scheme http -port {PORTA_INTERNA} -backend memory -external-url {endpoint}"
     )
+    container.ports[f"{PORTA_INTERNA}/tcp"] = ("127.0.0.1", porta)  # só em 127.0.0.1
     with container:
         wait_for_logs(container, "server started at", timeout=60)
         cliente = storage.Client(

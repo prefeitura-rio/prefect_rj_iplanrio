@@ -1,9 +1,9 @@
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
-from pipelines.rj_smfp__nota_carioca_adn.utils.extrator import Servicos, executar_extracao
-from pipelines.rj_smfp__nota_carioca_adn.utils.modelos import ConfigExtracao, ResultadoExtracao
 
 from pipelines.rj_smfp__nota_carioca_adn.tests.certificados import Pki, gerar_pki
 from pipelines.rj_smfp__nota_carioca_adn.tests.duble_adn import Comportamento, DubleAdn
@@ -13,8 +13,11 @@ from pipelines.rj_smfp__nota_carioca_adn.tests.fakes import (
     NotificadorGravador,
     RelogioFalso,
 )
+from pipelines.rj_smfp__nota_carioca_adn.tests.oracle_free import OracleFree, oracle_free
 from pipelines.rj_smfp__nota_carioca_adn.utils import discord
 from pipelines.rj_smfp__nota_carioca_adn.utils.adn_client import AdnClient, AdnConfig
+from pipelines.rj_smfp__nota_carioca_adn.utils.extrator import Servicos, executar_extracao
+from pipelines.rj_smfp__nota_carioca_adn.utils.modelos import ConfigExtracao, ResultadoExtracao
 
 
 class Dorminhoco:
@@ -104,6 +107,12 @@ def relogio() -> RelogioFalso:
 
 
 @pytest.fixture
+def relogio_na_janela() -> RelogioFalso:
+    """Relógio às 23:30 de São Paulo, dentro da janela do backfill (20:00-06:00)."""
+    return RelogioFalso(datetime(2026, 10, 23, 23, 30, tzinfo=ZoneInfo("America/Sao_Paulo")).astimezone(UTC))
+
+
+@pytest.fixture
 def notificador() -> NotificadorGravador:
     return NotificadorGravador()
 
@@ -129,3 +138,19 @@ def extrair(  # noqa: PLR0913, PLR0917 - a fixture reúne as portas do extrator
             return executar_extracao(configuracao, Servicos(adn, armazenamento, indice, notificador, relogio))
 
     return executar
+
+
+@pytest.fixture(scope="session")
+def oracle() -> Iterator[OracleFree]:
+    """Um Oracle Free para a sessão inteira (sobe só quando algum teste o pede); o container some no fim."""
+    with oracle_free() as banco:
+        yield banco
+
+
+@pytest.fixture
+def oracle_limpo(oracle: OracleFree, monkeypatch: pytest.MonkeyPatch) -> OracleFree:
+    """O Oracle Free sem linhas e com as variáveis ``DB_ORACLE_NC_LEITURA__*`` do usuário somente leitura."""
+    oracle.limpar()
+    for nome, valor in oracle.variaveis_de_leitura().items():
+        monkeypatch.setenv(nome, valor)
+    return oracle

@@ -44,7 +44,9 @@ def _validar(valor: object, esquema: dict[str, object], caminho: str) -> None:
     if tipo == "object":
         propriedades: dict[str, dict[str, object]] = esquema.get("properties", {})  # type: ignore[assignment]
         extras = set(valor) - set(propriedades)  # type: ignore[call-overload]
-        assert not extras or esquema.get("additionalProperties", True), f"{caminho}: propriedades fora do schema {extras}"
+        assert not extras or esquema.get("additionalProperties", True), (
+            f"{caminho}: propriedades fora do schema {extras}"
+        )
         for nome, subvalor in valor.items():  # type: ignore[attr-defined]
             _validar(subvalor, propriedades[nome], f"{caminho}.{nome}")
 

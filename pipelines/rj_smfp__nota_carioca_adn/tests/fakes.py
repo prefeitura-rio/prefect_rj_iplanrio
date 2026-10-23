@@ -8,6 +8,7 @@ import itertools
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 
+from pipelines.rj_smfp__nota_carioca_adn.utils.fonte import LinhaOracle
 from pipelines.rj_smfp__nota_carioca_adn.utils.modelos import DocumentoIndexado, FaixaNsu, LinhaIndice
 
 SUFIXO_LOTE = ".ndjson.gz"
@@ -104,7 +105,7 @@ class IndiceMemoria:
 
     def documentos_na_faixa(self, ambiente: str, nsu_ini: int, nsu_fim: int) -> list[DocumentoIndexado]:
         return [
-            DocumentoIndexado(linha.nsu, linha.xml_sha256, linha.origem)
+            DocumentoIndexado(linha.nsu, linha.xml_sha256, linha.origem, linha.gcs_uri, linha.linha)
             for linha in self.linhas
             if linha.ambiente == ambiente and nsu_ini <= linha.nsu <= nsu_fim
         ]
@@ -137,8 +138,8 @@ class IndiceMemoria:
 class RelogioFalso:
     """Relógio manual: ``dormir`` só avança o tempo e o registra."""
 
-    def __init__(self) -> None:
-        self._agora = datetime(2026, 10, 23, 12, 0, 0, tzinfo=UTC)
+    def __init__(self, inicio: datetime | None = None) -> None:
+        self._agora = inicio or datetime(2026, 10, 23, 12, 0, 0, tzinfo=UTC)
         self.esperas: list[float] = []
 
     def monotonic(self) -> float:
@@ -172,3 +173,23 @@ class NotificadorGravador:
 
     def falhar(self, erro: BaseException) -> None:
         self.eventos.append(("falhar", erro))
+
+
+class FonteMemoria:
+    """Fonte do histórico em memória, com o contrato do Oracle: faixa fechada, ordem por NSU; conta as leituras."""
+
+    def __init__(self, linhas: Sequence[LinhaOracle]) -> None:
+        self.linhas = {linha.nsu: linha for linha in linhas}
+        self.leituras: list[tuple[int, int]] = []
+        self.consultas_de_nsus: list[tuple[int, int]] = []
+
+    def nsus_na_faixa(self, nsu_ini: int, nsu_fim: int) -> dict[int, bool]:
+        self.consultas_de_nsus.append((nsu_ini, nsu_fim))
+        return {nsu: linha.quarentena for nsu, linha in sorted(self.linhas.items()) if nsu_ini <= nsu <= nsu_fim}
+
+    def ler_faixa(self, nsu_ini: int, nsu_fim: int) -> list[LinhaOracle]:
+        self.leituras.append((nsu_ini, nsu_fim))
+        return [linha for nsu, linha in sorted(self.linhas.items()) if nsu_ini <= nsu <= nsu_fim]
+
+    def close(self) -> None:
+        return

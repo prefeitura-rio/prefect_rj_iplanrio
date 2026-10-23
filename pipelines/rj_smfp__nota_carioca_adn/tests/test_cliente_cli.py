@@ -19,9 +19,7 @@ def ambiente_adn(monkeypatch: pytest.MonkeyPatch, duble: DubleAdn, pki: Pki) -> 
 
 
 @pytest.mark.usefixtures("ambiente_adn")
-def test_cliente_sondar_imprime_so_metadados_sem_o_xml(
-    duble: DubleAdn, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cliente_sondar_imprime_so_metadados_sem_o_xml(duble: DubleAdn, capsys: pytest.CaptureFixture[str]) -> None:
     # Given: o dublê com cursor exclusivo
     # When: sonda o NSU 100 em dry-run
     codigo = cli.main(["sondar", "--nsu", "100", "--dry-run"])

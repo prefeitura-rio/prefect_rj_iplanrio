@@ -81,7 +81,11 @@ def test_extracao_preserva_o_bom_e_os_controles_do_xml_no_raw(
 ) -> None:
     # Given: um documento cujo XML tem BOM e byte nulo (o raw guarda o que o ADN mandou)
     sujo = "\ufeff" + xml_sintetico.nfse_xml(3).replace("<nNFSe>", "<nNFSe>\x00")
-    monkeypatch.setattr(xml_sintetico, "documento_xml", lambda nsu: sujo if nsu == 3 else xml_sintetico.nfse_xml(nsu))
+
+    def documento(nsu: int) -> str:
+        return sujo if nsu == 3 else xml_sintetico.nfse_xml(nsu)
+
+    monkeypatch.setattr(xml_sintetico, "documento_xml", documento)
 
     # When
     extrair(Comportamento(total_nsu=5))
@@ -113,7 +117,13 @@ def test_extracao_indice_aponta_para_a_linha_do_objeto_com_origem_adn(
 
 
 @pytest.mark.parametrize(
-    ("inclusivo", "lote"), [(False, 50), (True, 50), (False, 100), (True, 100)], ids=lambda v: str(v)
+    ("inclusivo", "lote"),
+    [
+        pytest.param(False, 50, id="exclusivo-lote-50"),
+        pytest.param(True, 50, id="inclusivo-lote-50"),
+        pytest.param(False, 100, id="exclusivo-lote-100"),
+        pytest.param(True, 100, id="inclusivo-lote-100"),
+    ],
 )
 def test_extracao_funciona_nas_quatro_variantes_do_adn(
     inclusivo: bool, lote: int, extrair: Extrair, indice: IndiceMemoria
