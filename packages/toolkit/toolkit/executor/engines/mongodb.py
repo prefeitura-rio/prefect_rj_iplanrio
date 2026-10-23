@@ -104,6 +104,51 @@ def build_chunk_selector(column: str, chunk: Chunk) -> dict[str, object]:
     }
 
 
+def read_collection(origin: Origin) -> tuple[str, dict[str, object]]:
+    """Return the collection of an origin and the selector of its query.
+
+    Raise `ValueError` for a query with no collection.
+    """
+    match origin:
+        case TableOrigin(name):
+            return name, {}
+        case Query(text, _, table):
+            if table is None:
+                raise ValueError("A MongoDB query needs the collection: set the table")
+            return table, loads(text)
+        case Aggregate(_, table):
+            return table, {}
+        case _:
+            raise UnsupportedRequestError("MongoDBEngine", origin)
+
+
+def combine_conditions(
+    selector: Mapping[str, object], rows: Rows
+) -> Mapping[str, object]:
+    """Join the selector, the filters and the chunk with AND, or return no query."""
+    conditions: list[Mapping[str, object]] = [
+        *([selector] if selector else []),
+        *filter_selectors(rows.filters),
+        *(
+            [build_chunk_selector(rows.column, rows.chunk)]
+            if rows.column is not None and rows.chunk is not None
+            else []
+        ),
+    ]
+
+    return {"$and": conditions} if conditions else {}
+
+
+def page_after(query: Mapping[str, object], last: object) -> Mapping[str, object]:
+    """Return the query of the page after the last `_id` read, or of the first."""
+    if last is None:
+        return query
+
+    after = {MONGO_ID_FIELD: {"$gt": last}}
+
+    return {"$and": [query, after]} if query else after
+
+
 @dataclass
 class MongoDBEngine(Engine):
     """An open MongoDB database that reads a collection in pages of `_id`.
@@ -242,33 +287,8 @@ class MongoDBEngine(Engine):
         Raise `ValueError` for filters that are not JSON objects, for a query with no
         collection, and for a paged read when the shape has no `_id`.
         """
-        selector: dict[str, object] = {}
-
-        match origin:
-            case TableOrigin(name):
-                collection_name = name
-            case Query(text, _, table):
-                if table is None:
-                    raise ValueError(
-                        "A MongoDB query needs the collection: set the table"
-                    )
-                collection_name = table
-                selector = loads(text)
-            case Aggregate(_, table):
-                collection_name = table
-            case _:
-                raise UnsupportedRequestError("MongoDBEngine", origin)
-
-        conditions: list[Mapping[str, object]] = [
-            *([selector] if selector else []),
-            *filter_selectors(rows.filters),
-            *(
-                [build_chunk_selector(rows.column, rows.chunk)]
-                if rows.column is not None and rows.chunk is not None
-                else []
-            ),
-        ]
-        query: Mapping[str, object] = {"$and": conditions} if conditions else {}
+        collection_name, selector = read_collection(origin)
+        query = combine_conditions(selector, rows)
 
         if rows.empty:
             return
@@ -290,13 +310,7 @@ class MongoDBEngine(Engine):
         last: object = None
 
         while True:
-            page_query = (
-                query
-                if last is None
-                else {"$and": [query, {MONGO_ID_FIELD: {"$gt": last}}]}
-                if query
-                else {MONGO_ID_FIELD: {"$gt": last}}
-            )
+            page_query = page_after(query, last)
             table = await to_thread(
                 self.fetch, collection, page_query, self.schema, self.batch_size
             )

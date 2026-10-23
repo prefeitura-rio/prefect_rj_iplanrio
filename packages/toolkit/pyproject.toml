@@ -68,6 +68,7 @@ select = [
   "A",
   "B",
   "C4",
+  "C90",
   "D",
   "DTZ",
   "E",
@@ -135,6 +136,7 @@ max-doc-length = 88 # a docstring or a comment line holds up to 88 columns, as t
   "S608",    # a test builds SQL for a throwaway table from fixed values
   "TID251",  # a test imports obstore and the database drivers to set up or check a fake
   "PLR2004", # a test compares with the literal that it expects
+  "C901",    # a fake server has one branch for each route
 ]
 
 [tool.basedpyright]

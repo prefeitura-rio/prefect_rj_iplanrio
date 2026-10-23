@@ -183,6 +183,7 @@ select = [
   "ARG",
   "B",
   "C4",
+  "C90",
   "DTZ",
   "E",
   "F",
@@ -215,8 +216,9 @@ select = [
   "ARG001",
 ] # Prefect calls a retry check and a hook with a fixed signature, and these use some of the arguments only
 "tests/**" = [
+  "C901",
   "PLR2004",
-] # the expected numbers and values of an assertion are the point of a test
+] # the expected values of an assertion are the point of a test, and a fake server has one branch for each route
 "pipelines/*/tests/**" = [
   "PLR0913",
   "PLR0917",

@@ -106,23 +106,13 @@ def read_request(db_type: str, read: Read, batched: bool) -> Origin:
     `query` and `since`. MongoDB also takes a `pipeline` of aggregation stages over a
     `table`. Raise `ValueError` for a read that does not fit.
     """
-    table, query, since = read.get("table"), read.get("query"), read.get("since")
-
     if "pipeline" in read:
         return build_aggregate(db_type, read)
 
+    table, query = read.get("table"), read.get("query")
+
     if db_type in DOCUMENT_STORES:
-        if query is not None and since is not None:
-            raise ValueError("Give one of query and since, not both")
-        if since is not None and db_type != "couchdb":
-            raise ValueError(f"{db_type} has no since: only CouchDB reads changes")
-        if since is not None:
-            return Changes(since, table)
-        if query is not None:
-            return Query(query, db_type, table)
-        if table is not None:
-            return Table(table)
-        raise ValueError("Give a table, a query or a since")
+        return read_document_origin(db_type, table, query, read.get("since"))
 
     match table, query:
         case str(), None:
@@ -133,6 +123,21 @@ def read_request(db_type: str, read: Read, batched: bool) -> Origin:
             return Query(query, db_type)
         case _:
             raise ValueError("Give exactly one of table and query")
+
+
+def read_document_origin(db_type: str, table: str | None, query: str | None, since: str | None) -> Origin:
+    """Return the origin of a CouchDB or MongoDB read: changes, a selector or a whole database."""
+    if query is not None and since is not None:
+        raise ValueError("Give one of query and since, not both")
+    if since is not None and db_type != "couchdb":
+        raise ValueError(f"{db_type} has no since: only CouchDB reads changes")
+    if since is not None:
+        return Changes(since, table)
+    if query is not None:
+        return Query(query, db_type, table)
+    if table is not None:
+        return Table(table)
+    raise ValueError("Give a table, a query or a since")
 
 
 def epsg_code(crs: str) -> str:
