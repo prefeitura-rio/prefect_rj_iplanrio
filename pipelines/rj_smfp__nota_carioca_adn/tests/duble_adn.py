@@ -159,7 +159,7 @@ class DubleAdn:
                 duble._atender(self)
 
         self._servidor = Servidor(("127.0.0.1", 0), Manipulador)
-        self._thread = threading.Thread(target=self._servidor.serve_forever, daemon=True)
+        self._thread = threading.Thread(target=self._servidor.serve_forever, args=(0.01,), daemon=True)
 
     @property
     def url(self) -> str:

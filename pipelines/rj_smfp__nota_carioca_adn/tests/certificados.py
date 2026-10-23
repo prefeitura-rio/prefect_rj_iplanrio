@@ -54,6 +54,12 @@ def _emitir(
         .not_valid_before(agora - timedelta(minutes=5))
         .not_valid_after(agora + timedelta(days=2))
     )
+    # O Python 3.13 valida em modo estrito e exige os identificadores de chave (SKI e AKI).
+    construtor = construtor.add_extension(x509.SubjectKeyIdentifier.from_public_key(chave_publica), False)  # type: ignore[arg-type]
+    construtor = construtor.add_extension(
+        x509.AuthorityKeyIdentifier.from_issuer_public_key(chave_emissor.public_key()),  # type: ignore[attr-defined]
+        False,
+    )
     for extensao in extras:
         construtor = construtor.add_extension(extensao.value, extensao.critical)
     return construtor.sign(chave_emissor, hashes.SHA256())  # type: ignore[arg-type]
@@ -72,7 +78,24 @@ def gerar_pki(diretorio: Path) -> Pki:
         "CA SINTETICA DE TESTE",
         nome_ca,
         chave_ca,
-        [x509.Extension(x509.ExtensionOID.BASIC_CONSTRAINTS, True, x509.BasicConstraints(ca=True, path_length=None))],
+        [
+            x509.Extension(x509.ExtensionOID.BASIC_CONSTRAINTS, True, x509.BasicConstraints(ca=True, path_length=None)),
+            x509.Extension(
+                x509.ExtensionOID.KEY_USAGE,
+                True,
+                x509.KeyUsage(
+                    digital_signature=True,
+                    content_commitment=False,
+                    key_encipherment=False,
+                    data_encipherment=False,
+                    key_agreement=False,
+                    key_cert_sign=True,
+                    crl_sign=True,
+                    encipher_only=False,
+                    decipher_only=False,
+                ),
+            ),
+        ],
     )
     chave_servidor = ec.generate_private_key(ec.SECP256R1())
     alt = x509.SubjectAlternativeName([x509.DNSName("localhost"), x509.IPAddress(ipaddress.ip_address("127.0.0.1"))])
