@@ -1,0 +1,91 @@
+name: rj_smfp__nota_carioca_parser
+prefect-version: 3.4.3
+
+build:
+- prefect.deployments.steps.run_shell_script:
+    id: get-commit-hash
+    script: git rev-parse --short HEAD
+    stream_output: false
+- prefect_docker.deployments.steps.build_docker_image:
+    id: build-image
+    requires: prefect-docker>=0.6.5
+    image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+    tag: "rj_smfp__nota_carioca_parser-{{ get-commit-hash.stdout }}"
+    dockerfile: pipelines/rj_smfp__nota_carioca_parser/Dockerfile
+
+push:
+- prefect_docker.deployments.steps.push_docker_image:
+    requires: prefect-docker>=0.6.5
+    image_name: "{{ build-image.image_name }}"
+    tag: "{{ build-image.tag }}"
+
+pull:
+- prefect.deployments.steps.set_working_directory:
+    directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+# Os dois deployments nascem com a agenda INATIVA até o gate dos todos 38 e 39 (extração do ADN e paridade F1 sobre
+# dados reais). Kill switch: pausar o deployment. Rodam depois da extração do ADN (a agenda de 15 min cobre o intervalo
+# entre as extrações); ligar a agenda é decisão do dono, depois do gate.
+- name: rj-smfp--nota-carioca-parser--staging
+  tags:
+  - environment:staging
+  - severity:low
+  - code_owner:fredzolio
+  version: "{{ build-image.tag }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_parser/flow.py:rj_smfp__nota_carioca_parser
+  # Uma execução por vez: duas leriam a mesma marca e carregariam o mesmo lote duas vezes.
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  schedules:
+  - cron: "*/15 * * * *"
+    timezone: America/Sao_Paulo
+    slug: incremental-apos-extracao
+    active: false
+  # Staging lê a produção restrita do ADN e grava no dataset de staging.
+  parameters:
+    dataset_id: raw_nfse_nacional_staging
+    ambiente: producao_restrita
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_parser -- prefect flow-run execute
+      secretName: prefect-jobs-secrets-staging
+      image_pull_policy: Always
+      cpu_request: "500m"
+      cpu_limit: "2"
+      memory_request: 1Gi
+      memory_limit: 2Gi
+- name: rj-smfp--nota-carioca-parser--prod
+  tags:
+  - environment:prod
+  - severity:medium
+  - code_owner:fredzolio
+  version: "{{ get-commit-hash.stdout }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_parser/flow.py:rj_smfp__nota_carioca_parser
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  schedules:
+  - cron: "*/15 * * * *"
+    timezone: America/Sao_Paulo
+    slug: incremental-apos-extracao
+    active: false
+  parameters:
+    dataset_id: raw_nfse_nacional
+    ambiente: producao
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_parser -- prefect flow-run execute
+      secretName: prefect-jobs-secrets
+      image_pull_policy: Always
+      cpu_request: "500m"
+      cpu_limit: "2"
+      memory_request: 1Gi
+      memory_limit: 2Gi

@@ -29,6 +29,13 @@ class Reprovado:
     prioridade: Prioridade
 
 
+def recusar(documento: Documento, erro: ErroDocumento, buscar_xml_nota: BuscarXmlNota) -> Reprovado:
+    """Registra a recusa do documento, com a prioridade P1 a P5 da quarentena."""
+    xml = sanitizar_xml(documento.xml)
+    prioridade = classificar_quarentena(documento.tipo_documento, xml, documento.chave_acesso, buscar_xml_nota)
+    return Reprovado(documento, str(erro), prioridade)
+
+
 def avaliar_documento(
     documento: Documento,
     buscar_xml_nota: BuscarXmlNota,
@@ -45,9 +52,7 @@ def avaliar_documento(
             raise TipoDocumentoDesconhecido(None)
         return Aprovado(documento, validar_documento(documento.xml, documento.tipo_documento, por_versao))
     except ErroDocumento as erro:
-        xml = sanitizar_xml(documento.xml)
-        prioridade = classificar_quarentena(documento.tipo_documento, xml, documento.chave_acesso, buscar_xml_nota)
-        return Reprovado(documento, str(erro), prioridade)
+        return recusar(documento, erro, buscar_xml_nota)
 
 
 def linha_quarentena(reprovado: Reprovado, versao_parser: str, avaliado_em: datetime) -> dict[str, object]:
@@ -111,4 +116,5 @@ __all__ = [
     "linha_devolvido",
     "linha_quarentena",
     "reavaliar_quarentena",
+    "recusar",
 ]

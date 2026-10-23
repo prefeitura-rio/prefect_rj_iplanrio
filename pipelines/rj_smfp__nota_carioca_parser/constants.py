@@ -25,7 +25,7 @@ TABELA_QUARENTENA = "quarentena"
 TABELAS_RAW = ("nfse", "dps", "pessoas", "eventos")
 
 # Quantidade de NSUs lidos do índice por lote; a marca avança a cada lote carregado por inteiro.
-NSUS_POR_LOTE = 20_000
+NSUS_POR_LOTE = 5_000
 # Piso do quarentena reavaliada por execução (devolução), em documentos; o excedente fica para a próxima execução.
 QUARENTENA_POR_EXECUCAO = 5_000
 # Teto de rodadas de revalidação depois que nós tolerados são removidos (o libxml2 para no primeiro erro estrutural).
