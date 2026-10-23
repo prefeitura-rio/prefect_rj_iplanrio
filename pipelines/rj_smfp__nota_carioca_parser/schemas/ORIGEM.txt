@@ -1,0 +1,40 @@
+Origem dos esquemas XSD vendorizados em schemas/1.00 e schemas/1.01
+=====================================================================
+
+Fonte oficial : Portal da Nota Fiscal de Serviço eletrônica (gov.br/nfse)
+                Biblioteca > Documentação técnica > Documentação Atual (Produção)
+                (página "Atualizado em 15/08/2026"; seção "Esquemas XSD")
+Pacote        : NFSe-ESQUEMAS_XSD-v1.01-20260209
+URL           : https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/nfse-esquemas_xsd-v1-01-20260209.zip
+Baixado em    : 2026-10-23 (curl direto, HTTP 200, application/zip, 65640 bytes; sem bloqueio de WAF)
+sha256 do zip : e7935cbd9470527c6cc32984c1b2263e614183bf0139ce2733eaaed2de9a8072
+
+Conteúdo      : o mesmo zip traz as duas versões (Schemas/1.00/ e Schemas/1.01/); não existe um zip
+                separado da v1.00 na página de documentação atual. Os arquivos foram copiados sem
+                nenhuma alteração (bytes idênticos aos do zip, com BOM e CRLF). As pastas vazias
+                Schemas/Componente_recepcao/ e Schemas/Componente_Schemas/ do zip não foram copiadas.
+Uso           : lxml.etree.XMLSchema por documento (NFSe_vX.xsd, evento_vX.xsd, CNC_v1.00.xsd; o CNC
+                usa sempre a v1.00, como no .NET). As XSDs são imutáveis: tolerâncias ficam em código
+                (utils/tolerancias_*.py), nunca em edição do esquema.
+
+sha256 dos arquivos (relativos a schemas/):
+9aa2f8bff12530e3fc3ee839c2768c3f78990ca33557e20e0416ed4e40b291ec  1.00/CNC_v1.00.xsd
+35b1efecd3a1a7eeea218f62a65becc3d27522ded22b7614e676bbf222cae651  1.00/DPS_v1.00.xsd
+2c78fa25f38345209f2dbd0b5f2bd1be224fd92404f6c86af219c1294af455ba  1.00/NFSe_v1.00.xsd
+3c34425d9b46b58628ecde8818f65b8c11bac958c3fc71ee1af4e9980e8bc08c  1.00/evento_v1.00.xsd
+ded678013de82b489f19d340824e07a45b2a01995af15ef56f7d2cdd27a5b317  1.00/pedRegEvento_v1.00.xsd
+9632fde4654d17ba5f130e9163155e44085799e8147e584effd2de8632efb36b  1.00/tiposCnc_v1.00.xsd
+52ecf2a78ffea4cb7f35c30d5c4b6dab8a8e7e84aa4565074eef22b2ab3669e1  1.00/tiposComplexos_v1.00.xsd
+6743a30763b087f1a5da036ea2864c8798ba4d3c48a293d00ecafefe31770bdf  1.00/tiposEventos_v1.00.xsd
+9e35101b2a29b7b09f656ee4d83ed3752bd84d4b7ae370823f24efac744d0f04  1.00/tiposSimples_v1.00.xsd
+d87432c5f6ebb2bd61a1de357797401c203f14daefde834b73946f25f926a216  1.00/xmldsig-core-schema.xsd
+7032188bb6f137d52b16512583b739a361e6b1434c42cb539a29b8efa32f8321  1.01/CNC_v1.00.xsd
+fe45e5250a48e519aba89fc6a472863b8e602ed957778fb64692804933a00d0c  1.01/DPS_v1.01.xsd
+af0bd2d8c50acba3d9c3f3f515426eca083b3f66e3211ce8dd48a7cf101818b8  1.01/NFSe_v1.01.xsd
+986d0a1c4d27454f712169849aa7c2380aaa4560bd9c920e0ff03ba6599ae28b  1.01/evento_v1.01.xsd
+e90b6816d29cca0bd5ed8f86ad98d3b7b0d8bbfc11a7583e6ff8f98170fd4009  1.01/pedRegEvento_v1.01.xsd
+af606b7317824fa8fa7ad8e44bac2ad8530cd5d162ebcdec647205473c41d525  1.01/tiposCnc_v1.00.xsd
+e8e09d525574cc224ca6d1f8d8eb0366043ab2a3aa8d0d234058e6244d60e371  1.01/tiposComplexos_v1.01.xsd
+1b32bea21089dc232d78b62d805e9c07382f440d4e0ea2cb3fb6b82ebde68c11  1.01/tiposEventos_v1.01.xsd
+830ea116c34d7310699e34b214b7214a65f7e5d3b1f09aeaa702f7e3f4283b17  1.01/tiposSimples_v1.01.xsd
+49848f732663aecb618d72ad6130c5c3240f0a10f3a1a8544b7d48a6c726046f  1.01/xmldsig-core-schema.xsd
