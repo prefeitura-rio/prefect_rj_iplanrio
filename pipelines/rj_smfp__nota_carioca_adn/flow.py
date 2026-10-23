@@ -3,8 +3,8 @@
 Extração própria do ADN (Ambiente de Dados Nacional da NFS-e) para a Nota Carioca: um consumidor sequencial do
 ``GET /municipios/DFe/{nsu}`` com o certificado e-CNPJ do município (mTLS), que grava cada lote como objeto imutável
 no GCS (``gs://rj-iplanrio-dia-nfse-nacional-raw/adn/{ambiente}/dt={AAAA-MM-DD}/lote_{ini}_{fim}.ndjson.gz``, uma linha
-por documento com o XML original), indexa os documentos em ``raw_nfse_nacional.documentos`` (load job) e só então
-avança o cursor em ``raw_nfse_nacional.adn_cursor``. Depois de esgotar o ADN ("sem documentos"), busca uma a uma as
+por documento com o XML original), indexa os documentos em ``documentos`` do dataset do ambiente (load job) e só então
+avança o cursor em ``adn_cursor``. Depois de esgotar o ADN ("sem documentos"), busca uma a uma as
 lacunas de NSU do índice, até ``max_lacunas_por_run``, e encerra: a agenda do deployment roda de novo em 60 minutos,
 que é o tempo mínimo que o manual pede depois de "nenhum documento localizado".
 

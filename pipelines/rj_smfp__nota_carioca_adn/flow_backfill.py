@@ -3,7 +3,7 @@
 Backfill do histórico do ADN a partir do XML que a app já gravou no Oracle (``NFSE_RPE.MV_DOCUMENTOSFISCAISNACIONAIS``
 e a ``_QUARENTENA``), por faixa de NSU, e conferência byte a byte contra o ADN direto. Grava no mesmo formato do
 extrator (``gs://rj-iplanrio-dia-nfse-nacional-raw/adn/{ambiente}/dt=.../lote_{ini}_{fim}.ndjson.gz``, com
-``origem='oracle_backfill'`` e ``quarentena_oracle`` em cada linha) e indexa em ``raw_nfse_nacional.documentos``.
+``origem='oracle_backfill'`` e ``quarentena_oracle`` em cada linha) e indexa em ``documentos`` do dataset do ambiente.
 
 Cuidados com o Oracle da app: só o usuário somente leitura ``NC_LEITURA`` (``DB_ORACLE_NC_LEITURA__*``; qualquer usuário
 com privilégio de escrita é recusado), uma sessão, uma transação ``SET TRANSACTION READ ONLY`` por leitura, no máximo

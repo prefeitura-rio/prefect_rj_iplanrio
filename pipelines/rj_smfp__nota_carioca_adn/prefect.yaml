@@ -42,6 +42,7 @@ deployments:
   # Staging consulta a produção restrita do ADN (ADN_BASE_URL do secret de staging) e grava em adn/staging/.
   parameters:
     ambiente: staging
+    dataset_id: raw_nfse_nacional_staging
     intervalo_entre_chamadas_s: 2
     max_lacunas_por_run: 10000
     cursor_inclusivo: false
@@ -77,6 +78,7 @@ deployments:
     collision_strategy: CANCEL_NEW
   parameters:
     ambiente: prod
+    dataset_id: raw_nfse_nacional
     intervalo_entre_chamadas_s: 2
     max_lacunas_por_run: 10000
     cursor_inclusivo: false
@@ -114,6 +116,7 @@ deployments:
   # nsu_inicio e nsu_fim são obrigatórios e vêm de cada disparo (faixas aprovadas pela DBA).
   parameters:
     ambiente: prod
+    dataset_id: raw_nfse_nacional
     modo: backfill
     linhas_por_minuto: 20000
     janela_horaria: "20:00-06:00"

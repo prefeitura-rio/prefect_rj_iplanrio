@@ -86,7 +86,7 @@ class RegistroDocumento:
 
 @dataclass(frozen=True, slots=True)
 class LinhaIndice:
-    """Linha de ``raw_nfse_nacional.documentos``; ``linha`` é a posição no objeto, a partir de 1."""
+    """Linha de ``documentos`` no dataset do ambiente; ``linha`` é a posição no objeto, a partir de 1."""
 
     nsu: int
     chave_acesso: str | None

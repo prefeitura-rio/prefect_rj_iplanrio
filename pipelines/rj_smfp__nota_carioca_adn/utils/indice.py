@@ -1,4 +1,4 @@
-"""Porta do índice e do cursor e adaptador do BigQuery (``raw_nfse_nacional``).
+"""Porta do índice e do cursor e adaptador do BigQuery (dataset do ambiente: ``raw_nfse_nacional`` em prod).
 
 Tabelas (o dataset já deve existir; as tabelas são criadas na primeira execução):
 
