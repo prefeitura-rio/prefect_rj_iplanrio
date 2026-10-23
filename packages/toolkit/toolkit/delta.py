@@ -217,6 +217,11 @@ def count_repeated_keys(source: Table, key: Sequence[str]) -> int:
     )
 
 
+def count_null_keys(source: Table, key: Sequence[str]) -> int:
+    """Return how many rows have a NULL in any of the key columns."""
+    return sum(source[name].null_count for name in key)
+
+
 def merge_chunk(
     uri: str,
     directory: Path,
@@ -230,16 +235,22 @@ def merge_chunk(
     and a column differs, so the same data merged twice rewrites no file. The
     `transaction` is the ledger entry of the run, committed with the rows. The first run
     creates the table, and a folder with no rows changes nothing. The new data must fit
-    in memory and hold one row for each key: otherwise `ValueError`, because Delta fails
-    an update, or inserts both rows. A schema that differs from the table raises as an
-    append does. With `extracted_at` each row gets that time in the column
-    `_prefect_extracted_at`.
+    in memory and hold one row for each key, with no NULL in it: otherwise `ValueError`,
+    because Delta fails an update, inserts both rows, or never matches a NULL. A schema
+    that differs from the table raises as an append does. With `extracted_at` each row
+    gets that time in the column `_prefect_extracted_at`.
     """
     source = open_reader(directory, extracted_at).read_all()
     key = spec["key"]
 
     if source.num_rows == 0:
         return
+
+    nulls = count_null_keys(source, key)
+    if nulls:
+        raise ValueError(
+            f"The new data has {nulls} NULL values in {key}: merge needs a full key"
+        )
 
     repeated = count_repeated_keys(source, key)
     if repeated:

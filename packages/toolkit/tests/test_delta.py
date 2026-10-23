@@ -578,3 +578,23 @@ def test_regression_a_merge_updates_a_row_that_differs_in_the_last_of_several_co
     }
     assert days == {1: date(2026, 10, 22), 2: date(2026, 10, 23)}
     assert set(DeltaTable(uri).file_uris()) != files
+
+
+@pytest.mark.parametrize(
+    ("key", "rows"),
+    [
+        pytest.param(["id"], [(None, "a")], id="a_null_in_the_only_key_column"),
+        pytest.param(["id", "nome"], [(1, None)], id="a_null_in_the_second_key_column"),
+    ],
+)
+def test_a_merge_with_a_null_in_the_key_is_refused(uri, tmp_path, key, rows):
+    """Refuse a row that no key can match: it would be added again on every run."""
+    folder = tmp_path / "nulls"
+    folder.mkdir()
+    data = [{"id": i, "nome": n, "batch": "run"} for i, n in rows]
+    write_table(Table.from_pylist(data, schema=SCHEMA), folder / "out.parquet")
+
+    with pytest.raises(ValueError, match="NULL"):
+        merge_chunk(uri, folder, MergeSpec(key=key), Transaction("run:1", 1))
+
+    assert not DeltaTable.is_deltatable(uri)
