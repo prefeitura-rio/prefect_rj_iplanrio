@@ -120,7 +120,7 @@ deployments:
             table_id: orders
           read:
             table: public.orders # ou query: "SELECT ...", um chunk só
-          dump_mode: append # ou overwrite
+          dump_mode: append # ou overwrite ou merge
           options:
             chunks:
               column: data_pedido
@@ -245,8 +245,30 @@ schedules:
 
 - Em `append` (o padrão), cada execução soma os registros dela à tabela. Se a mesma execução roda de novo, ela não soma de novo, mesmo que a API devolva outros dados. Uma execução nova, mesmo manual, soma de novo.
 - Em `overwrite`, os registros trocam a tabela.
+- Em `merge`, cada execução compara os registros com a tabela pela chave e grava só o que é novo ou mudou. Uma reexecução, uma execução manual ou uma janela que se repete não soma linha repetida. Veja [Modo `merge`](#modo-merge).
 - O flow faz uma requisição só. Para uma API com páginas, escreva um flow que pede cada página com `request_json` e carrega tudo com `load_files`.
 - Cada execução cria arquivos pequenos. A pipeline `rj_iplanrio__maintain_delta` junta os arquivos de todas as tabelas toda semana. Veja [Manutenção das tabelas](#manutenção-das-tabelas).
+
+### Modo `merge`
+
+O `merge` usa o `MERGE` do `Delta Lake`: uma execução só adiciona as chaves que a tabela não tem e, com `update`, troca a linha que mudou. As opções vão em `options.merge`:
+
+```yaml
+dump:
+  mode: merge
+  options:
+    merge:
+      key: [id_estacao, data, horario]
+      prune: data
+```
+
+- `key` são as colunas que identificam uma linha. Os dados novos precisam ter uma linha só para cada chave, senão a execução falha.
+- `update` vale `true` se não for dito. Com `false`, uma linha que a tabela já tem fica como está. Com `true`, ela muda só se alguma coluna for diferente, então os mesmos dados não reescrevem arquivo.
+- `prune` é uma coluna que nunca muda para uma chave, como a data da medição. O `merge` lê só os arquivos que chegam ao menor valor dela nos dados novos. Sem `prune`, ele lê a tabela inteira.
+- O modo `merge` não aceita `chunks` nem `capture`, e as opções de `merge` não valem para `append` nem para `overwrite`.
+- A primeira execução cria a tabela. Uma execução sem linhas não muda nada. Os dados novos precisam caber na memória.
+- Uma coluna nova nos dados falha como em `append`. Rode uma vez com `overwrite`.
+- Os flows de `rj_cor__meteorologia_inmet`, `rj_cor__meteorologia_redemet` e `rj_iplanrio__betterstack_api` recebem o grupo `dump` com `mode` e `options`. O `rj_cor__meteorologia_redemet_estacoes`, que é uma foto das estações, usa `dump_mode: overwrite`.
 
 ## Tasks prontas
 
@@ -281,6 +303,7 @@ Tudo que vai de uma fonte para o bucket usa uma tabela `Delta`, que o BigQuery l
 5. Se `read`, `filters`, `select`, `columns` ou `chunks` (a coluna ou a largura) mudam, todos os chunks são carregados de novo. O intervalo (`begin` e `end`), o `lookback`, o `batch_size` e o `concurrency` não contam.
 6. `append` falha com `SchemaMismatchError` se as colunas mudarem. `overwrite` grava todos os chunks, apaga os que saíram do intervalo e aceita colunas novas.
 7. Com `add_timestamp`, cada linha ganha a coluna `_prefect_extracted_at`: a hora em que o chunk foi gravado (`TIMESTAMP` em UTC). Um chunk que não mudou guarda a hora antiga.
+8. Em `merge`, a fonte inteira é um chunk e o registro do `Delta` guarda a impressão digital dele. Se ela é igual, nada é gravado. Se mudou, o `MERGE` grava as chaves novas e as linhas que mudaram, no mesmo `commit` do registro. Se `read`, `filters`, `select`, `columns` ou a chave do `merge` mudam, a impressão digital é lida de novo. O arquivo lido não conta, porque cada execução usa uma pasta nova.
 
 ## Manutenção das tabelas
 

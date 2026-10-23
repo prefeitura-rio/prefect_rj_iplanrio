@@ -850,3 +850,86 @@ def test_the_stages_of_a_pipeline_change_the_hash_of_the_config():
 
     assert hash_config(first, {}) == hash_config(same, {})
     assert hash_config(first, {}) != hash_config(other, {})
+
+
+MERGE_ON_ID: DumpOptions = {"merge": {"key": ["id"]}}
+
+
+async def test_a_merge_adds_the_new_keys_and_keeps_the_old_rows(lake):
+    """Add what the new run brings, once, so that overlapping windows add no duplicate."""
+    lake.put(ROWS[:3])
+    await lake.dump("merge", **MERGE_ON_ID)
+    lake.put(ROWS[1:])
+    await lake.dump("merge", **MERGE_ON_ID)
+
+    assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
+
+
+async def test_a_merge_changes_a_row_whose_values_changed(lake):
+    """Keep the last value of a key, as an incremental model with a unique key does."""
+    await lake.dump("merge", **MERGE_ON_ID)
+    lake.put([{**ROWS[1], "valor": 99.0}])
+
+    await lake.dump("merge", **MERGE_ON_ID)
+
+    assert next(row for row in lake.rows() if row[0] == 2)[3] == 99.0
+    assert len(lake.rows()) == 4
+
+
+async def test_a_merge_of_data_that_was_merged_before_makes_no_commit(lake):
+    """Skip a run whose data is the one that the ledger already knows, like an append does."""
+    first = await lake.dump("merge", **MERGE_ON_ID)
+
+    assert await lake.dump("merge", **MERGE_ON_ID) == first
+
+
+async def test_a_merge_can_leave_the_changed_row_as_it_is(lake):
+    """Add only the keys that the table lacks, when the options say not to update."""
+    await lake.dump("merge", merge={"key": ["id"], "update": False})
+    lake.put([{**ROWS[1], "valor": 99.0}, {"id": 5, "nome": "Eli", "dia": date(2024, 3, 3), "valor": 50.0}])
+
+    await lake.dump("merge", merge={"key": ["id"], "update": False})
+
+    assert next(row for row in lake.rows() if row[0] == 2)[3] == 20.0
+    assert [row[0] for row in lake.rows()] == [1, 2, 3, 4, 5]
+
+
+@pytest.mark.parametrize(
+    ("dump_mode", "options"),
+    [
+        pytest.param("merge", {}, id="a_merge_without_a_key"),
+        pytest.param("append", MERGE_ON_ID, id="merge_options_in_an_append"),
+        pytest.param("overwrite", MERGE_ON_ID, id="merge_options_in_an_overwrite"),
+        pytest.param("merge", {**MERGE_ON_ID, "chunks": DAYS}, id="a_merge_with_chunks"),
+        pytest.param("merge", {**MERGE_ON_ID, "capture": FIRST_RUN}, id="a_merge_with_a_capture"),
+    ],
+)
+async def test_a_merge_refuses_what_it_cannot_do(lake, dump_mode, options):
+    """Raise before any write when the mode and the options do not fit."""
+    with pytest.raises(ValueError, match="merge"):
+        await lake.dump(dump_mode, **options)
+
+    assert not DeltaTable.is_deltatable(lake.uri)
+
+
+async def test_a_merge_with_a_repeated_key_in_the_source_is_refused(lake):
+    """Name the problem instead of adding both rows."""
+    lake.put([*ROWS, {**ROWS[0], "valor": 1.0}])
+
+    with pytest.raises(ValueError, match="key"):
+        await lake.dump("merge", **MERGE_ON_ID)
+
+
+async def test_a_merge_config_is_the_same_for_a_new_temp_folder_and_changes_with_the_key(tmp_path):
+    """Keep one ledger entry for a pipeline that merges from a new folder each run."""
+    one = Files(f"{tmp_path}/one/*.parquet", "parquet")
+    two = Files(f"{tmp_path}/two/*.parquet", "parquet")
+
+    assert hash_config(one, MERGE_ON_ID) == hash_config(two, MERGE_ON_ID)
+    assert hash_config(one, MERGE_ON_ID) != hash_config(one, {"merge": {"key": ["id", "dia"]}})
+
+
+async def test_a_copy_in_batches_refuses_a_merge(batches_in_a_bucket):
+    """Raise, because a copy of files cannot merge."""
+    with pytest.raises(ValueError, match="merge"):
+        await batches_in_a_bucket("merge", 2)

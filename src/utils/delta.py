@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import uuid4
 
-from deltalake import DeltaTable
+from deltalake import DeltaTable, Transaction
 from obstore.store import ObjectStore
 from polars import DataFrame, concat
 from toolkit.bigquery import BigQuery
@@ -26,6 +26,7 @@ from toolkit.constants import ALL_KEY, BATCH_COLUMN, EXTRACTED_AT_COLUMN
 from toolkit.delta import (
     compute_fingerprint,
     maintain,
+    merge_chunk,
     read_known_fingerprints,
     sweep,
     write_chunk,
@@ -147,29 +148,40 @@ def hash_config(origin: Origin, options: DumpOptions) -> str:
 
     That is what is read, and the filters, the columns and the normalization. The range
     of the chunks and `lookback` are left out: they change which chunks run, not what
-    a chunk holds. A capture leaves out what is read too, because its files are in a
-    new folder on every run.
+    a chunk holds. A capture or a merge leaves out what is read too, because its files
+    are in a new folder on every run. The key of a merge is part of the config.
     """
     spec = options.get("chunks")
-    return hash_parts(
-        {
-            "read": None if "capture" in options else {"origin": type(origin).__name__, **asdict(origin)},
-            "filters": options.get("filters"),
-            "select": options.get("select"),
-            "columns": options.get("columns"),
-            "chunks": spec and {"column": spec["column"], "width": spec["width"]},
-        }
-    )
+    fresh = "capture" in options or "merge" in options
+    parts: dict[str, object] = {
+        "read": None if fresh else {"origin": type(origin).__name__, **asdict(origin)},
+        "filters": options.get("filters"),
+        "select": options.get("select"),
+        "columns": options.get("columns"),
+        "chunks": spec and {"column": spec["column"], "width": spec["width"]},
+    }
+
+    if "merge" in options:
+        parts["merge"] = options["merge"]
+
+    return hash_parts(parts)
 
 
 def cut_chunks(options: DumpOptions, dump_mode: DumpMode) -> list[Chunk]:
     """Return the chunks of a dump: the ones of `chunks`, one for a `capture`, or `all`.
 
-    Raise `ValueError` for a capture with `chunks` or with `overwrite`.
+    Raise `ValueError` for a capture with `chunks` or with `overwrite`, for the `merge`
+    mode without the `merge` options or the other way round, and for a merge with
+    `chunks` or with a `capture`.
     """
     spec = options.get("chunks")
     capture = options.get("capture")
+    merge = options.get("merge")
 
+    if (dump_mode == "merge") != (merge is not None):
+        raise ValueError("The merge mode and the merge options go together")
+    if merge and (spec or capture):
+        raise ValueError("A merge is one chunk: drop chunks and capture")
     if capture and (spec or dump_mode == "overwrite"):
         raise ValueError("A capture is added as one chunk: drop chunks, and do not overwrite")
     if capture:
@@ -197,9 +209,12 @@ async def dump_to_delta(
     chunk, `null`, that every run reads. The engine of the source says how many chunks
     it reads at the same time, and the chunks are written to the table one at a time. A
     `capture` is the exception: its rows are added to the table, in the chunk of its
-    day, and a capture that the ledger knows is never written again. Raise `ValueError`
-    for a source with no origin, for a capture with `chunks` or with `overwrite`, and
-    for `filters` that are not one predicate each.
+    day, and a capture that the ledger knows is never written again. `merge` is one
+    chunk too: its rows are matched to the table by key and only the new or changed
+    ones are written, so a rerun or an overlapping window adds no duplicate. Raise
+    `ValueError` for a source with no origin, for a capture with `chunks` or with
+    `overwrite`, for a merge that does not fit (see `cut_chunks`), and for `filters`
+    that are not one predicate each.
 
     The origin is what to read, as `read_request` or a flow builds it.
     """
@@ -209,6 +224,7 @@ async def dump_to_delta(
     filters = options.get("filters", [])
 
     capture = options.get("capture")
+    merge = options.get("merge")
     config = hash_config(origin, options)
     cut = cut_chunks(options, dump_mode)
     ids = {chunk.key: build_ledger_id(config, capture.isoformat() if capture else chunk.key) for chunk in cut}
@@ -246,8 +262,13 @@ async def dump_to_delta(
             nonlocal written, skipped
             number = await compute_fingerprint(Executor(local), folder)
 
-            if dump_mode == "append" and known.get(ids[chunk.key]) == number:
+            if dump_mode != "overwrite" and known.get(ids[chunk.key]) == number:
                 skipped += 1
+                return
+
+            if merge:
+                await to_thread(merge_chunk, uri, folder, merge, Transaction(ids[chunk.key], number), extracted_at)
+                written += 1
                 return
 
             await to_thread(
@@ -324,8 +345,11 @@ async def dump_in_batches(
 
     It reads the origin of the source and uploads each batch, so memory holds one
     batch. This is plain batching: a rerun in `append` adds the rows again. `overwrite`
-    deletes the old files first.
+    deletes the old files first. Raise `ValueError` for `merge`, which needs a Delta table.
     """
+    if dump_mode == "merge":
+        raise ValueError("A copy in batches cannot merge: use a Delta dump")
+
     store = create_store(destination.bucket)
 
     if dump_mode == "overwrite":

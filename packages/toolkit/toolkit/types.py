@@ -80,6 +80,21 @@ class Chunks(TypedDict):
     lookback: NotRequired[int]
 
 
+class MergeSpec(TypedDict):
+    """How a merge matches the new rows to the rows of the table.
+
+    `key` is the columns that identify a row, and the new data holds one row for each
+    key. `update` (`True` unless it is set) changes a matched row that differs, and
+    `False` only adds the keys that the table lacks. `prune` is a column that never
+    changes for a key: the merge reads only the files that reach the lowest value of the
+    new data.
+    """
+
+    key: list[str]
+    update: NotRequired[bool]
+    prune: NotRequired[str]
+
+
 class TableReport(TypedDict):
     """The state of a Delta table: version, files, bytes, last commit and chunk keys."""
 

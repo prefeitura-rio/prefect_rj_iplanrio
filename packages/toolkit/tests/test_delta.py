@@ -1,11 +1,12 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from threading import Thread
 
 import pytest
-from deltalake import DeltaTable, write_deltalake
+from deltalake import DeltaTable, Transaction, write_deltalake
 from deltalake.exceptions import SchemaMismatchError
 from pyarrow import Table
+from pyarrow import date32 as arrow_date32
 from pyarrow import int64 as arrow_int64
 from pyarrow import schema as arrow_schema
 from pyarrow import string as arrow_string
@@ -13,17 +14,20 @@ from pyarrow.parquet import write_table
 
 from toolkit.constants import EXTRACTED_AT_COLUMN
 from toolkit.delta import (
+    build_merge_predicate,
     compact,
     compute_fingerprint,
     find_layout_problems,
     hash_summary,
     inspect_table,
     maintain,
+    merge_chunk,
     read_known_fingerprints,
     sweep,
     write_chunk,
 )
 from toolkit.executor.executor import Executor
+from toolkit.types import MergeSpec
 
 SCHEMA = arrow_schema(
     [("id", arrow_int64()), ("nome", arrow_string()), ("batch", arrow_string())]
@@ -317,3 +321,260 @@ def test_a_chunk_written_without_a_time_has_no_column(uri, tmp_path):
     write_chunk(uri, chunk_files(tmp_path / "w", "w", [1]), "w", "c:1", 1)
 
     assert EXTRACTED_AT_COLUMN not in DeltaTable(uri).to_pyarrow_table().column_names
+
+
+def merge_files(directory: Path, rows: dict[int, str]) -> Path:
+    """Write the rows `id -> nome` as one Parquet file in a chunk named `run`."""
+    directory.mkdir(parents=True, exist_ok=True)
+    data = [{"id": i, "nome": nome, "batch": "run"} for i, nome in rows.items()]
+    write_table(Table.from_pylist(data, schema=SCHEMA), directory / "out.parquet")
+    return directory
+
+
+def read_names(uri: str) -> dict[int, str]:
+    """Return the name of each id in the table."""
+    return {
+        row["id"]: row["nome"] for row in DeltaTable(uri).to_pyarrow_table().to_pylist()
+    }
+
+
+def test_the_first_merge_creates_the_table_and_records_the_run(uri, tmp_path):
+    """Create the table with the rows, and the ledger entry in the same commit."""
+    merge_chunk(
+        uri,
+        merge_files(tmp_path / "a", {1: "a", 2: "b"}),
+        MergeSpec(key=["id"]),
+        Transaction("run:1", 1),
+    )
+
+    assert read_names(uri) == {1: "a", 2: "b"}
+    assert read_known_fingerprints(uri, ["run:1"]) == {"run:1": 1}
+
+
+@pytest.mark.parametrize(
+    ("update", "expected"),
+    [
+        pytest.param(
+            True,
+            {1: "a", 2: "changed", 3: "c"},
+            id="an_update_changes_the_row_and_adds_the_new_one",
+        ),
+        pytest.param(
+            False,
+            {1: "a", 2: "b", 3: "c"},
+            id="insert_only_keeps_the_old_row_and_adds_the_new_one",
+        ),
+    ],
+)
+def test_a_merge_adds_new_keys_and_updates_only_when_asked(
+    uri, tmp_path, update, expected
+):
+    """Add key 3, and change key 2 only with `update`."""
+    spec = MergeSpec(key=["id"], update=update)
+    merge_chunk(
+        uri,
+        merge_files(tmp_path / "a", {1: "a", 2: "b"}),
+        spec,
+        Transaction("run:1", 1),
+    )
+
+    merge_chunk(
+        uri,
+        merge_files(tmp_path / "b", {2: "changed", 3: "c"}),
+        spec,
+        Transaction("run:2", 1),
+    )
+
+    assert read_names(uri) == expected
+
+
+def test_the_same_data_merged_again_adds_no_row_and_rewrites_no_file(uri, tmp_path):
+    """Make a rerun, or an overlapping window, change nothing."""
+    spec = MergeSpec(key=["id"])
+    merge_chunk(
+        uri,
+        merge_files(tmp_path / "a", {1: "a", 2: "b"}),
+        spec,
+        Transaction("run:1", 1),
+    )
+    files = set(DeltaTable(uri).file_uris())
+
+    merge_chunk(
+        uri,
+        merge_files(tmp_path / "b", {1: "a", 2: "b"}),
+        spec,
+        Transaction("run:2", 1),
+    )
+
+    assert read_names(uri) == {1: "a", 2: "b"}
+    assert set(DeltaTable(uri).file_uris()) == files
+
+
+def test_a_merge_with_a_repeated_key_in_the_new_data_is_refused(uri, tmp_path):
+    """Refuse two rows with one key: Delta would insert both, or fail an update."""
+    folder = tmp_path / "dup"
+    folder.mkdir()
+    rows = [
+        {"id": 1, "nome": "x", "batch": "run"},
+        {"id": 1, "nome": "y", "batch": "run"},
+    ]
+    write_table(Table.from_pylist(rows, schema=SCHEMA), folder / "out.parquet")
+
+    with pytest.raises(ValueError, match="key"):
+        merge_chunk(uri, folder, MergeSpec(key=["id"]), Transaction("run:1", 1))
+
+    assert not DeltaTable.is_deltatable(uri)
+
+
+def test_a_merge_with_no_rows_changes_nothing(uri, tmp_path):
+    """Leave the table and its ledger alone when the run found nothing."""
+    merge_chunk(
+        uri,
+        merge_files(tmp_path / "a", {1: "a"}),
+        MergeSpec(key=["id"]),
+        Transaction("run:1", 1),
+    )
+    version = DeltaTable(uri).version()
+
+    merge_chunk(
+        uri,
+        merge_files(tmp_path / "empty", {}),
+        MergeSpec(key=["id"]),
+        Transaction("run:2", 1),
+    )
+
+    assert DeltaTable(uri).version() == version
+    assert read_known_fingerprints(uri, ["run:2"]) == {}
+
+
+def test_a_merge_with_a_time_stamps_new_and_changed_rows_only(uri, tmp_path):
+    """Keep the old time on a row that did not change."""
+    first = datetime(2024, 3, 10, 12, 0, tzinfo=UTC)
+    second = datetime(2024, 3, 10, 13, 0, tzinfo=UTC)
+    merge_chunk(
+        uri,
+        merge_files(tmp_path / "a", {1: "a", 2: "b"}),
+        MergeSpec(key=["id"]),
+        Transaction("run:1", 1),
+        first,
+    )
+
+    merge_chunk(
+        uri,
+        merge_files(tmp_path / "b", {1: "a", 2: "changed", 3: "c"}),
+        MergeSpec(key=["id"]),
+        Transaction("run:2", 1),
+        second,
+    )
+
+    stamps = {
+        row["id"]: row[EXTRACTED_AT_COLUMN]
+        for row in DeltaTable(uri).to_pyarrow_table().to_pylist()
+    }
+    assert stamps == {1: first, 2: second, 3: second}
+
+
+def test_a_merge_with_other_columns_is_refused(uri, tmp_path):
+    """Keep the schema rule of an append: a new column is an error."""
+    merge_chunk(
+        uri,
+        merge_files(tmp_path / "a", {1: "a"}),
+        MergeSpec(key=["id"]),
+        Transaction("run:1", 1),
+    )
+    folder = tmp_path / "wide"
+    folder.mkdir()
+    wide = arrow_schema(
+        [("id", arrow_int64()), ("extra", arrow_string()), ("batch", arrow_string())]
+    )
+    write_table(
+        Table.from_pylist([{"id": 2, "extra": "x", "batch": "run"}], schema=wide),
+        folder / "out.parquet",
+    )
+
+    with pytest.raises(Exception, match=r"(?i)schema|column"):
+        merge_chunk(uri, folder, MergeSpec(key=["id"]), Transaction("run:2", 1))
+
+
+@pytest.mark.parametrize(
+    ("spec", "low", "expected"),
+    [
+        pytest.param(MergeSpec(key=["id"]), None, 't."id" = s."id"', id="one_key"),
+        pytest.param(
+            MergeSpec(key=["a", "b"]),
+            None,
+            't."a" = s."a" AND t."b" = s."b"',
+            id="two_keys",
+        ),
+        pytest.param(
+            MergeSpec(key=["id"], prune="day"),
+            "2026-10-22",
+            't."id" = s."id" AND t."day" >= \'2026-10-22\'',
+            id="a_text_prune",
+        ),
+        pytest.param(
+            MergeSpec(key=["id"], prune="day"),
+            date(2026, 10, 22),
+            't."id" = s."id" AND t."day" >= CAST(\'2026-10-22\' AS DATE)',
+            id="a_date_prune",
+        ),
+        pytest.param(
+            MergeSpec(key=["id"], prune="n"),
+            5,
+            't."id" = s."id" AND t."n" >= 5',
+            id="a_number_prune",
+        ),
+        pytest.param(
+            MergeSpec(key=["id"], prune="day"),
+            "o'brien",
+            't."id" = s."id" AND t."day" >= \'o\'\'brien\'',
+            id="a_quote_in_the_value",
+        ),
+    ],
+)
+def test_the_merge_predicate_matches_the_key_and_prunes_old_files(spec, low, expected):
+    """Join the key columns, and bound the scan by the lowest prune value."""
+    assert build_merge_predicate(spec, low) == expected
+
+
+def test_regression_a_merge_updates_a_row_that_differs_in_the_last_of_several_columns(
+    uri, tmp_path
+):
+    """Regression: two columns besides the key must not mix the terms of the test."""
+    wide = arrow_schema(
+        [
+            ("id", arrow_int64()),
+            ("nome", arrow_string()),
+            ("dia", arrow_date32()),
+            ("batch", arrow_string()),
+        ]
+    )
+
+    def put(folder: str, rows: list[tuple[int, str, date]]) -> Path:
+        path = tmp_path / folder
+        path.mkdir()
+        data = [{"id": i, "nome": n, "dia": d, "batch": "run"} for i, n, d in rows]
+        write_table(Table.from_pylist(data, schema=wide), path / "out.parquet")
+        return path
+
+    spec = MergeSpec(key=["id"])
+    merge_chunk(
+        uri,
+        put("a", [(1, "a", date(2026, 10, 22)), (2, "b", date(2026, 10, 22))]),
+        spec,
+        Transaction("run:1", 1),
+    )
+    files = set(DeltaTable(uri).file_uris())
+
+    merge_chunk(
+        uri,
+        put("b", [(1, "a", date(2026, 10, 22)), (2, "b", date(2026, 10, 23))]),
+        spec,
+        Transaction("run:2", 1),
+    )
+
+    days = {
+        row["id"]: row["dia"] for row in DeltaTable(uri).to_pyarrow_table().to_pylist()
+    }
+    assert days == {1: date(2026, 10, 22), 2: date(2026, 10, 23)}
+    assert set(DeltaTable(uri).file_uris()) != files

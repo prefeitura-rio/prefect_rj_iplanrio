@@ -5,9 +5,9 @@ from datetime import datetime
 from typing import Literal, NotRequired, TypedDict
 
 from pydantic import ConfigDict, JsonValue, with_config
-from toolkit.types import Chunks, TableReport
+from toolkit.types import Chunks, MergeSpec, TableReport
 
-type DumpMode = Literal["append", "overwrite"]
+type DumpMode = Literal["append", "overwrite", "merge"]
 type FileFormat = Literal["parquet", "csv", "json"]
 
 
@@ -84,11 +84,14 @@ class DumpOptions(TypedDict, total=False):
     A filter is one SQL predicate in the dialect of the source, and for CouchDB a Mango
     selector. `chunks` cut the table into chunks, and `columns` normalizes the result. A
     `capture` adds the rows to the table instead of replacing a chunk: it is the time of
-    one run, so that a rerun of the same run adds nothing. A key that is not here is an
-    error, so a renamed or misspelled option never falls back to the default.
+    one run, so that a rerun of the same run adds nothing. `merge` is the options of the
+    `merge` mode: the key that identifies a row, whether a changed row is updated, and a
+    column that prunes old files. A key that is not here is an error, so a renamed or
+    misspelled option never falls back to the default.
     """
 
     chunks: Chunks
+    merge: MergeSpec
     capture: datetime
     filters: list[str]
     select: list[str]
@@ -107,6 +110,16 @@ class DatabaseDumpOptions(DumpOptions, total=False):
 
     batch_size: int
     concurrency: int
+
+
+class Dump(TypedDict, total=False):
+    """How a flow of records loads its table: the dump mode and the dump options.
+
+    `mode` is `append` unless it is set. One group keeps the parameters of a flow few.
+    """
+
+    mode: DumpMode
+    options: DumpOptions
 
 
 class Maintenance(TypedDict):

@@ -1,4 +1,4 @@
-"""Write chunks into a Delta table, and know which ones did not change.
+"""Write chunks into a Delta table, merge rows by key, and skip unchanged chunks.
 
 The ledger of the table holds one fingerprint for each chunk and config. A chunk whose
 fingerprint is the same is skipped, and a chunk that changed is replaced in one atomic
@@ -6,7 +6,7 @@ commit. The table lives in a bucket and is read through ADC, or on a local path.
 """
 
 from collections.abc import Collection, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from hashlib import md5
 from pathlib import Path
 from re import fullmatch
@@ -16,7 +16,7 @@ from typing import cast
 from deltalake import CommitProperties, DeltaTable, Transaction, write_deltalake
 from deltalake.exceptions import CommitFailedError
 from psycopg.sql import Literal
-from pyarrow import RecordBatchReader, repeat, timestamp
+from pyarrow import RecordBatchReader, Table, repeat, timestamp
 from pyarrow import scalar as arrow_scalar
 from pyarrow import schema as arrow_schema
 from pyarrow import table as arrow_table
@@ -33,7 +33,7 @@ from .constants import (
 )
 from .executor.executor import Executor
 from .telemetry import logger
-from .types import Fingerprint, TableReport
+from .types import Fingerprint, MergeSpec, TableReport
 
 
 def hash_summary(rows: int, low: str, high: str) -> int:
@@ -151,6 +151,138 @@ def write_chunk(
             sleep(attempt * 0.2)
         else:
             return
+
+
+def quote_name(name: str) -> str:
+    """Quote a column name for a predicate, with a double quote doubled.
+
+    ```python
+    quote_name("data")  # '"data"'
+    ```
+    """
+    return '"' + name.replace('"', '""') + '"'
+
+
+def build_literal(value: str | float | date) -> str:
+    """Return a value as a SQL literal that a predicate compares with its column.
+
+    ```python
+    build_literal("o'brien")  # "'o''brien'"
+    build_literal(date(2026, 10, 22))  # "CAST('2026-10-22' AS DATE)"
+    ```
+    """
+    if isinstance(value, datetime):
+        return f"CAST('{value.isoformat(sep=' ')}' AS TIMESTAMP)"
+    if isinstance(value, date):
+        return f"CAST('{value.isoformat()}' AS DATE)"
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, int | float):
+        return str(value)
+    return "'" + value.replace("'", "''") + "'"
+
+
+def build_merge_predicate(spec: MergeSpec, low: str | float | date | None) -> str:
+    """Return the predicate that matches a row of the table to a row of the new data.
+
+    The key columns are equal. With `prune` and a `low` value, the table side must also
+    reach `low`, so the merge reads only the recent files.
+
+    ```python
+    build_merge_predicate({"key": ["id"]}, None)  # 't."id" = s."id"'
+    ```
+    """
+    terms = [f"t.{quote_name(name)} = s.{quote_name(name)}" for name in spec["key"]]
+    prune = spec.get("prune")
+
+    if prune and low is not None:
+        terms.append(f"t.{quote_name(prune)} >= {build_literal(low)}")
+
+    return " AND ".join(terms)
+
+
+def build_changed_predicate(columns: Sequence[str]) -> str:
+    """Return the predicate that is true when a matched row differs in a column."""
+    return " OR ".join(
+        f"(t.{quote_name(name)} IS DISTINCT FROM s.{quote_name(name)})"
+        for name in columns
+    )
+
+
+def count_repeated_keys(source: Table, key: Sequence[str]) -> int:
+    """Return how many keys appear in more than one row of the table."""
+    counts = source.select(list(key)).group_by(list(key)).aggregate([([], "count_all")])
+    return sum(
+        1 for rows in cast("list[int]", counts["count_all"].to_pylist()) if rows > 1
+    )
+
+
+def merge_chunk(
+    uri: str,
+    directory: Path,
+    spec: MergeSpec,
+    transaction: Transaction,
+    extracted_at: datetime | None = None,
+) -> None:
+    """Merge the rows of a folder of Parquet files into the table by key, in one commit.
+
+    A key that the table lacks is added. A matched row changes only when `update` is on
+    and a column differs, so the same data merged twice rewrites no file. The
+    `transaction` is the ledger entry of the run, committed with the rows. The first run
+    creates the table, and a folder with no rows changes nothing. The new data must fit
+    in memory and hold one row for each key: otherwise `ValueError`, because Delta fails
+    an update, or inserts both rows. A schema that differs from the table raises as an
+    append does. With `extracted_at` each row gets that time in the column
+    `_prefect_extracted_at`.
+    """
+    source = open_reader(directory, extracted_at).read_all()
+    key = spec["key"]
+
+    if source.num_rows == 0:
+        return
+
+    repeated = count_repeated_keys(source, key)
+    if repeated:
+        raise ValueError(
+            f"The new data repeats {repeated} keys of {key}: merge needs one row for each"
+        )
+
+    properties = CommitProperties(app_transactions=[transaction])
+
+    if not DeltaTable.is_deltatable(uri):
+        write_deltalake(uri, source, mode="append", commit_properties=properties)
+        return
+
+    prune = spec.get("prune")
+    values = (
+        cast("list[str | float | date]", source[prune].drop_null().to_pylist())
+        if prune
+        else []
+    )
+    low = min(values, default=None)
+    merger = (
+        DeltaTable(uri)
+        .merge(
+            source,
+            predicate=build_merge_predicate(spec, low),
+            source_alias="s",
+            target_alias="t",
+            commit_properties=properties,
+        )
+        .when_not_matched_insert_all()
+    )
+    changing = [
+        name
+        for name in source.column_names
+        if name not in {*key, BATCH_COLUMN, EXTRACTED_AT_COLUMN}
+    ]
+
+    if spec.get("update", True) and changing:
+        merger = merger.when_matched_update_all(
+            predicate=build_changed_predicate(changing)
+        )
+
+    merger.execute()
 
 
 def sweep(uri: str, keep: Collection[str]) -> None:
