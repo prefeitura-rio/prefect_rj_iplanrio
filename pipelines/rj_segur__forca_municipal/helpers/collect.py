@@ -16,7 +16,7 @@ from pipelines.rj_segur__forca_municipal.constants import (
 )
 from pipelines.rj_segur__forca_municipal.helpers.kml import parse_placemarks
 from pipelines.rj_segur__forca_municipal.types import Api, Endpoint, Row, Tally
-from utils.utils import read_json
+from utils.records import read_json
 
 type Upload = Callable[[list[Row], int], Awaitable[None]]
 

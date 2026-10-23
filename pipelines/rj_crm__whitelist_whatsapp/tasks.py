@@ -19,7 +19,7 @@ from pipelines.rj_crm__whitelist_whatsapp.constants import (
 )
 from pipelines.rj_crm__whitelist_whatsapp.helpers import backoff_seconds, build_backfill_rows, build_rows
 from pipelines.rj_crm__whitelist_whatsapp.settings import Settings
-from utils.utils import dig, read_json
+from utils.records import dig, read_json
 
 
 async def fetch_page(

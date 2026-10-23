@@ -24,10 +24,8 @@ from toolkit.delta import compact, maintain
 from toolkit.gcs import list_keys
 from toolkit.types import Chunks
 
-from utils.utils import (
-    load_to_delta,
-    read_request,
-)
+from utils.delta import load_to_delta
+from utils.origins import read_request
 
 pytestmark = pytest.mark.cloud
 

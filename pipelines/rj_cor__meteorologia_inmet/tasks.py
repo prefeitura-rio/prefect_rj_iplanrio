@@ -12,7 +12,7 @@ from pipelines.rj_cor__meteorologia_inmet.constants import CONCURRENCY, SP_TZ, S
 from pipelines.rj_cor__meteorologia_inmet.helpers import build_rows
 from pipelines.rj_cor__meteorologia_inmet.settings import Settings
 from utils.constants import USER_AGENT
-from utils.utils import extract_records, read_json
+from utils.records import extract_records, read_json
 
 
 async def fetch_station(client: AsyncClient, limit: Semaphore, url: str, station: str) -> list[dict[str, JsonValue]]:

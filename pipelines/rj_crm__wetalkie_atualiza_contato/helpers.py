@@ -4,7 +4,8 @@ from json import dumps
 
 from pydantic import JsonValue
 
-from utils.utils import dig, render_query
+from utils.records import dig
+from utils.utils import render_query
 
 
 def build_query() -> str:

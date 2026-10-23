@@ -8,8 +8,8 @@ from typing import Self, final
 from httpx2 import AsyncClient, Response
 from pydantic import JsonValue
 
+from .records import dig, read_json, read_token
 from .settings import WetalkieSettings
-from .utils import dig, read_json, read_token
 
 UNAUTHORIZED = 401
 

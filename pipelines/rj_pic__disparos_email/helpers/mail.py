@@ -12,7 +12,7 @@ from toolkit.telemetry import logger
 
 from pipelines.rj_pic__disparos_email.constants import PERMANENT_STATUSES, REQUEST_TIMEOUT
 from pipelines.rj_pic__disparos_email.types import Mail
-from utils.utils import dig, read_json
+from utils.records import dig, read_json
 
 
 @dataclass(frozen=True)

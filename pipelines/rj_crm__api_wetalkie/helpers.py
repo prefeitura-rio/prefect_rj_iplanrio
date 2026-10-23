@@ -2,7 +2,7 @@
 
 from pydantic import JsonValue
 
-from utils.utils import dig
+from utils.records import dig
 
 
 def read_items(response: JsonValue) -> list[dict[str, JsonValue]]:

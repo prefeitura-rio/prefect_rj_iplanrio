@@ -21,7 +21,7 @@ from toolkit.executor import couchdb as couchdb_module
 from toolkit.executor.engines import mongodb as mongodb_module
 from toolkit.types import Chunks
 
-from utils.utils import dump_to_delta
+from utils.delta import dump_to_delta
 
 pytestmark = pytest.mark.parity
 

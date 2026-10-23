@@ -14,7 +14,7 @@ from unidecode import unidecode
 
 from pipelines.rj_crm__geolocalizacao_residencia.constants import RIO_CONTEXT, WAZE_BOUNDS
 from pipelines.rj_crm__geolocalizacao_residencia.types import Geocode
-from utils.utils import dig, read_json
+from utils.records import dig, read_json
 
 OK: Final = 200
 PAYMENT_REQUIRED: Final = 402

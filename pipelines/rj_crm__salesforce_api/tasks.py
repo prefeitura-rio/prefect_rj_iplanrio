@@ -10,9 +10,9 @@ from toolkit.telemetry import logger
 from pipelines.rj_crm__salesforce_api.constants import MAX_PAGES
 from pipelines.rj_crm__salesforce_api.helpers import build_page_request, build_rows, build_url, read_page
 from pipelines.rj_crm__salesforce_api.types import SfmcRequest
+from utils.records import dig
 from utils.settings import SfmcSettings
 from utils.tasks import request_json
-from utils.utils import dig
 
 
 @task

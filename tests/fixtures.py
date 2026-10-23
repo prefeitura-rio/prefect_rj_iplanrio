@@ -57,16 +57,12 @@ from toolkit.gcs import create_store
 from toolkit.oracle import Oracle
 from toolkit.types import Columns, QueryParams, TableReport
 
-from utils import tasks, utils
+from utils import delta, tasks
 from utils.couchdb import BCADASTRO
+from utils.delta import Destination, dump_to_delta, publish
+from utils.origins import read_request
+from utils.records import write_json_lines
 from utils.types import DatabaseDumpOptions, DumpMode, DumpOptions, Read
-from utils.utils import (
-    Destination,
-    dump_to_delta,
-    publish,
-    read_request,
-    write_json_lines,
-)
 
 READABLE = {"timestampNtz", "columnMapping", "deletionVectors"}
 """The reader features that BigQuery supports, with reader version 3 as the most it reads."""
@@ -304,7 +300,7 @@ class FakeBigQueryCalls:
 @pytest.fixture
 def bigquery(monkeypatch: pytest.MonkeyPatch) -> type[FakeBigQueryCalls]:
     """Replace BigQuery with the one that records the calls."""
-    monkeypatch.setattr(utils, "BigQuery", FakeBigQueryCalls)
+    monkeypatch.setattr(delta, "BigQuery", FakeBigQueryCalls)
     monkeypatch.setattr(tasks, "BigQuery", FakeBigQueryCalls)
 
     return FakeBigQueryCalls
@@ -341,7 +337,7 @@ def fake_bigquery() -> Iterator[type[FakeBigQuery]]:
     FakeBigQuery.tables.clear()
 
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(utils, "BigQuery", FakeBigQuery)
+        patch.setattr(delta, "BigQuery", FakeBigQuery)
 
         yield FakeBigQuery
 

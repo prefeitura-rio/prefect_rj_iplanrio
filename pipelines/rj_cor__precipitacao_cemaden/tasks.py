@@ -6,8 +6,8 @@ from toolkit.telemetry import logger
 
 from pipelines.rj_cor__precipitacao_cemaden.constants import SOURCE_URL
 from pipelines.rj_cor__precipitacao_cemaden.helpers import build_rows, find_new_stations
+from utils.records import extract_records
 from utils.tasks import request_json
-from utils.utils import extract_records
 
 
 @task

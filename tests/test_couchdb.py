@@ -16,8 +16,9 @@ from toolkit.types import Chunks
 
 from utils import tasks
 from utils.couchdb import BCADASTRO
+from utils.delta import dump_to_delta
+from utils.origins import read_request
 from utils.types import Database, Read
-from utils.utils import dump_to_delta, read_request
 
 CPF_IDS = ["00000000272", "00000000353", "00000008001"]
 

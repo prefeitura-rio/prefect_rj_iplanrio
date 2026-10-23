@@ -10,7 +10,9 @@ from toolkit.dbt import DbtRun
 from toolkit.settings import DiscordSettings
 from toolkit.telemetry import logger
 
+from .delta import summarize_maintenance
 from .hooks import notify_failure
+from .records import extract_records, load_records_schema, validate_records
 from .tasks import (
     dump_arcgis_to_gcs,
     dump_db_to_gcs,
@@ -26,14 +28,7 @@ from .tasks import (
     write_records,
 )
 from .types import Cloud, Database, DatabaseDumpOptions, DumpMode, DumpOptions, FileFormat, Maintenance, Read, Table
-from .utils import (
-    capture_options,
-    capture_time,
-    extract_records,
-    load_records_schema,
-    summarize_maintenance,
-    validate_records,
-)
+from .utils import capture_options, capture_time
 
 
 async def load_records(

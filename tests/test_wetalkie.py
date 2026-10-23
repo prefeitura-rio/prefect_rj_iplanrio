@@ -4,7 +4,7 @@ import pytest
 from httpx2 import AsyncClient, HTTPStatusError, MockTransport, Request, Response
 from pydantic import JsonValue
 
-from utils.utils import dig, read_token
+from utils.records import dig, read_token
 from utils.wetalkie import WetalkieApi, build_attendance_row
 
 URL = "https://wetalkie.test"

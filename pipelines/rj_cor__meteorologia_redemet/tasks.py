@@ -11,7 +11,7 @@ from toolkit.telemetry import logger
 from pipelines.rj_cor__meteorologia_redemet.constants import CONCURRENCY, OBSERVATION_URL, SP_TZ, STATIONS
 from pipelines.rj_cor__meteorologia_redemet.helpers import build_rows, list_stamps, read_observation
 from pipelines.rj_cor__meteorologia_redemet.settings import Settings
-from utils.utils import read_json
+from utils.records import read_json
 
 
 async def fetch_observation(

@@ -18,8 +18,8 @@ from typing import final
 import httpx2
 from toolkit.telemetry import logger
 
+from utils.records import dig, read_json
 from utils.settings import NoticeSettings
-from utils.utils import dig, read_json
 
 WEBHOOK_ENV = "DISCORD_WEBHOOK_URL"
 TIMEOUT_SECONDS = 10.0

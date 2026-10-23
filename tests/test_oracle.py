@@ -16,7 +16,8 @@ from toolkit.executor.sources.backends.oracle import OracleSource
 from toolkit.executor.sources.protocols import DBConn
 from toolkit.types import Chunks
 
-from utils.utils import dump_to_delta, read_request
+from utils.delta import dump_to_delta
+from utils.origins import read_request
 
 COLUMNS = [
     ("ID", "DB_TYPE_NUMBER", 10, 0),

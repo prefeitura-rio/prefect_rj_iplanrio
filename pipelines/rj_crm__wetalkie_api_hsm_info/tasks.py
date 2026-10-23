@@ -8,9 +8,9 @@ from toolkit.telemetry import logger
 
 from pipelines.rj_crm__wetalkie_api_hsm_info.constants import FIELDS, LOGIN_URL, MAX_PAGES, PAGE_SIZE, TEMPLATES_URL
 from pipelines.rj_crm__wetalkie_api_hsm_info.helpers import build_rows, read_page
+from utils.records import read_token
 from utils.settings import WetalkieSettings
 from utils.tasks import request_json
-from utils.utils import read_token
 
 
 @task

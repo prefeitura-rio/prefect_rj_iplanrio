@@ -7,7 +7,7 @@ from json import dumps
 from pydantic import JsonValue
 
 from pipelines.rj_crm__wetalkie_api_hsm_info.constants import CODED_FIELDS, SP_TZ
-from utils.utils import dig
+from utils.records import dig
 
 
 def read_page(data: JsonValue) -> tuple[list[dict[str, JsonValue]], bool]:

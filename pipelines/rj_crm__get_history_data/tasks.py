@@ -26,8 +26,9 @@ from pipelines.rj_crm__get_history_data.helpers.sfmc import (
     parse_fields,
 )
 from pipelines.rj_crm__get_history_data.types import Extension, Extraction, Row
+from utils.records import dig, read_json
 from utils.settings import SfmcSettings
-from utils.utils import dig, read_json, render_query
+from utils.utils import render_query
 
 
 @task(retries=2, retry_delay_seconds=30)

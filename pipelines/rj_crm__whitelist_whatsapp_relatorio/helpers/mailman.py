@@ -19,7 +19,7 @@ from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.ocorrencias import (
     para_template,
     urls_distintas,
 )
-from utils.utils import dig
+from utils.records import dig
 
 logger = logger_da_pipeline(__name__)
 JSON: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)

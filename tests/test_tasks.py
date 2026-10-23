@@ -10,6 +10,7 @@ from toolkit.dbt import DbtRun
 
 from utils import tasks
 from utils.constants import DISCORD_LIMIT, USER_AGENT
+from utils.delta import Destination
 from utils.tasks import (
     dump_arcgis_to_gcs,
     maintain_delta_table,
@@ -19,7 +20,6 @@ from utils.tasks import (
     run_dbt,
     write_records,
 )
-from utils.utils import Destination
 
 
 async def test_a_get_sends_the_params_and_the_headers_and_returns_the_json(fake_api):

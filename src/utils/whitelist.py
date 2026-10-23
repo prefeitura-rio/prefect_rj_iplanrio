@@ -10,8 +10,8 @@ from httpx2 import AsyncClient, HTTPError
 from pydantic import JsonValue
 from toolkit.telemetry import logger
 
+from .records import dig, read_json
 from .settings import WhitelistSettings
-from .utils import dig, read_json
 
 PAGE_SIZE = 100
 MIN_DIGITS = 10

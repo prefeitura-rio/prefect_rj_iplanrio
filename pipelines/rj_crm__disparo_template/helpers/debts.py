@@ -17,7 +17,7 @@ from pipelines.rj_crm__disparo_template.constants import (
     DEBTS_TRIES,
     ESCAPED_FIELDS,
 )
-from utils.utils import read_json
+from utils.records import read_json
 
 type Pause = Callable[[float], Awaitable[None]]
 JSON: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)

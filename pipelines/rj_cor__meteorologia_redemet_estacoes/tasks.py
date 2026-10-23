@@ -10,8 +10,8 @@ from toolkit.telemetry import logger
 from pipelines.rj_cor__meteorologia_redemet_estacoes.constants import STATIONS_URL
 from pipelines.rj_cor__meteorologia_redemet_estacoes.helpers import build_stations, find_new_stations
 from pipelines.rj_cor__meteorologia_redemet_estacoes.settings import Settings
+from utils.records import extract_records
 from utils.tasks import request_json
-from utils.utils import extract_records
 
 
 @task

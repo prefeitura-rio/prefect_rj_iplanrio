@@ -18,7 +18,7 @@ from pipelines.rj_crm__salesforce_datacloud.constants import (
 )
 from pipelines.rj_crm__salesforce_datacloud.helpers.transform import clean_records
 from pipelines.rj_crm__salesforce_datacloud.types import Row, Session
-from utils.utils import dig
+from utils.records import dig
 
 JSON: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 

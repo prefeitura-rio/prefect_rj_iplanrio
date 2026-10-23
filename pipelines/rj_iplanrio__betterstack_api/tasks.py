@@ -7,8 +7,8 @@ from toolkit.telemetry import logger
 from pipelines.rj_iplanrio__betterstack_api.constants import INCIDENTS_URL, PAGE_SIZE
 from pipelines.rj_iplanrio__betterstack_api.helpers import build_rows, read_next_page
 from pipelines.rj_iplanrio__betterstack_api.settings import Settings
+from utils.records import extract_records
 from utils.tasks import request_json
-from utils.utils import extract_records
 
 
 @task

@@ -36,7 +36,7 @@ from pipelines.rj_crm__geolocalizacao_residencia.helpers.providers import (
     xyz_url,
 )
 from pipelines.rj_crm__geolocalizacao_residencia.types import Geocode, Pause, Run, Step
-from utils.utils import dig, read_json
+from utils.records import dig, read_json
 
 ERRORS = (HTTPError, ValidationError, ValueError, KeyError, IndexError, TypeError)
 

@@ -20,8 +20,8 @@ from .constants import (
     BIFROST_FIRST_WAIT_SECONDS,
     BIFROST_MODEL,
 )
+from .records import dig
 from .settings import BifrostSettings
-from .utils import dig
 
 JSON: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 

@@ -6,7 +6,8 @@ from datetime import date, datetime, timedelta
 from pydantic import JsonValue
 
 from pipelines.rj_crm__callcenter_attendances_weekly.constants import SP_TZ
-from utils.utils import dig, render_query
+from utils.records import dig
+from utils.utils import render_query
 
 
 def read_date_range(start_date: str | None, end_date: str | None, interval: int) -> tuple[date, date]:

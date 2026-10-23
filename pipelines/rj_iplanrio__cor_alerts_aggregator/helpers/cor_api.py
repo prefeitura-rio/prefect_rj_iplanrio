@@ -6,7 +6,7 @@ from httpx2 import AsyncClient
 from pydantic import JsonValue
 from toolkit.telemetry import logger
 
-from utils.utils import dig, read_json
+from utils.records import dig, read_json
 
 HTTP_UNAUTHORIZED = 401
 
