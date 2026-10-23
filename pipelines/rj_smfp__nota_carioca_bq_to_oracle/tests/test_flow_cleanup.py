@@ -27,6 +27,7 @@ class FakeFlowRun:
         self.delete_error = delete_error
         self.validation_error = validation_error
         self.lock = threading.Lock()
+        self.manifests: list[dict] = []
 
         def record(name, result=None):
             def task(**kwargs):
@@ -63,6 +64,7 @@ class FakeFlowRun:
             "wait_inmemory_task": record("wait_inmemory", lambda kwargs: kwargs["plans"]),
             "swap_synonyms_task": self.swap,
             "release_inmemory_task": record("release_inmemory", []),
+            "write_export_manifest_task": self.write_manifest,
         }
         for name, fake in fakes.items():
             monkeypatch.setattr(flow_module, name, fake)
@@ -97,8 +99,12 @@ class FakeFlowRun:
     def swap(self, **kwargs):
         self.events.append("swap")
 
-    def run(self):
-        flow_module.rj_smfp__nota_carioca_bq_to_oracle.fn(table_ids=TABLES, discord_notifications=False)
+    def write_manifest(self, **kwargs):
+        self.events.append("manifest")
+        self.manifests.append(kwargs)
+
+    def run(self, **parameters):
+        flow_module.rj_smfp__nota_carioca_bq_to_oracle.fn(table_ids=TABLES, discord_notifications=False, **parameters)
 
 
 def test_indexes_run_while_the_files_are_still_being_deleted_and_every_table_is_cleaned(monkeypatch):
@@ -155,3 +161,34 @@ def test_a_negative_inmemory_window_is_refused_before_any_work(monkeypatch):
             table_ids=TABLES, discord_notifications=False, inmemory_window_months=-1
         )
     assert "export" not in fake.events
+
+
+def test_the_export_is_deleted_and_no_manifest_is_written_by_default(monkeypatch):
+    fake = FakeFlowRun(monkeypatch)
+    fake.run()
+    assert fake.events.count("delete-submitted") == len(TABLES)
+    assert "manifest" not in fake.events
+
+
+def test_preserving_the_export_skips_the_deletion_and_writes_the_manifest_after_the_swap(monkeypatch):
+    # Given: a carga completa pediu a preservação do export para o carregador do Postgres
+    fake = FakeFlowRun(monkeypatch)
+
+    # When: o flow roda com a flag ligada
+    fake.run(preservar_export_para_postgres=True)
+
+    # Then: nenhum arquivo é removido e o manifesto sai depois da troca, com o flow run e a foto exportada
+    assert "delete-submitted" not in fake.events
+    assert fake.deleted == []
+    assert fake.events.index("swap") < fake.events.index("manifest")
+    (written,) = fake.manifests
+    assert written["flow_run_id"] == "run"
+    assert written["dataset_id"] == "nota_carioca_staging"
+    assert sorted(written["snapshot"]) == TABLES
+
+
+def test_the_manifest_is_not_written_when_the_oracle_load_fails(monkeypatch):
+    fake = FakeFlowRun(monkeypatch, validation_error=ValueError("contagens divergentes"))
+    with pytest.raises(ValueError, match="divergentes"):
+        fake.run(preservar_export_para_postgres=True)
+    assert "manifest" not in fake.events

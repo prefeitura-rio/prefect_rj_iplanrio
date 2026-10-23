@@ -1,0 +1,135 @@
+name: rj_smfp__nota_carioca_bq_to_postgres
+prefect-version: 3.4.3
+
+build:
+- prefect.deployments.steps.run_shell_script:
+    id: get-commit-hash
+    script: git rev-parse --short HEAD
+    stream_output: false
+- prefect_docker.deployments.steps.build_docker_image:
+    id: build-image
+    requires: prefect-docker>=0.6.5
+    image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+    tag: "rj_smfp__nota_carioca_bq_to_postgres-{{ get-commit-hash.stdout }}"
+    dockerfile: pipelines/rj_smfp__nota_carioca_bq_to_postgres/Dockerfile
+
+push:
+- prefect_docker.deployments.steps.push_docker_image:
+    requires: prefect-docker>=0.6.5
+    image_name: "{{ build-image.image_name }}"
+    tag: "{{ build-image.tag }}"
+
+pull:
+- prefect.deployments.steps.set_working_directory:
+    directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+# Carregador das exigíveis: lê o manifesto que o bq_to_oracle grava (com preservar_export_para_postgres), carrega o slot
+# inativo (exigiveis_a/exigiveis_b) e publica as views. Sem schedule e sem parâmetros: quem dispara é a carga completa
+# (incluir_postgres), que passa o manifesto_uri do filho bq_to_oracle; um disparo manual informa o manifesto_uri. O DSN
+# (PG_NOTA_CARIOCA__DSN, login em nc_carregador) vem do secret do pod; o Discord de staging recebe o marcador 🧪 STAGING.
+- name: rj-smfp--nota-carioca-bq-to-postgres--staging
+  tags:
+  - environment:staging
+  - severity:low
+  - code_owner:fredzolio
+  version: "{{ build-image.tag }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_postgres/flow.py:rj_smfp__nota_carioca_bq_to_postgres
+  # Duas cargas simultâneas escreveriam no mesmo slot inativo; a segunda espera a primeira.
+  concurrency_limit:
+    limit: 1
+    collision_strategy: ENQUEUE
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_bq_to_postgres -- prefect flow-run execute
+      secretName: prefect-jobs-secrets-staging
+      image_pull_policy: Always
+      # Descompacta o CSV do GCS e o entrega ao COPY (cerca de 1 core); a memória é só buffer e o resultado dos COUNT.
+      cpu_request: "500m"
+      cpu_limit: "2"
+      memory_request: 1Gi
+      memory_limit: 2Gi
+- name: rj-smfp--nota-carioca-bq-to-postgres--prod
+  tags:
+  - environment:prod
+  - severity:medium
+  - code_owner:fredzolio
+  version: "{{ get-commit-hash.stdout }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_postgres/flow.py:rj_smfp__nota_carioca_bq_to_postgres
+  concurrency_limit:
+    limit: 1
+    collision_strategy: ENQUEUE
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_bq_to_postgres -- prefect flow-run execute
+      secretName: prefect-jobs-secrets
+      image_pull_policy: Always
+      cpu_request: "500m"
+      cpu_limit: "2"
+      memory_request: 1Gi
+      memory_limit: 2Gi
+# Sincronização de MV_CONTRIBUINTES (Oracle somente leitura → public.mv_contribuintes): upsert por snapshot a cada 15
+# minutos. O Oracle vem das variáveis DB_ORACLE_NC_LEITURA__* do secret do pod e o Postgres do DSN do login em
+# nc_sincronizador (PG_NOTA_CARIOCA_SINCRONIZADOR__DSN). A agenda existe mas fica INATIVA até o gate do todo 35.
+- name: rj-smfp--nota-carioca-contribuintes-postgres--staging
+  tags:
+  - environment:staging
+  - severity:low
+  - code_owner:fredzolio
+  version: "{{ build-image.tag }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_postgres/flow_contribuintes.py:rj_smfp__nota_carioca_contribuintes_postgres
+  # Uma sincronização por vez: se a anterior ainda roda, a nova é descartada (a próxima, em 15 min, cobre tudo).
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  schedules:
+  - cron: "*/15 * * * *"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: nota-carioca-contribuintes-postgres-15min
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_bq_to_postgres -- prefect flow-run execute
+      secretName: prefect-jobs-secrets-staging
+      image_pull_policy: Always
+      # Lê o Oracle em lotes de 10 mil linhas e as entrega ao COPY: pouca memória.
+      cpu_request: "250m"
+      cpu_limit: "1"
+      memory_request: 512Mi
+      memory_limit: 1Gi
+- name: rj-smfp--nota-carioca-contribuintes-postgres--prod
+  tags:
+  - environment:prod
+  - severity:medium
+  - code_owner:fredzolio
+  version: "{{ get-commit-hash.stdout }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_postgres/flow_contribuintes.py:rj_smfp__nota_carioca_contribuintes_postgres
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  schedules:
+  - cron: "*/15 * * * *"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: nota-carioca-contribuintes-postgres-15min
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_bq_to_postgres -- prefect flow-run execute
+      secretName: prefect-jobs-secrets
+      image_pull_policy: Always
+      cpu_request: "250m"
+      cpu_limit: "1"
+      memory_request: 512Mi
+      memory_limit: 1Gi

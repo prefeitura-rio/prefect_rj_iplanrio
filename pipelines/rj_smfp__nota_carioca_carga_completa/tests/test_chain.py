@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 import pytest
@@ -6,6 +6,8 @@ import pytest
 from pipelines.rj_smfp__nota_carioca_carga_completa.constants import (
     BQ_TO_ORACLE_DEPLOYMENT,
     BQ_TO_ORACLE_LABEL,
+    BQ_TO_POSTGRES_DEPLOYMENT,
+    BQ_TO_POSTGRES_LABEL,
     ORACLE_TO_BQ_DEPLOYMENT,
     ORACLE_TO_BQ_LABEL,
 )
@@ -14,6 +16,8 @@ from pipelines.rj_smfp__nota_carioca_carga_completa.utils.chain import (
     ChainPlan,
     ChainStoppedError,
     ChildRun,
+    ExportManifest,
+    PostgresLoad,
     Step,
     build_run_tags,
     run_chain,
@@ -26,6 +30,11 @@ TAGS = ("disparo:carga-completa", "disparo:discord", "discord-user:42")
 PLAN = ChainPlan(first=ORACLE_STEP, second=BQ_STEP, pause_seconds=30, tags=TAGS)
 ORACLE_DONE_SECONDS = 40 * 60
 BQ_DONE_SECONDS = 3 * 3600
+POSTGRES_STEP = Step(BQ_TO_POSTGRES_LABEL, BQ_TO_POSTGRES_DEPLOYMENT, 4 * 3600)
+EXPORT = ExportManifest(bucket="bucket-do-export", dataset_id="nota_carioca")
+POSTGRES_PLAN = ChainPlan(
+    first=ORACLE_STEP, second=BQ_STEP, pause_seconds=30, tags=TAGS, postgres=PostgresLoad(POSTGRES_STEP, EXPORT)
+)
 
 
 def child(name: str, state_type: str, state_name: str) -> ChildRun:
@@ -45,12 +54,14 @@ class World:
     ui_url: str | None = "https://prefect.test"
     events: list[tuple[str, ...]] = field(default_factory=list)
     run_tags: list[Sequence[str]] = field(default_factory=list)
+    run_parameters: list[Mapping[str, object]] = field(default_factory=list)
     now: float = 0.0
     paused: bool = False
 
     def run(self, step: Step, tags: Sequence[str]) -> ChildRun:
         self.events.append(("run", step.deployment, str(step.timeout_seconds)))
         self.run_tags.append(tags)
+        self.run_parameters.append(step.parameters)
         self.now += ORACLE_DONE_SECONDS if step is ORACLE_STEP else BQ_DONE_SECONDS
         outcome = self.results[step.deployment]
         if isinstance(outcome, Exception):
@@ -103,6 +114,10 @@ def both(oracle: ChildRun | Exception, bq: ChildRun | Exception | None = None) -
         ORACLE_TO_BQ_DEPLOYMENT: oracle,
         BQ_TO_ORACLE_DEPLOYMENT: bq if bq is not None else child("bq-run", *COMPLETED),
     }
+
+
+def with_postgres(results: dict[str, ChildRun | Exception], postgres: ChildRun | Exception | None = None) -> World:
+    return World({**results, BQ_TO_POSTGRES_DEPLOYMENT: postgres or child("pg-run", *COMPLETED)})
 
 
 def idle_world() -> World:
@@ -356,3 +371,105 @@ def test_step_rejects_non_positive_timeout() -> None:
 def test_chain_plan_rejects_negative_pause() -> None:
     with pytest.raises(ValueError, match="pausa"):
         ChainPlan(first=ORACLE_STEP, second=BQ_STEP, pause_seconds=-1, tags=())
+
+
+def test_the_export_manifest_uri_is_derived_from_the_flow_run_of_bq_to_oracle():
+    assert EXPORT.uri("abc-123") == "gs://bucket-do-export/nota_carioca/abc-123/manifesto.json"
+
+
+def test_run_chain_loads_postgres_after_bq_to_oracle_with_the_manifest_of_its_run() -> None:
+    # Given: os três deployments livres e os dois primeiros concluem
+    world = with_postgres(both(child("oracle-run", *COMPLETED)))
+
+    # When: roda a cadeia com o passo do Postgres
+    run_chain(POSTGRES_PLAN, world.actions())
+
+    # Then: confere os três, dispara na ordem com pausas, e o Postgres recebe o manifesto do filho bq_to_oracle
+    assert [event for event in world.events if event[0] not in ("log", "notify")] == [
+        ("guard", ORACLE_TO_BQ_DEPLOYMENT),
+        ("guard", BQ_TO_ORACLE_DEPLOYMENT),
+        ("guard", BQ_TO_POSTGRES_DEPLOYMENT),
+        ("run", ORACLE_TO_BQ_DEPLOYMENT, str(4 * 3600)),
+        ("pause", "30"),
+        ("guard", BQ_TO_ORACLE_DEPLOYMENT),
+        ("run", BQ_TO_ORACLE_DEPLOYMENT, str(8 * 3600)),
+        ("pause", "30"),
+        ("guard", BQ_TO_POSTGRES_DEPLOYMENT),
+        ("run", BQ_TO_POSTGRES_DEPLOYMENT, str(4 * 3600)),
+    ]
+    assert world.run_parameters[2] == {"manifesto_uri": "gs://bucket-do-export/nota_carioca/id-bq-run/manifesto.json"}
+
+
+def test_run_chain_announces_the_postgres_step_in_start_transition_and_total() -> None:
+    world = with_postgres(both(child("oracle-run", *COMPLETED)))
+
+    run_chain(POSTGRES_PLAN, world.actions())
+
+    assert world.notifications() == [
+        "🔗 Carga completa iniciada: Oracle → BigQuery, depois BigQuery → Oracle, depois BigQuery → Postgres",
+        "⏭️ Oracle → BigQuery concluído; BigQuery → Oracle começa em 30 s",
+        "⏭️ BigQuery → Oracle concluído; BigQuery → Postgres começa em 30 s",
+        "✅ Carga completa concluída em 6h 41min",
+    ]
+
+
+@pytest.mark.parametrize(("state_type", "state_name"), [("FAILED", "Failed"), ("CRASHED", "Crashed")])
+def test_run_chain_does_not_load_postgres_when_bq_to_oracle_fails(state_type: str, state_name: str) -> None:
+    # Given: o BigQuery → Oracle termina mal
+    world = with_postgres(both(child("oracle-run", *COMPLETED), child("bq-run", state_type, state_name)))
+
+    # When: roda a cadeia
+    with pytest.raises(ChainStoppedError) as stopped:
+        run_chain(POSTGRES_PLAN, world.actions())
+
+    # Then: o Postgres não é disparado (a foto fica alinhada com o Oracle) e a parada diz isso
+    assert world.runs() == [ORACLE_TO_BQ_DEPLOYMENT, BQ_TO_ORACLE_DEPLOYMENT]
+    assert f"BigQuery → Oracle terminou em {state_name}" in str(stopped.value)
+    assert "BigQuery → Postgres não foi disparado" in str(stopped.value)
+    assert world.notifications()[-1].startswith(
+        f"⛔ Carga completa interrompida: BigQuery → Oracle terminou em {state_name}; BigQuery → Postgres não foi"
+    )
+
+
+def test_run_chain_fails_when_the_postgres_load_does_not_complete() -> None:
+    world = with_postgres(both(child("oracle-run", *COMPLETED)), child("pg-run", "FAILED", "Failed"))
+
+    with pytest.raises(ChainStoppedError) as stopped:
+        run_chain(POSTGRES_PLAN, world.actions())
+
+    assert world.runs()[-1] == BQ_TO_POSTGRES_DEPLOYMENT
+    assert "BigQuery → Postgres terminou em Failed" in str(stopped.value)
+    assert not any("concluída" in text for text in world.notifications())
+
+
+def test_run_chain_triggers_nothing_when_the_postgres_deployment_is_busy_at_start() -> None:
+    world = with_postgres(both(child("oracle-run", *COMPLETED)))
+    world.busy[BQ_TO_POSTGRES_DEPLOYMENT] = [busy_run()]
+
+    with pytest.raises(ChainStoppedError, match="BigQuery → Postgres"):
+        run_chain(POSTGRES_PLAN, world.actions())
+
+    assert world.of_kind("run") == []
+
+
+def test_run_chain_does_not_load_postgres_when_it_became_busy_during_the_second_pause() -> None:
+    world = with_postgres(both(child("oracle-run", *COMPLETED)))
+    world.busy_after_pause[BQ_TO_POSTGRES_DEPLOYMENT] = [busy_run()]
+
+    with pytest.raises(ChainStoppedError):
+        run_chain(POSTGRES_PLAN, world.actions())
+
+    assert world.runs() == [ORACLE_TO_BQ_DEPLOYMENT, BQ_TO_ORACLE_DEPLOYMENT]
+    assert world.notifications()[-1] == (
+        "⛔ Carga completa interrompida (BigQuery → Oracle concluído): "
+        "BigQuery → Postgres já tem execução ativa (manual-run (Running))"
+    )
+
+
+def test_the_default_plan_has_no_postgres_step_and_no_step_parameters() -> None:
+    world = idle_world()
+
+    run_chain(PLAN, world.actions())
+
+    assert world.run_parameters == [{}, {}]
+    assert BQ_TO_POSTGRES_DEPLOYMENT not in world.runs()

@@ -122,6 +122,20 @@ def delete_blobs(project: str, bucket: str, blob_names: list[str]) -> None:
     logger.info("Removidos %d arquivos de gs://%s", len(blob_names), bucket)
 
 
+def upload_text(project: str, bucket: str, blob_name: str, text: str) -> None:
+    """Grava um texto UTF-8 como objeto do GCS, substituindo o que existir.
+
+    :param project: Projeto usado pelo client do GCS.
+    :param bucket: Bucket de destino.
+    :param blob_name: Nome do objeto no bucket.
+    :param text: Conteúdo do objeto.
+    """
+    storage.Client(project=project).bucket(bucket).blob(blob_name).upload_from_string(
+        text.encode("utf-8"), content_type="application/json; charset=utf-8"
+    )
+    logger.info("Gravado gs://%s/%s", bucket, blob_name)
+
+
 @dataclass(frozen=True)
 class SnapshotRequest:
     """Tabelas a exportar juntas, como uma foto única do BigQuery.

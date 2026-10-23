@@ -42,6 +42,10 @@ deployments:
   parameters:
     oracle_to_bq_deployment: rj-smfp--nota-carioca-oracle-to-bq/rj-smfp--nota-carioca-oracle-to-bq--staging
     bq_to_oracle_deployment: rj-smfp--nota-carioca-bq-to-oracle/rj-smfp--nota-carioca-bq-to-oracle--staging
+    # Carregador do Postgres de staging e o dataset de onde o bq_to_oracle de staging exporta (manifesto no GCS). Só valem
+    # com incluir_postgres, que fica desligado (padrão) até o gate do todo 35 do plano.
+    bq_to_postgres_deployment: rj-smfp--nota-carioca-bq-to-postgres/rj-smfp--nota-carioca-bq-to-postgres--staging
+    export_dataset_id: nota_carioca_staging
   work_pool:
     name: onprem-pool
     work_queue_name: default
