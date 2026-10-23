@@ -1,0 +1,76 @@
+name: rj_smfp__nota_carioca_bq_to_postgres
+prefect-version: 3.4.3
+
+build:
+- prefect.deployments.steps.run_shell_script:
+    id: get-commit-hash
+    script: git rev-parse --short HEAD
+    stream_output: false
+- prefect_docker.deployments.steps.build_docker_image:
+    id: build-image
+    requires: prefect-docker>=0.6.5
+    image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+    tag: "rj_smfp__nota_carioca_bq_to_postgres-{{ get-commit-hash.stdout }}"
+    dockerfile: pipelines/rj_smfp__nota_carioca_bq_to_postgres/Dockerfile
+
+push:
+- prefect_docker.deployments.steps.push_docker_image:
+    requires: prefect-docker>=0.6.5
+    image_name: "{{ build-image.image_name }}"
+    tag: "{{ build-image.tag }}"
+
+pull:
+- prefect.deployments.steps.set_working_directory:
+    directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+# Carregador das exigíveis: lê o manifesto que o bq_to_oracle grava (com preservar_export_para_postgres), carrega o slot
+# inativo (exigiveis_a/exigiveis_b) e publica as views. Sem schedule e sem parâmetros: quem dispara é a carga completa
+# (incluir_postgres), que passa o manifesto_uri do filho bq_to_oracle; um disparo manual informa o manifesto_uri. O DSN
+# (PG_NOTA_CARIOCA__DSN, login em nc_carregador) vem do secret do pod; o Discord de staging recebe o marcador 🧪 STAGING.
+- name: rj-smfp--nota-carioca-bq-to-postgres--staging
+  tags:
+  - environment:staging
+  - severity:low
+  - code_owner:fredzolio
+  version: "{{ build-image.tag }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_postgres/flow.py:rj_smfp__nota_carioca_bq_to_postgres
+  # Duas cargas simultâneas escreveriam no mesmo slot inativo; a segunda espera a primeira.
+  concurrency_limit:
+    limit: 1
+    collision_strategy: ENQUEUE
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_bq_to_postgres -- prefect flow-run execute
+      secretName: prefect-jobs-secrets-staging
+      image_pull_policy: Always
+      # Descompacta o CSV do GCS e o entrega ao COPY (cerca de 1 core); a memória é só buffer e o resultado dos COUNT.
+      cpu_request: "500m"
+      cpu_limit: "2"
+      memory_request: 1Gi
+      memory_limit: 2Gi
+- name: rj-smfp--nota-carioca-bq-to-postgres--prod
+  tags:
+  - environment:prod
+  - severity:medium
+  - code_owner:fredzolio
+  version: "{{ get-commit-hash.stdout }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_postgres/flow.py:rj_smfp__nota_carioca_bq_to_postgres
+  concurrency_limit:
+    limit: 1
+    collision_strategy: ENQUEUE
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_bq_to_postgres -- prefect flow-run execute
+      secretName: prefect-jobs-secrets
+      image_pull_policy: Always
+      cpu_request: "500m"
+      cpu_limit: "2"
+      memory_request: 1Gi
+      memory_limit: 2Gi
