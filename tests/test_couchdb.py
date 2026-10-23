@@ -241,13 +241,13 @@ async def test_a_database_that_reads_one_chunk_at_a_time_refuses_concurrency(mon
 
 
 @pytest.mark.parametrize(
-    ("pipeline", "database", "table_id"),
+    ("pipeline", "database", "key_width"),
     [
-        pytest.param("rj_iplanrio__bcadastro_chcpf", "chcpf_bcadastros", "chcpf", id="people"),
-        pytest.param("rj_iplanrio__bcadastro_chcnpj", "chcnpj_bcadastros", "chcnpj", id="companies"),
+        pytest.param("rj_iplanrio__bcadastro_chcpf", "chcpf_bcadastros", None, id="people"),
+        pytest.param("rj_iplanrio__bcadastro_chcnpj", "chcnpj_bcadastros", 8, id="companies"),
     ],
 )
-async def test_a_bcadastro_pipeline_dumps_what_its_prod_schedule_says(monkeypatch, pipeline, database, table_id):
+async def test_a_bcadastro_pipeline_dumps_what_its_prod_schedule_says(monkeypatch, pipeline, database, key_width):
     """Build the dump from the parameters of the prod schedule: the database, the shape, the chunks and the table."""
     seen = {}
 
@@ -276,7 +276,9 @@ async def test_a_bcadastro_pipeline_dumps_what_its_prod_schedule_says(monkeypatc
     )
     assert (seen["destination"].dataset_id, seen["destination"].table_id, seen["mode"]) == (
         "brutos_bcadastro",
-        table_id,
+        database,
         "append",
     )
+    assert source.key_width == key_width
     assert seen["options"]["chunks"]["column"] == "id"
+    assert seen["options"]["columns"] == {"add_timestamp": True}

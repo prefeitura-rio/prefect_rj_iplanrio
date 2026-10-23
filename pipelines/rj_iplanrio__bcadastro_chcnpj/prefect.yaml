@@ -68,14 +68,17 @@ deployments:
             database: chcnpj_bcadastros
             options:
               shape: utils.couchdb:BCADASTRO
+              key_width: 8
           table:
             dataset_id: brutos_bcadastro
-            table_id: chcnpj
+            table_id: chcnpj_bcadastros
           read:
             table: chcnpj_bcadastros
           options:
             chunks:
               column: id
-              width: 100000000000
+              width: 100000
               begin: 0
-              end: 99999999999999
+              end: 99999999
+            columns:
+              add_timestamp: true

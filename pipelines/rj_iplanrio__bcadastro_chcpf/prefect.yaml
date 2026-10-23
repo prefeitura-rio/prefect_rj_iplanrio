@@ -70,7 +70,7 @@ deployments:
               shape: utils.couchdb:BCADASTRO
           table:
             dataset_id: brutos_bcadastro
-            table_id: chcpf
+            table_id: chcpf_bcadastros
           read:
             table: chcpf_bcadastros
           options:
@@ -79,3 +79,5 @@ deployments:
               width: 100000000
               begin: 0
               end: 99999999999
+            columns:
+              add_timestamp: true
