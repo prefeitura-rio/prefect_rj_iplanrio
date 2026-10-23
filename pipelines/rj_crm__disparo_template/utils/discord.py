@@ -14,6 +14,7 @@ from datetime import datetime
 import aiohttp  # pylint: disable=E0611, E0401
 from discord import Webhook  # pylint: disable=E0611, E0401
 from pytz import timezone
+from prefect.runtime import flow_run as prefect_flow_run  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
 # pylint: disable=E0611, E0401
@@ -83,6 +84,7 @@ def send_dispatch_no_destinations_found(
 
 📋 **Campanha:** {campaign_name}
 🕐 **Disparo realizado em:** {datetime.now(timezone("America/Sao_Paulo")).date()}
+🔗 **Link:** {prefect_flow_run.ui_url or "URL indisponível"}
 
 """
 
@@ -127,6 +129,7 @@ def send_dispatch_success_notification(
 🕐 **Hora:** {dispatch_date}
 📋 **Campanha:** {campaign_name}
 *️⃣ **Tentativa:** {attempt_number} de {total_attempt_number}
+🔗 **Link:** {prefect_flow_run.ui_url or "URL indisponível"}
 """
 # 📄 **Porcentagem de pessoas na Whitelist:** {whitelist_percentage}%
 # 📖 **Quantidade de pessoas na Whitelist:** {int(whitelist_percentage*total_dispatches/100)}
@@ -219,6 +222,7 @@ def send_dispatch_result_notification(
 📋 **Campanha:** {campaign_name}
 🕐 **Disparo realizado em:** {dispatch_date}
 📦 **Total enviado:** {total_dispatches} disparos em {total_batches} lotes
+🔗 **Link:** {prefect_flow_run.ui_url or "URL indisponível"}
 
 **Status dos Disparos:**
 """
@@ -307,6 +311,7 @@ def send_retry_dispatch_result_notification(
 🆔 **Template ID:** {id_hsm}
 🕐 **Início do Disparo:** {dispatch_date}
 📦 **Total de CPFs alvo:** {total_dispatches}
+🔗 **Link:** {prefect_flow_run.ui_url or "URL indisponível"}
 
 **Status Final por CPF:**
 """

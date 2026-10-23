@@ -15,7 +15,7 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task  # pylint: d
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
 from prefect import flow  # pylint: disable=E0611, E0401
 from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
-from prefect.runtime import flow_run as prefect_flow_run
+from prefect.runtime import flow_run as prefect_flow_run  # pylint: disable=E0611, E0401
 from pytz import timezone
 
 from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
