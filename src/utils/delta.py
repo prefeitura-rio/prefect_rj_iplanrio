@@ -13,24 +13,19 @@ from obstore.store import ObjectStore
 from polars import DataFrame, concat
 from toolkit.bigquery import BigQuery
 from toolkit.chunks import (
-    NULL_CHUNK,
     Chunk,
     LedgerEntry,
     Rows,
     build_batch_column,
     build_ledger_id,
     hash_parts,
-    select_pending,
-    split_chunks,
 )
-from toolkit.constants import ALL_KEY, BATCH_COLUMN, EXTRACTED_AT_COLUMN
+from toolkit.constants import BATCH_COLUMN, EXTRACTED_AT_COLUMN
 from toolkit.delta import (
     compute_fingerprint,
     maintain,
-    merge_chunk,
     read_known_fingerprints,
     sweep,
-    write_chunk,
 )
 from toolkit.executor.engines.base import Engine, require_origin
 from toolkit.executor.engines.duckdb import DuckDBEngine
@@ -38,16 +33,16 @@ from toolkit.executor.executor import Executor
 from toolkit.executor.sources.backends.bigquery import BigQuerySource
 from toolkit.executor.sources.protocols import Source
 from toolkit.executor.types import Origin
-from toolkit.functions.native import now_sao_paulo
 from toolkit.gcs import create_store, delete_keys, list_keys, list_prefixes, upload
 from toolkit.telemetry import logger
-from toolkit.types import Columns, WriteFlags
+from toolkit.types import Columns
 from toolkit.utils import select_columns
 
 from .constants import (
     DISCORD_LIMIT,
     STAGING_PREFIX,
 )
+from .modes import Loader, build_ledger_key, cut_mode, pick_mode, pick_pending, skips_unchanged, sweeps
 from .types import DumpMode, DumpOptions, FileFormat, Maintenance
 
 
@@ -168,30 +163,6 @@ def hash_config(origin: Origin, options: DumpOptions) -> str:
     return hash_parts(parts)
 
 
-def cut_chunks(options: DumpOptions, dump_mode: DumpMode) -> list[Chunk]:
-    """Return the chunks of a dump: the ones of `chunks`, one for a `capture`, or `all`.
-
-    Raise `ValueError` for a capture with `chunks` or with `overwrite`, for the `merge`
-    mode without the `merge` options or the other way round, and for a merge with
-    `chunks` or with a `capture`.
-    """
-    spec = options.get("chunks")
-    capture = options.get("capture")
-    merge = options.get("merge")
-
-    if (dump_mode == "merge") != (merge is not None):
-        raise ValueError("The merge mode and the merge options go together")
-    if merge and (spec or capture):
-        raise ValueError("A merge is one chunk: drop chunks and capture")
-    if capture and (spec or dump_mode == "overwrite"):
-        raise ValueError("A capture is added as one chunk: drop chunks, and do not overwrite")
-    if capture:
-        return [Chunk(capture.date().isoformat(), 0, 0)]
-    if spec:
-        return [*split_chunks(spec, now_sao_paulo().date()), NULL_CHUNK]
-    return [Chunk(ALL_KEY, 0, 0)]
-
-
 async def dump_to_delta(
     source: Source,
     uri: str,
@@ -214,7 +185,7 @@ async def dump_to_delta(
     chunk too: its rows are matched to the table by key and only the new or changed
     ones are written, so a rerun or an overlapping window adds no duplicate. Raise
     `ValueError` for a source with no origin, for a capture with `chunks` or with
-    `overwrite`, for a merge that does not fit (see `cut_chunks`), and for `filters`
+    `overwrite`, for a mode that does not fit its options (see `pick_mode`), and for `filters`
     that are not one predicate each.
 
     The origin is what to read, as `read_request` or a flow builds it.
@@ -224,17 +195,15 @@ async def dump_to_delta(
     columns = options.get("columns", {})
     filters = options.get("filters", [])
 
-    capture = options.get("capture")
-    merge = options.get("merge")
+    mode = pick_mode(dump_mode, options)
     config = hash_config(origin, options)
-    cut = cut_chunks(options, dump_mode)
-    ids = {chunk.key: build_ledger_id(config, capture.isoformat() if capture else chunk.key) for chunk in cut}
+    cut = cut_mode(mode)
+    ids = {chunk.key: build_ledger_id(config, build_ledger_key(mode, chunk)) for chunk in cut}
     known = await to_thread(read_known_fingerprints, uri, list(ids.values()))
     seen = {key for key, name in ids.items() if name in known}
-    todo = cut if dump_mode == "overwrite" else select_pending(cut, seen, (spec or {}).get("lookback"))
-    if capture:
-        todo = [chunk for chunk in cut if chunk.key not in seen]
+    todo = pick_pending(mode, cut, seen)
     extracted_at = datetime.now(UTC) if columns.get("add_timestamp") else None
+    loader = Loader(mode, uri, extracted_at)
     written = skipped = 0
 
     async with Executor(Engine.from_source(source)) as executor, DuckDBEngine() as local:
@@ -263,32 +232,16 @@ async def dump_to_delta(
             nonlocal written, skipped
             number = await compute_fingerprint(Executor(local), folder)
 
-            if dump_mode != "overwrite" and known.get(ids[chunk.key]) == number:
+            if skips_unchanged(mode) and known.get(ids[chunk.key]) == number:
                 skipped += 1
                 return
 
-            if merge:
-                await to_thread(merge_chunk, uri, folder, merge, LedgerEntry(ids[chunk.key], number), extracted_at)
-                written += 1
-                return
-
-            await to_thread(
-                write_chunk,
-                uri,
-                folder,
-                chunk.key,
-                LedgerEntry(ids[chunk.key], number),
-                WriteFlags(
-                    overwrite_schema=dump_mode == "overwrite",
-                    append=capture is not None,
-                    extracted_at=extracted_at,
-                ),
-            )
+            await to_thread(loader.write, folder, chunk, LedgerEntry(ids[chunk.key], number))
             written += 1
 
         await executor.run_chunks(todo, plan, handle)
 
-    if dump_mode == "overwrite":
+    if sweeps(mode):
         await to_thread(sweep, uri, [chunk.key for chunk in cut])
 
     if written:
