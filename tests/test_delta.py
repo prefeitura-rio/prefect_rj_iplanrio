@@ -920,7 +920,7 @@ async def test_a_merge_with_a_repeated_key_in_the_source_is_refused(lake):
         await lake.dump("merge", **MERGE_ON_ID)
 
 
-async def test_a_merge_config_is_the_same_for_a_new_temp_folder_and_changes_with_the_key(tmp_path):
+def test_a_merge_config_is_the_same_for_a_new_temp_folder_and_changes_with_the_key(tmp_path):
     """Keep one ledger entry for a pipeline that merges from a new folder each run."""
     one = Files(f"{tmp_path}/one/*.parquet", "parquet")
     two = Files(f"{tmp_path}/two/*.parquet", "parquet")

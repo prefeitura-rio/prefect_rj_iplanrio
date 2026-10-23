@@ -81,8 +81,9 @@ async def upload_files_to_gcs(
 
     The files can come from DuckDB or from any other tool, and `data_path` is a file or
     a folder. Parquet, CSV (every column as text) and JSON are read by DuckDB, so
-    `options` applies as in `dump_db_to_gcs`. A folder name such as `ano=2024` adds no
-    column. Run `publish_table_in_bq` after it.
+    `options` applies as in `dump_db_to_gcs`, and `merge` mode reads the files into
+    memory. A folder name such as `ano=2024` adds no column. Run `publish_table_in_bq`
+    after it.
     """
     await load_to_delta(
         FilesSource(origin=Files(files_glob(data_path, source_format), source_format)),
@@ -138,7 +139,9 @@ async def dump_db_to_gcs(
       `transforms`, such as `{"cpf": "normalize_cpf"}`.
 
     `append` skips what did not change. `overwrite` writes every chunk again and
-    deletes the chunks outside the range. Run `publish_table_in_bq` after it.
+    deletes the chunks outside the range. `merge` matches the rows to the table by the
+    key in `options['merge']` and writes only the new and changed ones: it reads the
+    source into memory, so it suits small tables. Run `publish_table_in_bq` after it.
     """
     chosen = options or {}
     source_options: dict[str, JsonValue] = {**database.get("options", {})}
@@ -185,7 +188,8 @@ async def dump_bq_to_gcs(
     `project` is the project that runs the read. `read` is a `table` (`dataset.name`) or
     a `query` in the BigQuery dialect. This is plain batching: DuckDB streams
     `batch_size` rows at a time, and each batch is one file. A rerun in `append` adds the
-    rows again, and `overwrite` deletes the old files first.
+    rows again, and `overwrite` deletes the old files first. `merge` raises: a copy of
+    files cannot match rows.
     """
     await dump_in_batches(
         bigquery_source(project, read_request("bigquery", read, batched=False)),

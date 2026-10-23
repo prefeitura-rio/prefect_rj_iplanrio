@@ -280,7 +280,9 @@ async def ingest_api(
     dataclass or a `TypedDict` that every record must fit. A record that does not fit
     stops the run before anything is written, and the records are written as the API
     sent them. In `append` each run adds its records, and a retry of the same run adds
-    nothing. In `overwrite` the records replace the table. A response with no record
+    nothing. In `overwrite` the records replace the table. In `merge` the key in
+    `options['merge']` decides which records are new, and a record that the table has is
+    not added again. A response with no record
     loads nothing. It sends one request: a paged API needs a pipeline that sends each
     page with `request_json` and loads them with `load_files`.
     """
