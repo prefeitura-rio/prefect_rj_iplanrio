@@ -115,8 +115,8 @@ INSERT INTO `rj-crm-registry.brutos_salesforce.status_disparo`
 (
     id_jornada, nome_jornada, chave_atividade, nome_atividade, id_ativo,
     nome_hsm, id_hsm, id_waba, categoria_hsm, canal, texto_hsm, rodape_hsm,
-    contato_telefone, cpf, envio_datahora, entrega_datahora, leitura_datahora,
-    falha_datahora, descricao_falha, indicador_falha, indicador_quarentena,
+    contato_telefone, cpf, processado_datahora, envio_meta_datahora, entrega_meta_datahora, leitura_meta_datahora,
+    falha_meta_datahora, descricao_falha, indicador_falha, indicador_quarentena,
     status_disparo, id_status_disparo, data_particao
 )
 VALUES
@@ -135,6 +135,7 @@ VALUES
     'Parar de receber mensagem? Digite PARAR',
     '5521989190512',
     '12pgmagrad1',
+    DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 15 DAY),
     DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 15 DAY),
     DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 15 DAY),
     NULL,
@@ -161,7 +162,7 @@ disparos_divida_ativa as (
     contato_telefone as celular_disparo,
     DATE(processado_datahora) as data_disparo,
     nome_hsm as id_hsm,
-    falha_datahora as failedDate
+    falha_meta_datahora as failedDate
     from `rj-crm-registry.brutos_salesforce.status_disparo`
     where nome_hsm in (
         'pgm_divida_ativa_prod_v2',
@@ -181,7 +182,7 @@ disparos_divida_ativa as (
         WHEN templateId = 227 THEN 'pgmdividaativalembreteprodv1'
         WHEN templateId = 231 THEN 'pgmdividaativaconfirmapgtoprodv1'
     END as id_hsm,
-    -- failedDate vem como TIMESTAMP na wetalkie; falha_datahora é DATETIME na status_disparo,
+    -- failedDate vem como TIMESTAMP na wetalkie; falha_meta_datahora é DATETIME na status_disparo,
     -- precisa converter pro mesmo tipo pra não quebrar o UNION ALL (erro: incompatible types DATETIME, TIMESTAMP)
     DATETIME(failedDate, 'America/Sao_Paulo') as failedDate
     from `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`

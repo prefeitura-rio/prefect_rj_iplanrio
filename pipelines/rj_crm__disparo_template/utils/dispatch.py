@@ -22,8 +22,10 @@ from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
 from prefect.exceptions import PrefectException  # pylint: disable=E0611, E0401
+from prefect_rj_iplanrio.sql import load_query
 from pytz import timezone
 
+from pipelines.rj_crm__disparo_template.constants import QUERIES_ANCHOR  # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.discord import send_discord_notification  # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.enrichers import DF_ENRICHERS, get_df_enricher  # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.processors import get_query_processor  # pylint: disable=E0611, E0401
@@ -822,14 +824,12 @@ def check_flow_status(
         log(f"\n⚠️  Campaign name must be provided.")
         return None
 
-    filter_condition = f"nome_campanha = '{campaign_name}'"
-
-    query = f"""
-        SELECT ativo, data_limite_disparo, nome_campanha
-        FROM `rj-crm-registry.brutos_salesforce_staging.disparos_ativos`
-        WHERE {filter_condition} AND ambiente = '{flow_environment}'
-        LIMIT 1
-    """
+    query = load_query(
+        QUERIES_ANCHOR,
+        "check_flow_status",
+        campaign_name=campaign_name,
+        flow_environment=flow_environment,
+    )
     dfr = download_data_from_bigquery(
         query=query,
         billing_project_id=billing_project_id,
@@ -849,11 +849,11 @@ def check_flow_status(
     ativo_raw = row.get("ativo")
     is_ativo = str(ativo_raw).strip().lower() in ("1", "true", "yes", "sim", "ativo") if ativo_raw is not None else False
     if not is_ativo:
-        log(f"\n⚠️  Flow is not active for {row.get('nome_campanha')} in environment={flow_environment}.")
+        log(f"\n⚠️  Flow is not active for {row.get('nome_hsm')} in environment={flow_environment}.")
         message = f"""
     <@821121576455634955> <@1458456241683824744> <@302518123066556426>
     Prefect flow run desativado em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
-    📋 **Campanha:** {row.get("nome_campanha")}
+    📋 **Campanha:** {row.get("nome_campanha")} (`{row.get("nome_hsm")}`)
     💻 **Ambiente:** {flow_environment}
 
     Desligue o scheduler no prefect ou mude o status para ativo para reativar o fluxo.
@@ -879,7 +879,7 @@ def check_flow_status(
         message = f"""
     <@821121576455634955> <@1458456241683824744> <@302518123066556426>
     Prefect flow run atingiu a data limite em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
-    📋 **Campanha:** {row.get("nome_campanha")}
+    📋 **Campanha:** {row.get("nome_campanha")} (`{row.get("nome_hsm")}`)
     💻 **Ambiente:** {flow_environment}
     📆 **Data limite do disparo:** {expiration_date}
 
@@ -1029,7 +1029,7 @@ def check_campaign_success(
     Verifica se já existe webhook de envio ou falha para pelo menos 20% dos registros
     disparados (total_dispatched) no dia do disparo (dispatch_date) para a campanha.
 
-    Usa envio_datahora ou falha_datahora >= dispatch_date para garantir que o evento
+    Usa envio_meta_datahora ou falha_meta_datahora >= dispatch_date para garantir que o evento
     ocorreu hoje — e não um webhook tardio de delivered/read de campanha anterior
     chegando nos dias seguintes.
 
@@ -1042,8 +1042,9 @@ def check_campaign_success(
         WHERE LOWER(nome_hsm) = LOWER('{campaign_name}')
           AND data_particao = DATE('{dispatch_date}')
           AND (
-              envio_datahora >= '{dispatch_date}'
-              OR falha_datahora >= '{dispatch_date}'
+              envio_meta_datahora >= '{dispatch_date}'
+              OR falha_meta_datahora >= '{dispatch_date}'
+              OR falha_plataforma_datahora >= '{dispatch_date}'
           )
     """
     try:
@@ -1053,7 +1054,7 @@ def check_campaign_success(
         total = int(df.iloc[0]["total_sucesso"]) if not df.empty else 0
         threshold = total_dispatched * 0.2
         log(
-            f"check_campaign_success: {total} disparo(s) com envio_datahora ou falha_datahora "
+            f"check_campaign_success: {total} disparo(s) com envio_meta_datahora ou falha_meta_datahora "
             f"preenchidos hoje para '{campaign_name}' (dispatch_date={dispatch_date}). "
             f"Threshold 20%: {threshold:.0f} de {total_dispatched} disparados."
         )
@@ -1077,8 +1078,8 @@ def monitor_dispatch_status(
     """
     Aguarda initial_wait_minutes, depois materializa int_crm_status_disparo e checa se há
     sucesso confirmado para a campanha a cada check_interval_minutes, até max_wait_minutes.
-    Considera sucesso quando pelo menos 20% de total_dispatched tiverem envio_datahora ou
-    falha_datahora preenchidos. Alerta no Discord (DISCORD_WEBHOOK_URL_ERRORS) se nenhum
+    Considera sucesso quando pelo menos 20% de total_dispatched tiverem envio_meta_datahora ou
+    falha_meta_datahora preenchidos. Alerta no Discord (DISCORD_WEBHOOK_URL_ERRORS) se nenhum
     sucesso for confirmado dentro do prazo.
 
     Returns:
