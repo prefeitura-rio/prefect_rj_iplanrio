@@ -66,6 +66,7 @@ from .utils import (
     summarize_dbt,
     without_chunks,
     write_json_lines,
+    write_parquet,
 )
 from .wetalkie import WetalkieApi
 from .whitelist import Selection, Whitelist, add_to_whitelist
@@ -303,6 +304,16 @@ async def write_records(records: Sequence[Mapping[str, JsonValue]], folder: Path
     The folder is ready for `upload_files_to_gcs` with `source_format="json"`.
     """
     return await to_thread(write_json_lines, records, folder)
+
+
+@task
+async def write_parquet_records(records: Sequence[Mapping[str, JsonValue]], folder: Path) -> Path:
+    """Write records as a Parquet file in a folder, and return the folder.
+
+    The folder is ready for `upload_files_to_gcs` with `source_format="parquet"`. A text
+    that looks like a date stays text, which JSON lines do not keep.
+    """
+    return await to_thread(write_parquet, records, folder)
 
 
 @task

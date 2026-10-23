@@ -13,6 +13,7 @@ from deltalake.exceptions import SchemaMismatchError
 from duckdb import connect as duckdb_connect
 from fixtures import ConcurrentFilesSource, ItemData, ItemDict, ItemModel
 from httpx2 import ConnectError, ConnectTimeout, HTTPStatusError, Request, Response
+from polars import Float64, Int64, String, read_parquet
 from pyarrow import Table, decimal128
 from pyarrow import array as arrow_array
 from pyarrow import table as arrow_table
@@ -58,6 +59,7 @@ from utils.utils import (
     validate_records,
     without_chunks,
     write_json_lines,
+    write_parquet,
 )
 
 DESTINATION = Destination("b", "ds", "tb")
@@ -1016,6 +1018,22 @@ def test_a_response_with_no_list_of_objects_is_refused(data, key):
     """Raise, so a change in the API fails the run instead of loading nothing."""
     with pytest.raises(ValueError, match="No list of objects"):
         extract_records(data, key)
+
+
+def test_parquet_keeps_a_text_that_looks_like_a_date_as_text(tmp_path):
+    """Keep the text, the numbers and the nulls of the records in their own types."""
+    folder = write_parquet(
+        [
+            {"day": "2026-10-22 20:00:00", "count": 3, "ratio": 0.5, "gap": None},
+            {"day": "2026-10-22 21:00:00", "count": 4, "ratio": 1.5, "gap": None},
+        ],
+        tmp_path,
+    )
+
+    frame = read_parquet(folder / "records.parquet")
+
+    assert frame.schema == {"day": String, "count": Int64, "ratio": Float64, "gap": String}
+    assert frame["day"].to_list() == ["2026-10-22 20:00:00", "2026-10-22 21:00:00"]
 
 
 async def test_json_lines_load_as_rows_and_nested_values_stay_nested(tmp_path):

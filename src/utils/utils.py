@@ -21,7 +21,7 @@ from google.auth import default
 from google.auth.credentials import Credentials
 from httpx2 import AsyncClient, HTTPStatusError, Response, TransportError
 from obstore.store import ObjectStore
-from polars import DataFrame, concat
+from polars import DataFrame, Null, String, col, concat
 from prefect.runtime import flow_run
 from pydantic import JsonValue, TypeAdapter, ValidationError
 from toolkit.bigquery import BigQuery
@@ -620,6 +620,19 @@ def extract_records(data: JsonValue, key: str | None) -> list[dict[str, JsonValu
 def write_json_lines(records: Sequence[Mapping[str, JsonValue]], folder: Path) -> Path:
     """Write the records as a JSON lines file in a folder, and return the folder."""
     (folder / "records.json").write_text("\n".join(dumps(record) for record in records) + "\n", encoding="utf-8")
+    return folder
+
+
+def write_parquet(records: Sequence[Mapping[str, JsonValue]], folder: Path) -> Path:
+    """Write the records as a Parquet file in a folder, and return the folder.
+
+    DuckDB guesses the type of a JSON text, and reads `2026-10-22 20:00:00` as a timestamp.
+    A Parquet file keeps a text as text, a number as a number, and a column of only nulls as text.
+    """
+    frame = DataFrame(list(records), infer_schema_length=None)
+    nulls = [name for name, dtype in frame.schema.items() if dtype == Null]
+    frame.with_columns(col(name).cast(String) for name in nulls).write_parquet(folder / "records.parquet")
+
     return folder
 
 
