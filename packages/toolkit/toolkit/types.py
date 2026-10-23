@@ -95,6 +95,15 @@ class MergeSpec(TypedDict):
     prune: NotRequired[str]
 
 
+class MergeReport(TypedDict):
+    """What a merge did: rows in, rows added and changed, and files read."""
+
+    rows: int
+    inserted: int
+    updated: int
+    scanned: int
+
+
 class WriteFlags(TypedDict, total=False):
     """How `write_chunk` writes a chunk. Every key is optional and off unless set.
 

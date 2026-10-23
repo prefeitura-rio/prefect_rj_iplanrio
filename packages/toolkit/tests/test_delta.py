@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from threading import Thread
 
@@ -10,6 +10,7 @@ from pyarrow import date32 as arrow_date32
 from pyarrow import int64 as arrow_int64
 from pyarrow import schema as arrow_schema
 from pyarrow import string as arrow_string
+from pyarrow import timestamp as arrow_timestamp
 from pyarrow.parquet import write_table
 
 from toolkit.chunks import LedgerEntry
@@ -510,7 +511,7 @@ def test_a_merge_with_a_time_stamps_new_and_changed_rows_only(uri, tmp_path):
 
 
 def test_a_merge_with_other_columns_is_refused(uri, tmp_path):
-    """Keep the schema rule of an append: a new column is an error."""
+    """Keep the schema rule of an append: other columns are an error."""
     merge_chunk(
         uri,
         merge_files(tmp_path / "a", {1: "a"}),
@@ -527,8 +528,83 @@ def test_a_merge_with_other_columns_is_refused(uri, tmp_path):
         folder / "out.parquet",
     )
 
-    with pytest.raises(Exception, match=r"(?i)schema|column"):
+    with pytest.raises(SchemaMismatchError, match="extra"):
         merge_chunk(uri, folder, MergeSpec(key=["id"]), LedgerEntry("run:2", 1))
+
+    assert read_names(uri) == {1: "a"}
+
+
+@pytest.mark.parametrize(
+    ("prune", "scanned"),
+    [
+        pytest.param(None, 3, id="without_a_prune_column_every_file_is_read"),
+        pytest.param("nome", 1, id="with_a_prune_column_only_the_recent_file_is_read"),
+    ],
+)
+def test_a_prune_column_lowers_the_files_that_a_merge_reads(
+    uri, tmp_path, prune, scanned
+):
+    """Read one file instead of three, when the key sits in the last one."""
+    for number, nome in enumerate("abc", start=1):
+        merge_chunk(
+            uri,
+            merge_files(tmp_path / nome, {number: nome}),
+            MergeSpec(key=["id"]),
+            LedgerEntry(f"run:{number}", 1),
+        )
+    spec = MergeSpec(key=["id"], prune=prune) if prune else MergeSpec(key=["id"])
+
+    report = merge_chunk(
+        uri, merge_files(tmp_path / "again", {3: "c"}), spec, LedgerEntry("run:4", 1)
+    )
+
+    assert report == {"rows": 1, "inserted": 0, "updated": 0, "scanned": scanned}
+
+
+def test_a_merge_reports_the_rows_that_it_added_and_changed(uri, tmp_path):
+    """Count the rows of each outcome, for the log and for the caller."""
+    spec = MergeSpec(key=["id"])
+    first = merge_chunk(
+        uri,
+        merge_files(tmp_path / "a", {1: "a", 2: "b"}),
+        spec,
+        LedgerEntry("run:1", 1),
+    )
+
+    second = merge_chunk(
+        uri,
+        merge_files(tmp_path / "b", {2: "changed", 3: "c"}),
+        spec,
+        LedgerEntry("run:2", 1),
+    )
+
+    assert first == {"rows": 2, "inserted": 2, "updated": 0, "scanned": 0}
+    assert (second["rows"], second["inserted"], second["updated"]) == (2, 1, 1)
+
+
+def test_a_merge_prunes_by_a_column_with_a_time_zone(uri, tmp_path):
+    """Compare the lowest time of the new data with a UTC column, with no duplicate."""
+    zoned = arrow_schema(
+        [
+            ("id", arrow_int64()),
+            ("at", arrow_timestamp("us", "UTC")),
+            ("batch", arrow_string()),
+        ]
+    )
+    folder = tmp_path / "zoned"
+    folder.mkdir()
+    rows = [
+        {"id": i, "at": datetime(2026, 10, 22, i, tzinfo=UTC), "batch": "run"}
+        for i in (1, 2)
+    ]
+    write_table(Table.from_pylist(rows, schema=zoned), folder / "out.parquet")
+    spec = MergeSpec(key=["id"], prune="at")
+    merge_chunk(uri, folder, spec, LedgerEntry("run:1", 1))
+
+    report = merge_chunk(uri, folder, spec, LedgerEntry("run:2", 1))
+
+    assert report["inserted"] == 0
+    assert DeltaTable(uri).to_pyarrow_table().num_rows == 2
 
 
 @pytest.mark.parametrize(
@@ -558,6 +634,12 @@ def test_a_merge_with_other_columns_is_refused(uri, tmp_path):
             5,
             't."id" = s."id" AND t."n" >= 5',
             id="a_number_prune",
+        ),
+        pytest.param(
+            MergeSpec(key=["id"], prune="at"),
+            datetime(2026, 10, 22, 0, 30, tzinfo=timezone(timedelta(hours=-3))),
+            't."id" = s."id" AND t."at" >= CAST(\'2026-10-22 00:30:00-03:00\' AS TIMESTAMP)',
+            id="a_time_with_an_offset",
         ),
         pytest.param(
             MergeSpec(key=["id"], prune="day"),

@@ -14,7 +14,7 @@ from time import sleep
 from typing import cast
 
 from deltalake import CommitProperties, DeltaTable, Transaction, write_deltalake
-from deltalake.exceptions import CommitFailedError
+from deltalake.exceptions import CommitFailedError, SchemaMismatchError
 from psycopg.sql import Literal
 from pyarrow import RecordBatchReader, Table, repeat, timestamp
 from pyarrow import scalar as arrow_scalar
@@ -37,7 +37,7 @@ from .constants import (
 )
 from .executor.executor import Executor
 from .telemetry import logger
-from .types import Fingerprint, MergeSpec, TableReport, WriteFlags
+from .types import Fingerprint, MergeReport, MergeSpec, TableReport, WriteFlags
 
 
 def hash_summary(rows: int, low: str, high: str) -> int:
@@ -157,12 +157,7 @@ def write_chunk(
 
 
 def quote_name(name: str) -> str:
-    """Quote a column name for a predicate, with a double quote doubled.
-
-    ```python
-    quote_name("data")  # '"data"'
-    ```
-    """
+    """Quote a column name for a predicate."""
     return '"' + name.replace('"', '""') + '"'
 
 
@@ -230,30 +225,8 @@ def count_null_keys(source: Table, key: Sequence[str]) -> int:
     return sum(source[name].null_count for name in key)
 
 
-def merge_chunk(
-    uri: str,
-    directory: Path,
-    spec: MergeSpec,
-    entry: LedgerEntry,
-    extracted_at: datetime | None = None,
-) -> None:
-    """Merge the rows of a folder of Parquet files into the table by key, in one commit.
-
-    A key that the table lacks is added. A matched row changes only when `update` is on
-    and a column differs, so the same data merged twice rewrites no file. The
-    `entry` is the ledger entry of the run, committed with the rows. The first run
-    creates the table, and a folder with no rows changes nothing. The new data must fit
-    in memory and hold one row for each key, with no NULL in it: otherwise `ValueError`,
-    because Delta fails an update, inserts both rows, or never matches a NULL. A schema
-    that differs from the table raises as an append does. With `extracted_at` each row
-    gets that time in the column `_prefect_extracted_at`.
-    """
-    source = open_reader(directory, extracted_at).read_all()
-    key = spec["key"]
-
-    if source.num_rows == 0:
-        return
-
+def check_merge_source(source: Table, key: Sequence[str]) -> None:
+    """Raise `ValueError` for a NULL in the key, or for a key that two rows share."""
     nulls = count_null_keys(source, key)
     if nulls:
         raise ValueError(
@@ -266,32 +239,43 @@ def merge_chunk(
             f"The new data repeats {repeated} keys of {key}: merge needs one row for each"
         )
 
-    properties = CommitProperties(
-        app_transactions=[Transaction(entry.id, entry.number)]
-    )
 
-    if not DeltaTable.is_deltatable(uri):
-        write_deltalake(uri, source, mode="append", commit_properties=properties)
-        return
+def check_merge_schema(source: Table, table: DeltaTable) -> None:
+    """Raise `SchemaMismatchError` for other columns than the table."""
+    different = set(source.column_names) ^ {
+        field.name for field in table.schema().fields
+    }
 
-    prune = spec.get("prune")
-    values = (
-        cast("list[str | float | date]", source[prune].drop_null().to_pylist())
-        if prune
-        else []
-    )
-    low = min(values, default=None)
-    merger = (
-        DeltaTable(uri)
-        .merge(
-            source,
-            predicate=build_merge_predicate(spec, low),
-            source_alias=SOURCE_ALIAS,
-            target_alias=TARGET_ALIAS,
-            commit_properties=properties,
+    if different:
+        raise SchemaMismatchError(
+            f"The columns differ from the table: {sorted(different)}"
         )
-        .when_not_matched_insert_all()
-    )
+
+
+def find_lowest(source: Table, column: str | None) -> str | float | date | None:
+    """Return the lowest value of a column, or nothing without a column or a value."""
+    if column is None:
+        return None
+
+    values = cast("list[str | float | date]", source[column].drop_null().to_pylist())
+    return min(values, default=None)
+
+
+def run_merge(
+    table: DeltaTable,
+    source: Table,
+    spec: MergeSpec,
+    properties: CommitProperties,
+) -> dict[str, int]:
+    """Run the merge of the new rows into the table, and return its metrics."""
+    key = spec["key"]
+    merger = table.merge(
+        source,
+        predicate=build_merge_predicate(spec, find_lowest(source, spec.get("prune"))),
+        source_alias=SOURCE_ALIAS,
+        target_alias=TARGET_ALIAS,
+        commit_properties=properties,
+    ).when_not_matched_insert_all()
     changing = [
         name
         for name in source.column_names
@@ -303,7 +287,59 @@ def merge_chunk(
             predicate=build_changed_predicate(changing)
         )
 
-    merger.execute()
+    return cast("dict[str, int]", merger.execute())
+
+
+def merge_chunk(
+    uri: str,
+    directory: Path,
+    spec: MergeSpec,
+    entry: LedgerEntry,
+    extracted_at: datetime | None = None,
+) -> MergeReport:
+    """Merge the rows of a folder of Parquet files into the table by key, in one commit.
+
+    A key that the table lacks is added. A matched row changes only when `update` is on
+    and a column differs, so the same data merged twice rewrites no file. The `entry` is
+    the ledger entry of the run, committed with the rows. The first run creates the
+    table, and a folder with no rows changes nothing. The new data must fit in memory
+    and hold one row for each key, with no NULL in it: otherwise `ValueError`, because
+    Delta fails an update, inserts both rows, or never matches a NULL. Other columns
+    than the ones of the table raise `SchemaMismatchError`, as an append does. With
+    `extracted_at` each row gets that time in the column `_prefect_extracted_at`.
+    Return the rows, and how many were added and changed, and how many files were read.
+    """
+    source = open_reader(directory, extracted_at).read_all()
+    report = MergeReport(rows=source.num_rows, inserted=0, updated=0, scanned=0)
+
+    if source.num_rows == 0:
+        logger.info("Delta merge skipped: rows=0")
+        return report
+
+    check_merge_source(source, spec["key"])
+    properties = CommitProperties(
+        app_transactions=[Transaction(entry.id, entry.number)]
+    )
+
+    if DeltaTable.is_deltatable(uri):
+        table = DeltaTable(uri)
+        check_merge_schema(source, table)
+        metrics = run_merge(table, source, spec, properties)
+        report["inserted"] = metrics["num_target_rows_inserted"]
+        report["updated"] = metrics["num_target_rows_updated"]
+        report["scanned"] = metrics["num_target_files_scanned"]
+    else:
+        write_deltalake(uri, source, mode="append", commit_properties=properties)
+        report["inserted"] = source.num_rows
+
+    logger.info(
+        "Delta merge finished: rows=%d inserted=%d updated=%d scanned=%d",
+        report["rows"],
+        report["inserted"],
+        report["updated"],
+        report["scanned"],
+    )
+    return report
 
 
 def sweep(uri: str, keep: Collection[str]) -> None:
