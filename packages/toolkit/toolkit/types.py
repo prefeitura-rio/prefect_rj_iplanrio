@@ -95,6 +95,19 @@ class MergeSpec(TypedDict):
     prune: NotRequired[str]
 
 
+class WriteFlags(TypedDict, total=False):
+    """How `write_chunk` writes a chunk. Every key is optional and off unless set.
+
+    `overwrite_schema` replaces the schema of the table. `append` adds the rows and
+    leaves the rows of the chunk. `extracted_at` stamps each row with that time, and
+    `None` adds no column.
+    """
+
+    overwrite_schema: bool
+    append: bool
+    extracted_at: datetime | None
+
+
 class TableReport(TypedDict):
     """The state of a Delta table: version, files, bytes, last commit and chunk keys."""
 

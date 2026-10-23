@@ -22,18 +22,22 @@ from pyarrow import schema as arrow_schema
 from pyarrow import table as arrow_table
 from pyarrow.dataset import Dataset, dataset
 
+from .chunks import LedgerEntry
 from .constants import (
     ALL_KEY,
     BATCH_COLUMN,
     COMMIT_ATTEMPTS,
+    COUNT_COLUMN,
     DATE_KEY,
     EXTRACTED_AT_COLUMN,
     NUMBER_KEY,
+    SOURCE_ALIAS,
+    TARGET_ALIAS,
     VACUUM_RETENTION_HOURS,
 )
 from .executor.executor import Executor
 from .telemetry import logger
-from .types import Fingerprint, MergeSpec, TableReport
+from .types import Fingerprint, MergeSpec, TableReport, WriteFlags
 
 
 def hash_summary(rows: int, low: str, high: str) -> int:
@@ -107,28 +111,27 @@ def write_chunk(
     uri: str,
     directory: Path,
     key: str,
-    ledger: str,
-    number: int,
-    *,
-    overwrite_schema: bool = False,
-    append: bool = False,
-    extracted_at: datetime | None = None,
+    entry: LedgerEntry,
+    flags: WriteFlags | None = None,
 ) -> None:
     """Replace the rows of one chunk with the Parquet files of a folder.
 
-    It runs in one commit that also records `number` in the ledger as `ledger`. An empty
-    folder removes the rows of the chunk. A commit conflict, such as two writers that
-    create the table, is tried again. A schema that differs from the table raises
+    It runs in one commit that also records the `entry` in the ledger. An empty folder
+    removes the rows of the chunk. A commit conflict, such as two writers that create
+    the table, is tried again. A schema that differs from the table raises
     `SchemaMismatchError`, unless `overwrite_schema` replaces the schema of the table.
     With `append` the rows are added and the rows of the chunk stay. With
     `extracted_at` each row gets that time in the column `_prefect_extracted_at`.
     """
-    properties = CommitProperties(app_transactions=[Transaction(ledger, number)])
+    chosen = flags or {}
+    properties = CommitProperties(
+        app_transactions=[Transaction(entry.id, entry.number)]
+    )
 
     for attempt in range(1, COMMIT_ATTEMPTS + 1):
-        reader = open_reader(directory, extracted_at)
+        reader = open_reader(directory, chosen.get("extracted_at"))
         try:
-            if append:
+            if chosen.get("append"):
                 write_deltalake(
                     uri,
                     reader,
@@ -141,7 +144,7 @@ def write_chunk(
                     reader,
                     mode="overwrite",
                     predicate=f"{BATCH_COLUMN} = '{key}'",
-                    schema_mode="overwrite" if overwrite_schema else None,
+                    schema_mode="overwrite" if chosen.get("overwrite_schema") else None,
                     commit_properties=properties,
                 )
         except CommitFailedError:
@@ -192,11 +195,14 @@ def build_merge_predicate(spec: MergeSpec, low: str | float | date | None) -> st
     build_merge_predicate({"key": ["id"]}, None)  # 't."id" = s."id"'
     ```
     """
-    terms = [f"t.{quote_name(name)} = s.{quote_name(name)}" for name in spec["key"]]
+    terms = [
+        f"{TARGET_ALIAS}.{quote_name(name)} = {SOURCE_ALIAS}.{quote_name(name)}"
+        for name in spec["key"]
+    ]
     prune = spec.get("prune")
 
     if prune and low is not None:
-        terms.append(f"t.{quote_name(prune)} >= {build_literal(low)}")
+        terms.append(f"{TARGET_ALIAS}.{quote_name(prune)} >= {build_literal(low)}")
 
     return " AND ".join(terms)
 
@@ -204,16 +210,18 @@ def build_merge_predicate(spec: MergeSpec, low: str | float | date | None) -> st
 def build_changed_predicate(columns: Sequence[str]) -> str:
     """Return the predicate that is true when a matched row differs in a column."""
     return " OR ".join(
-        f"(t.{quote_name(name)} IS DISTINCT FROM s.{quote_name(name)})"
+        f"({TARGET_ALIAS}.{quote_name(name)} IS DISTINCT FROM {SOURCE_ALIAS}.{quote_name(name)})"
         for name in columns
     )
 
 
 def count_repeated_keys(source: Table, key: Sequence[str]) -> int:
     """Return how many keys appear in more than one row of the table."""
-    counts = source.select(list(key)).group_by(list(key)).aggregate([([], "count_all")])
+    counts = (
+        source.select(list(key)).group_by(list(key)).aggregate([([], COUNT_COLUMN)])
+    )
     return sum(
-        1 for rows in cast("list[int]", counts["count_all"].to_pylist()) if rows > 1
+        1 for rows in cast("list[int]", counts[COUNT_COLUMN].to_pylist()) if rows > 1
     )
 
 
@@ -226,14 +234,14 @@ def merge_chunk(
     uri: str,
     directory: Path,
     spec: MergeSpec,
-    transaction: Transaction,
+    entry: LedgerEntry,
     extracted_at: datetime | None = None,
 ) -> None:
     """Merge the rows of a folder of Parquet files into the table by key, in one commit.
 
     A key that the table lacks is added. A matched row changes only when `update` is on
     and a column differs, so the same data merged twice rewrites no file. The
-    `transaction` is the ledger entry of the run, committed with the rows. The first run
+    `entry` is the ledger entry of the run, committed with the rows. The first run
     creates the table, and a folder with no rows changes nothing. The new data must fit
     in memory and hold one row for each key, with no NULL in it: otherwise `ValueError`,
     because Delta fails an update, inserts both rows, or never matches a NULL. A schema
@@ -258,7 +266,9 @@ def merge_chunk(
             f"The new data repeats {repeated} keys of {key}: merge needs one row for each"
         )
 
-    properties = CommitProperties(app_transactions=[transaction])
+    properties = CommitProperties(
+        app_transactions=[Transaction(entry.id, entry.number)]
+    )
 
     if not DeltaTable.is_deltatable(uri):
         write_deltalake(uri, source, mode="append", commit_properties=properties)
@@ -276,8 +286,8 @@ def merge_chunk(
         .merge(
             source,
             predicate=build_merge_predicate(spec, low),
-            source_alias="s",
-            target_alias="t",
+            source_alias=SOURCE_ALIAS,
+            target_alias=TARGET_ALIAS,
             commit_properties=properties,
         )
         .when_not_matched_insert_all()

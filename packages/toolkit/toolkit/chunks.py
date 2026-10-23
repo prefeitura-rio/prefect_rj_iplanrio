@@ -199,6 +199,14 @@ def hash_parts(parts: Mapping[str, object]) -> str:
     return md5(text.encode(), usedforsecurity=False).hexdigest()[:8]
 
 
+@dataclass(frozen=True, slots=True)
+class LedgerEntry:
+    """One entry of the ledger: the id of a chunk under a config, and its number."""
+
+    id: str
+    number: int
+
+
 def build_ledger_id(config: str, key: str) -> str:
     """Name the ledger entry of one chunk under one config.
 

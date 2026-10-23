@@ -8,13 +8,14 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import uuid4
 
-from deltalake import DeltaTable, Transaction
+from deltalake import DeltaTable
 from obstore.store import ObjectStore
 from polars import DataFrame, concat
 from toolkit.bigquery import BigQuery
 from toolkit.chunks import (
     NULL_CHUNK,
     Chunk,
+    LedgerEntry,
     Rows,
     build_batch_column,
     build_ledger_id,
@@ -40,7 +41,7 @@ from toolkit.executor.types import Origin
 from toolkit.functions.native import now_sao_paulo
 from toolkit.gcs import create_store, delete_keys, list_keys, list_prefixes, upload
 from toolkit.telemetry import logger
-from toolkit.types import Columns
+from toolkit.types import Columns, WriteFlags
 from toolkit.utils import select_columns
 
 from .constants import (
@@ -267,7 +268,7 @@ async def dump_to_delta(
                 return
 
             if merge:
-                await to_thread(merge_chunk, uri, folder, merge, Transaction(ids[chunk.key], number), extracted_at)
+                await to_thread(merge_chunk, uri, folder, merge, LedgerEntry(ids[chunk.key], number), extracted_at)
                 written += 1
                 return
 
@@ -276,11 +277,12 @@ async def dump_to_delta(
                 uri,
                 folder,
                 chunk.key,
-                ids[chunk.key],
-                number,
-                overwrite_schema=dump_mode == "overwrite",
-                append=capture is not None,
-                extracted_at=extracted_at,
+                LedgerEntry(ids[chunk.key], number),
+                WriteFlags(
+                    overwrite_schema=dump_mode == "overwrite",
+                    append=capture is not None,
+                    extracted_at=extracted_at,
+                ),
             )
             written += 1
 

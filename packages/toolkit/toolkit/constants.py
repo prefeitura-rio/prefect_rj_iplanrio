@@ -168,6 +168,15 @@ DATE_KEY: Final = r"\d{4}-\d{2}-\d{2}"
 NUMBER_KEY: Final = r"\d+"
 """The pattern of the key of a chunk that a number column cuts."""
 
+SOURCE_ALIAS: Final = "s"
+"""The alias of the new rows in the predicates of a merge."""
+
+TARGET_ALIAS: Final = "t"
+"""The alias of the rows of the table in the predicates of a merge."""
+
+COUNT_COLUMN: Final = "count_all"
+"""The column that a group by of `pyarrow` names for the size of each group."""
+
 COMMIT_ATTEMPTS: Final = 5
 """How many times a Delta write tries again after a commit conflict."""
 
