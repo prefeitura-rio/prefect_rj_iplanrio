@@ -20,7 +20,7 @@ from pyarrow import RecordBatchReader, repeat, timestamp
 from pyarrow import scalar as arrow_scalar
 from pyarrow import schema as arrow_schema
 from pyarrow import table as arrow_table
-from pyarrow.dataset import dataset
+from pyarrow.dataset import Dataset, dataset
 
 from .constants import (
     ALL_KEY,
@@ -183,9 +183,12 @@ def inspect_table(uri: str) -> TableReport:
     Raise `TableNotFoundError` if no Delta table lives at `uri`.
     """
     table = DeltaTable(uri)
-    actions = arrow_table(table.get_add_actions(flatten=True))
-    sizes = cast("list[int]", actions["size_bytes"].to_pylist())
-    keys = cast("list[str]", actions[f"min.{BATCH_COLUMN}"].to_pylist())
+    sizes = cast(
+        "list[int]", arrow_table(table.get_add_actions())["size_bytes"].to_pylist()
+    )
+    source = cast("Dataset", table.to_pyarrow_dataset())  # pyright: ignore[reportUnknownMemberType]  # deltalake types it loosely
+    chunks = source.to_table(columns=[BATCH_COLUMN])
+    keys = cast("list[str]", chunks.column(BATCH_COLUMN).unique().to_pylist())
     stamp = cast("int", table.history(1)[0]["timestamp"])
 
     return TableReport(
