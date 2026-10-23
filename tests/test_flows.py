@@ -1,9 +1,10 @@
 from pathlib import Path
 
 import pytest
+from toolkit.telemetry import logger
 
 from utils import flows
-from utils.flows import load_records
+from utils.flows import load_records, send_alerts
 from utils.types import Cloud, Table
 
 TABLE = Table(dataset_id="ds", table_id="tb")
@@ -78,3 +79,59 @@ async def test_records_are_written_loaded_and_published_in_that_order(calls, arg
     await load_records(RECORDS, TABLE, CLOUD, **arguments)
 
     assert calls == [(writer, RECORDS, True), ("upload", True, TABLE, uploaded), ("publish", TABLE, CLOUD)]
+
+
+@pytest.fixture
+def alerts(monkeypatch):
+    """Return the messages that a run of `send_alerts` sent, with a fake query that gives three rows."""
+    sent = []
+    logged = []
+
+    class Frame:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def to_dicts(self):
+            return self.rows
+
+    async def read_bq(query, *, project):
+        assert project == "rj-iplanrio"
+        return Frame([{"n": 1}, {"n": 2}, {"n": 3}] if query == "three" else [])
+
+    async def notify_discord(message, *, webhook):
+        sent.append((message, webhook))
+
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://hook")
+    monkeypatch.setattr(flows, "read_bq", read_bq)
+    monkeypatch.setattr(flows, "notify_discord", notify_discord)
+    monkeypatch.setattr(logger, "info", lambda message, *args: logged.append(message % args))
+
+    return sent, logged
+
+
+@pytest.mark.parametrize(
+    ("query", "test_mode", "sent_messages", "logged_messages"),
+    [
+        pytest.param(
+            "three",
+            False,
+            [("row 1", "https://hook"), ("row 3", "https://hook")],
+            [],
+            id="a_row_that_builds_nothing_is_skipped",
+        ),
+        pytest.param("three", True, [], ["Test run: row 1", "Test run: row 3"], id="test_mode_logs_and_sends_nothing"),
+        pytest.param("none", False, [], ["No alert found, so the run ends"], id="no_row_ends_the_run"),
+    ],
+)
+async def test_an_alert_goes_to_discord_for_each_row_that_builds_a_message(
+    alerts, query, test_mode, sent_messages, logged_messages
+):
+    """Send a message for each row, skip a row with no message, and log in test mode."""
+    sent, logged = alerts
+
+    def build_message(row):
+        return None if row["n"] == 2 else f"row {row['n']}"
+
+    await send_alerts(query, build_message, test_mode=test_mode)
+
+    assert (sent, logged) == (sent_messages, logged_messages)

@@ -1,6 +1,6 @@
 """Prefect flows that more than one pipeline uses, built on the shared tasks."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -13,6 +13,7 @@ from toolkit.telemetry import logger
 from .delta import summarize_maintenance
 from .hooks import notify_failure
 from .records import extract_records, load_records_schema, validate_records
+from .settings import NoticeSettings
 from .tasks import (
     dump_arcgis_to_gcs,
     dump_db_to_gcs,
@@ -21,6 +22,7 @@ from .tasks import (
     maintain_delta_table,
     notify_discord,
     publish_table_in_bq,
+    read_bq,
     request_json,
     run_dbt,
     upload_files_to_gcs,
@@ -60,6 +62,37 @@ async def load_records(
         )
 
     await publish_table_in_bq(table, cloud)
+
+
+async def send_alerts(
+    query: str,
+    build_message: Callable[[Mapping[str, object]], str | None],
+    *,
+    test_mode: bool = False,
+    project: str = "rj-iplanrio",
+) -> None:
+    """Send to Discord one message for each row that a BigQuery query returns.
+
+    `build_message` turns a row into the text, or into nothing to skip the row. In test
+    mode the messages go to the log and not to Discord.
+    """
+    webhook = NoticeSettings().DISCORD_WEBHOOK_URL.get_secret_value()
+    rows = (await read_bq(query, project=project)).to_dicts()
+
+    if not rows:
+        logger.info("No alert found, so the run ends")
+        return
+
+    for row in rows:
+        message = build_message(row)
+
+        if message is None:
+            continue
+
+        if test_mode:
+            logger.info("Test run: %s", message)
+        else:
+            await notify_discord(message, webhook=webhook)
 
 
 @flow(
