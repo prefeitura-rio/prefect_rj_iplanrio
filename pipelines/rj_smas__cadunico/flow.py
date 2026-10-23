@@ -23,7 +23,7 @@ from pipelines.rj_smas__cadunico.tasks import (
 def rj_smas__cadunico(
     raw_bucket: str = "rj-smas",
     raw_prefix_area: str = "raw/protecao_social_cadunico/registro_familia",
-    staging_bucket: str = "rj-iplanrio",
+    staging_bucket: str = "rj-smas-cadunico",
     table_id: str = "registro_familia",
     layout_table_id: str = "layout",
     dataset_id: str = "brutos_cadunico",
@@ -40,6 +40,9 @@ def rj_smas__cadunico(
     2. Compara com arquivos em raw
     3. Processa, cria tabela e faz upload de cada arquivo individualmente
     """
+    if not isinstance(staging_bucket, str) or not staging_bucket.strip():
+        raise ValueError("staging_bucket deve ser informado explicitamente")
+
     staging_prefix_area = f"staging/{dataset_id}/{table_id}"
 
     injected_credential = inject_bd_credentials()
@@ -67,6 +70,7 @@ def rj_smas__cadunico(
             dataset_id=dataset_id,
             table_id=table_id,
             max_concurrent=max_concurrent,
+            staging_bucket=staging_bucket,
             wait_for=[need_to_ingest],
         )
     injected_files = False

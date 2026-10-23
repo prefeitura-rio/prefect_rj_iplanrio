@@ -44,6 +44,7 @@ def ingest_files_task(
     dataset_id: str,
     table_id: str,
     max_concurrent: int = 3,
+    staging_bucket: str | None = None,
 ) -> None:
     return ingest_files(
         files_to_ingest=files_to_ingest,
@@ -51,6 +52,7 @@ def ingest_files_task(
         dataset_id=dataset_id,
         table_id=table_id,
         max_concurrent=max_concurrent,
+        staging_bucket=staging_bucket,
     )
 
 
@@ -67,7 +69,7 @@ def update_layout_from_storage_and_create_versions_dbt_models_task(
     registo_familia_table_id: str = "registro_familia",
     raw_bucket: str = "rj-smas",
     raw_prefix_area: str = "raw/protecao_social_cadunico/layout",
-    staging_bucket: str = "rj-iplanrio",
+    staging_bucket: str = "rj-smas-cadunico",
     force_create_models: bool = True,
     repository_path: str = "/tmp/dbt_repository/",
 ):
