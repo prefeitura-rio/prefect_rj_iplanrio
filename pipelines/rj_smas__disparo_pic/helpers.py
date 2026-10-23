@@ -1,11 +1,9 @@
 """The query, the approval and the destinations of the reminders of the Cartão PIC."""
 
 from collections.abc import Sequence
-from datetime import date, datetime
 from json import dumps
 from pathlib import Path
 from typing import cast
-from zoneinfo import ZoneInfo
 
 import polars as pl
 from pydantic import TypeAdapter
@@ -15,12 +13,6 @@ from pipelines.rj_smas__disparo_pic.constants import APPROVAL_COLUMN, APPROVED, 
 from pipelines.rj_smas__disparo_pic.types import Campaign
 
 ITEMS: TypeAdapter[list[object]] = TypeAdapter(list[object])
-TIMEZONE = "America/Sao_Paulo"
-
-
-def today() -> date:
-    """Return today in São Paulo."""
-    return datetime.now(ZoneInfo(TIMEZONE)).date()
 
 
 def build_query(folder: Path, campaign: Campaign, event_date: str) -> str:

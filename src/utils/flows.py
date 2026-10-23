@@ -1,5 +1,6 @@
 """Prefect flows that more than one pipeline uses, built on the shared tasks."""
 
+from asyncio import sleep
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -7,11 +8,14 @@ from tempfile import TemporaryDirectory
 from prefect import flow
 from pydantic import JsonValue
 from toolkit.dbt import DbtRun
+from toolkit.functions.native import now_sao_paulo
 from toolkit.settings import DiscordSettings
 from toolkit.telemetry import logger
 
 from .delta import summarize_maintenance
+from .dispatch import no_destinations_notice, post_notice
 from .hooks import notify_failure
+from .hsm import Campaign, Recipient, Waits
 from .records import extract_records, load_records_schema, validate_records
 from .settings import NoticeSettings
 from .tasks import (
@@ -21,16 +25,19 @@ from .tasks import (
     list_delta_tables,
     maintain_delta_table,
     notify_discord,
+    post_hsm_results,
     publish_table_in_bq,
     read_bq,
     request_json,
     run_dbt,
+    run_hsm,
     upload_files_to_gcs,
     write_parquet_records,
     write_records,
 )
 from .types import Cloud, Database, DatabaseDumpOptions, DumpMode, DumpOptions, FileFormat, Maintenance, Read, Table
 from .utils import capture_options, capture_time
+from .whitelist import Selection
 
 
 async def load_records(
@@ -93,6 +100,46 @@ async def send_alerts(
             logger.info("Test run: %s", message)
         else:
             await notify_discord(message, webhook=webhook)
+
+
+async def dispatch_hsm(
+    campaign: Campaign,
+    recipients: Sequence[Recipient],
+    *,
+    whitelist_percentage: int,
+    waits: Waits,
+    table: Table,
+    cloud: Cloud,
+) -> None:
+    """Send an HSM to the recipients, record what went out, and report the status later.
+
+    With no recipient the run posts a notice and ends. A share of the phones, the
+    `whitelist_percentage`, goes to the whitelist of the day. The run waits
+    `waits.before_dispatch` minutes before it sends, and `waits.before_results` minutes before the
+    notice with the status. The batches that went out are recorded in `table`, even if a later
+    one fails, and then the run raises. A test records nothing.
+    """
+    today = now_sao_paulo().date()
+
+    if not recipients:
+        logger.info("The query gave nobody, so the run ends")
+        await post_notice(no_destinations_notice(campaign.name, test_mode=campaign.test_mode, today=today))
+
+        return
+
+    hsm = campaign.as_hsm()
+    selection = Selection(whitelist_percentage, f"citizen-hsm-{hsm.campaign_name}-{today}")
+    run = await run_hsm(hsm, recipients, selection, waits.before_dispatch, test_mode=campaign.test_mode)
+
+    if run.rows and not campaign.test_mode:
+        await load_records(run.rows, table, cloud)
+
+    if run.error:
+        raise RuntimeError(run.error)
+
+    logger.info("Waiting for the status of the messages: minutes=%d", waits.before_results)
+    await sleep(waits.before_results * 60)
+    await post_hsm_results(hsm, run.dispatch_date, len(recipients), test_mode=campaign.test_mode)
 
 
 @flow(

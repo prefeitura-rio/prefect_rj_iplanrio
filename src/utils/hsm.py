@@ -4,12 +4,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from json import dumps
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, Literal
 
 from httpx2 import HTTPError
 from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints, TypeAdapter, ValidationError
 from toolkit.telemetry import logger
 
+from .constants import TEST_PREFIX
 from .wetalkie import WetalkieApi
 
 OK = 200
@@ -57,6 +58,37 @@ class Hsm:
     campaign_name: str
     cost_center_id: int
     chunk_size: int = 1000
+
+
+@dataclass(frozen=True)
+class Campaign:
+    """The campaign of an HSM dispatch, and where it runs.
+
+    The HSM `id_hsm` goes out in batches of `chunk_size` as a campaign of the cost center
+    `cost_center_id`. With `test_mode`, the name gets the prefix `teste-`, the destinations are the
+    ones of the setting `DESTINATIONS`, and nothing is recorded. A pipeline gives the defaults.
+    """
+
+    name: str
+    id_hsm: int
+    cost_center_id: int
+    chunk_size: int
+    environment: Literal["staging", "production"] = "staging"
+    test_mode: bool = True
+
+    def as_hsm(self) -> Hsm:
+        """Return the HSM of the dispatch, with the name of the campaign as it is sent."""
+        name = f"{TEST_PREFIX}{self.name}" if self.test_mode else self.name
+
+        return Hsm(self.id_hsm, name, self.cost_center_id, self.chunk_size)
+
+
+@dataclass(frozen=True)
+class Waits:
+    """The pauses of a dispatch, in minutes: before it, to let a person stop it, and before the results."""
+
+    before_dispatch: int
+    before_results: int
 
 
 @dataclass(frozen=True)

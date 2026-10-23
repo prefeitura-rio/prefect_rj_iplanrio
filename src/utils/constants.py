@@ -72,3 +72,6 @@ USER_AGENT: Final = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, 
 """The User-Agent of an API request. INMET resets the connection of a library User-Agent such as `python-httpx`."""
 
 DRIVE_FOLDER_MIME: Final = "application/vnd.google-apps.folder"
+
+TEST_PREFIX: Final = "teste-"
+"""The prefix of the name of a campaign that runs in test mode."""
