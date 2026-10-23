@@ -41,12 +41,7 @@ deployments:
         secretName: pipelines-rj-cor--meteorologia-redemet
         image_pull_policy: Always
     parameters:
-      dump:
-        mode: merge
-        options:
-          merge:
-            key: [id_estacao, data_medicao]
-            prune: data_medicao
+      dump_mode: merge
 
   - name: rj-cor--meteorologia-redemet--prod
     tags:
@@ -73,11 +68,6 @@ deployments:
           table:
             dataset_id: clima_estacao_meteorologica
             table_id: meteorologia_redemet
-          dump:
-            mode: merge
-            options:
-              merge:
-                key: [id_estacao, data_medicao]
-                prune: data_medicao
+          dump_mode: merge
           first_date:
           last_date:
