@@ -1,10 +1,11 @@
 [project]
 name = "rj_smfp__nota_carioca_bq_to_postgres"
 version = "1.0.0"
-description = "Loads the Nota Carioca exigiveis exported by bq_to_oracle into the Cloud SQL Postgres A/B slots and publishes them atomically."
+description = "Loads the Nota Carioca exigiveis exported by bq_to_oracle into the Cloud SQL Postgres A/B slots and publishes them atomically, and syncs MV_CONTRIBUINTES from a read-only Oracle user."
 dependencies = [
     "prefect_rj_iplanrio",
     "google-cloud-storage>=2.10.0",
+    "oracledb>=4.0.1",
     "psycopg[binary]>=3.2",
     "pydantic>=2.5",
 ]

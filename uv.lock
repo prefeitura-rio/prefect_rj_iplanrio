@@ -5486,6 +5486,7 @@ version = "1.0.0"
 source = { virtual = "pipelines/rj_smfp__nota_carioca_bq_to_postgres" }
 dependencies = [
     { name = "google-cloud-storage" },
+    { name = "oracledb" },
     { name = "prefect-rj-iplanrio" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
@@ -5499,6 +5500,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "google-cloud-storage", specifier = ">=2.10.0" },
+    { name = "oracledb", specifier = ">=4.0.1" },
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pydantic", specifier = ">=2.5" },

@@ -74,3 +74,62 @@ deployments:
       cpu_limit: "2"
       memory_request: 1Gi
       memory_limit: 2Gi
+# Sincronização de MV_CONTRIBUINTES (Oracle somente leitura → public.mv_contribuintes): upsert por snapshot a cada 15
+# minutos. O Oracle vem das variáveis DB_ORACLE_NC_LEITURA__* do secret do pod e o Postgres do DSN do login em
+# nc_sincronizador (PG_NOTA_CARIOCA_SINCRONIZADOR__DSN). A agenda existe mas fica INATIVA até o gate do todo 35.
+- name: rj-smfp--nota-carioca-contribuintes-postgres--staging
+  tags:
+  - environment:staging
+  - severity:low
+  - code_owner:fredzolio
+  version: "{{ build-image.tag }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_postgres/flow_contribuintes.py:rj_smfp__nota_carioca_contribuintes_postgres
+  # Uma sincronização por vez: se a anterior ainda roda, a nova é descartada (a próxima, em 15 min, cobre tudo).
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  schedules:
+  - cron: "*/15 * * * *"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: nota-carioca-contribuintes-postgres-15min
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_bq_to_postgres -- prefect flow-run execute
+      secretName: prefect-jobs-secrets-staging
+      image_pull_policy: Always
+      # Lê o Oracle em lotes de 10 mil linhas e as entrega ao COPY: pouca memória.
+      cpu_request: "250m"
+      cpu_limit: "1"
+      memory_request: 512Mi
+      memory_limit: 1Gi
+- name: rj-smfp--nota-carioca-contribuintes-postgres--prod
+  tags:
+  - environment:prod
+  - severity:medium
+  - code_owner:fredzolio
+  version: "{{ get-commit-hash.stdout }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_postgres/flow_contribuintes.py:rj_smfp__nota_carioca_contribuintes_postgres
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  schedules:
+  - cron: "*/15 * * * *"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: nota-carioca-contribuintes-postgres-15min
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_bq_to_postgres -- prefect flow-run execute
+      secretName: prefect-jobs-secrets
+      image_pull_policy: Always
+      cpu_request: "250m"
+      cpu_limit: "1"
+      memory_request: 512Mi
+      memory_limit: 1Gi
