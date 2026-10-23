@@ -41,8 +41,8 @@ with
         from `rj-crm-registry.brutos_salesforce.status_disparo`
         where data_particao = current_date('America/Sao_Paulo')
           and (
-              date(envio_datahora) = current_date('America/Sao_Paulo')
-              or date(falha_datahora) = current_date('America/Sao_Paulo')
+              date(envio_meta_datahora) = current_date('America/Sao_Paulo')
+              or date(falha_meta_datahora) = current_date('America/Sao_Paulo')
           )
     ),
 

@@ -22,6 +22,7 @@ from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
 from prefect.exceptions import PrefectException  # pylint: disable=E0611, E0401
+from prefect.runtime import flow_run as prefect_flow_run
 from prefect_rj_iplanrio.sql import load_query
 from pytz import timezone
 
@@ -855,6 +856,7 @@ def check_flow_status(
     Prefect flow run desativado em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
     📋 **Campanha:** {row.get("nome_campanha")} (`{row.get("nome_hsm")}`)
     💻 **Ambiente:** {flow_environment}
+    🔗 **Link:** {prefect_flow_run.ui_url or "URL indisponível"}
 
     Desligue o scheduler no prefect ou mude o status para ativo para reativar o fluxo.
     """
@@ -882,6 +884,7 @@ def check_flow_status(
     📋 **Campanha:** {row.get("nome_campanha")} (`{row.get("nome_hsm")}`)
     💻 **Ambiente:** {flow_environment}
     📆 **Data limite do disparo:** {expiration_date}
+    🔗 **Link:** {prefect_flow_run.ui_url or "URL indisponível"}
 
     Desligue o scheduler no prefect ou altere a data limite.
     """
@@ -1120,6 +1123,7 @@ def monitor_dispatch_status(
 🚨 **Nenhum webhook de sucesso recebido!**
 📋 **Campanha:** {campaign_name}
 ⏱️ **Prazo monitorado:** {max_wait_minutes} minutos após o envio via SFTP.
+🔗 **Link:** {prefect_flow_run.ui_url or "URL indisponível"}
 """
         if webhook_url:
             send_discord_notification(webhook_url, message)
