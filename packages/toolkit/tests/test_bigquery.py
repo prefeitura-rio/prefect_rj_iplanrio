@@ -37,3 +37,46 @@ async def test_a_statement_waits_for_its_job_and_returns_the_rows_it_changed(
 def test_bigquery_reads_a_gcs_uri_as_gs(uri, expected):
     """Give BigQuery the `gs://` form of the URI, the only one it accepts."""
     assert build_source_uri(uri) == expected
+
+
+@pytest.mark.parametrize(
+    ("table_type", "source_format", "calls"),
+    [
+        pytest.param(None, None, ["create"], id="no_table_is_created"),
+        pytest.param(
+            "EXTERNAL", "DELTA_LAKE", ["update"], id="a_delta_table_is_refreshed"
+        ),
+        pytest.param(
+            "EXTERNAL", "CSV", ["delete", "create"], id="a_csv_table_is_replaced"
+        ),
+        pytest.param(
+            "EXTERNAL",
+            "PARQUET",
+            ["delete", "create"],
+            id="a_parquet_table_is_replaced",
+        ),
+    ],
+)
+async def test_a_delta_table_replaces_an_external_table_of_another_format(
+    fake_bigquery_tables, table_type, source_format, calls
+):
+    """Create a table, refresh a Delta one, and replace any other external one."""
+    client = fake_bigquery_tables(table_type, source_format)
+
+    await BigQuery(client=client).sync_delta_table(
+        "p.d.t", "gcs://b/staging/d/t", "p.us.conn"
+    )
+
+    assert client.calls == calls
+
+
+async def test_a_delta_table_never_replaces_a_native_table(fake_bigquery_tables):
+    """Refuse a native table, because its rows live only in BigQuery."""
+    client = fake_bigquery_tables("TABLE", None)
+
+    with pytest.raises(ValueError, match="native"):
+        await BigQuery(client=client).sync_delta_table(
+            "p.d.t", "gcs://b/staging/d/t", "p.us.conn"
+        )
+
+    assert client.calls == []

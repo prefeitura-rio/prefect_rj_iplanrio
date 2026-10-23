@@ -15,6 +15,7 @@ from typing import ClassVar, Self, override
 import pytest
 from deltalake import DeltaTable
 from git import Actor, Repo
+from google.api_core.exceptions import NotFound
 from polars import DataFrame
 from pyarrow import Schema, Table, decimal128
 from pyarrow import array as arrow_array
@@ -322,6 +323,49 @@ class FakeBigQueryClient:
         job = FakeQueryJob(self.rows)
         self.jobs.append((sql, job))
         return job
+
+
+class FakeBigQueryTables:
+    """A BigQuery client that holds one table and records what a sync does to it."""
+
+    def __init__(self, table_type: str | None, source_format: str | None) -> None:
+        """Hold a table of the type and format, or none."""
+        self.calls: list[str] = []
+        self.existing = (
+            None
+            if table_type is None
+            else SimpleNamespace(
+                table_type=table_type,
+                external_data_configuration=SimpleNamespace(
+                    source_format=source_format
+                ),
+            )
+        )
+
+    def get_table(self, table: str) -> SimpleNamespace:
+        """Return the table, or raise `NotFound` when there is none."""
+        if self.existing is None:
+            raise NotFound(table)
+        return self.existing
+
+    def delete_table(self, table: str) -> None:
+        """Record a delete."""
+        self.calls.append("delete")
+        self.existing = None
+
+    def create_table(self, table: object) -> None:
+        """Record a create."""
+        self.calls.append("create")
+
+    def update_table(self, table: object, fields: list[str], **options: object) -> None:
+        """Record an update."""
+        self.calls.append("update")
+
+
+@pytest.fixture
+def fake_bigquery_tables() -> Callable[[str | None, str | None], FakeBigQueryTables]:
+    """Return a function that builds a fake BigQuery client with one table."""
+    return FakeBigQueryTables
 
 
 @pytest.fixture

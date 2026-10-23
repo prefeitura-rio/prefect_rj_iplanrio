@@ -83,7 +83,9 @@ class BigQuery:
         """Create an external table over a Delta table, or refresh its schema.
 
         A Delta table needs a BigLake connection. BigQuery detects the schema, so a
-        refresh picks up a new column.
+        refresh picks up a new column. An external table of another format (CSV or
+        Parquet from an older dump) cannot become a Delta table, so it is replaced.
+        Raise `ValueError` for a native table, because its rows live only in BigQuery.
         """
         config = ExternalConfig("DELTA_LAKE")
         config.source_uris = [build_source_uri(uri)]
@@ -95,6 +97,20 @@ class BigQuery:
             try:
                 existing = self.client.get_table(table)
             except NotFound:
+                external = Table(table)
+                external.external_data_configuration = config
+                self.client.create_table(external)
+                return
+
+            if existing.table_type != "EXTERNAL":
+                raise ValueError(
+                    f"{table} is a native table: drop it before it becomes a Delta table"
+                )
+
+            current = existing.external_data_configuration
+
+            if current is None or current.source_format != "DELTA_LAKE":
+                self.client.delete_table(table)
                 external = Table(table)
                 external.external_data_configuration = config
                 self.client.create_table(external)
