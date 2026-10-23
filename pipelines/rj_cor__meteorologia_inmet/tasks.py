@@ -11,6 +11,7 @@ from toolkit.telemetry import logger
 from pipelines.rj_cor__meteorologia_inmet.constants import CONCURRENCY, SP_TZ, STATIONS, STATIONS_URL
 from pipelines.rj_cor__meteorologia_inmet.helpers import build_rows
 from pipelines.rj_cor__meteorologia_inmet.settings import Settings
+from utils.constants import USER_AGENT
 from utils.utils import extract_records, read_json
 
 
@@ -33,7 +34,7 @@ async def fetch_measurements_task(first_date: str, last_date: str) -> list[dict[
     token = Settings().INMET_TOKEN.get_secret_value()
     limit = Semaphore(CONCURRENCY)
 
-    async with AsyncClient(timeout=30) as client:
+    async with AsyncClient(timeout=30, headers={"User-Agent": USER_AGENT}) as client:
         found = await gather(
             *(
                 fetch_station(client, limit, f"{STATIONS_URL}/{first_date}/{last_date}/{station}/{token}", station)
