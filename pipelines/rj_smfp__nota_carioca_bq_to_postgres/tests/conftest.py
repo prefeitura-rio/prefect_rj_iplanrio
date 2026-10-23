@@ -4,11 +4,13 @@ from dataclasses import dataclass
 import psycopg
 import pytest
 from harness import (
+    OracleContribuintes,
     OracleServer,
     PostgresServer,
     docker_available,
     drop_database,
     new_database,
+    prepare_contribuintes,
     start_oracle,
     start_postgres,
 )
@@ -90,3 +92,9 @@ def prefect_api() -> Iterator[None]:
     """API temporária do Prefect (SQLite): flows e tasks rodam de verdade, sem tocar no Prefect real."""
     with prefect_test_harness():
         yield
+
+
+@pytest.fixture(scope="session")
+def oracle_contribuintes(oracle_server: OracleServer) -> OracleContribuintes:
+    """O Oracle de teste com a MV_CONTRIBUINTES provisória do R1 e o usuário somente leitura."""
+    return prepare_contribuintes(oracle_server)
