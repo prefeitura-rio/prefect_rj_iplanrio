@@ -21,3 +21,10 @@ RUN apt-get update \
     && ldconfig \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+
+ARG DUCKDB_VERSION=1.5.6
+RUN uv run --no-project --with "duckdb==${DUCKDB_VERSION}" python -c "\
+import duckdb; \
+connection = duckdb.connect(); \
+[connection.execute(f'INSTALL {name}') for name in ('mysql_scanner', 'postgres_scanner', 'spatial')]; \
+[connection.execute(f'INSTALL {name} FROM community') for name in ('mssql', 'bigquery', 'gsheets')]"
