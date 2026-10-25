@@ -32,12 +32,13 @@ deployments:
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_ssm__run_dbt/flow.py:rj_ssm__run_dbt
     work_pool:
-      name: default-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_ssm__run_dbt -- prefect flow-run execute
-        secretName: prefect-jobs-ssm-secrets
+        namespace: pipelines-staging
+        secretName: pipelines-rj-ssm--run-dbt
         image_pull_policy: Always
   - name: rj-ssm--run_dbt--prod
     tags:
@@ -50,12 +51,13 @@ deployments:
       limit: 1
       collision_strategy: ENQUEUE
     work_pool:
-      name: default-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_ssm__run_dbt -- prefect flow-run execute
-        secretName: prefect-jobs-ssm-secrets
+        namespace: pipelines-prod
+        secretName: pipelines-rj-ssm--run-dbt
         image_pull_policy: Always
     schedules:
       - interval: 86400
