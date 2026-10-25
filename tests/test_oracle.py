@@ -147,7 +147,7 @@ async def test_the_scn_and_the_columns_live_in_the_session_and_not_in_the_source
     reading = replace(source, origin=read_request("oracle", {"table": "APP.ORDERS"}, False))
 
     for name in ("first", "second"):
-        await dump_to_delta(reading, str(tmp_path / name), "append", {})
+        await dump_to_delta(reading, str(tmp_path / name), "append", {"probe": False})
 
     assert oracle.scn_reads == 2
     assert source == OracleSource(conn)

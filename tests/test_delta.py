@@ -1,3 +1,4 @@
+from asyncio import gather
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -10,7 +11,7 @@ import pytest
 from deltalake import DeltaTable
 from deltalake.exceptions import SchemaMismatchError
 from duckdb import connect as duckdb_connect
-from fixtures import ConcurrentFilesSource
+from fixtures import ConcurrentFilesSource, ProbedFilesSource, ProbedFilesSourceV2
 from pyarrow import Table, decimal128
 from pyarrow import array as arrow_array
 from pyarrow import table as arrow_table
@@ -32,6 +33,7 @@ from utils.delta import (
     dump_in_batches,
     dump_to_delta,
     files_glob,
+    finish_dump,
     hash_config,
     load_to_delta,
     publish,
@@ -39,6 +41,7 @@ from utils.delta import (
     summarize_maintenance,
     without_chunks,
 )
+from utils.modes import pick_mode
 from utils.types import DumpMode, DumpOptions, Maintenance
 
 DESTINATION = Destination("b", "ds", "tb")
@@ -933,3 +936,192 @@ async def test_a_copy_in_batches_refuses_a_merge(batches_in_a_bucket):
     """Raise, because a copy of files cannot merge."""
     with pytest.raises(ValueError, match="merge"):
         await batches_in_a_bucket("merge", 2)
+
+
+def shard_options(index: int, count: int, **options: Unpack[DumpOptions]) -> DumpOptions:
+    """Return the options of one shard of a dump by days."""
+    return {**options, "chunks": options.get("chunks", DAYS), "shard": {"index": index, "count": count}}
+
+
+async def test_two_shards_load_their_own_chunks_and_together_all_of_them(lake):
+    """Write only the chunks of the slice, and leave the rest to the other shard."""
+    await lake.dump(**shard_options(0, 2))
+
+    assert [row[0] for row in lake.rows()] == [1, 2, 4]
+    assert lake.writes() == 2
+
+    await lake.dump(**shard_options(1, 2))
+
+    assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
+    assert lake.writes() == 3 + NULL_CHUNK
+
+
+async def test_shards_that_run_together_create_one_table_with_every_chunk(lake):
+    """Run the shards at the same time over a table that does not exist yet, and lose no chunk."""
+    values = Files(f"{lake.source}/*.parquet", "parquet")
+
+    await gather(
+        *[dump_to_delta(FilesSource(origin=values), lake.uri, "append", shard_options(i, 4)) for i in range(4)]
+    )
+
+    assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
+    assert lake.writes() == 3 + NULL_CHUNK
+
+
+async def test_a_shard_leaves_the_sweep_and_the_checkpoint_to_the_end_of_the_dump(lake):
+    """Keep the old chunk and write no checkpoint in a shard, then close the dump once with both."""
+    await lake.dump(chunks=DAYS)
+    inside: Chunks = {**DAYS, "begin": "2024-03-02"}
+    log = Path(lake.uri, "_delta_log")
+    before = sum(1 for entry in log.iterdir() if "checkpoint" in entry.name)
+
+    for index in range(2):
+        await lake.dump("overwrite", **shard_options(index, 2, chunks=inside))
+
+    assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
+    assert sum(1 for entry in log.iterdir() if "checkpoint" in entry.name) == before
+
+    await finish_dump(lake.uri, pick_mode("overwrite", {"chunks": inside}))
+
+    assert [row[0] for row in lake.rows()] == [3, 4]
+    assert sum(1 for entry in log.iterdir() if "checkpoint" in entry.name) > before
+
+
+async def test_a_shard_does_not_clear_the_older_layout(monkeypatch):
+    """Leave the files of an older layout to the parent run, which clears them once."""
+    cleared: list[object] = []
+
+    async def fake_clear(*args: object) -> None:
+        """Record the call."""
+        cleared.append(args)
+
+    async def fake_dump(*args: object) -> None:
+        """Do not dump."""
+
+    monkeypatch.setattr(delta, "clear_legacy", fake_clear)
+    monkeypatch.setattr(delta, "dump_to_delta", fake_dump)
+    source = FilesSource(origin=Files("x.parquet", "parquet"))
+
+    await load_to_delta(source, DESTINATION, "overwrite", shard_options(0, 2))
+    assert cleared == []
+
+    await load_to_delta(source, DESTINATION, "overwrite", {"chunks": DAYS})
+    assert len(cleared) == 1
+
+
+TOKENS = {"2024-03-01": 11, "2024-03-02": 12, "2024-03-03": 13, "null": 14}
+
+
+def probed(lake, source_class=ProbedFilesSource, tokens=None):
+    """Return a source over the files of the lake, with canned tokens for its chunks."""
+    origin = Files(f"{lake.source}/*.parquet", "parquet")
+
+    return source_class(dict(TOKENS if tokens is None else tokens), origin=origin)
+
+
+async def test_a_chunk_with_the_token_of_the_ledger_is_not_downloaded(lake):
+    """Download every chunk the first time, and none when no token moved."""
+    source = probed(lake)
+    await dump_to_delta(source, lake.uri, "append", {"chunks": DAYS})
+    writes = lake.writes()
+
+    assert sorted(source.downloads) == sorted(TOKENS)
+
+    source.downloads.clear()
+    await dump_to_delta(source, lake.uri, "append", {"chunks": DAYS})
+
+    assert source.downloads == []
+    assert lake.writes() == writes
+    assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
+
+
+async def test_only_the_chunk_whose_token_moved_is_downloaded_and_written(lake):
+    """Replace one chunk and leave the others, with no download for them."""
+    source = probed(lake)
+    await dump_to_delta(source, lake.uri, "append", {"chunks": DAYS})
+    writes = lake.writes()
+    source.downloads.clear()
+    source.tokens["2024-03-02"] = 99
+
+    await dump_to_delta(source, lake.uri, "append", {"chunks": DAYS})
+
+    assert source.downloads == ["2024-03-02"]
+    assert lake.writes() == writes + 1
+
+    source.downloads.clear()
+    await dump_to_delta(source, lake.uri, "append", {"chunks": DAYS})
+
+    assert source.downloads == []
+
+
+async def test_a_probe_with_no_token_falls_back_to_the_fingerprint_of_the_content(lake):
+    """Download the chunk, and skip the write when its content did not change."""
+    source = probed(lake, tokens={})
+    await dump_to_delta(source, lake.uri, "append", {"chunks": DAYS})
+    writes = lake.writes()
+    source.downloads.clear()
+
+    await dump_to_delta(source, lake.uri, "append", {"chunks": DAYS})
+
+    assert sorted(source.downloads) == sorted(TOKENS)
+    assert lake.writes() == writes
+
+
+async def test_the_option_probe_false_downloads_every_chunk_and_asks_no_probe(lake):
+    """Turn the probe off for a deployment with `probe: false`."""
+    source = probed(lake)
+    await dump_to_delta(source, lake.uri, "append", {"chunks": DAYS, "probe": False})
+    source.downloads.clear()
+    source.probes.clear()
+
+    await dump_to_delta(source, lake.uri, "append", {"chunks": DAYS, "probe": False})
+
+    assert sorted(source.downloads) == sorted(TOKENS)
+    assert source.probes == []
+
+
+async def test_an_overwrite_never_probes(lake):
+    """Write every chunk again in an overwrite, with no probe."""
+    source = probed(lake)
+    await dump_to_delta(source, lake.uri, "overwrite", {"chunks": DAYS})
+    source.downloads.clear()
+    source.probes.clear()
+
+    await dump_to_delta(source, lake.uri, "overwrite", {"chunks": DAYS})
+
+    assert sorted(source.downloads) == sorted(TOKENS)
+    assert source.probes == []
+
+
+async def test_a_new_kind_of_token_loads_every_chunk_again(lake):
+    """Never compare a token with a ledger number of another kind."""
+    first = probed(lake)
+    await dump_to_delta(first, lake.uri, "append", {"chunks": DAYS})
+    second = probed(lake, ProbedFilesSourceV2)
+
+    await dump_to_delta(second, lake.uri, "append", {"chunks": DAYS})
+
+    assert sorted(second.downloads) == sorted(TOKENS)
+
+
+async def test_the_option_probe_is_refused_for_a_source_with_no_probe(lake):
+    """Raise instead of ignoring `probe: true` on a source that cannot probe."""
+    origin = Files(f"{lake.source}/*.parquet", "parquet")
+
+    with pytest.raises(ValueError, match="no probe"):
+        await dump_to_delta(FilesSource(origin=origin), lake.uri, "append", {"chunks": DAYS, "probe": True})
+
+
+@pytest.mark.parametrize(
+    ("probe_label", "same"),
+    [
+        pytest.param("", True, id="no_probe_keeps_the_hash_of_before"),
+        pytest.param("pg-1", False, id="a_probe_changes_the_hash"),
+        pytest.param("pg-1:updated_at", False, id="a_range_column_changes_the_hash"),
+    ],
+)
+def test_the_label_of_the_probe_is_part_of_the_config_hash(probe_label, same):
+    """Change the hash only when a probe runs, so the existing ledgers stay valid."""
+    origin = Files("a.parquet", "parquet")
+
+    assert (hash_config(origin, {}, probe_label) == hash_config(origin, {})) is same

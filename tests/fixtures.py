@@ -41,7 +41,7 @@ from pyarrow.parquet import ParquetWriter
 from pydantic import BaseModel, JsonValue
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 from toolkit import gcs
-from toolkit.chunks import Rows
+from toolkit.chunks import Probe, Rows
 from toolkit.executor.constants import DEFAULT_BATCH_SIZE, SOURCE_CONFIG
 from toolkit.executor.engines.base import Engine
 from toolkit.executor.engines.couchdb import write_page
@@ -211,6 +211,9 @@ class FakeDatabaseSource(DuckDBSource):
 class ConcurrentFilesSource:
     """Local files that an engine reads with `workers` chunks at the same time."""
 
+    probe_kind: ClassVar[str] = ""
+    range_column_needed: ClassVar[bool] = False
+
     workers: int
     origin: Origin | None = None
 
@@ -265,6 +268,86 @@ class ConcurrentFilesEngine(Engine):
     @override
     async def materialize(self, target: Path, rows: Rows, columns: Columns = ()) -> None:
         """Write a chunk of the files."""
+        await self.inner.materialize(target, rows, columns)
+
+
+@dataclass(frozen=True)
+class ProbedFilesSource:
+    """Local files with a probe that the test controls.
+
+    `tokens` gives the token of each chunk, by its key, and `downloads` and `probes` record
+    the chunks that were read and probed. They are shared by every engine of the source.
+    """
+
+    tokens: dict[str, int | None]
+    downloads: list[str] = field(default_factory=list[str])
+    probes: list[str] = field(default_factory=list[str])
+    origin: Origin | None = None
+    probe_kind: ClassVar[str] = "test-1"
+    range_column_needed: ClassVar[bool] = False
+
+
+@dataclass(frozen=True)
+class ProbedFilesSourceV2(ProbedFilesSource):
+    """The same source with another kind of token."""
+
+    probe_kind: ClassVar[str] = "test-2"
+
+
+@dataclass
+class ProbedFilesEngine(Engine):
+    """An engine that reads local files through DuckDB, and probes with canned tokens."""
+
+    source_type: ClassVar[type[Source]] = ProbedFilesSource
+
+    source: ProbedFilesSource
+    inner: DuckDBEngine = field(init=False, repr=False)
+
+    @override
+    async def probe(self, rows: Rows, known: int | None, probe: Probe) -> bool:
+        """Take the canned token of the chunk, and download unless it is the known one."""
+        key = rows.chunk.key if rows.chunk else "all"
+        self.source.probes.append(key)
+        self.token = self.source.tokens.get(key)
+
+        return self.token is None or self.token != known
+
+    @override
+    async def open(self, stack: AsyncExitStack) -> None:
+        """Open the DuckDB engine that reads the files."""
+        self.inner = await stack.enter_async_context(DuckDBEngine(FilesSource(origin=self.source.origin)))
+
+    @override
+    def clone(self) -> Self:
+        """Return a new unopened engine of the source."""
+        return replace(self)
+
+    @override
+    async def execute(self, sql: str, *, params: QueryParams | None = None) -> None:
+        """Run the statement on the DuckDB engine."""
+        await self.inner.execute(sql, params=params)
+
+    @override
+    def query(
+        self, sql: str, *, params: QueryParams | None = None, batch_size: int = DEFAULT_BATCH_SIZE
+    ) -> AsyncGenerator[DataFrame]:
+        """Run the query on the DuckDB engine."""
+        return self.inner.query(sql, params=params, batch_size=batch_size)
+
+    @override
+    def read(self, *, batch_size: int = DEFAULT_BATCH_SIZE) -> AsyncGenerator[DataFrame]:
+        """Read the files whole."""
+        return self.inner.read(batch_size=batch_size)
+
+    @override
+    async def describe(self) -> dict[str, str]:
+        """Describe the files."""
+        return await self.inner.describe()
+
+    @override
+    async def materialize(self, target: Path, rows: Rows, columns: Columns = ()) -> None:
+        """Write a chunk of the files, and record it."""
+        self.source.downloads.append(rows.chunk.key if rows.chunk else "all")
         await self.inner.materialize(target, rows, columns)
 
 
@@ -809,7 +892,7 @@ def dump_oracle():
         given: dict[str, int] = {"batch_size": options["batch_size"]} if "batch_size" in options else {}
         origin = read_request("oracle", read, "chunks" in options)
         source = get_source("oracle")(conn=conn, origin=origin, **given)
-        await dump_to_delta(source, str(uri), "append", options)
+        await dump_to_delta(source, str(uri), "append", {"probe": False, **options})
 
     return dump_oracle
 
@@ -891,6 +974,21 @@ def report():
 
 
 @pytest.fixture
+def stored_rows():
+    """Provide the `stored_rows` helper."""
+
+    async def stored_rows(store, prefix: str) -> list[int]:
+        """Return the ids of every Parquet object under a prefix."""
+        ids: list[int] = []
+        for key in await gcs.list_keys(store, prefix):
+            data = bytes(await (await store.get_async(key)).bytes_async())
+            ids += read_parquet(BytesIO(data))["id"].to_list()
+        return sorted(ids)
+
+    return stored_rows
+
+
+@pytest.fixture
 def put():
     """Provide the `put` helper."""
 
@@ -913,21 +1011,6 @@ def stamps():
         return cast("dict[int, datetime]", dict(zip(ids, times, strict=True)))
 
     return stamps
-
-
-@pytest.fixture
-def stored_rows():
-    """Provide the `stored_rows` helper."""
-
-    async def stored_rows(store, prefix: str) -> list[int]:
-        """Return the ids of every Parquet object under a prefix."""
-        ids: list[int] = []
-        for key in await gcs.list_keys(store, prefix):
-            data = bytes(await (await store.get_async(key)).bytes_async())
-            ids += read_parquet(BytesIO(data))["id"].to_list()
-        return sorted(ids)
-
-    return stored_rows
 
 
 @pytest.fixture

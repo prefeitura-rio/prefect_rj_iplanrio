@@ -5,13 +5,21 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from toolkit.chunks import NULL_CHUNK, Chunk, LedgerEntry, select_pending, split_chunks
+from toolkit.chunks import (
+    NULL_CHUNK,
+    Chunk,
+    LedgerEntry,
+    Probe,
+    select_pending,
+    split_chunks,
+)
 from toolkit.constants import ALL_KEY
 from toolkit.delta import merge_chunk, write_chunk
+from toolkit.executor.sources.protocols import Source
 from toolkit.functions.native import now_sao_paulo
 from toolkit.types import Chunks, MergeSpec, WriteFlags
 
-from .types import DumpMode, DumpOptions
+from .types import DatabaseDumpOptions, DumpMode, DumpOptions, Shard
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,16 +53,29 @@ class Merge:
 type Mode = Replace | Overwrite | Capture | Merge
 
 
+def check_shard(spec: Chunks | None, shard: Shard | None) -> None:
+    """Raise `ValueError` for a shard with no `chunks` to slice, or with an index out of range."""
+    if shard is None:
+        return
+
+    if spec is None:
+        raise ValueError("A shard is a slice of the chunks: set chunks")
+
+    if not 0 <= shard["index"] < shard["count"]:
+        raise ValueError(f"The shard {shard['index']} is not in the {shard['count']} shards")
+
+
 def pick_mode(dump_mode: DumpMode, options: DumpOptions) -> Mode:
     """Return the way to load for a dump mode and its options.
 
     Raise `ValueError` for the merge mode without the `merge` options or the other way
-    round, for a merge with `chunks` or with a `capture`, and for a capture with `chunks`
-    or with an `overwrite`.
+    round, for a merge with `chunks` or with a `capture`, for a capture with `chunks`
+    or with an `overwrite`, and for a `shard` that does not fit (see `check_shard`).
     """
     spec = options.get("chunks")
     capture = options.get("capture")
     merge = options.get("merge")
+    check_shard(spec, options.get("shard"))
 
     if (dump_mode == "merge") != (merge is not None):
         raise ValueError("The merge mode and the merge options go together")
@@ -94,6 +115,36 @@ def cut_mode(mode: Mode) -> list[Chunk]:
             return cut_range(None)
 
 
+def pick_shard(cut: Sequence[Chunk], shard: Shard) -> list[Chunk]:
+    """Return the chunks of one shard: every `count`-th chunk, from `index`.
+
+    The slices of all the shards hold every chunk once, and a dense area of the range
+    spreads over the shards. It reads the whole `cut`, never the ledger, so the parent and
+    the children agree on it.
+    """
+    return list(cut[shard["index"] :: shard["count"]])
+
+
+def plan_shards(dump_mode: DumpMode, options: DatabaseDumpOptions) -> int:
+    """Return how many child runs a dump takes: its `shards`, and never more than its chunks.
+
+    Raise `ValueError` for fewer than one shard, for `shards` in a run that is a shard,
+    and for a dump that has no `chunks` or that is not a load by chunks.
+    """
+    shards = options.get("shards", 0)
+
+    if shards < 1:
+        raise ValueError("The shards must be at least 1")
+
+    if "shard" in options:
+        raise ValueError("A shard cannot have shards of its own")
+
+    if "chunks" not in options:
+        raise ValueError("Shards cut the chunks: set chunks")
+
+    return min(shards, len(cut_mode(pick_mode(dump_mode, options))))
+
+
 def build_ledger_key(mode: Mode, chunk: Chunk) -> str:
     """Return the key of a chunk in the ledger: the time of a capture, or the chunk itself."""
     match mode:
@@ -116,6 +167,50 @@ def pick_pending(mode: Mode, cut: Sequence[Chunk], seen: Collection[str]) -> lis
             return [chunk for chunk in cut if chunk.key not in seen]
         case Replace(spec):
             return select_pending(cut, seen, (spec or {}).get("lookback"))
+
+
+def probes(mode: Mode) -> bool:
+    """Tell whether a chunk can be skipped before its download, with a probe.
+
+    Only the `Replace` mode can: an overwrite writes every chunk again, and a capture and
+    a merge load one chunk from a new folder on each run.
+    """
+    return isinstance(mode, Replace)
+
+
+def pick_probe(source: Source, mode: Mode, options: DumpOptions) -> Probe | None:
+    """Return how a dump probes its chunks, or `None` when it downloads them all.
+
+    A source with a `probe_kind` that needs no column (Oracle, CouchDB) probes unless
+    `probe` is false. A database probes when `range_column` is set. `probe: false` and
+    a mode that skips no download (see `probes`) give `None`. Raise `ValueError` for
+    `probe: true` on a source with no probe, for `probe: true` on a database with no
+    `range_column`, and for a `range_column` on a source that does not use one.
+
+    ```python
+    pick_probe(postgres, Replace(None), {"range_column": "updated_at"})
+    # Probe("pg-range-1", "updated_at")
+    ```
+    """
+    wanted = options.get("probe")
+    column = options.get("range_column")
+
+    if wanted and not source.probe_kind:
+        raise ValueError("This source has no probe: drop the option probe")
+
+    if column and not source.range_column_needed:
+        raise ValueError("The option range_column is for a database probe only")
+
+    if wanted and source.range_column_needed and not column:
+        raise ValueError("The probe of this source needs the option range_column")
+
+    if wanted is False or not probes(mode) or not source.probe_kind:
+        return None
+
+    if source.range_column_needed and not column:
+        return None
+
+    return Probe(source.probe_kind, column)
 
 
 def skips_unchanged(mode: Mode) -> bool:

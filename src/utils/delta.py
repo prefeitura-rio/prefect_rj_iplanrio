@@ -1,6 +1,6 @@
 """Delta tables in the bucket: where they live, how a dump loads them and how BigQuery sees them."""
 
-from asyncio import to_thread
+from asyncio import Lock, to_thread
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -14,6 +14,7 @@ from polars import DataFrame, concat
 from toolkit.bigquery import BigQuery
 from toolkit.chunks import (
     Chunk,
+    ChunkPlan,
     LedgerEntry,
     Rows,
     build_batch_column,
@@ -35,14 +36,24 @@ from toolkit.executor.sources.protocols import Source
 from toolkit.executor.types import Origin
 from toolkit.gcs import create_store, delete_keys, list_keys, list_prefixes, upload
 from toolkit.telemetry import logger
-from toolkit.types import Columns
 from toolkit.utils import select_columns
 
 from .constants import (
     DISCORD_LIMIT,
     STAGING_PREFIX,
 )
-from .modes import Loader, build_ledger_key, cut_mode, pick_mode, pick_pending, skips_unchanged, sweeps
+from .modes import (
+    Loader,
+    Mode,
+    build_ledger_key,
+    cut_mode,
+    pick_mode,
+    pick_pending,
+    pick_probe,
+    pick_shard,
+    skips_unchanged,
+    sweeps,
+)
 from .types import DumpMode, DumpOptions, FileFormat, Maintenance
 
 
@@ -139,13 +150,16 @@ def files_glob(data_path: Path, source_format: FileFormat) -> str:
     return str(data_path)
 
 
-def hash_config(origin: Origin, options: DumpOptions) -> str:
+def hash_config(origin: Origin, options: DumpOptions, probe_label: str = "") -> str:
     """Hash everything that changes the bytes of a chunk.
 
     That is what is read, and the filters, the columns and the normalization. The range
     of the chunks and `lookback` are left out: they change which chunks run, not what
     a chunk holds. A capture or a merge leaves out what is read too, because its files
-    are in a new folder on every run. The key of a merge is part of the config.
+    are in a new folder on every run. The key of a merge is part of the config. So is
+    the label of the probe (its kind and column), when a probe runs: the ledger then
+    holds its tokens and not the fingerprints of the content, and a new label loads
+    every chunk again.
     """
     spec = options.get("chunks")
     fresh = "capture" in options or "merge" in options
@@ -160,7 +174,24 @@ def hash_config(origin: Origin, options: DumpOptions) -> str:
     if "merge" in options:
         parts["merge"] = options["merge"]
 
+    if probe_label:
+        parts["probe"] = probe_label
+
     return hash_parts(parts)
+
+
+async def finish_dump(uri: str, mode: Mode, *, written: bool = True) -> None:
+    """Close a dump of a table: delete the chunks that left the range, then maintain it.
+
+    An `overwrite` sweeps the chunks outside its range, and a table that the dump wrote
+    gets a checkpoint and loses the files that no version reads. A dump in shards ends
+    here once, after all of its shards.
+    """
+    if sweeps(mode):
+        await to_thread(sweep, uri, [chunk.key for chunk in cut_mode(mode)])
+
+    if written:
+        await to_thread(maintain, uri)
 
 
 async def dump_to_delta(
@@ -179,14 +210,17 @@ async def dump_to_delta(
     again, then deletes the chunks outside the config. No `chunks` means one chunk
     for the whole source. With `chunks`, the rows whose column is NULL go in a last
     chunk, `null`, that every run reads. The engine of the source says how many chunks
-    it reads at the same time, and the chunks are written to the table one at a time. A
-    `capture` is the exception: its rows are added to the table, in the chunk of its
-    day, and a capture that the ledger knows is never written again. `merge` is one
-    chunk too: its rows are matched to the table by key and only the new or changed
-    ones are written, so a rerun or an overlapping window adds no duplicate. Raise
-    `ValueError` for a source with no origin, for a capture with `chunks` or with
-    `overwrite`, for a mode that does not fit its options (see `pick_mode`), and for `filters`
-    that are not one predicate each.
+    it reads at the same time, and the chunks are written to the table together: the
+    ledger gives each chunk its own transaction, so two commits never clash. A run with
+    a `shard` loads only its slice of the chunks (see `pick_shard`), and leaves the
+    sweep and the maintenance to `finish_dump`. A `capture` is the exception: its rows
+    are added to the table, in the chunk of its day, and a capture that the ledger
+    knows is never written again. `merge` is one chunk too: its rows are matched to the
+    table by key and only the new or changed ones are written, so a rerun or an
+    overlapping window adds no duplicate. Raise `ValueError` for a source with no
+    origin, for a capture with `chunks` or with `overwrite`, for a mode that does not
+    fit its options (see `pick_mode`), and for `filters` that are not one predicate
+    each.
 
     The origin is what to read, as `read_request` or a flow builds it.
     """
@@ -196,15 +230,23 @@ async def dump_to_delta(
     filters = options.get("filters", [])
 
     mode = pick_mode(dump_mode, options)
-    config = hash_config(origin, options)
+    probe = pick_probe(source, mode, options)
+    config = hash_config(origin, options, probe.label if probe else "")
     cut = cut_mode(mode)
     ids = {chunk.key: build_ledger_id(config, build_ledger_key(mode, chunk)) for chunk in cut}
     known = await to_thread(read_known_fingerprints, uri, list(ids.values()))
     seen = {key for key, name in ids.items() if name in known}
     todo = pick_pending(mode, cut, seen)
+    shard = options.get("shard")
+
+    if shard:
+        mine = {chunk.key for chunk in pick_shard(cut, shard)}
+        todo = [chunk for chunk in todo if chunk.key in mine]
+
     extracted_at = datetime.now(UTC) if columns.get("add_timestamp") else None
     loader = Loader(mode, uri, extracted_at)
     written = skipped = 0
+    fingerprinting = Lock()
 
     async with Executor(Engine.from_source(source)) as executor, DuckDBEngine() as local:
         described = await executor.describe()
@@ -222,32 +264,42 @@ async def dump_to_delta(
             select=options.get("select"),
         )
 
-        def plan(chunk: Chunk) -> tuple[Rows, Columns]:
-            """Return the rows and the columns that one chunk reads."""
+        def plan(chunk: Chunk) -> ChunkPlan:
+            """Return the rows, the columns and the ledger number of one chunk."""
             rows = Rows(filters, spec["column"] if spec else None, chunk if spec else None)
-            return rows, [*base, build_batch_column(chunk.key)]
+            return ChunkPlan(rows, [*base, build_batch_column(chunk.key)], known.get(ids[chunk.key]))
 
-        async def handle(chunk: Chunk, folder: Path) -> None:
-            """Fingerprint a chunk and write it to the table, unless it did not change."""
+        async def handle(chunk: Chunk, folder: Path, token: int | None) -> None:
+            """Write a downloaded chunk, with its token, or with its fingerprint without one."""
             nonlocal written, skipped
-            number = await compute_fingerprint(Executor(local), folder)
+            number = token
 
-            if skips_unchanged(mode) and known.get(ids[chunk.key]) == number:
-                skipped += 1
-                return
+            if number is None:
+                async with fingerprinting:
+                    number = await compute_fingerprint(Executor(local), folder)
+
+                if skips_unchanged(mode) and known.get(ids[chunk.key]) == number:
+                    skipped += 1
+                    return
 
             await to_thread(loader.write, folder, chunk, LedgerEntry(ids[chunk.key], number))
             written += 1
 
-        await executor.run_chunks(todo, plan, handle)
+        skipped += len(await executor.run_chunks(todo, plan, handle, probe=probe))
 
-    if sweeps(mode):
-        await to_thread(sweep, uri, [chunk.key for chunk in cut])
+    if not shard:
+        await finish_dump(uri, mode, written=written > 0)
 
-    if written:
-        await to_thread(maintain, uri)
-
-    logger.info("Delta dump finished: uri=%s chunks=%d written=%d skipped=%d", uri, len(cut), written, skipped)
+    logger.info(
+        "Delta dump finished: uri=%s chunks=%d todo=%d written=%d skipped=%d probe=%s shard=%s",
+        uri,
+        len(cut),
+        len(todo),
+        written,
+        skipped,
+        probe.label if probe else "none",
+        f"{shard['index']}/{shard['count']}" if shard else "none",
+    )
 
 
 def bigquery_source(project: str, origin: Origin) -> Source:
@@ -272,10 +324,15 @@ async def load_to_delta(
 ) -> None:
     """Dump a source into the Delta table of a destination.
 
-    An `overwrite` first deletes the files of an older layout. See `dump_to_delta`.
+    An `overwrite` first deletes the files of an older layout, except in a `shard`: the
+    parent run does it once. See `dump_to_delta`.
     """
-    await clear_legacy(destination, dump_mode)
-    await dump_to_delta(source, destination.uri, dump_mode, options or {})
+    chosen = options or {}
+
+    if "shard" not in chosen:
+        await clear_legacy(destination, dump_mode)
+
+    await dump_to_delta(source, destination.uri, dump_mode, chosen)
 
 
 def without_chunks(options: DumpOptions | None, source: str) -> DumpOptions:

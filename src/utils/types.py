@@ -76,6 +76,13 @@ class Read(TypedDict, total=False):
     pipeline: str
 
 
+class Shard(TypedDict):
+    """One slice of the chunks of a dump: the run `index` of `count` runs, from 0."""
+
+    index: int
+    count: int
+
+
 @with_config(ConfigDict(extra="forbid"))
 class DumpOptions(TypedDict, total=False):
     """How a dump narrows, cuts, cleans and loads the data. Every key is optional.
@@ -86,11 +93,21 @@ class DumpOptions(TypedDict, total=False):
     `capture` adds the rows to the table instead of replacing a chunk: it is the time of
     one run, so that a rerun of the same run adds nothing. `merge` is the options of the
     `merge` mode: the key that identifies a row, whether a changed row is updated, and a
-    column that prunes old files. A key that is not here is an error, so a renamed or
-    misspelled option never falls back to the default.
+    column that prunes old files. `shard` is set by the parent run of a dump in shards,
+    never by hand: it limits the run to its slice of the chunks. `probe` turns the probe
+    of the source off with `false`, or demands one with `true`. The probe asks the
+    source for a cheap token of a chunk, the count of its rows and the highest value of
+    `range_column`, and skips the download of a chunk whose token the ledger holds.
+    Oracle and CouchDB probe by default, with their own token. A database (Postgres,
+    MySQL, SQL Server, MongoDB) probes when `range_column` is set: a column that every
+    write changes, such as `updated_at`. A key that is not here is an error, so a
+    renamed or misspelled option never falls back to the default.
     """
 
     chunks: Chunks
+    shard: Shard
+    probe: bool
+    range_column: str
     merge: MergeSpec
     capture: datetime
     filters: list[str]
@@ -105,11 +122,13 @@ class DatabaseDumpOptions(DumpOptions, total=False):
     `batch_size` is the rows of one read from Oracle, or the documents of one page from
     CouchDB or MongoDB. The other databases stream through DuckDB, so they reject it.
     `concurrency` is the chunks that CouchDB or MongoDB read at the same time, and the
-    other databases reject it.
+    other databases reject it. `shards` runs the chunks in that many child runs of the
+    deployment, each one with its own `concurrency`.
     """
 
     batch_size: int
     concurrency: int
+    shards: int
 
 
 class Maintenance(TypedDict):

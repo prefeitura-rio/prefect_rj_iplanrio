@@ -112,7 +112,10 @@ async def test_a_couchdb_database_is_dumped_in_chunks_over_its_text_ids(fake_api
     read: Read = {"table": "chcpf_bcadastros"}
 
     await dump_to_delta(
-        replace(source, origin=read_request("couchdb", read, True)), str(tmp_path / "t"), "append", {"chunks": chunks}
+        replace(source, origin=read_request("couchdb", read, True)),
+        str(tmp_path / "t"),
+        "append",
+        {"chunks": chunks, "probe": False},
     )
     rows = DeltaTable(str(tmp_path / "t")).to_pyarrow_table().to_pylist()
 

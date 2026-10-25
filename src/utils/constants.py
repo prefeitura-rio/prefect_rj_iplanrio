@@ -9,6 +9,15 @@ from .types import Cloud
 STAGING_PREFIX: Final = "staging"
 """The bucket folder that holds the files of every external table."""
 
+SHARD_QUEUE: Final = "shards"
+"""The work queue of the child runs of a dump in shards, whose limit caps their load."""
+
+SHARD_TAG: Final = "shard"
+"""The tag of a child run of a dump in shards."""
+
+SHARD_POLL_SECONDS: Final = 15
+"""The seconds between two reads of the state of the child runs."""
+
 RETRIES: Final = 2
 """How many times a failed step of a dump runs again."""
 

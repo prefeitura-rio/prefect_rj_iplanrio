@@ -35,9 +35,11 @@ from .constants import DBT_FAILED, RETRIES, RETRY_DELAY_SECONDS, USER_AGENT
 from .delta import (
     Destination,
     bigquery_source,
+    clear_legacy,
     discover_tables,
     dump_in_batches,
     files_glob,
+    finish_dump,
     load_to_delta,
     publish,
     read_dataframe,
@@ -46,6 +48,7 @@ from .delta import (
 from .dispatch import Switch, decide_switch, post_notice
 from .hooks import retry_on_transient_error
 from .hsm import Hsm, HsmRun, Recipient, Sent, build_rows, results_notice, send_batches, success_notice
+from .modes import pick_mode
 from .origins import epsg_code, expand_database, read_request
 from .records import read_json, write_json_lines, write_parquet
 from .types import (
@@ -137,6 +140,16 @@ async def dump_db_to_gcs(
       it is set. The other databases read one chunk at a time, so it raises for them.
     - `columns` sets `normalize_columns` (a slug, the default), `normalize_values` and
       `transforms`, such as `{"cpf": "normalize_cpf"}`.
+    - `probe` is `false` to turn the probe of the source off, and `true` to demand one.
+      A probe asks the source for a cheap token of a chunk, the count of its rows and
+      the highest value of `range_column`, and an `append` skips the download of a chunk
+      whose token the ledger holds. Oracle and CouchDB probe by default. Postgres,
+      MySQL, SQL Server and MongoDB probe when `range_column` is set, a column that
+      every write changes. `filters` and a native `query` are probed only for Oracle
+      (`filters`) and MongoDB (both), where they are native.
+    - `range_column` is the column of the probe of a database.
+    - `shard` limits the run to its slice of the chunks, and `dump_database` sets it for
+      each child run of `shards`. A shard does not publish, sweep or maintain the table.
 
     `append` skips what did not change. `overwrite` writes every chunk again and
     deletes the chunks outside the range. `merge` matches the rows to the table by the
@@ -171,6 +184,25 @@ async def dump_db_to_gcs(
         dump_mode,
         chosen,
     )
+
+
+@retrying
+async def prepare_delta_table(table: Table, *, bucket: str, dump_mode: DumpMode) -> None:
+    """Clear the files of an older layout before the shards of an `overwrite` dump start."""
+    await clear_legacy(Destination(bucket, table["dataset_id"], table["table_id"]), dump_mode)
+
+
+@retrying
+async def finish_delta_table(
+    table: Table, *, bucket: str, dump_mode: DumpMode, options: DatabaseDumpOptions | None
+) -> None:
+    """Sweep and maintain a Delta table after every shard of its dump has ended.
+
+    `options` are those of the dump. An `overwrite` deletes the chunks outside its range, and
+    the table gets a checkpoint and loses the files that no version reads.
+    """
+    destination = Destination(bucket, table["dataset_id"], table["table_id"])
+    await finish_dump(destination.uri, pick_mode(dump_mode, options or {}))
 
 
 @retrying

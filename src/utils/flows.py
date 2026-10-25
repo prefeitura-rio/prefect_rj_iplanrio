@@ -4,8 +4,11 @@ from asyncio import sleep
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import cast
+from uuid import UUID
 
 from prefect import flow
+from prefect.runtime import deployment, flow_run
 from pydantic import JsonValue
 from toolkit.dbt import DbtRun
 from toolkit.functions.native import now_sao_paulo
@@ -18,16 +21,20 @@ from .delta import summarize_maintenance
 from .dispatch import no_destinations_notice, post_notice
 from .hooks import notify_failure
 from .hsm import Campaign, Recipient, Waits
+from .modes import plan_shards
 from .records import extract_records, load_records_schema, validate_records
 from .settings import NoticeSettings
+from .shards import run_shards
 from .tasks import (
     dump_arcgis_to_gcs,
     dump_db_to_gcs,
     dump_gsheet_to_gcs,
+    finish_delta_table,
     list_delta_tables,
     maintain_delta_table,
     notify_discord,
     post_hsm_results,
+    prepare_delta_table,
     publish_table_in_bq,
     read_bq,
     request_json,
@@ -173,12 +180,34 @@ async def dump_database(
     DuckDB reads the source one chunk at a time and writes a Delta table in the bucket.
     A chunk that did not change is never written again, so a rerun, or a retry after a
     failure, repeats nothing. BigQuery reads the Delta table through a BigLake
-    connection. Set `database` and `cloud` in the `prefect.yaml` of the pipeline, and
+    connection. With `options.shards` the run only plans: it starts that many child runs
+    of its deployment, each one dumps its slice of the chunks (with its own `concurrency`),
+    and the parent sweeps, maintains and publishes once all of them completed. A child run
+    publishes nothing. Set `database` and `cloud` in the `prefect.yaml` of the pipeline, and
     `table`, `read` and `options` in each schedule. A pipeline imports this flow in its
     `flow.py` and names it with `with_options(name=...)`. A failed run posts to Discord
     if `DISCORD_WEBHOOK_URL` is set. With `dbt` a dbt command runs after the publish.
     """
-    await dump_db_to_gcs(database, table, read, bucket=cloud["bucket"], dump_mode=dump_mode, options=options)
+    chosen = options or {}
+    bucket = cloud["bucket"]
+
+    if "shards" in chosen:
+        deployment_id = cast("str | None", deployment.id)
+
+        if deployment_id is None:
+            raise ValueError("A dump in shards runs as a deployment, so that its child runs exist")
+
+        count = plan_shards(dump_mode, chosen)
+        await prepare_delta_table(table, bucket=bucket, dump_mode=dump_mode)
+        parameters = cast("dict[str, object]", flow_run.parameters)
+        await run_shards(UUID(deployment_id), parameters, count, table["table_id"])
+        await finish_delta_table(table, bucket=bucket, dump_mode=dump_mode, options=options)
+    else:
+        await dump_db_to_gcs(database, table, read, bucket=bucket, dump_mode=dump_mode, options=options)
+
+    if "shard" in chosen:
+        return
+
     await publish_table_in_bq(table, cloud)
 
     if dbt:
