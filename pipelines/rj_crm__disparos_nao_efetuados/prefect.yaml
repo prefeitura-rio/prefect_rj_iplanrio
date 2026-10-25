@@ -33,12 +33,13 @@ deployments:
         dataset_id: brutos_salesforce
         table_id: campanhas_sem_disparo
     work_pool:
-      name: default-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: "uv run --package rj_crm__disparos_nao_efetuados -- prefect flow-run execute"
-        secretName: prefect-jobs-crm-registry-secrets-staging
+        namespace: pipelines-staging
+        secretName: pipelines-rj-crm--disparos-nao-efetuados
         image_pull_policy: Always
     schedules:
       - cron: "0 15 * * *"
@@ -59,12 +60,13 @@ deployments:
         dataset_id: brutos_salesforce
         table_id: campanhas_sem_disparo
     work_pool:
-      name: default-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: "uv run --package rj_crm__disparos_nao_efetuados -- prefect flow-run execute"
-        secretName: prefect-jobs-crm-registry-secrets
+        namespace: pipelines-prod
+        secretName: pipelines-rj-crm--disparos-nao-efetuados
         image_pull_policy: Always
     schedules:
       - cron: "0 15 * * *"
