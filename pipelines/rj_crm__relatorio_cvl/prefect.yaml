@@ -69,8 +69,6 @@ deployments:
         timezone: America/Sao_Paulo
         active: true
         slug: monthly-relatorio-cvl-prod
-        flow_run_name: rj_crm__relatorio_cvl_monthly_run
-        deployment_name: rj-crm--relatorio-cvl--prod
         parameters:
           table:
             dataset_id: brutos_wetalkie

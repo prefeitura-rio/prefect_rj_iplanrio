@@ -83,4 +83,3 @@ deployments:
         timezone: UTC
         active: true
         slug: daily-atualizacao-api-datametrica-agend-cadunico
-        flow_run_name: atualizacao-api-datametrica-agend-cadunico

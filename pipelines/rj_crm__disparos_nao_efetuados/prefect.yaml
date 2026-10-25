@@ -46,7 +46,6 @@ deployments:
         timezone: America/Sao_Paulo
         active: false
         slug: daily-disparos-nao-efetuados
-        flow_run_name: disparos-nao-efetuados-daily
 
   - name: rj-crm--disparos-nao-efetuados--prod
     tags:
@@ -73,4 +72,3 @@ deployments:
         timezone: America/Sao_Paulo
         active: true
         slug: daily-disparos-nao-efetuados
-        flow_run_name: disparos-nao-efetuados-daily
