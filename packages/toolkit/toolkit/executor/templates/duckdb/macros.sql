@@ -100,22 +100,39 @@ WHERE {{ filters | join(" AND ") }}{{ " AND " if filters and predicates }}{% for
 {#
 {
   "kind": "macro",
+  "name": "duckdb.decoded",
+  "description": "Read a source column through a decoder function, or as it is when there is none.",
+  "inputs": {
+    "source": "SQL of the source column.",
+    "decoder": "Name of a function that reads the column, or none."
+  },
+  "returns": "A SQL expression."
+}
+#}
+{% macro decoded(source, decoder) -%}
+{%- if decoder -%}{{ decoder }}({{ source }}){%- else -%}{{ source }}{%- endif -%}
+{%- endmacro %}
+
+{#
+{
+  "kind": "macro",
   "name": "duckdb.select_columns",
   "description": "List the columns of a result, each renamed and, if it has a function, computed by it.",
   "inputs": {
-    "columns": "Each column as a mapping with its source and target identifiers, and an optional function identifier or cast type. Build them with select_columns."
+    "columns": "Each column as a mapping with its source and target identifiers, and an optional function identifier or cast type. Build them with select_columns.",
+    "decoder": "Name of a function that reads each source column before anything else, or none."
   },
   "returns": "A select list such as clean_text(\"Nome Completo\") AS \"nome_completo\"."
 }
 #}
-{% macro select_columns(columns) -%}
+{% macro select_columns(columns, decoder=none) -%}
 {%- for column in columns -%}
 {%- if column.function is defined -%}
-{{ column.function }}({{ column.source }})
+{{ column.function }}({{ decoded(column.source, decoder) }})
 {%- elif column.cast is defined -%}
-CAST({{ column.source }} AS {{ column.cast }})
+CAST({{ decoded(column.source, decoder) }} AS {{ column.cast }})
 {%- else -%}
-{{ column.source }}
+{{ decoded(column.source, decoder) }}
 {%- endif %} AS {{ column.target }}{{ ", " if not loop.last }}
 {%- endfor -%}
 {%- endmacro %}

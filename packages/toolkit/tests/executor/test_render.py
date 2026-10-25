@@ -1,3 +1,6 @@
+from datetime import date
+
+import duckdb
 import pytest
 from jinja2 import UndefinedError
 from psycopg.sql import SQL, Identifier, Literal
@@ -99,6 +102,54 @@ def test_a_cast_column_is_cast_in_the_select_list(dump_values):
     assert 'SELECT CAST("h" AS VARCHAR) AS "h"\n' in render_template(
         "duckdb/extract_chunk", values
     )
+
+
+@pytest.mark.parametrize(
+    ("db_type", "expected"),
+    [
+        pytest.param(
+            "mssql", 'utf8_text("a") AS "a"', id="a_sql_server_query_is_decoded"
+        ),
+        pytest.param("postgres", '"a" AS "a"', id="a_postgres_query_is_read_as_it_is"),
+        pytest.param("mysql", '"a" AS "a"', id="a_mysql_query_is_read_as_it_is"),
+    ],
+)
+def test_only_a_sql_server_query_goes_through_the_text_decoder(
+    db_type, expected, dump_values
+):
+    """Decode the text of a SQL Server query, which sends it in its code page."""
+    sql = render_template("duckdb/extract_chunk", dump_values(type=db_type))
+
+    assert f"SELECT {expected}\n" in sql
+
+
+def test_a_table_of_sql_server_is_not_decoded(dump_values):
+    """Leave the columns of an attached table alone: the extension decodes them."""
+    values = dump_values(type="table", table=Identifier("src", "dbo", "t"))
+
+    assert 'SELECT "a" AS "a"\n' in render_template("duckdb/extract_chunk", values)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param("'Gráficas S.A.'", "Gráficas S.A.", id="valid_utf8_is_kept"),
+        pytest.param("'abc'", "abc", id="ascii_is_kept"),
+        pytest.param("NULL::VARCHAR", None, id="null_stays_null"),
+        pytest.param("42", 42, id="a_number_is_not_changed"),
+        pytest.param(
+            "DATE '2020-01-31'", date(2020, 1, 31), id="a_date_is_not_changed"
+        ),
+    ],
+)
+def test_the_text_decoder_passes_what_is_not_windows_1252_text(value, expected):
+    """Define utf8_text in DuckDB, and keep every value that needs no decoding."""
+    connection = duckdb.connect()
+    connection.execute(render_template("duckdb/create_utf8_text", {}))
+
+    [(answer,)] = connection.execute(f"SELECT utf8_text({value})").fetchall()
+
+    assert answer == expected
 
 
 @pytest.mark.parametrize(

@@ -24,12 +24,15 @@ class MSSQLSource(AttachedSource):
 
     @override
     async def setup(self, engine: Engine) -> None:
-        """Attach the database, and replace the 30 s query timeout of the extension.
+        """Attach the database, define `utf8_text` and replace the 30 s query timeout.
 
         A query that takes longer than the timeout to start returning rows fails with
-        `Connection closed while waiting for COLMETADATA`.
+        `Connection closed while waiting for COLMETADATA`. A native query sends text in
+        the code page of the column, which `utf8_text` turns into UTF-8, while an
+        attached table is decoded by the extension.
         """
         await AttachedSource.setup(self, engine)
+        await engine.execute(render_template("duckdb/create_utf8_text", {}))
         await engine.execute(
             render_template(
                 "duckdb/set_mssql_timeout",

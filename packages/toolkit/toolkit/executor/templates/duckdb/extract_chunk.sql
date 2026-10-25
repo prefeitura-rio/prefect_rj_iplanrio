@@ -21,7 +21,7 @@
 -- noqa: disable=PRS
 {% from "duckdb/macros.sql" import select_columns, source_table, where_clause %}
 COPY (
-    SELECT {{ select_columns(columns) if columns else "*" }}
+    SELECT {{ select_columns(columns, "utf8_text" if type == "mssql" else none) if columns else "*" }}
     FROM {{ source_table(type, alias, secret, query | default(none), where | default("'1=1'"), sheet | default(none), table | default(none), srid | default(none)) }}
     {{ where_clause(predicates | default([]), filters | default([])) }}
 ) TO {{ target }} (FORMAT PARQUET)
