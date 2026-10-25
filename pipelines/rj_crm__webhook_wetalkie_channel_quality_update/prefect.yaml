@@ -23,4 +23,70 @@ pull:
   - prefect.deployments.steps.set_working_directory:
       directory: /opt/prefect/prefect_rj_iplanrio
 
-deployments: []
+deployments:
+  - name: rj-crm--webhook-wetalkie-channel-quality-update--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ build-image.tag }}'
+    entrypoint: pipelines/rj_crm__webhook_wetalkie_channel_quality_update/flow.py:rj_crm__webhook_wetalkie_channel_quality_update
+    work_pool:
+      name: onprem-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: uv run --package rj_crm__webhook_wetalkie_channel_quality_update -- prefect flow-run execute
+        namespace: pipelines-staging
+        secretName: pipelines-rj-crm--webhook-wetalkie-channel-quality-update
+        image_pull_policy: Always
+    parameters:
+      query: |
+        SELECT
+          datarelay_timestamp,
+          content_display_phone_number,
+          content_event,
+          content_current_limit
+        FROM
+          `rj-crm-registry.brutos_wetalkie_staging.phone_number_quality_update_*`
+        WHERE 1=1
+          AND account = '1'
+          AND datarelay_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 MINUTE)
+        ORDER BY datarelay_timestamp DESC
+      test_mode: true
+  - name: rj-crm--webhook-wetalkie-channel-quality-update--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ get-commit-hash.stdout }}'
+    entrypoint: pipelines/rj_crm__webhook_wetalkie_channel_quality_update/flow.py:rj_crm__webhook_wetalkie_channel_quality_update
+    work_pool:
+      name: onprem-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: uv run --package rj_crm__webhook_wetalkie_channel_quality_update -- prefect flow-run execute
+        namespace: pipelines-prod
+        secretName: pipelines-rj-crm--webhook-wetalkie-channel-quality-update
+        image_pull_policy: Always
+    parameters:
+      query: |
+        SELECT
+          datarelay_timestamp,
+          content_display_phone_number,
+          content_event,
+          content_current_limit
+        FROM
+          `rj-crm-registry.brutos_wetalkie_staging.phone_number_quality_update_*`
+        WHERE 1=1
+          AND account = '1'
+          AND datarelay_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 MINUTE)
+        ORDER BY datarelay_timestamp DESC
+      test_mode: false
+    schedules:
+      - interval: 300
+        anchor_date: '2021-01-01T00:00:00'
+        timezone: America/Sao_Paulo
+        active: false
+        slug: webhook-wetalkie-channel-quality-5min
