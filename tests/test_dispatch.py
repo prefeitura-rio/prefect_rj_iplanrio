@@ -4,7 +4,6 @@ import pytest
 
 from utils.dispatch import (
     decide_switch,
-    failure_notice,
     format_query,
     is_active,
     no_destinations_notice,
@@ -141,4 +140,3 @@ def test_the_notices_name_the_campaign() -> None:
     assert "[TESTE]" in no_destinations_notice("c", test_mode=True, today=WEDNESDAY)
     assert "[TESTE]" not in no_destinations_notice("c", test_mode=False, today=WEDNESDAY)
     assert "2026-07-15" in no_destinations_notice("c", test_mode=False, today=WEDNESDAY)
-    assert "boom" in failure_notice("c", "boom")

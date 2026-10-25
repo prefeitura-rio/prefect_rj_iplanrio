@@ -142,11 +142,6 @@ def no_destinations_notice(campaign: str, *, test_mode: bool, today: date) -> st
     return f"{title}\n📋 **Campanha:** {campaign}\n🕐 **Disparo realizado em:** {today}\n"
 
 
-def failure_notice(campaign: str, reason: str | None) -> str:
-    """Return the notice of a run that failed."""
-    return f"{MENTIONS}\nPrefect flow run failed!\n📋 **Campanha:** {campaign}\n⚠️ **Mensagem:** {reason}\n"
-
-
 async def post_notice(message: str, *, errors: bool = False) -> None:
     """Post a message to the channel of the dispatches, or to the one of the errors.
 

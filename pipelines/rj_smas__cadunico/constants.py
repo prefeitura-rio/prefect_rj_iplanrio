@@ -10,8 +10,6 @@ DEFAULT_RAW: Final[RawFolders] = {
     "layout_prefix": "raw/protecao_social_cadunico/layout",
 }
 DEFAULT_TABLES: Final[Tables] = {"dataset_id": "brutos_cadunico", "records": "registro_familia", "layout": "layout"}
-DEFAULT_REPOSITORY: Final = "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-iplanrio"
-DEFAULT_BRANCH: Final = "cadunico"
 MAX_CONCURRENT: Final = 3
 """The ZIP files of records that load at one time."""
 COMMIT_AUTHOR: Final = ("CadUnico Pipeline", "pipeline@prefeitura.rio")

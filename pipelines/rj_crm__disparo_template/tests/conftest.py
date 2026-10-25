@@ -9,7 +9,7 @@ import pytest
 from httpx2 import AsyncClient, ConnectError, MockTransport, Request, Response
 
 from pipelines.rj_crm__disparo_template.helpers import frames
-from pipelines.rj_crm__disparo_template.helpers.sftp import SftpTarget, Uploader
+from pipelines.rj_crm__disparo_template.helpers.sftp import SftpTarget
 
 NOW = datetime(2026, 7, 17, 9, 30, 5, tzinfo=UTC)
 TODAY = date(2026, 7, 17)
@@ -55,11 +55,6 @@ class FakeSftp:
             yield session
 
         return session_of()
-
-
-def as_uploader(session: FakeSession) -> Uploader:
-    """Give the fake session as an uploader."""
-    return session
 
 
 @pytest.fixture

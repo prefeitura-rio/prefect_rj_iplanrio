@@ -46,21 +46,6 @@ VALID_SECRETARIATS: Final = ("SMTR", "Comlurb", "RioLuz", "Seconserva", "SMS", "
 VALID_PHONE_FLAGS: Final = ("PERTENCE", "INDEFINIDO", "NAO_PERTENCE")
 NO_SECRETARIAT: Final = "Sem secretaria identificada"
 """The secretariat that the catalog of rules uses for a session that the model gave none."""
-SESSION_COLUMNS: Final = (
-    "id_sessao",
-    "telefone",
-    "cpf",
-    "nome_cidadao",
-    "sessao_inicio_datahora",
-    "sessao_fim_datahora",
-    "jornada_nome",
-    "id_jornada",
-    "id_disparo_hsm",
-    "hsm_envio_datahora",
-    "hsm_texto",
-    "conversa_completa",
-)
-"""The columns of the session that reach the table, for the sessions of the model and for the ones by rule."""
 SAFE_IMPORTS: Final = frozenset({"re", "unicodedata"})
 FORBIDDEN_NAMES: Final = frozenset(
     {
