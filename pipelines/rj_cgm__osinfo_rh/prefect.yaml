@@ -43,7 +43,8 @@ deployments:
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_cgm__osinfo_rh -- prefect flow-run execute
-        secretName: prefect-jobs-secrets-staging
+        namespace: pipelines-staging
+        secretName: pipelines-rj-cgm--osinfo-rh
         image_pull_policy: Always
   - name: rj-cgm--osinfo_rh--prod
     tags:
@@ -64,7 +65,8 @@ deployments:
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_cgm__osinfo_rh -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        namespace: pipelines-prod
+        secretName: pipelines-rj-cgm--osinfo-rh
         image_pull_policy: Always
     schedules:
       - interval: 86400
