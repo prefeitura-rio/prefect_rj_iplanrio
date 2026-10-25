@@ -56,7 +56,7 @@ async for lote in executor.read(expect=Schema({"id": Int64, "nome": String})):
 | `toolkit.chunks`    | Os chunks de um `dump` e o `hash` da configuração.                                                                                                                                           |
 | `toolkit.delta`     | A tabela `Delta` de um `dump`: `write_chunk` (troca um chunk, soma linhas com `append` ou grava a hora com `extracted_at`), `merge_chunk` (junta linhas pela chave com o `MERGE` do `Delta`, no mesmo commit do ledger), `compact`, `maintain`, `inspect_table` e `find_layout_problems`. |
 | `toolkit.gcs`       | `create_store`, `list_keys`, `list_prefixes`, `upload` e `delete_keys`, com `obstore` e chaves `HMAC`.                                                                                       |
-| `toolkit.bigquery`  | `BigQuery`: `has_table`, `create_dataset`, `execute` (uma instrução, como um `MERGE`) e `sync_delta_table` (tabela `Delta` por uma conexão BigLake).                                         |
+| `toolkit.bigquery`  | `BigQuery`: `create_dataset`, `execute` (uma instrução, como um `MERGE`) e `sync_delta_table` (tabela `Delta` por uma conexão BigLake).                                         |
 | `toolkit.oracle`    | `Oracle`, o cliente `SQL` da conexão com `connect`, `execute` e `query`. A consulta volta em `Polars`, nos tipos que o `Delta` guarda.                                                       |
 | `toolkit.dbt`       | `DbtRun` (um comando `dbt`) e o clone do repositório de consultas, com `GITHUB_TOKEN` no lugar do token da URL.                                                                              |
 | `toolkit.settings`  | `ToolkitSettings` (o log e a telemetria) e um grupo por parte, como `GcsSettings`. Cada parte cria o seu grupo quando precisa dele.                                                          |
@@ -105,9 +105,53 @@ Uma fonte é uma `dataclass` do `Pydantic`, e as chaves de `options` são os cam
 | `describe()`                          | Devolve o nome e o tipo `DuckDB` de cada coluna da origem.                                                                        |
 | `materialize(destino, linhas, colunas)` | Grava um chunk da origem como `Parquet`. Sem `colunas`, grava todas.                                                          |
 | `check_chunks(chunks, colunas)`       | Levanta `ValueError` se a coluna de `chunks` não serve aos chunks. O padrão pede inteiro ou data. O CouchDB pede só o `id`.      |
+| `probe(linhas, conhecido, probe)`     | Devolve `True` se o chunk precisa ser baixado e `False` se não mudou. O padrão devolve `True` (veja o protocolo abaixo). |
 | `concurrency`                         | Quantos chunks um `dump` lê ao mesmo tempo. O padrão é 1. O CouchDB e o MongoDB usam o `concurrency` da fonte (padrão 2).        |
 
-`Executor.run_chunks(todo, plan, handle)` grava cada chunk em uma pasta temporária e o entrega ao `handle`. Cada leitor extra usa um motor próprio (`clone()`), e o `handle` roda para um chunk por vez, então ele pode gravar num lugar compartilhado. O primeiro erro cancela os outros leitores e sobe como veio.
+`Executor.run_chunks(todo, plan, handle, probe=Probe(tipo, coluna))` grava cada chunk em uma pasta temporária e o entrega ao `handle`. Cada leitor extra usa um motor próprio (`clone()`), e o `handle` roda para vários chunks ao mesmo tempo, então ele precisa aguentar isso. O primeiro erro cancela os outros leitores e sobe como veio. O resultado é a lista de chunks que o `probe` pulou.
+
+### Protocolo de idempotência (`probe`)
+
+Um motor pode dizer, antes do download, se um chunk mudou. `await motor.probe(linhas, conhecido, probe)` devolve `True` se o chunk precisa ser baixado e `False` se não mudou. O motor pede à fonte um **token** barato do chunk, um número que muda quando as linhas do chunk mudam, e o compara com `conhecido`, o número que o registro (`ledger`) da tabela `Delta` guarda. O token fica em `motor.token`, e o `dump` o grava no registro depois de baixar o chunk.
+
+Regras que todo `probe` cumpre:
+
+1. `False` só quando o token existe e é igual a `conhecido`. Na dúvida, em erro e com `conhecido=None`, a resposta é `True`. O `probe` nunca levanta: ele avisa no log e devolve `True`, sem token.
+2. O token é tirado **antes** do download e nunca é mais novo que os dados que o download lê. Um token mais novo pularia linhas velhas para sempre. No Oracle, por isso, o `probe` lê no mesmo `SCN` da leitura.
+3. Um falso positivo (o token mudou e as linhas não) custa um download. Um falso negativo perde dado.
+4. O motor sempre atribui `token`, com `None` quando não há.
+5. A fonte declara `probe_kind`, o nome com versão do token (`pg-range-1`), vazio quando não há `probe`. O `Probe` (tipo e coluna) entra no `hash` da configuração, então trocar de tipo ou de coluna recarrega todos os chunks uma vez, e um token nunca é comparado com um número de outro tipo. A opção `probe: false` do `dump` desliga o `probe`, e `probe: true` numa fonte sem `probe` é um erro.
+6. Só o modo `append` usa o `probe`. O `overwrite` grava tudo, e `capture` e `merge` leem um chunk de uma pasta nova a cada execução.
+
+Sem `probe`, o motor devolve `True` e o `dump` calcula a impressão digital do `Parquet`, como antes.
+
+#### Uma só estratégia: `range`
+
+O servidor conta as linhas do chunk e pega o maior valor de `range_column` (`MAX`). Um índice nessa coluna responde sem ler linha nenhuma, e o servidor devolve uma linha. A contagem pega inserções e exclusões, e o maior valor pega atualizações. O token é `hash_summary(contagem, maior valor)`.
+
+O `range` só é correto se toda escrita muda a coluna (um `updated_at` que a aplicação sempre atualiza, uma `rowversion` do SQL Server). Uma atualização que não mexe na coluna, e deixa a contagem igual, passa despercebida. O `probe` só roda nos chunks que o `dump` volta a ler (os do `lookback`), e o `lookback` limita o tempo dessa falha.
+
+| Fonte | Token | Configuração |
+| --- | --- | --- |
+| Postgres, MySQL, SQL Server | `COUNT` e `MAX(range_column)` | `range_column` |
+| MongoDB | `$group` com `$sum` e `$max` | `range_column` |
+| Oracle | `COUNT` e `MAX(ORA_ROWSCN)` | nenhuma |
+| CouchDB | `id` e `rev` de `_all_docs` | nenhuma |
+
+Postgres, MySQL, SQL Server e MongoDB fazem o `probe` só quando o `dump` define `range_column`, e `probe: true` sem ela é um erro. Oracle e CouchDB usam o `probe` por padrão e rejeitam `range_column`.
+
+```yaml
+dump_options:
+  range_column: updated_at
+```
+
+**Postgres, MySQL e SQL Server** fazem o `probe` com a função de consulta nativa da extensão do `DuckDB` (`postgres_query`, `mysql_query` e `mssql_scan`). O `DuckDB` sozinho não faz isso: ele só empurra filtros e colunas, então leria o chunk inteiro. O SQL fica em `templates/duckdb/probe_range.sql`, com `COUNT(*)` (`COUNT_BIG` no SQL Server) e `MAX(coluna)`. O chunk vira um predicado no dialeto (`build_native_chunk`): uma faixa de números é exata, e uma faixa de dias cresce um dia para cada lado, porque o corte do `dump` usa o fuso de São Paulo. Com `filters` não há `probe`, porque os filtros são SQL do `DuckDB`. Um erro do `DuckDB` (um `timeout`, por exemplo) avisa uma vez e baixa o chunk.
+
+**CouchDB** lê `_all_docs` sem os documentos, página por página, e faz o `hash` das linhas `id:rev` (`hash_revisions`). A revisão muda a cada escrita e um documento apagado sai da lista, então o `hash` muda quando qualquer documento do chunk muda. Uma escrita que não muda nada também muda a revisão (um falso positivo). As faixas de chave são as da leitura (`list_key_ranges`, duas para o chunk `null`), e os `_design/` ficam de fora. Com `filters`, com uma origem `Query` ou `Changes`, ou com um chunk de outra coluna que não o `id`, não há `probe`. Um erro de HTTP avisa uma vez e baixa o chunk. Usa o `probe` por padrão.
+
+**Oracle** conta as linhas do chunk e pega o maior `ORA_ROWSCN` (`templates/oracle/probe.sql`). A consulta lê `AS OF SCN` no mesmo `SCN` da leitura, então o token e as linhas vêm do mesmo ponto: uma escrita feita depois do `SCN` só aparece na execução seguinte. Sem o `SCN` (faltam as permissões), a leitura é depois do `probe`, o que também é seguro. O `ORA_ROWSCN` é guardado por bloco: uma escrita em outra linha do mesmo bloco muda o token (falso positivo), e nenhuma escrita no chunk passa sem mudar. Os filtros e o chunk são os da leitura (SQL do Oracle, com `bind`). O `ORA_ROWSCN` não atravessa uma consulta, então uma origem `Query` não tem `probe`. Conferido no Oracle Free 23 e no XE 21, com e sem o `SCN`. Usa o `probe` por padrão.
+
+**MongoDB** roda uma agregação no servidor (`build_range_pipeline`): um `$match` com os filtros, o seletor e o chunk, e um `$group` com `$sum` e o `$max` de `range_column`. Não há `probe` para uma agregação (`Aggregate`). O `probe` usa o `AsyncMongoClient`, um segundo cliente do motor, aberto no `open`. Funciona com esquemas que têm lista ou struct, porque não lê o texto dos campos. O `range` ainda não foi rodado num servidor MongoDB.
 
 ## Bancos: tipos e limites
 

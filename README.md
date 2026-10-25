@@ -157,7 +157,9 @@ Uma chave de `options` que não existe é um erro, para um nome errado nunca vir
 
 `batch_size` é o número de linhas de cada leitura. Vale para o Oracle (padrão 50 000), para o CouchDB (documentos por página, padrão `COUCHDB_PAGE_SIZE`) e para o MongoDB (documentos por página, padrão 50 000). Os outros bancos passam pelo `DuckDB`, que lê em fluxo, e um `batch_size` neles é um erro. O `batch_size` não muda o conteúdo de um chunk, então não conta para recarregar os chunks.
 
-`concurrency` é o número de chunks que o CouchDB e o MongoDB leem ao mesmo tempo (padrão 2). Cada leitor abre o seu próprio cliente e o seu próprio `DuckDB`, então a memória e o disco local crescem com o número. Os `commits` na tabela `Delta` continuam um por vez. Os outros bancos leem um chunk por vez, e um `concurrency` neles é um erro. O `concurrency` não muda o conteúdo de um chunk, então não conta para recarregar os chunks.
+`concurrency` é o número de chunks que o CouchDB e o MongoDB leem ao mesmo tempo (padrão 2). Cada leitor abre o seu próprio cliente e o seu próprio `DuckDB`, então a memória e o disco local crescem com o número. Os `commits` na tabela `Delta` também são ao mesmo tempo: cada chunk tem a sua própria transação no registro, então dois `commits` não colidem, e um `commit` que perde a corrida roda de novo. Os outros bancos leem um chunk por vez, e um `concurrency` neles é um erro. O `concurrency` não muda o conteúdo de um chunk, então não conta para recarregar os chunks.
+
+`probe` liga ou desliga o `probe` da fonte: antes de baixar um chunk, o `dump` pede à fonte um token barato dele (a contagem das linhas e o maior valor de `range_column`) e pula o download se o registro da tabela já tem esse token. Oracle e CouchDB usam o `probe` por padrão. Postgres, MySQL, SQL Server e MongoDB usam quando o `dump` define `range_column`, uma coluna que muda a cada escrita, como um `updated_at`, de preferência com índice. `probe: false` desliga, e `probe: true` numa fonte sem `probe`, ou num banco sem `range_column`, é um erro. Só o modo `append` usa o `probe`. Veja o protocolo no README do `toolkit`.
 
 ```yaml
 # CouchDB: quatro chunks ao mesmo tempo
@@ -223,6 +225,36 @@ options:
   batch_size: 20000
 ```
 
+### Dump em shards
+
+`shards` divide os chunks entre vários runs filhos, cada um em um pod. É a mesma ideia do `data-proxy`: o pai planeja, os filhos extraem em paralelo, e o pai fecha a tabela uma vez. Cada filho ainda lê `concurrency` chunks ao mesmo tempo, então o total ao mesmo tempo é `shards × concurrency`.
+
+```yaml
+options:
+  chunks:
+    column: id
+    width: 100000000
+    begin: 0
+    end: 99999999999
+  concurrency: 4
+  shards: 10
+```
+
+1. O run pai (o do agendamento) limpa o layout antigo, cria `shards` runs da **mesma** deployment e espera todos terminarem. Os filhos vão para a fila `shards` do pool, e o limite da fila controla a carga na fonte.
+2. O filho `i` de `n` recebe `options.shard: {index: i, count: n}` e carrega os chunks `i`, `i + n`, `i + 2n`, e assim por diante. A fatia é sobre todos os chunks, nunca sobre o registro, então o pai e os filhos sempre concordam, e uma área densa da faixa se espalha entre os filhos. O filho não publica, não apaga chunks e não roda `dbt`.
+3. Quando todos os filhos completam, o pai apaga os chunks fora do intervalo (`overwrite`), grava o `checkpoint`, limpa os arquivos sem uso, publica a tabela no BigQuery e roda o `dbt`.
+4. Se um filho falha, o pai espera os outros e falha com o nome dele. Só o pai posta no Discord. Rodar de novo é seguro: em `append`, os chunks que o registro já tem são pulados. Em `overwrite`, todos são gravados de novo.
+5. Se o pai para, ele cancela os filhos que ainda não terminaram, porque o `Prefect` não faz isso.
+6. `shards` pede `chunks`, e não vale com `merge` nem com `capture`. Mais `shards` do que chunks vira um filho por chunk. Cada filho começa em segundos, então use fatias de dezenas de chunks.
+
+O pool precisa da fila uma vez (a fila só existe depois de criada, e o limite fica nela):
+
+```bash
+prefect work-queue create shards --pool onprem-pool --limit 8
+```
+
+Os workers leem todas as filas do pool, então não há mudança na infra. Para o pai não ocupar uma vaga dos filhos, o pai fica na fila `default`.
+
 ### Exemplo: API para o BigQuery
 
 O `ingest_api` faz a requisição e tira a lista de registros da resposta. `records_key` é o caminho até a lista, como `data.items`. Deixe vazio se a resposta já é a lista. `records_schema` é o caminho `módulo:nome` de um modelo `Pydantic`, de uma `dataclass` ou de um `TypedDict` a que todo registro precisa obedecer: um registro fora do esquema para a execução antes de gravar qualquer coisa, e a mensagem diz o índice do registro e o campo, nunca o valor. Os registros são gravados como a API os enviou.
@@ -281,11 +313,11 @@ As tasks ficam em `src/utils/tasks.py`. Use-as para montar um flow próprio.
 | Task                                        | O que faz                                                                                                          |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `dump_db_to_gcs(database, table, read)`     | Copia uma tabela ou consulta de um banco para uma tabela `Delta` no bucket.                                        |
+| `dump_bq_to_gcs(table, read, project=...)`  | Copia uma tabela ou consulta do BigQuery para `Parquet` no bucket, em lotes. Um `append` repetido soma de novo.    |
 | `dump_arcgis_to_gcs(table, url)`            | Copia uma camada do `ArcGIS` para o bucket.                                                                        |
 | `dump_gsheet_to_gcs(table, spreadsheet_id)` | Copia uma planilha para o bucket.                                                                                  |
 | `upload_files_to_gcs(data_path, table)`     | Carrega arquivos locais para o bucket.                                                                             |
 | `publish_table_in_bq(table, cloud)`         | Cria a tabela do BigQuery sobre a tabela do bucket, ou atualiza as colunas dela. Rode depois das tasks acima.      |
-| `dump_bq_to_gcs(table, read, project=...)`  | Copia uma tabela ou consulta do BigQuery para `Parquet` no bucket, em lotes. Um `append` repetido soma de novo.    |
 | `request_json(url)`                         | Faz uma requisição (`GET` por padrão) e devolve o JSON. Tenta de novo depois de timeout, erro de rede, 429 ou 5xx. |
 | `write_records(records, folder)`            | Grava uma lista de objetos como linhas JSON, pronta para `upload_files_to_gcs`.                                    |
 | `read_bq(query, project=...)`               | Roda uma consulta do BigQuery e devolve um `DataFrame` do `Polars`, todo na memória.                               |
@@ -304,10 +336,11 @@ Tudo que vai de uma fonte para o bucket usa uma tabela `Delta`, que o BigQuery l
 2. Para cada chunk, o `DuckDB` lê a fonte com os `filters`, aplica `select` e `columns` e grava um `Parquet` local. Uma **impressão digital** do arquivo (a contagem de linhas e duas somas de `md5`) fica no registro da tabela `Delta`.
 3. Se a impressão digital é igual à do registro, nada é gravado. Se mudou, o chunk é trocado em um só `commit`. Um chunk que ficou vazio na fonte perde as linhas.
 4. Um chunk novo sempre é lido. `lookback: 2` lê de novo só os dois últimos chunks já carregados.
-5. Se `read`, `filters`, `select`, `columns` ou `chunks` (a coluna ou a largura) mudam, todos os chunks são carregados de novo. O intervalo (`begin` e `end`), o `lookback`, o `batch_size` e o `concurrency` não contam.
+5. Se `read`, `filters`, `select`, `columns` ou `chunks` (a coluna ou a largura) mudam, todos os chunks são carregados de novo. O intervalo (`begin` e `end`), o `lookback`, o `batch_size`, o `concurrency` e o `shards` não contam.
 6. `append` falha com `SchemaMismatchError` se as colunas mudarem. `overwrite` grava todos os chunks, apaga os que saíram do intervalo e aceita colunas novas.
 7. Com `add_timestamp`, cada linha ganha a coluna `_prefect_extracted_at`: a hora em que o chunk foi gravado (`TIMESTAMP` em UTC). Um chunk que não mudou guarda a hora antiga.
-8. Em `merge`, a fonte inteira é um chunk e o registro do `Delta` guarda a impressão digital dele. Se ela é igual, nada é gravado. Se mudou, o `MERGE` grava as chaves novas e as linhas que mudaram, no mesmo `commit` do registro. Se `read`, `filters`, `select`, `columns` ou a chave do `merge` mudam, a impressão digital é lida de novo. O arquivo lido não conta, porque cada execução usa uma pasta nova.
+8. Com `probe`, o passo 2 muda: antes de baixar, a fonte devolve um token do chunk (uma consulta que roda no servidor e devolve uma linha). Se o token é o do registro, o chunk não é baixado nem gravado. Se mudou, o chunk é baixado, gravado, e o token vai para o registro no lugar da impressão digital. Um erro ou uma fonte sem token cai no caminho de antes.
+9. Em `merge`, a fonte inteira é um chunk e o registro do `Delta` guarda a impressão digital dele. Se ela é igual, nada é gravado. Se mudou, o `MERGE` grava as chaves novas e as linhas que mudaram, no mesmo `commit` do registro. Se `read`, `filters`, `select`, `columns` ou a chave do `merge` mudam, a impressão digital é lida de novo. O arquivo lido não conta, porque cada execução usa uma pasta nova.
 
 ## Manutenção das tabelas
 

@@ -81,3 +81,5 @@ deployments:
               end: 99999999999999
             columns:
               add_timestamp: true
+            concurrency: 4
+            shards: 4

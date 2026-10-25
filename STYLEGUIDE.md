@@ -348,12 +348,11 @@ Todas as assinaturas de função — parâmetros e tipo de retorno — devem ter
 
 ```python
 # ✅ correto
-def fetch_items(dataset_id: str, table_id: str) -> str:
-    ...
+def fetch_items(dataset_id: str, table_id: str) -> str: ...
+
 
 # ❌ errado — tipo de retorno ausente, tipos dos parâmetros ausentes
-def fetch_items(dataset_id, table_id):
-    ...
+def fetch_items(dataset_id, table_id): ...
 ```
 
 ### 5.2 Sintaxe de tipos
@@ -366,18 +365,18 @@ def process(
     items: list[str],
     config: dict[str, int],
     label: str | None = None,
-) -> tuple[str, int]:
-    ...
+) -> tuple[str, int]: ...
+
 
 # ❌ errado
 from typing import Dict, List, Optional, Tuple
+
 
 def process(
     items: List[str],
     config: Dict[str, int],
     label: Optional[str] = None,
-) -> Tuple[str, int]:
-    ...
+) -> Tuple[str, int]: ...
 ```
 
 ### 5.3 Imports
@@ -416,6 +415,7 @@ def dump(url: str) -> str:
     data_path = DEFAULT_TMP_PATH
     ...
 
+
 # ❌ errado — variável local com nome de constante
 def dump(url: str) -> str:
     DATA_PATH = "/tmp/dump"
@@ -442,7 +442,9 @@ def fetch_items(dataset_id: str, table_id: str) -> str:
 ```python
 # ❌ errado — import direto do stdlib sem a configuração do workspace
 import logging
+
 logger = logging.getLogger(__name__)
+
 
 # ❌ errado — proibido
 def fetch_items(dataset_id: str, table_id: str) -> str:
@@ -514,8 +516,7 @@ def fetch_records(
     environment: str,
     page_size: int = 500,
     timeout: int = 30,
-) -> pl.DataFrame:
-    ...
+) -> pl.DataFrame: ...
 ```
 
 ```python
@@ -533,8 +534,7 @@ class FetchConfig:
     timeout: int = 30
 
 
-def fetch_records(config: FetchConfig) -> pl.DataFrame:
-    ...
+def fetch_records(config: FetchConfig) -> pl.DataFrame: ...
 ```
 
 ```python
@@ -551,8 +551,7 @@ class FetchParams(TypedDict):
     timeout: int
 
 
-def fetch_records(**params: Unpack[FetchParams]) -> pl.DataFrame:
-    ...
+def fetch_records(**params: Unpack[FetchParams]) -> pl.DataFrame: ...
 ```
 
 ### 5.8 Dados tabulares
@@ -600,9 +599,7 @@ async def totals_by_station(source: Path) -> Dataset[StationTotal]:
     """Some os valores de um Parquet com as colunas `station_id` e `mm`, por estação."""
     async with DuckDBEngine() as engine:
         executor = Executor(engine, Path(__file__).parent / "queries")
-        return await executor.query(
-            "totals_by_station", {"source": Literal(str(source))}, expect=StationTotal
-        )
+        return await executor.query("totals_by_station", {"source": Literal(str(source))}, expect=StationTotal)
 ```
 
 ```sql
@@ -724,8 +721,7 @@ Uma variável que mais de uma pipeline lê entra em uma classe de `utils.setting
 
 ```python
 @flow(log_prints=True)
-def rj_secretaria__pipeline(param: str = "default") -> None:
-    ...
+def rj_secretaria__pipeline(param: str = "default") -> None: ...
 ```
 
 - `log_prints=True` é sempre definido como proteção contra chamadas `print()` acidentais. Todo logging intencional deve usar `get_logger` (veja [§5.5](#55-logging)).
@@ -758,7 +754,7 @@ No Prefect 3, o grafo de execução é inferido a partir das dependências de da
 # ✅ correto — ordenação expressa por data flow
 @flow(log_prints=True, flow_run_name="{table_id}")
 def rj_secretaria__pipeline(dataset_id: str, table_id: str) -> None:
-    prepare_workdir_task()                                   # sequencial, sem output necessário
+    prepare_workdir_task()  # sequencial, sem output necessário
     last_update = get_last_update_task(dataset_id=dataset_id, table_id=table_id)
     data_path = fetch_history_task(last_update=last_update)  # dependência de dados — Prefect infere a ordem
     upload_task(data_path=data_path, dataset_id=dataset_id, table_id=table_id)
