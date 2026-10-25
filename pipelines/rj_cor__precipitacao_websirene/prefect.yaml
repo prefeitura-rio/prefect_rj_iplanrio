@@ -37,5 +37,6 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_cor__precipitacao_websirene -- prefect flow-run execute
-        secretName: prefect-jobs-secrets-staging
+        namespace: pipelines-staging
+        secretName: pipelines-rj-cor--precipitacao-websirene
         image_pull_policy: Always

@@ -40,7 +40,8 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_iplanrio__alertario_previsao_24h -- prefect flow-run execute
-        secretName: prefect-jobs-secrets-staging
+        namespace: pipelines-staging
+        secretName: pipelines-rj-iplanrio--alertario-previsao-24h
         image_pull_policy: Always
 
   - name: rj-iplanrio--alertario-previsao-24h--prod
@@ -59,7 +60,8 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_iplanrio__alertario_previsao_24h -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        namespace: pipelines-prod
+        secretName: pipelines-rj-iplanrio--alertario-previsao-24h
         image_pull_policy: Always
 
     schedules:
