@@ -40,7 +40,8 @@ deployments:
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_smfp__nota_carioca_oracle_to_bq -- prefect flow-run execute
-        secretName: prefect-jobs-secrets-staging
+        namespace: pipelines-staging
+        secretName: pipelines-rj-smfp--nota-carioca-oracle-to-bq
         image_pull_policy: Always
     parameters:
       database:
@@ -68,7 +69,8 @@ deployments:
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_smfp__nota_carioca_oracle_to_bq -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        namespace: pipelines-prod
+        secretName: pipelines-rj-smfp--nota-carioca-oracle-to-bq
         image_pull_policy: Always
         cpu_request: '3'
         cpu_limit: '6'

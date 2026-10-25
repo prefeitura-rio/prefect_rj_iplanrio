@@ -43,7 +43,8 @@ deployments:
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_iplanrio__sicop -- prefect flow-run execute
-        secretName: prefect-jobs-secrets-staging
+        namespace: pipelines-staging
+        secretName: pipelines-rj-iplanrio--sicop
         image_pull_policy: Always
   - name: rj-iplanrio--sicop--prod
     tags:
@@ -64,7 +65,8 @@ deployments:
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_iplanrio__sicop -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        namespace: pipelines-prod
+        secretName: pipelines-rj-iplanrio--sicop
         image_pull_policy: Always
     schedules:
       - interval: 86400
