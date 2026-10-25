@@ -38,7 +38,7 @@ deployments:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_sms__sisreg_disparo_lembretes -- prefect flow-run execute
         namespace: pipelines-prod
-        secretName: pipelines-rj-sms--sisreg-disparo-lembretes
+        secretName: pipelines-sms-rj-sms--sisreg-disparo-lembretes
         image_pull_policy: Always
         env:
           INFISICAL_ENVIRONMENT: prod
@@ -68,7 +68,7 @@ deployments:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_sms__sisreg_disparo_lembretes -- prefect flow-run execute
         namespace: pipelines-staging
-        secretName: pipelines-rj-sms--sisreg-disparo-lembretes
+        secretName: pipelines-sms-rj-sms--sisreg-disparo-lembretes
         image_pull_policy: Always
         env:
           INFISICAL_ENVIRONMENT: staging
