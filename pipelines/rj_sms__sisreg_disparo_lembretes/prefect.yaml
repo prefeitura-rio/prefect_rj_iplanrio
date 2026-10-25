@@ -40,9 +40,6 @@ deployments:
         namespace: pipelines-prod
         secretName: pipelines-sms-rj-sms--sisreg-disparo-lembretes
         image_pull_policy: Always
-        env:
-          INFISICAL_ENVIRONMENT: prod
-          INFISICAL_SECRET_PATH: /wetalkie
     parameters:
       table:
         dataset_id: disparos
@@ -70,9 +67,6 @@ deployments:
         namespace: pipelines-staging
         secretName: pipelines-sms-rj-sms--sisreg-disparo-lembretes
         image_pull_policy: Always
-        env:
-          INFISICAL_ENVIRONMENT: staging
-          INFISICAL_SECRET_PATH: /wetalkie
     parameters:
       table:
         dataset_id: disparos
