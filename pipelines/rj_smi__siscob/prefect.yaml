@@ -24,6 +24,28 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
+  - name: rj-smi--siscob--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ build-image.tag }}'
+    entrypoint: pipelines/rj_smi__siscob/flow.py:rj_smi__siscob
+    parameters:
+      database:
+        type: mssql
+        host: 10.70.1.34
+        port: 1433
+        database: SISCOB200
+    work_pool:
+      name: onprem-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: uv run --package rj_smi__siscob -- prefect flow-run execute
+        namespace: pipelines-staging
+        secretName: pipelines-rj-smi--siscob
+        image_pull_policy: Always
   - name: rj-smi--siscob--prod
     tags:
       - environment:prod
@@ -43,7 +65,8 @@ deployments:
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_smi__siscob -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        namespace: pipelines-prod
+        secretName: pipelines-rj-smi--siscob
         image_pull_policy: Always
     schedules:
       - interval: 86400

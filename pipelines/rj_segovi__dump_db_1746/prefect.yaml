@@ -43,6 +43,8 @@ deployments:
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_segovi__dump_db_1746 -- prefect flow-run execute
+        namespace: pipelines-staging
+        secretName: pipelines-rj-segovi--dump-db-1746
         image_pull_policy: Always
     schedules:
       - interval: 86400

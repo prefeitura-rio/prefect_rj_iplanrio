@@ -43,5 +43,6 @@ deployments:
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_cetrio__transporte_rodoviario_radar_transito -- prefect flow-run execute
-        secretName: prefect-jobs-secrets-staging
+        namespace: pipelines-staging
+        secretName: pipelines-rj-cetrio--transporte-rodoviario-radar-transito
         image_pull_policy: Always

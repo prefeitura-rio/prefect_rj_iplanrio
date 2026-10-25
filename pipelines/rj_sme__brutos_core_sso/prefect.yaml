@@ -43,6 +43,8 @@ deployments:
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_sme__brutos_core_sso -- prefect flow-run execute
+        namespace: pipelines-staging
+        secretName: pipelines-rj-sme--brutos-core-sso
         image_pull_policy: Always
   - name: rj-sme--brutos_core_sso--prod
     tags:
@@ -63,6 +65,8 @@ deployments:
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_sme__brutos_core_sso -- prefect flow-run execute
+        namespace: pipelines-prod
+        secretName: pipelines-rj-sme--brutos-core-sso
         image_pull_policy: Always
     schedules:
       - interval: 86400
