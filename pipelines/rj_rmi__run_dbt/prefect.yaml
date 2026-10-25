@@ -34,7 +34,7 @@ deployments:
     parameters:
       request:
         repository: https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-rmi.git
-        command: debug
+        command: deps
         target: prod
     work_pool:
       name: onprem-pool
