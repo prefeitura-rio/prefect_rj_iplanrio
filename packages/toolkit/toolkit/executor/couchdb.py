@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator, Mapping
 from dataclasses import dataclass, field
+from hashlib import md5
 from urllib.parse import quote
 
 from httpx2 import AsyncClient
@@ -64,14 +65,18 @@ def build_database_path(database: str, endpoint: str) -> str:
 
 
 def build_page_params(
-    page_size: int, start: str | None, stop: str | None
+    page_size: int, start: str | None, stop: str | None, *, documents: bool = True
 ) -> dict[str, str]:
-    """Return the parameters of one `_all_docs` page."""
-    params = {
-        "include_docs": "true",
-        "limit": str(page_size),
-        "update_seq": "true",
-    }
+    """Return the parameters of one `_all_docs` page.
+
+    With `documents` off a row holds only the id and the revision, which is far less
+    to read and to send.
+    """
+    params = {"limit": str(page_size)}
+
+    if documents:
+        params["include_docs"] = "true"
+        params["update_seq"] = "true"
 
     if start is not None:
         params["startkey"] = convert_to_json_text(start)
@@ -131,6 +136,52 @@ class CouchDBClient:
                 yield items, update_seq
             if len(page.rows) < self.page_size:
                 return
+
+            last = page.rows[-1].id
+
+            if last == cursor and skip:
+                raise ValueError(
+                    f"The server repeated the key {last} of {database}, so the read cannot advance"
+                )
+
+            cursor, skip = last, 1
+
+    async def hash_revisions(
+        self, database: str, start: str | None, stop: str | None
+    ) -> tuple[int, str]:
+        """Return the documents between two keys, and a digest of their revisions.
+
+        It reads `_all_docs` with no documents, page by page like `read_all_docs`, and
+        hashes the lines `id:rev`. A revision changes on every write, and a deleted
+        document leaves the list, so the pair changes when any document does. The
+        design documents stay out, as they do in a read.
+
+        Raise `ValueError` if the server repeats a key, because the read cannot advance.
+        """
+        digest = md5(usedforsecurity=False)
+        count = 0
+        cursor = start
+        skip = 0
+
+        while True:
+            params = {
+                **build_page_params(self.page_size, cursor, stop, documents=False),
+                **({"skip": str(skip)} if skip else {}),
+            }
+            page = await self.get(
+                build_database_path(database, "_all_docs"), params, CouchDBAllDocs
+            )
+
+            for item in page.rows:
+                if item.id.startswith(COUCHDB_DESIGN_PREFIX):
+                    continue
+
+                revision = (item.value or {}).get("rev")
+                digest.update(f"{item.id}:{revision}\n".encode())
+                count += 1
+
+            if len(page.rows) < self.page_size:
+                return count, digest.hexdigest()
 
             last = page.rows[-1].id
 

@@ -7,7 +7,6 @@ commit. The table lives in a bucket and is read through ADC, or on a local path.
 
 from collections.abc import Collection, Sequence
 from datetime import UTC, date, datetime
-from hashlib import md5
 from pathlib import Path
 from re import fullmatch
 from time import sleep
@@ -15,6 +14,7 @@ from typing import cast
 
 from deltalake import CommitProperties, DeltaTable, Transaction, write_deltalake
 from deltalake.exceptions import CommitFailedError, SchemaMismatchError
+from deltalake.transaction import PostCommitHookProperties
 from psycopg.sql import Literal
 from pyarrow import RecordBatchReader, Table, repeat, timestamp
 from pyarrow import scalar as arrow_scalar
@@ -22,7 +22,7 @@ from pyarrow import schema as arrow_schema
 from pyarrow import table as arrow_table
 from pyarrow.dataset import Dataset, dataset
 
-from .chunks import LedgerEntry
+from .chunks import LedgerEntry, hash_summary
 from .constants import (
     ALL_KEY,
     BATCH_COLUMN,
@@ -38,17 +38,6 @@ from .constants import (
 from .executor.executor import Executor
 from .telemetry import logger
 from .types import Fingerprint, MergeReport, MergeSpec, TableReport, WriteFlags
-
-
-def hash_summary(rows: int, low: str, high: str) -> int:
-    """Turn a content summary into the 60 bit number that the ledger stores.
-
-    ```python
-    hash_summary(3, "1", "2")  # 810314219720917701
-    ```
-    """
-    digest = md5(f"{rows}:{low}:{high}".encode(), usedforsecurity=False)
-    return int(digest.hexdigest()[:15], 16)
 
 
 async def compute_fingerprint(executor: Executor, directory: Path) -> int:
@@ -107,6 +96,15 @@ def open_reader(directory: Path, extracted_at: datetime | None) -> RecordBatchRe
     )
 
 
+def checkpointing() -> PostCommitHookProperties:
+    """Make a commit write a checkpoint when its version reaches the table interval.
+
+    A table that many commits fill, such as a dump that loads a chunk each, keeps the
+    log that a write reads short. Delta checks the interval, 100 commits by default.
+    """
+    return PostCommitHookProperties(create_checkpoint=True)
+
+
 def write_chunk(
     uri: str,
     directory: Path,
@@ -137,6 +135,7 @@ def write_chunk(
                     reader,
                     mode="append",
                     commit_properties=properties,
+                    post_commithook_properties=checkpointing(),
                 )
             else:
                 write_deltalake(
@@ -146,6 +145,7 @@ def write_chunk(
                     predicate=f"{BATCH_COLUMN} = '{key}'",
                     schema_mode="overwrite" if chosen.get("overwrite_schema") else None,
                     commit_properties=properties,
+                    post_commithook_properties=checkpointing(),
                 )
         except CommitFailedError:
             if attempt == COMMIT_ATTEMPTS:
@@ -275,6 +275,7 @@ def run_merge(
         source_alias=SOURCE_ALIAS,
         target_alias=TARGET_ALIAS,
         commit_properties=properties,
+        post_commithook_properties=checkpointing(),
     ).when_not_matched_insert_all()
     changing = [
         name
@@ -329,7 +330,13 @@ def merge_chunk(
         report["updated"] = metrics["num_target_rows_updated"]
         report["scanned"] = metrics["num_target_files_scanned"]
     else:
-        write_deltalake(uri, source, mode="append", commit_properties=properties)
+        write_deltalake(
+            uri,
+            source,
+            mode="append",
+            commit_properties=properties,
+            post_commithook_properties=checkpointing(),
+        )
         report["inserted"] = source.num_rows
 
     logger.info(

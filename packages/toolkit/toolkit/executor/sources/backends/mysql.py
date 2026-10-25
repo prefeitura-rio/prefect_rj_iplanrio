@@ -13,4 +13,6 @@ class MySQLSource(AttachedSource):
     """MySQL, read through the DuckDB `mysql_scanner` extension."""
 
     name: ClassVar[str] = "mysql"
+    probe_kind: ClassVar[str] = "mysql-range-1"
+    range_column_needed: ClassVar[bool] = True
     extensions: ClassVar[tuple[Extension, ...]] = (Extension("mysql_scanner"),)

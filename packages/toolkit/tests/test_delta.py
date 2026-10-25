@@ -13,14 +13,13 @@ from pyarrow import string as arrow_string
 from pyarrow import timestamp as arrow_timestamp
 from pyarrow.parquet import write_table
 
-from toolkit.chunks import LedgerEntry
+from toolkit.chunks import LedgerEntry, hash_summary
 from toolkit.constants import EXTRACTED_AT_COLUMN
 from toolkit.delta import (
     build_merge_predicate,
     compact,
     compute_fingerprint,
     find_layout_problems,
-    hash_summary,
     inspect_table,
     maintain,
     merge_chunk,
@@ -166,6 +165,35 @@ def test_maintain_writes_a_checkpoint_for_the_readers_of_the_log(uri, tmp_path):
 
     log = Path(uri, "_delta_log")
     assert any("checkpoint" in name.name for name in log.iterdir())
+
+
+@pytest.mark.parametrize(
+    ("commits", "checkpoint"),
+    [
+        pytest.param(99, False, id="no_checkpoint_before_the_interval"),
+        pytest.param(
+            101, True, id="a_checkpoint_when_the_version_reaches_the_interval"
+        ),
+    ],
+)
+def test_a_dump_of_many_chunks_checkpoints_the_log_on_its_own(
+    uri, tmp_path, commits, checkpoint
+):
+    """Write a checkpoint every 100 commits, so a write never replays a long log."""
+    for number in range(commits):
+        key = f"w{number}"
+        write_chunk(
+            uri,
+            chunk_files(tmp_path / key, key, [number]),
+            key,
+            LedgerEntry(f"c:{key}", 1),
+            {"append": True},
+        )
+
+    log = Path(uri, "_delta_log")
+
+    assert any("checkpoint" in name.name for name in log.iterdir()) is checkpoint
+    assert DeltaTable(uri).to_pyarrow_table().num_rows == commits
 
 
 @pytest.mark.parametrize(

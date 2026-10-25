@@ -138,7 +138,8 @@ async def test_an_engine_reads_the_origin_of_its_source(parquet, tmp_path):
 async def test_files_are_written_to_a_sheet_with_the_header_in_the_first_row():
     """Render the write of a sheet, with the spreadsheet and the sheet as literals."""
     connection = MagicMock()
-    engine = DuckDBEngine.wrap(connection)
+    engine = DuckDBEngine()
+    engine.connection = connection
 
     await engine.write_sheet(Files("rows.parquet", "parquet"), "id1", "Aba 1")
     sql = connection.execute.call_args.args[0]

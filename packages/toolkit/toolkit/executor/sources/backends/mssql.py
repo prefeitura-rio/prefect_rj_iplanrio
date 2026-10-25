@@ -17,6 +17,8 @@ class MSSQLSource(AttachedSource):
     """SQL Server, read through the community DuckDB `mssql` extension."""
 
     name: ClassVar[str] = "mssql"
+    probe_kind: ClassVar[str] = "mssql-range-1"
+    range_column_needed: ClassVar[bool] = True
     extensions: ClassVar[tuple[Extension, ...]] = (Extension("mssql", community=True),)
     read_only: ClassVar[bool] = False
 

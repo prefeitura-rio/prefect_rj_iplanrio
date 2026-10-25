@@ -1,8 +1,5 @@
 import pytest
 from duckdb import BinderException
-from duckdb import connect as duckdb_connect
-
-from toolkit.executor.engines.duckdb import DuckDBEngine
 
 
 @pytest.mark.parametrize(
@@ -56,17 +53,6 @@ async def test_a_call_with_the_wrong_types_is_rejected_before_it_runs(
     """Reject the wrong types and the wrong count when DuckDB binds the call."""
     with pytest.raises(BinderException, match="No function matches"):
         _ = [dataframe async for dataframe in duckdb_memory.query(f"SELECT {call}")]
-
-
-async def test_every_engine_has_the_functions_however_it_is_built():
-    """Register `normalize` when an engine wraps a connection, not only on open."""
-    with duckdb_connect() as connection:
-        engine = DuckDBEngine.wrap(connection)
-
-        sql = "SELECT normalize('A b', '_', true)"
-        [dataframe] = [dataframe async for dataframe in engine.query(sql)]
-
-    assert dataframe.rows() == [("a_b",)]
 
 
 async def test_to_sao_paulo_converts_a_timestamp_with_a_time_zone(scalar):

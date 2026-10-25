@@ -52,6 +52,7 @@ class CouchDBSource(Registered):
     """
 
     name: ClassVar[str] = "couchdb"
+    probe_kind: ClassVar[str] = "couchdb-rev-1"
 
     conn: DBConn
     shape: Annotated[InstanceOf[Shape], BeforeValidator(load_shape)] = field(

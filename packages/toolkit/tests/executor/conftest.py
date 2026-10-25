@@ -44,7 +44,9 @@ from toolkit.executor.sources.shapes import Shape, convert_to_json_text
 from toolkit.types import Geometry, TemplateValue
 from toolkit.utils import build_column_aliases
 
-collect_ignore: list[str] = [] if find_spec("pymongoarrow") else ["test_mongodb.py"]
+collect_ignore: list[str] = (
+    [] if find_spec("pymongoarrow") else ["test_mongodb.py", "test_probes.py"]
+)
 """The MongoDB tests need the `mongodb` extra, so they are skipped without it."""
 
 USER = "user"

@@ -16,11 +16,16 @@ class Registered:
     It holds the `origin` to read, and registers each subclass that sets a `name`, so
     `get_source` finds it. A class that does not set `name` is a base for the others.
     The keys of the options of a source are its fields, and a key that it does not
-    declare is an error.
+    declare is an error. A source whose engine has a probe (see `Engine.probe`) sets
+    `probe_kind`, the versioned name of its token, and an empty kind means no probe.
+    `range_column_needed` is true when the probe needs a column to take the highest
+    value of, and then a dump probes only when it names one.
     """
 
     sources: ClassVar[dict[str, type[Registered]]] = {}
     name: ClassVar[str]
+    probe_kind: ClassVar[str] = ""
+    range_column_needed: ClassVar[bool] = False
 
     origin: Origin | None = field(default=None, kw_only=True)
 

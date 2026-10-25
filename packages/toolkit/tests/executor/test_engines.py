@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 import pytest
 from pymongoarrow.api import Schema
 from pymongoarrow.types import ObjectIdType
@@ -50,6 +52,8 @@ def test_a_source_that_no_engine_serves_is_refused():
     """Raise `TypeError` that names the source."""
 
     class Stranger:
+        probe_kind: ClassVar[str] = ""
+        range_column_needed: ClassVar[bool] = False
         origin: None = None
 
     with pytest.raises(TypeError, match="Stranger"):

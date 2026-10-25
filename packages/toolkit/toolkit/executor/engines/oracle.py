@@ -12,7 +12,7 @@ from polars import DataFrame
 from psycopg.sql import Composable, Identifier, Literal
 from pyarrow.parquet import ParquetWriter
 
-from ...chunks import Rows
+from ...chunks import Probe, Rows, hash_summary
 from ...constants import ORACLE_SNAPSHOT_FALLBACK_CODES, TIMEZONE
 from ...oracle import ChunkRead, Oracle, build_predicates, build_source_sql
 from ...telemetry import logger
@@ -20,6 +20,7 @@ from ...types import Columns, QueryParams, Snapshot
 from ...utils import filter_conditions
 from ..constants import DEFAULT_BATCH_SIZE
 from ..executor import Executor
+from ..requests import Table as TableOrigin
 from ..requests import UnsupportedRequestError
 from ..schema import Column, read_columns
 from ..sources.backends.oracle import OracleSource
@@ -45,6 +46,8 @@ class OracleEngine(Engine):
     duckdb: DuckDBEngine = field(init=False, repr=False)
     client: Oracle = field(init=False, repr=False)
     scn: int | None = field(default=None, init=False)
+    token: int | None = field(default=None, init=False, repr=False)
+    warned: bool = field(default=False, init=False, repr=False)
     columns: dict[str, dict[str, Column]] = field(
         default_factory=dict, init=False, repr=False
     )
@@ -66,6 +69,60 @@ class OracleEngine(Engine):
     def clone(self) -> Self:
         """Return a new unopened engine of the source."""
         return replace(self)
+
+    @override
+    async def probe(self, rows: Rows, known: int | None, probe: Probe) -> bool:
+        """Probe a chunk with its row count and its highest `ORA_ROWSCN`.
+
+        The query reads the table `AS OF SCN` at the system change number that the
+        dump reads, so the token and the rows come from the same point. Without a
+        number (the grants are missing) the dump reads later than the probe, which is
+        sound. `ORA_ROWSCN` is kept by the block: a write to another row of the block
+        moves it, a false positive, and no write to the chunk goes unseen. The filters
+        and the chunk are the ones of the extract. `ORA_ROWSCN` does not cross a query,
+        so a `Query` origin downloads with no token. A database error logs one warning
+        and downloads the chunk. `probe` has no column, because `ORA_ROWSCN` is the
+        token.
+        """
+        self.token = None
+        origin = require_origin(self.source)
+
+        if not isinstance(origin, TableOrigin):
+            return True
+
+        try:
+            source, _ = build_source_sql(origin)
+            found, binds = build_predicates(
+                rows.column, rows.chunk, [rows.column] if rows.column else []
+            )
+            scn = self.scn
+            result = await Executor(self).query(
+                "oracle/probe",
+                {
+                    "source": source,
+                    "scn": scn is not None,
+                    "filters": filter_conditions(rows.filters),
+                    "predicates": list(found),
+                },
+                params=[*([scn] if scn is not None else []), *binds.values()],
+            )
+            answer = result.dataframe
+            self.token = hash_summary(
+                int(str(answer["n"][0])), str(answer["total"][0]), ""
+            )
+        except (DatabaseError, ValueError) as error:
+            self.token = None
+
+            if not self.warned:
+                self.warned = True
+                logger.warning(
+                    "Probe failed, so every chunk is downloaded: source=oracle error=%s",
+                    str(error).splitlines()[0],
+                )
+
+            return True
+
+        return self.token != known
 
     async def prepare(self) -> None:
         """Set the session time zone and read the system change number."""

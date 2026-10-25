@@ -1,7 +1,7 @@
 """The contract of a source: the configuration of the system that a dump reads."""
 
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 from ..types import Origin
 
@@ -24,7 +24,14 @@ class Source(Protocol):
     read. An engine built from it, `Engine.from_source(source)`, opens the connection
     and does the work. What a read needs while it runs, such as the SCN of Oracle or the
     id width of CouchDB, lives in the engine.
+
+    `probe_kind` names the token of the probe of its engine, and is empty when it has
+    none. `range_column_needed` says whether the probe needs a column, and then a dump
+    probes only when it names one.
     """
+
+    probe_kind: ClassVar[str]
+    range_column_needed: ClassVar[bool]
 
     @property
     def origin(self) -> Origin | None:

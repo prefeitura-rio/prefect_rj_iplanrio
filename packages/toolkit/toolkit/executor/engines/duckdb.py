@@ -9,20 +9,23 @@ from contextlib import AsyncExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import ClassVar, Self, override
+from typing import ClassVar, Self, cast, override
 
 from duckdb import DuckDBPyConnection
+from duckdb import Error as DuckDBError
 from duckdb import connect as duckdb_connect
 from polars import DataFrame, Schema
 from psycopg.sql import Identifier, Literal
 
-from ...chunks import Rows, build_chunk_predicates
+from ...chunks import Probe, Rows, build_chunk_predicates, hash_summary
 from ...constants import TIMEZONE
 from ...functions.registry import register_functions
 from ...settings import DuckDBSettings
+from ...telemetry import logger
 from ...types import Columns, QueryParams, TemplateValue
 from ...utils import filter_conditions
 from ..constants import ALIAS, DEFAULT_BATCH_SIZE, SECRET
+from ..probe import build_native_chunk, quote_native
 from ..render import render_template
 from ..requests import (
     Aggregate,
@@ -136,27 +139,13 @@ class DuckDBEngine(Engine):
 
     source: DuckDBSource | None = None
     extensions: Sequence[Extension] = ()
-    wrapped: DuckDBPyConnection | None = field(default=None, init=False, repr=False)
     connection: DuckDBPyConnection = field(init=False, repr=False)
-
-    @classmethod
-    def wrap(cls, connection: DuckDBPyConnection) -> Self:
-        """Return an engine over an open connection that it does not close."""
-        register_functions(connection)
-
-        engine = cls()
-        engine.wrapped = connection
-        engine.connection = connection
-
-        return engine
+    token: int | None = field(default=None, init=False, repr=False)
+    warned: bool = field(default=False, init=False, repr=False)
 
     @override
     async def open(self, stack: AsyncExitStack) -> None:
         """Open an in-memory connection, set it up and prepare the source."""
-        if self.wrapped is not None:
-            self.connection = self.wrapped
-            return
-
         self.connection = await to_thread(duckdb_connect)
         stack.push_async_callback(to_thread, self.connection.close)
         register_functions(self.connection)
@@ -224,6 +213,70 @@ class DuckDBEngine(Engine):
     ) -> None:
         """Write the rows of one chunk of the origin as Parquet."""
         await self.materialize_origin(self.origin(), target, rows, columns)
+
+    @override
+    async def probe(self, rows: Rows, known: int | None, probe: Probe) -> bool:
+        """Probe a chunk with a native query that runs on the server of the source.
+
+        The query counts the rows of the chunk and takes the highest value of
+        `probe.column`, which an index answers with no row read. It goes through the
+        pass-through function of the extension (`postgres_query`, `mysql_query` or
+        `mssql_scan`), so the server answers one row and none of the rows cross the
+        network. DuckDB cannot do it alone: it pushes only the filters and the columns
+        down, and it would read the whole chunk. Download the chunk without a probe for
+        a source with no `probe_kind`, for a probe with no column, for an origin that
+        is not a table, and for `filters`, which are DuckDB SQL. A DuckDB error, such
+        as a timeout, logs one warning and downloads the chunk.
+        """
+        self.token = None
+        source = self.source
+
+        if source is None or not source.probe_kind or probe.column is None:
+            return True
+
+        origin = self.origin()
+        predicate = build_native_chunk(source.name, rows)
+
+        if not isinstance(origin, Table) or predicate is None:
+            return True
+
+        try:
+            native = render_template(
+                "duckdb/probe_range",
+                {
+                    "type": source.name,
+                    "table": ".".join(
+                        quote_native(source.name, part)
+                        for part in origin.name.split(".")
+                    ),
+                    "column": quote_native(source.name, probe.column),
+                    "predicate": predicate,
+                },
+            )
+            sql = render_template(
+                "duckdb/select_source",
+                build_origin_values(Query(native, source.name)),
+            )
+            answer, *_ = [frame async for frame in self.query(sql)]
+            self.token = hash_summary(
+                int(cast("str", answer["n"][0])),
+                str(cast("object", answer["last"][0])),
+                "",
+            )
+        except DuckDBError as error:
+            self.token = None
+
+            if not self.warned:
+                self.warned = True
+                logger.warning(
+                    "Probe failed, so every chunk is downloaded: source=%s error=%s",
+                    source.name,
+                    error,
+                )
+
+            return True
+
+        return self.token != known
 
     def origin(self) -> Origin:
         """Return the origin of the source, or raise `ValueError` if there is none."""

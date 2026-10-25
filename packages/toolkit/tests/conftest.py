@@ -24,7 +24,7 @@ from pyarrow import string as arrow_string
 from pyarrow import table as arrow_table
 from pyarrow import timestamp as arrow_timestamp
 
-from toolkit.chunks import Rows
+from toolkit.chunks import Probe, Rows
 from toolkit.executor.constants import DEFAULT_BATCH_SIZE
 from toolkit.executor.engines.base import Engine
 from toolkit.executor.engines.duckdb import DuckDBEngine
@@ -59,6 +59,9 @@ def scalar(duckdb_memory: DuckDBEngine) -> Callable[[str], Awaitable[object]]:
 @dataclass(frozen=True)
 class FakeSource:
     """A source that only the fake engine serves."""
+
+    probe_kind: ClassVar[str] = ""
+    range_column_needed: ClassVar[bool] = False
 
     origin: Origin | None = None
 
@@ -135,6 +138,7 @@ class Activity:
     opened: int = 0
     closed: int = 0
     materialized: list[str] = field(default_factory=list[str])
+    probed: list[str] = field(default_factory=list[str])
 
     def close(self) -> None:
         """Count one closing."""
@@ -145,7 +149,10 @@ class Activity:
 class FakeChunkEngine(Engine):
     """An engine that writes a file for each chunk, and counts the overlaps.
 
-    `fail_on` names a chunk that raises. The activity is shared with the clones.
+    `fail_on` names a chunk that raises. `probes` gives the token that the probe takes
+    for a chunk, and `None` as a token means that the probe cannot tell. Without
+    `probes` the fake keeps the probe of `Engine`. The activity is shared with the
+    clones.
     """
 
     source_type: ClassVar[type[Source]] = FakeSource
@@ -154,6 +161,19 @@ class FakeChunkEngine(Engine):
     workers: int = 1
     fail_on: str | None = None
     activity: Activity = field(default_factory=Activity)
+    probes: Mapping[str, int | None] | None = None
+
+    @override
+    async def probe(self, rows: Rows, known: int | None, probe: Probe) -> bool:
+        """Take the canned token of the chunk, and download unless it is known."""
+        if self.probes is None:
+            return await super().probe(rows, known, probe)
+
+        key = rows.column or ""
+        self.activity.probed.append(key)
+        self.token = self.probes.get(key)
+
+        return self.token is None or self.token != known
 
     @property
     @override
@@ -170,7 +190,9 @@ class FakeChunkEngine(Engine):
     @override
     def clone(self) -> Self:
         """Return a new unopened fake that shares the activity."""
-        return type(self)(self.source, self.workers, self.fail_on, self.activity)
+        return type(self)(
+            self.source, self.workers, self.fail_on, self.activity, self.probes
+        )
 
     @override
     async def execute(self, sql: str, *, params: QueryParams | None = None) -> None:

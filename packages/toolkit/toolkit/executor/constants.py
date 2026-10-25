@@ -27,6 +27,9 @@ TEMPLATES_DIR: Final = Path(__file__).parent / "templates"
 ALIAS: Final = "src"
 """The name of the attached source. Templates write `FROM src.schema.table`."""
 
+PROBE_DATE_MARGIN_DAYS: Final = 1
+"""The days that a probe adds on each side of a date chunk, to cover the time zone."""
+
 SECRET: Final = "src_secret"  # noqa: S105  # the name of a DuckDB secret, not a password
 
 SHEETS_SCOPES: Final = (

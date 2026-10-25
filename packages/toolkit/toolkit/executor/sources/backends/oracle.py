@@ -16,6 +16,7 @@ class OracleSource(Registered):
     """An Oracle database. `batch_size` is the rows of one fetch."""
 
     name: ClassVar[str] = "oracle"
+    probe_kind: ClassVar[str] = "oracle-rowscn-1"
 
     conn: DBConn
     batch_size: PositiveInt = ORACLE_BATCH_ROWS

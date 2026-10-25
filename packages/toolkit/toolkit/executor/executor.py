@@ -1,6 +1,6 @@
 """Orchestrate an engine: connect it, render SQL templates and read the chunks."""
 
-from asyncio import Lock, TaskGroup
+from asyncio import TaskGroup
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import AsyncExitStack
@@ -12,7 +12,7 @@ from typing import Self, overload
 
 from psycopg.sql import Identifier
 
-from ..chunks import Chunk, Rows
+from ..chunks import Chunk, ChunkPlan, Probe, Rows
 from ..constants import EXECUTE_SPAN, TEMPLATE_ATTRIBUTE
 from ..telemetry import logger, tracer
 from ..types import Columns, Described, QueryParams, TemplateValue
@@ -172,38 +172,53 @@ class Executor:
     async def run_chunks(
         self,
         todo: Sequence[Chunk],
-        plan: Callable[[Chunk], tuple[Rows, Columns]],
-        handle: Callable[[Chunk, Path], Awaitable[None]],
-    ) -> None:
+        plan: Callable[[Chunk], ChunkPlan],
+        handle: Callable[[Chunk, Path, int | None], Awaitable[None]],
+        probe: Probe | None = None,
+    ) -> list[Chunk]:
         """Write each chunk of `todo` as Parquet in a temporary folder, and hand it on.
 
-        `plan` gives the rows and the columns of a chunk, and `handle` takes the chunk
-        and the folder of its `out.parquet`. The engine says how many chunks are read
-        at the same time with `concurrency`. Each extra worker reads on an engine of its
-        own, and `handle` runs for one chunk at a time, so it may write to a shared
-        place. The first error cancels the other workers and is raised as it is.
+        `plan` gives the rows, the columns and the ledger number of a chunk. With a
+        `probe` a worker first asks its engine whether the chunk changed (see
+        `Engine.probe`), and it skips a chunk that did not, with no download. The
+        skipped chunks are the result. `handle` takes a downloaded chunk, the folder of
+        its `out.parquet` and the token of the probe, or `None` if there is none. The
+        engine says how many chunks are read at the same time with `concurrency`. Each
+        extra worker reads on an engine of its own and calls `handle` when its chunk is
+        ready, so `handle` runs for several chunks at once and must be safe to run
+        together. The first error
+        cancels the other workers and is raised as it is.
         """
         pending = deque(todo)
-        lock = Lock()
+        skipped: list[Chunk] = []
 
         async def work(engine: Engine) -> None:
             """Read chunks until none is left."""
             while pending:
                 chunk = pending.popleft()
-                rows, columns = plan(chunk)
+                chunk_plan = plan(chunk)
+
+                if probe and not await engine.probe(
+                    chunk_plan.rows, chunk_plan.known, probe
+                ):
+                    skipped.append(chunk)
+                    continue
+
+                token = engine.token if probe else None
 
                 with TemporaryDirectory() as directory:
                     folder = Path(directory)
-                    await engine.materialize(folder / "out.parquet", rows, columns)
+                    await engine.materialize(
+                        folder / "out.parquet", chunk_plan.rows, chunk_plan.columns
+                    )
 
-                    async with lock:
-                        await handle(chunk, folder)
+                    await handle(chunk, folder, token)
 
         workers = self.engine.concurrency
 
         if workers == 1:
             await work(self.engine)
-            return
+            return skipped
 
         try:
             async with AsyncExitStack() as stack, TaskGroup() as group:
@@ -212,6 +227,8 @@ class Executor:
                     group.create_task(work(engine))
         except ExceptionGroup as errors:
             raise errors.exceptions[0] from errors
+
+        return skipped
 
     async def normalize_columns(
         self,

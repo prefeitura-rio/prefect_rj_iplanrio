@@ -53,6 +53,8 @@ class MongoDBSource(Registered):
     """
 
     name: ClassVar[str] = "mongodb"
+    probe_kind: ClassVar[str] = "mongodb-range-1"
+    range_column_needed: ClassVar[bool] = True
 
     conn: DBConn
     shape: Annotated[InstanceOf[Schema], BeforeValidator(load_schema)]

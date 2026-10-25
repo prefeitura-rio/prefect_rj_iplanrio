@@ -9,7 +9,7 @@ from json import dumps
 from psycopg.sql import Composable, Identifier, Literal
 
 from .constants import BATCH_COLUMN
-from .types import Chunks, DateWidth
+from .types import Chunks, Columns, DateWidth
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +37,38 @@ class Rows:
     column: str | None = None
     chunk: Chunk | None = None
     empty: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Probe:
+    """How a dump probes its chunks: the `kind` of the token and a `column`.
+
+    The probe reads the count of the chunk and the highest value of `column`, which an
+    index answers with no row read. `column` is `None` for a source whose token needs
+    none. `label` names the kind and the column, so a ledger of tokens made with another
+    column is never compared with this one.
+    """
+
+    kind: str
+    column: str | None = None
+
+    @property
+    def label(self) -> str:
+        """Return the kind, with the column when there is one."""
+        return f"{self.kind}:{self.column}" if self.column else self.kind
+
+
+@dataclass(frozen=True, slots=True)
+class ChunkPlan:
+    """What a worker needs for one chunk: its rows, its select list and its number.
+
+    `known` is the number that the ledger holds for the chunk, or `None` when it has
+    none. A probe compares its token with it.
+    """
+
+    rows: Rows
+    columns: Columns
+    known: int | None = None
 
 
 def first_day(unit: DateWidth, day: date) -> date:
@@ -182,6 +214,17 @@ def select_pending(
         for chunk in cut
         if chunk == NULL_CHUNK or chunk.key not in known or chunk.key in recent
     ]
+
+
+def hash_summary(rows: int, low: str, high: str) -> int:
+    """Turn a content summary into the 60 bit number that the ledger stores.
+
+    ```python
+    hash_summary(3, "1", "2")  # 810314219720917701
+    ```
+    """
+    digest = md5(f"{rows}:{low}:{high}".encode(), usedforsecurity=False)
+    return int(digest.hexdigest()[:15], 16)
 
 
 def hash_parts(parts: Mapping[str, object]) -> str:

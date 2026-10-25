@@ -31,6 +31,8 @@ filters = ["(b = 1)"]
 names = ["\"a\"", "\"b\""]
 predicates = [{"column": "\"a\"", "op": ">=", "value": "1"}]
 table = t
+predicate = "a = 1"
+column = "\"a\""
 renames = []
 spreadsheet = "'s'"
 sheet = "'Sheet1'"

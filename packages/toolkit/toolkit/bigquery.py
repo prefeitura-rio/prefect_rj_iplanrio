@@ -51,19 +51,6 @@ class BigQuery:
             stack.push_async_callback(to_thread, client.close)
             yield cls(client=client)
 
-    async def has_table(self, table: str) -> bool:
-        """Return whether `project.dataset.table` exists."""
-
-        def run() -> bool:
-            """Return whether the client finds the table."""
-            try:
-                self.client.get_table(table)
-            except NotFound:
-                return False
-            return True
-
-        return await to_thread(run)
-
     async def create_dataset(self, dataset: str) -> None:
         """Create a dataset when it does not exist."""
         await to_thread(self.client.create_dataset, dataset, exists_ok=True)

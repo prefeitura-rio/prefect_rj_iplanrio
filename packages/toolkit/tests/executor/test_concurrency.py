@@ -1,25 +1,24 @@
-from asyncio import sleep
+from asyncio import Event, wait_for
 from pathlib import Path
 
 import pytest
 
-from toolkit.chunks import Chunk, Rows
+from toolkit.chunks import Chunk, ChunkPlan, Rows
 from toolkit.executor.executor import Executor
-from toolkit.types import Columns
 
 KEYS = [f"w{number}" for number in range(6)]
 CHUNKS = [Chunk(key, 0, 1) for key in KEYS]
 
 
-def plan(chunk: Chunk) -> tuple[Rows, Columns]:
+def plan(chunk: Chunk) -> ChunkPlan:
     """Return rows whose column is the key of the chunk, which the fake reads back."""
-    return Rows(column=chunk.key), []
+    return ChunkPlan(Rows(column=chunk.key), [])
 
 
 async def run(executor: Executor, handled: list[str]) -> None:
     """Hand every chunk to a handler that records its key."""
 
-    async def handle(chunk: Chunk, folder: Path) -> None:
+    async def handle(chunk: Chunk, folder: Path, token: int | None) -> None:
         """Record the chunk, after the file that the engine wrote."""
         assert (folder / "out.parquet").read_text() == chunk.key
         handled.append(chunk.key)
@@ -48,22 +47,22 @@ async def test_the_engine_says_how_many_chunks_are_read_together(
     assert engine.activity.peak == peak
 
 
-async def test_the_chunks_are_handed_over_one_at_a_time(fake_chunk_engine):
-    """Run the handler for one chunk at a time, so it may write to a shared place."""
-    running = peak = 0
-    engine = fake_chunk_engine(workers=3)
+async def test_the_chunks_are_handed_over_together(fake_chunk_engine):
+    """Run the handler for two chunks at once: each waits for the other and both end."""
+    engine = fake_chunk_engine(workers=2)
+    arrived = [Event(), Event()]
+    handled: list[str] = []
 
-    async def handle(chunk: Chunk, folder: Path) -> None:
-        """Count the handlers that overlap."""
-        nonlocal running, peak
-        running += 1
-        peak = max(peak, running)
-        await sleep(0.01)
-        running -= 1
+    async def handle(chunk: Chunk, folder: Path, token: int | None) -> None:
+        """Wait until the other handler has started."""
+        mine = len(handled) % 2
+        handled.append(chunk.key)
+        arrived[mine].set()
+        await wait_for(arrived[1 - mine].wait(), timeout=1)
 
-    await Executor(engine).run_chunks(CHUNKS, plan, handle)
+    await Executor(engine).run_chunks(CHUNKS[:2], plan, handle)
 
-    assert peak == 1
+    assert sorted(handled) == KEYS[:2]
 
 
 async def test_each_extra_worker_reads_on_an_engine_of_its_own(fake_chunk_engine):

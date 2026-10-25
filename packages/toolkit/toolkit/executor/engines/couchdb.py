@@ -7,12 +7,14 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import ClassVar, Self, override
 
+from httpx2 import HTTPError
 from polars import DataFrame
 from pyarrow import Table
 from pyarrow.parquet import ParquetWriter
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
-from ...chunks import Chunk, Rows
+from ...chunks import Chunk, Probe, Rows, hash_summary
+from ...telemetry import logger
 from ...types import Chunks, Columns
 from ...utils import filter_selectors
 from ..constants import COUCHDB_ID_COLUMN, DEFAULT_BATCH_SIZE
@@ -89,6 +91,8 @@ class CouchDBEngine(Engine):
     source: CouchDBSource
     duckdb: DuckDBEngine = field(init=False, repr=False)
     client: CouchDBClient = field(init=False, repr=False)
+    token: int | None = field(default=None, init=False, repr=False)
+    warned: bool = field(default=False, init=False, repr=False)
 
     @property
     @override
@@ -122,6 +126,56 @@ class CouchDBEngine(Engine):
     def clone(self) -> Self:
         """Return a new unopened engine of the source."""
         return replace(self)
+
+    @override
+    async def probe(self, rows: Rows, known: int | None, probe: Probe) -> bool:
+        """Probe a chunk with the revisions of its documents.
+
+        A page of `_all_docs` with no documents holds only `id` and `rev`, so the
+        whole chunk is listed with a fraction of the bytes of a read. The revision
+        changes on every write and a deleted document leaves the list, so the hash of
+        the `id:rev` lines moves when any document of the chunk does, and a write that
+        changes nothing moves it too (a false positive). The ranges are the ones of
+        the read, so the probe and the download see the same documents. Download the
+        chunk with no token for `filters`, for a `Query` or `Changes` origin, and for a
+        chunk over a column other than the id. An HTTP error logs one warning and
+        downloads the chunk. `probe` has no column, because the revision is the token.
+        """
+        self.token = None
+        origin = require_origin(self.source)
+
+        if (
+            not isinstance(origin, TableOrigin)
+            or rows.filters
+            or rows.column not in (None, COUCHDB_ID_COLUMN)
+        ):
+            return True
+
+        database = origin.name
+
+        try:
+            count = 0
+            digests: list[str] = []
+
+            for start, stop in await self.client.list_key_ranges(database, rows.chunk):
+                found, digest = await self.client.hash_revisions(database, start, stop)
+                count += found
+                digests.append(digest)
+
+            self.token = hash_summary(count, "".join(digests), "")
+        except (HTTPError, ValidationError, ValueError) as error:
+            self.token = None
+
+            if not self.warned:
+                self.warned = True
+                logger.warning(
+                    "Probe failed, so every chunk is downloaded: source=couchdb error=%s",
+                    error,
+                )
+
+            return True
+
+        return self.token != known
 
     @override
     async def read(

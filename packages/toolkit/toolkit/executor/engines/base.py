@@ -11,7 +11,7 @@ from typing import ClassVar, Self
 
 from polars import DataFrame
 
-from ...chunks import Rows
+from ...chunks import Probe, Rows
 from ...types import Chunks, Columns, QueryParams
 from .. import engines
 from ..constants import (
@@ -39,6 +39,8 @@ class Engine(ABC):
     source_type: ClassVar[type[Source]]
 
     closer: AsyncExitStack
+    token: int | None = None
+    """The token that the last `probe` took on this engine, for the ledger."""
 
     @abstractmethod
     def __init__(self, source: Source, /) -> None:
@@ -82,6 +84,31 @@ class Engine(ABC):
     def concurrency(self) -> int:
         """Return how many chunks a dump reads at the same time. The default is one."""
         return 1
+
+    async def probe(self, rows: Rows, known: int | None, probe: Probe) -> bool:
+        """Return `True` if the chunk must be downloaded, `False` if it did not change.
+
+        A probe asks the system for a cheap token of the chunk, a number that changes
+        whenever the rows of the chunk change, and compares it with `known`, the number
+        that the ledger holds. `probe` names the kind of the token and the column to
+        take the highest value of, when the engine needs one. It leaves the token in
+        `token`, for the dump to record once it has downloaded the chunk. The default
+        has no token and always downloads.
+
+        An engine that overrides it keeps these rules:
+
+        - `False` only when the token exists and equals `known`. Any doubt, any error
+          and `known=None` give `True`. A probe never raises: it logs a warning and
+          gives `True`, with no token.
+        - The token is taken before the download and is never newer than the data
+          that the download reads. A newer token would skip stale rows for good.
+        - A false positive (a token that moved with no change in the rows) costs one
+          download. A false negative loses data.
+        - Set `token` on every call, with `None` when there is none.
+        """
+        self.token = None
+
+        return True
 
     @abstractmethod
     async def open(self, stack: AsyncExitStack) -> None:

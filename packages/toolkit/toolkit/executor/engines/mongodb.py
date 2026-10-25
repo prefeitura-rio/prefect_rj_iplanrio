@@ -13,16 +13,20 @@ from polars import DataFrame
 from pyarrow import Schema as ArrowSchema
 from pyarrow import Table, array, string
 from pyarrow.parquet import ParquetWriter
-from pymongo import MongoClient
+from pymongo import AsyncMongoClient, MongoClient
+from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.collection import Collection
 from pymongo.database import Database
+from pymongo.errors import PyMongoError
 from pymongoarrow.api import Schema, aggregate_arrow_all, find_arrow_all
 from pymongoarrow.types import Decimal128Type, ObjectIdType
 
-from ...chunks import NULL_CHUNK, Chunk, Rows
+from ...chunks import NULL_CHUNK, Chunk, Probe, Rows, hash_summary
+from ...telemetry import logger
 from ...types import Chunks, Columns
 from ...utils import filter_selectors
 from ..constants import DEFAULT_BATCH_SIZE, MONGO_ID_FIELD
+from ..probe import build_range_pipeline
 from ..requests import (
     Aggregate,
     Query,
@@ -169,6 +173,9 @@ class MongoDBEngine(Engine):
     aggregate: Run = field(default=run_aggregate)
     duckdb: DuckDBEngine = field(init=False, repr=False)
     database: Database[dict[str, object]] = field(init=False, repr=False)
+    probe_database: AsyncDatabase[dict[str, object]] = field(init=False, repr=False)
+    token: int | None = field(default=None, init=False, repr=False)
+    warned: bool = field(default=False, init=False, repr=False)
 
     @property
     @override
@@ -201,10 +208,63 @@ class MongoDBEngine(Engine):
 
         self.database = client[self.source.conn.database]
 
+        probe_client = AsyncMongoClient[dict[str, object]](self.source.uri)
+        stack.push_async_callback(probe_client.close)
+        self.probe_database = probe_client[self.source.conn.database]
+
     @override
     def clone(self) -> Self:
         """Return a new unopened engine of the source."""
         return replace(self)
+
+    async def run_probe(
+        self, collection: str, pipeline: Sequence[Mapping[str, object]]
+    ) -> list[dict[str, object]]:
+        """Run the aggregation of a probe on the async client, and return it."""
+        cursor = await self.probe_database[collection].aggregate(list(pipeline))
+
+        return await cursor.to_list()
+
+    @override
+    async def probe(self, rows: Rows, known: int | None, probe: Probe) -> bool:
+        """Probe a chunk with one aggregation: its count and its highest value.
+
+        The server counts the documents of the chunk and takes the `$max` of
+        `probe.column`, which an index answers with no read of the documents, and one
+        document comes back. The filters and the chunk are native here, so the probe
+        reads the documents that the download reads. Download the chunk with no token
+        for an aggregation origin and for a probe with no column. An error of the
+        server logs one warning and downloads the chunk.
+        """
+        self.token = None
+        origin = require_origin(self.source)
+
+        if isinstance(origin, Aggregate) or probe.column is None:
+            return True
+
+        try:
+            collection, selector = read_collection(origin)
+            pipeline = build_range_pipeline(
+                probe.column, combine_conditions(selector, rows)
+            )
+            found = await self.run_probe(collection, pipeline)
+            total = found[0] if found else {}
+            self.token = hash_summary(
+                int(str(total.get("n", 0))), str(total.get("last")), ""
+            )
+        except (PyMongoError, ValueError) as error:
+            self.token = None
+
+            if not self.warned:
+                self.warned = True
+                logger.warning(
+                    "Probe failed, so every chunk is downloaded: source=mongodb error=%s",
+                    error,
+                )
+
+            return True
+
+        return self.token != known
 
     @override
     async def read(
