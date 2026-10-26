@@ -381,7 +381,7 @@ def get_layout_table_from_staging(
         bucket_name=staging_bucket,
         dataset_id=dataset_id,
         table_id=registo_familia_table_id,
-        prefix=f"staging/{dataset_id}/{registo_familia_table_id}",
+        prefix=f"staging/{dataset_id}/{registo_familia_table_id}/",
     )
 
     if dataframe is not None and not dataframe.empty:
@@ -393,7 +393,7 @@ def get_layout_table_from_staging(
             raise_msg = ""
             raise_msg += "Please, upload the layouts to the storage raw:\n"
             raise_msg += "https://console.cloud.google.com/storage/browser/rj-smas/raw/protecao_social_cadunico/layout\n\n"
-            raise_msg += "layout versions to be uploaded\n{not_in_layout_versions}"
+            raise_msg += f"layout versions to be uploaded\n{not_in_layout_versions}"
 
             raise ValueError(raise_msg)
 
@@ -928,7 +928,7 @@ def update_layout_from_storage_and_create_versions_dbt_models(
             "staging_bucket": staging_bucket,
         },
     )
-    staging_prefix_area = f"staging/{dataset_id}/{layout_table_id}"
+    staging_prefix_area = f"staging/{dataset_id}/{layout_table_id}/"
     logger.log_progress("VERIFICANDO PARTIÇÕES EM STAGING")
     staging_partitions_list = get_existing_partitions(
         prefix=staging_prefix_area,

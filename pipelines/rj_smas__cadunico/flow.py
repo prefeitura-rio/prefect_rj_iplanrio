@@ -40,7 +40,7 @@ def rj_smas__cadunico(
     2. Compara com arquivos em raw
     3. Processa, cria tabela e faz upload de cada arquivo individualmente
     """
-    staging_prefix_area = f"staging/{dataset_id}/{table_id}"
+    staging_prefix_area = f"staging/{dataset_id}/{table_id}/"
 
     injected_credential = inject_bd_credentials()
 
