@@ -563,6 +563,14 @@ def convert_string_to_json(s, context=None):
         raise BaseException(f"JSON parse error{context_msg}: {e}")
 
 
+def decode_key(key: str, width: int) -> str:
+    if not key.isdigit() or width > 3:  # campo texto (>3 posicoes): literal, como antes
+        return key
+    if int(key) >= 10**width:
+        raise ValueError(f"codigo {key!r} nao cabe em campo de {width} posicoes")
+    return str(int(key)).zfill(width)
+
+
 def create_cadunico_dbt_consolidated_models(
     dbt_repository_path: str,
     dataframe: pd.DataFrame,
@@ -780,9 +788,10 @@ def create_cadunico_dbt_consolidated_models(
                             + f"            WHEN REGEXP_CONTAINS({col_name}, r'^\\s*$') THEN NULL\n"
                         )
                         for key in dicionario_atributos.keys():
+                            pattern = decode_key(key, int(row["tamanho"]))
                             col_expression = (
                                 col_expression
-                                + f"            WHEN REGEXP_CONTAINS({col_name}, r'^{key}$') THEN '{dicionario_atributos[key]}'\n"  # noqa
+                                + f"            WHEN REGEXP_CONTAINS({col_name}, r'^{pattern}$') THEN '{dicionario_atributos[key]}'\n"  # noqa
                             )
                         col_expression = (
                             col_expression
