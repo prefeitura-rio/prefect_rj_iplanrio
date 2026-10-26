@@ -82,7 +82,7 @@ async def test_the_extraction_time_is_a_timestamp_in_bigquery(cloud, database, d
 
 
 async def test_the_same_dump_again_writes_no_commit_and_no_object(cloud, database, dump_to_cloud) -> None:
-    """Skip every chunk that did not change, so the bucket and the log stay as they are."""
+    """Skip each chunk that did not change, so the bucket and log stay as they are."""
     destination = cloud.destination(name("rerun"))
     await dump_to_cloud(database, destination, chunks=MONTHS)
     before = DeltaTable(destination.uri)
@@ -122,7 +122,7 @@ async def test_a_chunk_that_became_empty_loses_its_rows_in_bigquery(cloud, datab
 
 
 async def test_overwrite_with_other_columns_reaches_bigquery_after_publish(cloud, database, dump_to_cloud) -> None:
-    """Replace the schema in overwrite, refresh the table, and see only the new columns."""
+    """Replace the schema in overwrite, refresh the table, and see new columns only."""
     destination = cloud.destination(name("schema"))
     await dump_to_cloud(database, destination, chunks=MONTHS)
     await cloud.publish(destination)
@@ -134,7 +134,7 @@ async def test_overwrite_with_other_columns_reaches_bigquery_after_publish(cloud
 
 
 async def test_bigquery_sees_the_new_schema_as_soon_as_the_files_change(cloud, database, dump_to_cloud) -> None:
-    """Read the schema from the Delta log on every query, so a publish is not needed to see it."""
+    """Read the schema from the Delta log each query, so no publish is needed."""
     destination = cloud.destination(name("detect"))
     await dump_to_cloud(database, destination, chunks=MONTHS)
     await cloud.publish(destination)
@@ -156,7 +156,7 @@ async def test_publishing_twice_refreshes_the_table_instead_of_failing(cloud, da
 
 
 async def test_the_types_of_the_pipelines_survive_delta_and_bigquery(cloud, dump_to_cloud) -> None:
-    """Read integers, decimals, dates and both kinds of timestamp with the types that dbt expects."""
+    """Read integers, decimals, dates and both timestamps with the types dbt expects."""
     destination = cloud.destination(name("types"))
     dataframe = arrow_table(
         {
@@ -217,7 +217,7 @@ async def test_a_dump_leaves_a_checkpoint_and_bigquery_still_reads(cloud, databa
 
 
 async def test_the_files_of_an_older_layout_go_before_an_overwrite_and_a_delta_table_stays(cloud, database) -> None:
-    """Delete old Hive files in the first overwrite, and never delete the Delta table in the next."""
+    """Delete old Hive files in the first overwrite, and keep the Delta table."""
     destination = cloud.destination(name("legacy"))
     store = cloud.store()
     old = f"{destination.prefix}/ano=2023/part-old.parquet"
@@ -237,7 +237,7 @@ async def test_the_files_of_an_older_layout_go_before_an_overwrite_and_a_delta_t
 
 
 async def test_captures_add_up_in_bigquery_and_compacting_keeps_every_row(cloud, tmp_path, capture) -> None:
-    """Add what each run brings, ignore a repeated run, and still read every row after a compaction."""
+    """Add what each run brings, ignore a repeat, and keep every row on compaction."""
     destination = cloud.destination(name("capture"))
     first = datetime(2024, 3, 10, 9, 0, tzinfo=UTC)
 

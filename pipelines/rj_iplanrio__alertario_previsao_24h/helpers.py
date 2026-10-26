@@ -35,7 +35,7 @@ def read_number(text: str | None) -> float | None:
 
 
 def read_tide_time(text: str | None) -> str | None:
-    """Return the time of a tide in ISO format, or nothing if it is empty or has an unknown format."""
+    """Return the time of a tide in ISO format, or nothing if empty or unknown."""
     if not text:
         return None
 
@@ -56,7 +56,9 @@ def read_tide_time(text: str | None) -> str | None:
 
 
 def build_tables(xml: str, execution_id: str, now: datetime) -> Forecast:
-    """Read the forecast XML and return its rows by table, the synoptic text and the date of the XML.
+    """Read the forecast XML and return its rows by table.
+
+    It also returns the synoptic text and the date of the XML.
 
     All the rows carry `execution_id`, so the tables join. `now` is the time of the run,
     and the date of the XML is `now` if the XML has none or a bad one. A number that is
@@ -155,7 +157,9 @@ def find_alerts(periods: Sequence[Mapping[str, object]]) -> list[PrecipitationAl
 def format_alert_message(
     alerts: Sequence[PrecipitationAlert], synoptic: str | None = None, synoptic_date: date | None = None
 ) -> str:
-    """Return the Discord message of the alerts, grouped by day, with the synoptic text first if there is one.
+    """Return the Discord message of the alerts, grouped by day.
+
+    The synoptic text goes first, if there is one.
 
     Raise `ValueError` if there is no alert.
     """

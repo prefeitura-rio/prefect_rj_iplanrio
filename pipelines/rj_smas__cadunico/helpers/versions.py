@@ -8,7 +8,7 @@ from pipelines.rj_smas__cadunico.types import Record
 
 
 def order_key(row: Record) -> tuple[str, str]:
-    """Return the key that orders the rows: the type of record, then the layout version."""
+    """Return the key that orders the rows: the record type, then the layout version."""
     return row["reg"] or "", row["versao_layout_particao"] or ""
 
 
@@ -21,7 +21,7 @@ def sort_rows(rows: Sequence[Record], *, descending: bool = False) -> list[Recor
 
 
 def compare_versions(rows: Sequence[Record]) -> tuple[list[Record], list[str]]:
-    """Compare each version of a type of record with the one before it, in the order of the rows.
+    """Compare each version of a record type with the one before, in row order.
 
     The rows of a version get `versao_layout_anterior`, the version before it, and
     `coluna_esta_versao_anterior`, `True` if the column is in that version. The first
@@ -56,7 +56,9 @@ def compare_versions(rows: Sequence[Record]) -> tuple[list[Record], list[str]]:
 
 
 def spread_missing(compared: Sequence[Record], *, ascending: bool) -> list[Record]:
-    """Return the rows of the columns that a version lacks, once for it and once for each version on the far side.
+    """Return the rows of the columns that a version lacks.
+
+    One is for it and one for each version on the far side.
 
     These rows tell a version to select the column as `NULL`, so the versions can join
     in one query. The far side is the older versions when `ascending`, else the newer
@@ -81,7 +83,9 @@ def spread_missing(compared: Sequence[Record], *, ascending: bool) -> list[Recor
 
 
 def control_versions(rows: Sequence[Record]) -> tuple[list[Record], list[str]]:
-    """Return the layout rows with the control of their columns between versions, and the warnings.
+    """Return the layout rows with the control of their columns between versions.
+
+    Also return the warnings.
 
     A first pass goes from the oldest version to the newest, and a second one the other
     way. The result has every row once as it is, and the rows of the columns that a

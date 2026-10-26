@@ -10,7 +10,10 @@ from pipelines.rj_pic__disparos_email.types import Mail
 
 @final
 class Timeline:
-    """A clock and a pause that move together, with no real wait. It records the pauses."""
+    """A clock and a pause that move together, with no real wait.
+
+    It records the pauses.
+    """
 
     def __init__(self) -> None:
         """Store the arguments."""
@@ -29,7 +32,7 @@ class Timeline:
 
 @final
 class FakeDataRelay:
-    """The Data Relay: it answers with the replies in order, and keeps the requests that it saw."""
+    """The Data Relay: it answers with the replies in order, and keeps the requests."""
 
     def __init__(self, *replies: Response | Exception) -> None:
         """Store the arguments."""
@@ -38,7 +41,7 @@ class FakeDataRelay:
         self.client = AsyncClient(transport=MockTransport(self.handle))
 
     def handle(self, request: Request) -> Response:
-        """Answer a request with the next reply, or with a good one when none is left."""
+        """Answer a request with the next reply, or a good one when none is left."""
         self.requests.append(request)
         reply = self.replies.pop(0) if self.replies else Response(200, json={"success": True})
 

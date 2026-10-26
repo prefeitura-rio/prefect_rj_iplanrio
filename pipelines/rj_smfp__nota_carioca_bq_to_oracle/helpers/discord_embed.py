@@ -1,9 +1,10 @@
-"""Montagem pura do embed de progresso do Discord: estado (``RunView``) entra, ``dict`` do payload sai.
+"""Build the Discord progress embed from a `RunView`, as the payload `dict`.
 
-Este arquivo é idêntico nas duas pipelines da Nota Carioca (cada imagem Docker copia só
-a sua pasta), exceto pelo caminho do import de ``discord_format``. Não faz HTTP nem lê
-relógio: quem chama entrega a hora em ``RunView.updated_at``. Respeita os limites do
-Discord: descrição 4096, valor de campo 1024, 25 campos e 6000 caracteres no embed todo.
+This file is the same in both Nota Carioca pipelines (each Docker image copies only
+its own folder), except for the import path of `discord_format`. It makes no HTTP
+call and reads no clock: the caller gives the time in `RunView.updated_at`. It keeps
+the limits of Discord: 4096 for the description, 1024 for the value of a field, 25
+fields, and 6000 characters in the whole embed.
 """
 
 from datetime import timedelta
@@ -62,7 +63,10 @@ def status_color(status: RunStatus) -> int:
 
 
 def table_block(table: TableView, status: RunStatus) -> str:
-    """Monta o bloco de uma tabela: nome, etapa, barra, detalhes e ETA (só uma linha no sucesso)."""
+    """Build the block of a table: name, stage, bar, details and ETA.
+
+    On success it is one line only.
+    """
     icon = ITEM_ICON[table.status]
     if status is RunStatus.SUCCESS:
         return f"{icon} **{table.name}**" + (f" — {table.detail}" if table.detail else "")
@@ -88,14 +92,15 @@ def count_separator(left: CountSide, right: CountSide) -> str:
 
 
 def format_validation_line(line: ValidationLine) -> str:
-    """Formata a comparação de uma tabela em uma linha.
+    """Format the comparison of a table as one line.
 
-    ✅ quando todas as contagens existem e são iguais; ⬜ se nenhuma foi medida ainda; ❌
-    nos demais casos (diferem ou falta um lado, mostrado como ``—``). Entre dois lados:
-    ``=`` se iguais, ``≠`` se diferem, ``·`` se falta um.
+    ✅ when all the counts exist and are equal, ⬜ if none was measured yet, and ❌ in the
+    other cases (they differ, or a side is missing and shown as `—`). Between two sides:
+    `=` if equal, `≠` if different, `·` if one is missing.
 
-    :param line: Contagens da tabela.
-    :returns: Por exemplo ``✅ DPS · Oracle (SCN) 10 = BigQuery 10 · Σ VALOR iguais``.
+    ```text
+    ✅ DPS · Oracle (SCN) 10 = BigQuery 10 · Σ VALOR iguais
+    ```
     """
     icon = "✅" if line.is_valid else "❌" if line.has_counts else "⬜"
     chain = count_chain(line.sides)
@@ -118,10 +123,11 @@ def count_chain(sides: tuple[CountSide, ...]) -> str:
 
 
 def validation_summary(view: RunView) -> str:
-    """Resumo da validação para a mensagem final avulsa; vazio se não há linhas de validação.
+    """Summarize the validation for the final message, or give nothing without lines.
 
-    :param view: Estado final. :returns: Por exemplo `` · 3/3 tabelas validadas (linhas
-    iguais na origem e no destino)``.
+    ```text
+     · 3/3 tabelas validadas (linhas iguais na origem e no destino)
+    ```
     """
     total = len(view.validation)
     if not total:
@@ -174,10 +180,9 @@ def embed_size(embed: dict[str, object], fields: list[dict[str, object]]) -> int
 
 
 def build_payload(view: RunView) -> dict[str, object]:
-    """Monta o corpo do POST/PATCH do webhook, dentro dos limites do Discord.
+    """Build the body of the POST or PATCH of the webhook, inside the limits of Discord.
 
-    :param view: Estado a mostrar.
-    :returns: ``{"embeds": [...], "allowed_mentions": {"parse": []}}``; sem menções.
+    Return `{"embeds": [...], "allowed_mentions": {"parse": []}}`, which has no mention.
     """
     fields = build_fields(view)
     embed: dict[str, object] = {
@@ -197,17 +202,18 @@ def build_payload(view: RunView) -> dict[str, object]:
 
 
 def short_error(error: str | None) -> str:
-    """Resume o erro em uma linha curta, sem crases, para a mensagem final."""
+    """Shorten the error to one short line, with no backticks, for the final message."""
     text = " ".join((error or "sem detalhes").replace("`", "'").split())
     return clip(text, SHORT_ERROR_LIMIT)
 
 
 def build_announcement(view: RunView) -> dict[str, object]:
-    """Monta a mensagem final avulsa, de uma linha (uma mensagem nova notifica; a edição não).
+    """Build the final one-line message.
 
-    :param view: Estado final da execução.
-    :returns: ``{"content": ..., "allowed_mentions": {"parse": []}}``.
-    :raises ValueError: Se a execução ainda estiver em andamento.
+    A new message notifies, and an edit does not.
+
+    Return `{"content": ..., "allowed_mentions": {"parse": []}}`. Raise `ValueError` if
+    the run is still going.
     """
     name = f"**{view.flow_label}** (`{view.dataset_id}`)"
     link = f" · <{view.url}>" if view.url else ""

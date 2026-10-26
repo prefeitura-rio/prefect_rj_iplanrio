@@ -8,10 +8,16 @@ PROJECT_ID: Final = "rj-crm-registry"
 DATASET_ID: Final = "crm_whatsapp"
 SCORE_TABLE_ID: Final = "telefone_prob_high_delivery"
 EVALUATION_TABLE_ID: Final = "telefone_qualidade_modelo_avaliacao"
-"""The long table of the retrain: `data_execucao`, `versao`, `origem`, `algoritmo`, `metrica`, `valor`, `detalhe`."""
+"""The long table of the retrain.
+
+It has `data_execucao`, `versao`, `origem`, `algoritmo`, `metrica`, `valor` and
+`detalhe`."""
 MODELS_ROOT: Final = "gs://rj-crm-registry/modelos/qualidade_telefone"
 DRIVE_ROOT_ID: Final = "1h4wlF6mq9I7NmVCmR2yn6vycShDKoEpy"
-"""The folder `Relatórios de retreino` of the Drive. It needs Editor access for the service account."""
+"""The folder `Relatórios de retreino` of the Drive.
+
+It needs Editor access for the service account.
+"""
 DEFAULT_BATCH_SIZE: Final = 300_000
 """The phones that the scoring holds in memory at one time."""
 DEFAULT_TRIALS: Final = 30
@@ -58,7 +64,10 @@ DUMMY_GROUPS: Final = {
 """The dummies that `features_telefone.sql` makes, by the column they come from."""
 DUMMY_FEATURES: Final = tuple(column for columns in DUMMY_GROUPS.values() for column in columns)
 FLOAT_FEATURES: Final = ("taxa_sucesso_anterior", "concentracao_familiar", "pct_cpfs_menor_idade")
-"""The features that are fractions. Every other one is a count, a number of days or a dummy."""
+"""The features that are fractions.
+
+Every other one is a count, a number of days or a dummy.
+"""
 SENTINEL_FEATURES: Final = (
     "taxa_sucesso_anterior",
     "dias_desde_ultimo_disparo",
@@ -74,16 +83,19 @@ SENTINEL_FEATURES: Final = (
 FEATURES: Final = (*NUMERIC_FEATURES, *DUMMY_FEATURES)
 """The order that the model expects. The model predicts by position."""
 COVERAGE_FEATURES: Final = (*NUMERIC_FEATURES, *DUMMY_GROUPS)
-"""The names in the coverage report: each numeric feature, and each group of dummies as one."""
+"""The names in the coverage report: each numeric feature and each dummy group."""
 
 MIN_TRAINING_ROWS: Final = 10_000
 MIN_MINORITY_EXAMPLES: Final = 200
 MIN_EVENTS: Final = 1_000
 MAX_ROW_CHANGE: Final = 0.3
-"""How much the rows of a scoring can differ from the last one before the run refuses to publish."""
+"""How much a scoring can differ from the last one before the run refuses it."""
 MAX_P_VALUE: Final = 0.05
 MIN_SCORE_DEVIATION: Final = 0.01
-"""The least deviation of the raw score, in log-odds. A model with less has collapsed."""
+"""The least deviation of the raw score, in log-odds.
+
+A model with less has collapsed.
+"""
 
 TRAINING_FOLDS: Final = 5
 TEST_SIZE: Final = 0.2
@@ -102,7 +114,10 @@ SEARCH_KEYS: Final = (
 )
 """The hyperparameters that the search defines."""
 FIXED_PARAMETERS: Final = {"is_unbalance": True, "random_state": RANDOM_STATE, "n_jobs": 1, "verbose": -1}
-"""The LightGBM arguments outside the search. `is_unbalance` leaves the probability uncalibrated on purpose."""
+"""The LightGBM arguments outside the search.
+
+`is_unbalance` leaves the probability uncalibrated on purpose.
+"""
 PROBABILITY_QUANTILES: Final = (0.01, 0.25, 0.50, 0.75, 0.99)
 
 NEW_MODEL: Final = "modelo_novo"

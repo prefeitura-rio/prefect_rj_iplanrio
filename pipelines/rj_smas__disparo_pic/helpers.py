@@ -16,7 +16,10 @@ ITEMS: TypeAdapter[list[object]] = TypeAdapter(list[object])
 
 
 def build_query(folder: Path, campaign: Campaign, event_date: str) -> str:
-    """Return the query of the deliveries of `event_date`, from `queries/destinations.sql`, for the campaign HSM."""
+    """Return the query of the deliveries of `event_date` for the campaign HSM.
+
+    It comes from `queries/destinations.sql`.
+    """
     text = (folder / "queries" / "destinations.sql").read_text(encoding="utf-8")
 
     return text.format_map({"event_date_placeholder": event_date, "id_hsm_placeholder": campaign.id_hsm})
@@ -47,7 +50,7 @@ def read_event_date(approval: pl.DataFrame) -> str | None:
 
 
 def read_texts(frame: pl.DataFrame) -> list[str]:
-    """Return the first column of the result of the query: a JSON text for each destination."""
+    """Return the first column of the query result: a JSON text for each destination."""
     if frame.is_empty() or not frame.width:
         return []
 
@@ -55,7 +58,7 @@ def read_texts(frame: pl.DataFrame) -> list[str]:
 
 
 def read_test_texts(setting: str | None) -> list[str]:
-    """Return the destinations of the setting `DESTINATIONS`, a JSON list of objects, as one JSON text each.
+    """Return the destinations of `DESTINATIONS`, a JSON list, as JSON texts.
 
     Raise `ValueError` if the setting is empty: a test with no destination must not fall
     back to the people of the query.

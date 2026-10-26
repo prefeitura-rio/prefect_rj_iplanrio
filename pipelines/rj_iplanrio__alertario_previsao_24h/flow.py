@@ -25,7 +25,7 @@ async def rj_iplanrio__alertario_previsao_24h(
     dump_mode: DumpMode = "append",
     alerts: Alerts | None = None,
 ) -> None:
-    """Load the 24-hour forecast of the AlertaRio to BigQuery, and warn Discord of heavy rain.
+    """Load the AlertaRio 24-hour forecast to BigQuery, and warn of heavy rain.
 
     The XML gives four tables that share one execution id: `dim_quadro_sinotico` (one
     row for the run), `dim_previsao_periodo` (a forecast for each period),

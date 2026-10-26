@@ -1,16 +1,13 @@
 """Flow for rj_setur__turismo_fluxo_visitantes."""
 
 from prefect import flow
-from toolkit.telemetry import logger
 
-from pipelines.rj_setur__turismo_fluxo_visitantes.helpers import get_worksheet_ranges_config
 from pipelines.rj_setur__turismo_fluxo_visitantes.tasks import (
     extract_range_to_csv,
     get_google_credentials,
-    get_worksheet_info,
     list_spreadsheets_in_folder,
+    plan_extraction_jobs,
 )
-from pipelines.rj_setur__turismo_fluxo_visitantes.types import ExtractionJob
 from utils.constants import DEFAULT_CLOUD
 from utils.hooks import notify_failure
 from utils.tasks import publish_table_in_bq, upload_files_to_gcs
@@ -25,50 +22,12 @@ async def rj_setur__turismo_fluxo_visitantes(
     dataset_id: str = "brutos_turismo_fluxo_visitante",
     dump_mode: DumpMode = "overwrite",
 ) -> None:
-    """Read tourism visitor flow data from multiple Google Sheets and upload to BigQuery."""
+    """Read the tourism visitor flow of several Sheets and load it to BigQuery."""
     credentials = get_google_credentials()
-    worksheet_ranges_config = get_worksheet_ranges_config()
     spreadsheets = list_spreadsheets_in_folder(folder_id=folder_id, credentials=credentials)
-
-    if not spreadsheets:
-        logger.info("No spreadsheets found in folder")
-        return
-
-    extraction_jobs: list[ExtractionJob] = []
-
-    for spreadsheet in spreadsheets:
-        spreadsheet_url = spreadsheet["url"]
-        spreadsheet_name = spreadsheet["name"]
-        spreadsheet_year = spreadsheet["year"]
-        worksheets = get_worksheet_info(spreadsheet_url=spreadsheet_url, credentials=credentials)
-
-        for worksheet in worksheets:
-            worksheet_title = str(worksheet["title"])
-            worksheet_index = int(worksheet["index"])
-
-            if worksheet_title not in worksheet_ranges_config:
-                continue
-
-            ranges_config = worksheet_ranges_config[worksheet_title]
-
-            for cell_range, table_suffix in ranges_config:
-                job: ExtractionJob = {
-                    "spreadsheet_url": spreadsheet_url,
-                    "spreadsheet_name": spreadsheet_name,
-                    "spreadsheet_year": spreadsheet_year,
-                    "worksheet_index": worksheet_index,
-                    "worksheet_title": worksheet_title,
-                    "cell_range": cell_range,
-                    "table_suffix": table_suffix,
-                    "dataset_id": dataset_id,
-                    "dump_mode": dump_mode,
-                }
-                table_name = f"{worksheet_title}{'_' + table_suffix if table_suffix else ''}_{spreadsheet_year}"
-                logger.info(f"  Queued: {table_name} from {cell_range}")
-                extraction_jobs.append(job)
-
-    logger.info(f"\nPrepared {len(extraction_jobs)} extraction tasks")
-    logger.info("Starting sequential extraction...\n")
+    extraction_jobs = plan_extraction_jobs(
+        spreadsheets=spreadsheets, credentials=credentials, dataset_id=dataset_id, dump_mode=dump_mode
+    )
 
     for job in extraction_jobs:
         folder, table_id = extract_range_to_csv(job, credentials)
@@ -77,5 +36,3 @@ async def rj_setur__turismo_fluxo_visitantes(
             folder, table, bucket=cloud["bucket"], dump_mode=job["dump_mode"], source_format="csv"
         )
         await publish_table_in_bq(table, cloud)
-
-    logger.info(f"\n✓ All {len(extraction_jobs)} extractions completed successfully")

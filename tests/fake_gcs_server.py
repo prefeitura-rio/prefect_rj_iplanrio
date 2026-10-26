@@ -59,7 +59,10 @@ def byte_range(header: str, size: int) -> tuple[int, int]:
 
 
 def listing(blobs: Mapping[str, FakeBlob], bucket: str, query: Mapping[str, str]) -> bytes:
-    """Return the XML of the `list-type=2` answer, with the `delimiter` folded into prefixes."""
+    """Return the XML of the `list-type=2` answer.
+
+    `delimiter` is folded into prefixes.
+    """
     prefix, delimiter = query.get("prefix", ""), query.get("delimiter", "")
     after = query.get("start-after", "")
     contents: list[tuple[str, FakeBlob]] = []
@@ -208,7 +211,7 @@ def make_handler(state: FakeBucket) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
 
         def do_POST(self) -> None:
-            """Delete many objects with one request, as `obstore` does for a list of keys."""
+            """Delete many objects with one request, as `obstore` does."""
             bucket, _, query = self.target()
             size = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(size).decode() if size else ""

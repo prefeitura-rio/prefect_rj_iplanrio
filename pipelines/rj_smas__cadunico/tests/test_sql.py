@@ -25,7 +25,7 @@ def render(model: Model) -> str:
 
 
 def test_the_model_selects_each_version_of_the_text_line_and_joins_them(make_record: Callable[..., Record]) -> None:
-    """Write a select for each version, joined with `UNION ALL`, with the dbt config on top."""
+    """Write a select for each version, joined by `UNION ALL`, with the dbt config."""
     rows = control_versions(
         [
             make_record("a", version="7.01", particao="0701", posicao="1", tamanho="2", bigquery_type="INT64"),

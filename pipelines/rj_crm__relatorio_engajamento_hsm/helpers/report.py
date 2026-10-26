@@ -1,4 +1,4 @@
-"""The report: the categories, the margin of error, the Word document and the CSV files."""
+"""The report: categories, margin of error, Word document and CSV files."""
 
 from collections.abc import Sequence
 from csv import writer
@@ -38,7 +38,9 @@ NOT_JUDGED = "não avaliada"
 
 
 def wilson_margin(proportion: float, judged: int, size: int | None = None, z: float = Z_95) -> float:
-    """Return the half width of the Wilson interval (95%) of a proportion that `judged` observations gave.
+    """Return the half width of the 95% Wilson interval of a proportion.
+
+    `judged` is the number of observations.
 
     With `size`, the size of the category, the interval has the correction of a finite
     population. Without it a small category judged in full, a census with no sampling
@@ -56,19 +58,25 @@ def wilson_margin(proportion: float, judged: int, size: int | None = None, z: fl
 
 
 def precision_of(category: Category) -> float | None:
-    """Return the share of the judged conversations that the judge found right, or nothing if none was judged."""
+    """Return the share of judged conversations that the judge found right.
+
+    It gives nothing if none was judged.
+    """
     return category.correct / category.judged if category.judged else None
 
 
 def margin_of(category: Category) -> float | None:
-    """Return the margin of error of the precision of a category, or nothing if none was judged."""
+    """Return the margin of error of the precision of a category, or nothing."""
     precision = precision_of(category)
 
     return None if precision is None else wilson_margin(precision, category.judged, category.count)
 
 
 def describe_precision(category: Category) -> str:
-    """Return the precision of a category as `87% ± 5% (n=20)`, or that it was not judged."""
+    """Return the precision of a category as `87% ± 5% (n=20)`.
+
+    A category that was not judged says so.
+    """
     precision, margin = precision_of(category), margin_of(category)
 
     return (
@@ -79,7 +87,10 @@ def describe_precision(category: Category) -> str:
 def build_categories(
     items: Sequence[Classification], catalog: dict[str, str], examples_per_category: int
 ) -> list[Category]:
-    """Return a category for each name that the items have, the biggest first, with its numbers and examples."""
+    """Return a category for each item name, the biggest first.
+
+    Each has its numbers and examples.
+    """
     by_name: dict[str, list[Classification]] = {}
 
     for item in items:
@@ -152,7 +163,7 @@ def first_filled(values: Sequence[str | None]) -> str | None:
 
 
 def add_summary(document: WordDocument, report: Report, categories: Sequence[Category], hsm_text: str) -> None:
-    """Add the summary: the dispatches, the engagement, the conversations classified and judged, and the precision."""
+    """Add the summary: dispatches, engagement, conversations, judged and precision."""
     classified = len(report.items)
     judged = sum(category.judged for category in categories)
     correct = sum(category.correct for category in categories)
@@ -193,7 +204,7 @@ def add_notes(document: WordDocument, csv_names: Sequence[str]) -> None:
 
 
 def add_categories(document: WordDocument, categories: Sequence[Category]) -> None:
-    """Add the table of the categories and, for each, its description, its numbers and its examples."""
+    """Add the table of the categories and, for each, a description and examples."""
     document.add_heading("Categorias", level=1)
     table = document.add_table(rows=1, cols=4)
     table.style = "Light Grid Accent 2"
@@ -252,7 +263,9 @@ def add_examples(document: WordDocument, category: Category) -> None:
 def build_docx(
     report: Report, categories: Sequence[Category], sql: str, csv_names: Sequence[str], now: datetime
 ) -> bytes:
-    """Return the Word document of a report: summary, notes, the query used, the categories and their examples.
+    """Return the Word document of a report.
+
+    It has the summary, notes, the query, the categories and examples.
 
     `sql` is the query that read the conversations, with its values in place, for anyone
     to reproduce.
@@ -288,7 +301,10 @@ def to_csv(columns: Sequence[str], rows: Sequence[Sequence[str | int | float | N
 
 
 def categories_csv(categories: Sequence[Category]) -> bytes:
-    """Return the CSV of the categories: one line each, with the share, the judged count, the precision, its margin."""
+    """Return the CSV of the categories, one line each.
+
+    It has the share, judged count, precision and margin.
+    """
     rows = [
         (
             category.name,
@@ -306,7 +322,7 @@ def categories_csv(categories: Sequence[Category]) -> bytes:
 
 
 def detail_csv(items: Sequence[Classification]) -> bytes:
-    """Return the CSV of the conversations: one line each, with its category and the verdict of the judge."""
+    """Return the CSV of the conversations: one line with its category and verdict."""
     rows = [
         (
             item.conversation.session_id,
@@ -326,7 +342,7 @@ def detail_csv(items: Sequence[Classification]) -> bytes:
 
 
 def report_slug(hsm_name: str, reference: date) -> str:
-    """Return the prefix of the files of the report of an HSM for a day, that never has a time.
+    """Return the prefix of the report files of an HSM for a day, which has no time.
 
     It names the files, and it tells whether the report exists, so a run repeats with no
     duplicate.

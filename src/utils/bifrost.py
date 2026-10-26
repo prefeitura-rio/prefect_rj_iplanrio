@@ -27,11 +27,13 @@ JSON: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
 
 class BifrostError(RuntimeError):
-    """The gateway failed: a network error, an error status, an error in the body, or a body with no text."""
+    """The gateway failed: a network error, an error status or body, or no text."""
 
 
 def scale_output_tokens(batch_size: int) -> int:
-    """Return the limit of output tokens for a batch: it grows with the batch, and never goes under 8192.
+    """Return the output token limit of a batch.
+
+    It grows with the batch and never goes below 8192.
 
     Without it, a batch bigger than the one that was measured risks an answer cut in the
     middle, which is a JSON that does not parse and a batch that fails.
@@ -40,7 +42,7 @@ def scale_output_tokens(batch_size: int) -> int:
 
 
 def strip_code_fence(text: str) -> str:
-    """Return the text without the ```` ```json ```` fence that the model sometimes adds to a JSON answer."""
+    """Return the text without the json code fence that the model may add."""
     text = text.strip()
 
     return (
@@ -51,7 +53,7 @@ def strip_code_fence(text: str) -> str:
 
 
 def parse_json_list(text: str) -> list[dict[str, JsonValue]]:
-    """Return the objects of a JSON list in an answer of the model, without its code fence.
+    """Return the objects of a JSON list in a model answer, without its code fence.
 
     Anything in the list that is not an object is dropped. Raise `ValueError` if the
     answer is not a JSON list.
@@ -69,7 +71,10 @@ def parse_json_list(text: str) -> list[dict[str, JsonValue]]:
 
 @dataclass(frozen=True)
 class Answer:
-    """What the model said, and the tokens that the question and the answer cost, when the gateway tells them."""
+    """What the model said, and the tokens that the question and answer cost.
+
+    The gateway tells them when it can.
+    """
 
     text: str
     prompt_tokens: int | None = None
@@ -94,12 +99,12 @@ def parse_json_object(text: str) -> dict[str, JsonValue]:
 
 
 def read_count(value: JsonValue) -> int | None:
-    """Return a token count of the gateway as a whole number, or nothing if it is not one."""
+    """Return a gateway token count as a whole number, or nothing if it is not one."""
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 def read_answer(body: JsonValue) -> Answer:
-    """Return the answer of the gateway: the text of its parts that are not thoughts, and the usage.
+    """Return the gateway answer: the text of its non-thought parts, and the usage.
 
     Raise `BifrostError` if the body is an error or has no part.
     """
@@ -137,7 +142,10 @@ def read_text(body: JsonValue) -> str:
 
 @final
 class Bifrost:
-    """A client of the gateway for a model, that asks again with a growing wait when a question fails."""
+    """A gateway client for a model.
+
+    It asks again with a growing wait when a question fails.
+    """
 
     def __init__(
         self,
@@ -146,7 +154,7 @@ class Bifrost:
         wait: float = BIFROST_FIRST_WAIT_SECONDS,
         attempts: int = BIFROST_ATTEMPTS,
     ) -> None:
-        """Wrap a client with the address and the key of the gateway, the model, the first wait and the tries."""
+        """Wrap a client with the gateway address, key, model, first wait and tries."""
         self.client = client
         self.model = model
         self.wait = wait
@@ -201,7 +209,9 @@ class Bifrost:
         max_output_tokens: int = 512,
         thinking_budget: int = 0,
     ) -> Answer:
-        """Ask the model and return its answer with the usage, trying `attempts` times with a growing wait.
+        """Ask the model and return its answer with the usage.
+
+        It tries `attempts` times with a growing wait.
 
         The wait doubles between the tries.
 

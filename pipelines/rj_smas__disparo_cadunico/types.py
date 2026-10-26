@@ -29,7 +29,10 @@ class Campaign(HsmCampaign):
 
 @dataclass(frozen=True)
 class Audience:
-    """Who gets the reminder: the appointments `days_ahead` days ahead, with `processor`, and the whitelist share."""
+    """Who gets the reminder: the appointments `days_ahead` days ahead.
+
+    It also has the `processor` and the whitelist share.
+    """
 
     processor: str | None = PROCESSOR
     days_ahead: int = DAYS_AHEAD

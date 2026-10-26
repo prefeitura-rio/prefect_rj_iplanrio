@@ -52,7 +52,7 @@ def filters_for(engine: str, kind: str) -> list[str]:
 
 
 async def stage(name: str, rows: Rows, columns=(), **options: object) -> Table:
-    """Write a chunk of `orders` through the engine of `name`, and return the file as a table."""
+    """Write a chunk of `orders` through the engine of `name`, and return the table."""
     async with Engine.from_source(build_source(name, **options)) as engine:
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder) / "out.parquet"
@@ -62,7 +62,7 @@ async def stage(name: str, rows: Rows, columns=(), **options: object) -> Table:
 
 
 def canonical(table: Table) -> list[tuple[int, str | None, date | None, Decimal]]:
-    """Return the rows of a staged table in one form, sorted by id, whatever the engine."""
+    """Return the rows of a staged table in one form, sorted by id, for any engine."""
     found = []
 
     for row in table.to_pylist():

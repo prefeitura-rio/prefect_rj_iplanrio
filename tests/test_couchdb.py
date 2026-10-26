@@ -31,7 +31,7 @@ def test_the_bcadastro_columns_are_those_of_the_destination_without_the_airbyte_
 
 
 def test_a_page_of_cpf_documents_becomes_the_rows_of_the_destination(cpf_page, tmp_path, stage_page) -> None:
-    """Keep the id, the revision and the sequence of each person, and the document whole."""
+    """Keep the id, revision and sequence of each person, and the whole document."""
     path = tmp_path / "cpf.parquet"
 
     page = stage_page(cpf_page, path)
@@ -74,7 +74,7 @@ async def test_a_cnpj_document_keeps_its_partners_as_nested_json(cnpj_page, tmp_
 
 
 async def test_a_page_of_changes_keeps_the_sequence_and_the_deletions(cpf_changes_page, tmp_path, query_rows) -> None:
-    """Write the sequence of each change, and a deletion as the tombstone of its document."""
+    """Write the sequence of each change, and a deletion as a tombstone."""
     path = tmp_path / "changes.parquet"
     page = CouchDBChanges.model_validate_json(cpf_changes_page)
     items = [convert_change(change) for change in page.results]
@@ -96,7 +96,7 @@ async def test_a_page_of_changes_keeps_the_sequence_and_the_deletions(cpf_change
 
 
 async def test_a_couchdb_database_is_dumped_in_chunks_over_its_text_ids(fake_api, tmp_path) -> None:
-    """Cut the text ids by number, read what is outside them last, and keep each document."""
+    """Cut the text ids by number, read what is outside last, and keep each document."""
     event: dict[str, JsonValue] = {
         "_id": "CPF-20261020011517",
         "_rev": revision("CPF-20261020011517"),
@@ -136,7 +136,7 @@ async def test_a_couchdb_database_is_dumped_in_chunks_over_its_text_ids(fake_api
 
 
 async def test_the_options_of_the_database_choose_the_bcadastro_shape(monkeypatch) -> None:
-    """Build the source from the shape and the key width that the `prefect.yaml` names."""
+    """Build the source from the shape and key width that the `prefect.yaml` names."""
     seen = {}
 
     async def load(source, destination, dump_mode, options) -> None:
@@ -172,7 +172,7 @@ async def test_the_options_of_the_database_choose_the_bcadastro_shape(monkeypatc
     ],
 )
 async def test_the_batch_size_of_the_options_reaches_the_source(monkeypatch, kind, attribute) -> None:
-    """Merge `options.batch_size` into the options of the source that reads in chunks."""
+    """Merge `options.batch_size` into the options of the chunked source."""
     seen = {}
 
     async def load(source, *_) -> None:
@@ -228,7 +228,10 @@ async def test_the_concurrency_of_the_options_reaches_the_source(monkeypatch) ->
 
 
 async def test_a_database_that_reads_one_chunk_at_a_time_refuses_concurrency(monkeypatch) -> None:
-    """Raise for `concurrency` on postgres, which one DuckDB connection serves, before any read."""
+    """Raise for `concurrency` on postgres, which one DuckDB connection serves.
+
+    It raises before any read.
+    """
     monkeypatch.setenv("DB_USERNAME", "user")
     monkeypatch.setenv("DB_PASSWORD", "password")
     database: Database = {"type": "postgres", "host": "10.0.0.1", "port": 5432, "database": "db"}
@@ -255,7 +258,10 @@ async def test_a_database_that_reads_one_chunk_at_a_time_refuses_concurrency(mon
 async def test_a_bcadastro_pipeline_dumps_what_its_prod_schedule_says(
     monkeypatch, pipeline, database, key_width
 ) -> None:
-    """Build the dump from the parameters of the prod schedule: the database, the shape, the chunks and the table."""
+    """Build the dump from the parameters of the prod schedule.
+
+    They are the database, shape, chunks and more.
+    """
     seen = {}
 
     async def load(source, destination, dump_mode, options) -> None:

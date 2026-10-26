@@ -61,12 +61,10 @@ LOADED_TABLE_INMEMORY = "INMEMORY PRIORITY HIGH MEMCOMPRESS FOR QUERY HIGH DISTR
 
 @dataclass(frozen=True)
 class TablePartition:
-    """Partição declarada na tabela, como em ``all_tab_partitions``.
+    """A partition declared on the table, as in `all_tab_partitions`.
 
-    :param name: Nome da partição.
-    :param high_value: Limite da partição, no texto do dicionário
-        (por exemplo ``TO_DATE(' 2026-01-01 00:00:00', ...)``).
-    :param tablespace: Tablespace da partição.
+    `high_value` is the limit of the partition in the text of the dictionary, such as
+    `TO_DATE(' 2026-01-01 00:00:00', ...)`.
     """
 
     name: str
@@ -75,19 +73,18 @@ class TablePartition:
 
     @property
     def description(self) -> str:
-        """Descreve a partição em uma linha, para logs e diferenças."""
+        """Describe the partition in one line, for logs and differences."""
         return f"{self.name} ({self.high_value})" + (f" em {self.tablespace}" if self.tablespace else "")
 
 
 @dataclass(frozen=True)
 class Partitioning:
-    """Particionamento da tabela.
+    """The partitioning of the table.
 
-    :param kind: Tipo (``RANGE`` ou ``LIST``).
-    :param key_columns: Colunas da chave de partição, na ordem.
-    :param interval: Expressão do ``INTERVAL``, ou ``None`` se não houver.
-    :param partitions: Partições declaradas. As criadas automaticamente pelo
-        ``INTERVAL`` ficam de fora: o próprio Oracle as recria na carga.
+    `kind` is `RANGE` or `LIST`, and `key_columns` are the columns of the partition key,
+    in order. `interval` is the expression of `INTERVAL`, or `None` if there is none.
+    `partitions` are the declared partitions. Those that `INTERVAL` created on its own
+    stay out, because Oracle creates them again in the load.
     """
 
     kind: str
@@ -103,38 +100,36 @@ class Partitioning:
 
 
 class IndexExpression(str):
-    """Chave de índice que é uma expressão SQL (índice baseado em função), e não o nome de uma coluna.
+    """An index key that is a SQL expression, and not a column name.
 
-    O texto vem de ``all_ind_expressions.column_expression`` e entra no
-    ``CREATE INDEX`` como está. Compara e calcula o hash como uma ``str``; o tipo
-    só distingue a expressão de um nome de coluna, que recebe aspas.
+    It is a function-based index.
+
+    The text comes from `all_ind_expressions.column_expression`, and it goes in
+    `CREATE INDEX` as it is. It compares and hashes as a `str`, and the type only tells
+    the expression from a column name, which gets quotes.
     """
 
     @property
     def columns(self) -> set[str]:
-        """Colunas citadas na expressão, entre aspas duplas, fora de literais de texto."""
+        """List the columns that the expression names, outside text literals.
+
+        They are in double quotes.
+        """
         return set(QUOTED_IDENTIFIER_PATTERN.findall(STRING_LITERAL_PATTERN.sub("''", self)))
 
 
 @dataclass(frozen=True)
 class IndexDefinition:
-    """Índice de uma tabela, como em ``all_indexes`` e ``all_ind_columns``.
+    """An index of a table, as in `all_indexes` and `all_ind_columns`.
 
-    Grau de paralelismo, status e dono não entram na comparação entre índices.
-
-    :param name: Nome do índice.
-    :param index_type: Tipo no dicionário (``NORMAL``, ``BITMAP``,
-        ``FUNCTION-BASED NORMAL``...).
-    :param unique: Se o índice é único.
-    :param columns: Chaves do índice, na ordem: nomes de coluna ou, nas posições de
-        um índice baseado em função, :class:`IndexExpression`.
-    :param locality: ``LOCAL`` ou ``GLOBAL`` se o índice for particionado;
-        ``None`` se não for.
-    :param tablespace: Tablespace do índice (o padrão das partições, se for
-        particionado).
-    :param degree: Grau de paralelismo gravado no índice.
-    :param status: Status do índice (``VALID``, ``UNUSABLE``, ``N/A``...).
-    :param owner: Dono do índice.
+    The degree of parallelism, the status and the owner do not count when two indexes
+    are compared. `index_type` is the type in the dictionary (`NORMAL`, `BITMAP`,
+    `FUNCTION-BASED NORMAL`...). `columns` are the keys of the index, in order: column
+    names, or an `IndexExpression` in the positions of a function-based index.
+    `locality` is `LOCAL` or `GLOBAL` if the index is partitioned, and `None` if not.
+    `tablespace` is the tablespace of the index (the default of the partitions, if it is
+    partitioned). `degree` is the degree of parallelism that is stored in the index, and
+    `status` is its status (`VALID`, `UNUSABLE`, `N/A`...).
     """
 
     name: str
@@ -149,22 +144,19 @@ class IndexDefinition:
 
     @property
     def description(self) -> str:
-        """Descreve o índice em uma linha, sem o nome."""
+        """Describe the index in one line, without its name."""
         kind = " ".join(part for part in (self.locality, "UNIQUE" if self.unique else None, self.index_type) if part)
         return f"{kind} ({', '.join(self.columns)})" + (f" em {self.tablespace}" if self.tablespace else "")
 
 
 @dataclass(frozen=True)
 class TableLayout:
-    """Tablespace, particionamento, índices e In-Memory de uma tabela.
+    """The tablespace, partitioning, indexes and In-Memory of a table.
 
-    :param tablespace: Tablespace da tabela (o padrão das partições, se for
-        particionada).
-    :param partitioning: Particionamento, ou ``None`` se a tabela não for
-        particionada.
-    :param indexes: Índices da tabela.
-    :param inmemory: Cláusula ``INMEMORY`` da tabela (o padrão das partições, se
-        for particionada), ou ``None`` se ela não estiver no In-Memory.
+    `tablespace` is the tablespace of the table (the default of the partitions, if it is
+    partitioned). `partitioning` is `None` if the table is not partitioned. `inmemory`
+    is the `INMEMORY` clause of the table (the default of the partitions, if it is
+    partitioned), or `None` if it is not in the In-Memory.
     """
 
     tablespace: str | None
@@ -175,11 +167,11 @@ class TableLayout:
 
 @dataclass(frozen=True)
 class StructurePlan:
-    """Estrutura que a tabela carregada deve ter, derivada da original.
+    """The structure that the loaded table must have, derived from the original.
 
-    :param layout: Tablespace e particionamento da original, com os índices já
-        renomeados para a tabela carregada.
-    :param skipped_indexes: Índices da original que não são replicados.
+    `layout` is the tablespace and the partitioning of the original, with the indexes
+    already renamed for the loaded table. `skipped_indexes` are the indexes of the
+    original that are not copied.
     """
 
     layout: TableLayout

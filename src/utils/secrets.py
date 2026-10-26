@@ -69,7 +69,7 @@ async def read_secrets(client: AsyncClient, settings: InfisicalSettings, jwt: st
 
 
 def build_environment(current: Mapping[str, str], secrets: Mapping[str, str]) -> dict[str, str]:
-    """Return the environment of the command: the secrets under the variables of the job."""
+    """Return the command environment: the secrets under the job variables."""
     return {**secrets, **current}
 
 

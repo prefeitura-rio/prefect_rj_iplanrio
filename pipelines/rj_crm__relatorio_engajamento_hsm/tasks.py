@@ -67,7 +67,10 @@ from utils.utils import render_query
 
 @task(retries=2, retry_delay_seconds=30)
 async def read_dispatches_task(reference: date) -> list[Dispatch]:
-    """Return the dispatches that asked for a report on a day, with their campaign and start date."""
+    """Return the dispatches that asked for a report on a day.
+
+    Each has its campaign and start date.
+    """
     sql = render_query(__file__, "pending_dispatches", dispatches_table=DISPATCHES_TABLE)
     dispatches = await to_thread(bq.read_dispatches, sql, reference)
     logger.info("Dispatches with a report for %s: %d", reference, len(dispatches))
@@ -77,12 +80,15 @@ async def read_dispatches_task(reference: date) -> list[Dispatch]:
 
 @task
 async def report_exists_task(hsm_name: str, reference: date, root_id: str) -> bool:
-    """Tell whether the folder of the HSM already has the report of the day, so a repeat adds nothing."""
+    """Tell whether the HSM folder has the report of the day.
+
+    A repeat then adds nothing.
+    """
     return await to_thread(lambda: report_exists(connect(), root_id, hsm_name, reference))
 
 
 def conversations_sql(hsm_name: str, start: str, sources: str) -> str:
-    """Render the query of the conversations with the expressions that stand for the name, the date and the sources."""
+    """Render the conversations query with the name, date and source expressions."""
     return render_query(
         __file__,
         "extract_conversations",
@@ -97,7 +103,9 @@ def conversations_sql(hsm_name: str, start: str, sources: str) -> str:
 
 @task(retries=2, retry_delay_seconds=30)
 async def extract_task(dispatch: Dispatch) -> Extraction:
-    """Read the messages of the sessions that got the HSM since its start date, and build the conversations.
+    """Read the messages of the sessions that got the HSM, and build conversations.
+
+    It reads since the start date of the HSM.
 
     Only the sessions where the citizen answered make a conversation, and the totals
     count them all.
@@ -115,7 +123,10 @@ async def extract_task(dispatch: Dispatch) -> Extraction:
 async def ask_list(
     bifrost: Bifrost, prompt: str, max_tokens: int, step: str, batch: int
 ) -> list[dict[str, JsonValue]] | None:
-    """Ask the model and return the objects of its answer, or nothing, and log it, if the batch fails."""
+    """Ask the model and return the objects of its answer, or log and return nothing.
+
+    It does so when the batch fails.
+    """
     try:
         return parse_json_list(await bifrost.ask(prompt, max_output_tokens=max_tokens))
     except (BifrostError, ValueError) as error:
@@ -127,7 +138,9 @@ async def ask_list(
 async def classify_task(
     conversations: list[Conversation], model: str, limits: Limits
 ) -> tuple[list[Classification], dict[str, str]]:
-    """Discover the categories of the dispatch from a random sample, then classify every conversation.
+    """Discover the categories of the dispatch from a random sample.
+
+    Then classify every conversation.
 
     The discovery looks at the sample in batches and stops after 5 batches in a row with
     nothing new. It is the only step that adds a category. The classification only picks
@@ -194,7 +207,9 @@ async def classify_task(
 async def judge_task(
     items: list[Classification], catalog: dict[str, str], model: str, limits: Limits
 ) -> list[Classification]:
-    """Have a second call of the model audit a sample of the classifications, and return all of them with the verdicts.
+    """Have a second model call audit a sample of the classifications.
+
+    Return all of them with the verdicts.
 
     A category under `judge_all_below` conversations is judged in full, a larger one in
     `large_category_pct` percent.
@@ -238,7 +253,9 @@ async def judge_task(
 
 @task(retries=2, retry_delay_seconds=30)
 async def publish_task(report: Report, root_id: str, examples_per_category: int = DEFAULT_EXAMPLES) -> None:
-    """Build the Word report and the two CSV files of a dispatch, and publish them in the folder of its HSM.
+    """Build the Word report and two CSV files of a dispatch, and publish them.
+
+    They go in the folder of its HSM.
 
     The files are `<slug>.docx`, `categorias_<slug>.csv` and
     `classificacoes_<slug>.csv`.

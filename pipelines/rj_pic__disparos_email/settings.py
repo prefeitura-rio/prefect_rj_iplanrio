@@ -6,7 +6,7 @@ from utils.settings import DataRelaySettings
 
 
 class Settings(DataRelaySettings):
-    """The table of the recipients, the sender of the mail and the pace of the sending."""
+    """The table of the recipients, the mail sender and the pace of the sending."""
 
     BIGQUERY_PROJECT_ID: str = required_text()
     BIGQUERY_DATASET_ID: str = required_text()

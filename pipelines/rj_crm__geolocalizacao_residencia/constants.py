@@ -46,4 +46,4 @@ FALLBACK_STEPS: Final = (
     Step("locationiq", "LOCATIONIQ_API_KEY", 10, 1.1),
     Step("opencage", "OPENCAGE_API_KEY", 10, 1.1),
 )
-"""The services of the fallback, in the order that they run, each with the setting of its key."""
+"""The services of the fallback, in the order they run, with the key setting."""

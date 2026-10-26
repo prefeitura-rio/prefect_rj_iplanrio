@@ -28,7 +28,9 @@ async def rj_sms__sisreg_disparo_lembretes(
     dump_mode: DumpMode = "append",
     destinations: list[Recipient] | None = None,
 ) -> None:
-    """Send an SMS reminder to each patient with an appointment tomorrow, through the Wetalkie API.
+    """Send an SMS reminder to each patient with an appointment tomorrow.
+
+    It uses the Wetalkie API.
 
     The query of `queries/appointments.sql` gives one recipient for each appointment,
     with the phone and the `vars` of the template. A phone that comes twice gets one

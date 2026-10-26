@@ -44,7 +44,7 @@ def alerts_of(*items: tuple[date, str, str]) -> list[PrecipitationAlert]:
 
 
 def test_the_xml_gives_four_tables_that_share_the_execution_id() -> None:
-    """Read the periods, the zones and the tides, with the synoptic text and the date of the XML."""
+    """Read the periods, zones and tides, with the synoptic text and the date."""
     forecast = build_tables(XML, "run-1", NOW)
     tables = forecast["tables"]
 
@@ -209,7 +209,10 @@ def test_a_message_without_alerts_is_refused() -> None:
 def test_the_alert_goes_out_unless_a_rule_of_the_day_stops_it(
     stats: dict[str, int | None] | None, send: bool, reason: str
 ) -> None:
-    """Apply the duplicate, daily and interval rules in that order, with a limit of 2 and 4 hours."""
+    """Apply the duplicate, daily and interval rules in that order, with a limit.
+
+    The alert goes out unless a rule stops it.
+    """
     decided, why = decide_alert(stats, "abcdef123456", 2, 4)
 
     assert decided is send

@@ -186,7 +186,7 @@ def test_compare_partitions_accepts_identical_copy() -> None:
 
 
 def test_compare_partitions_flags_unpartitioned_missing_and_extra_partitions() -> None:
-    """Check that compare partitions flags unpartitioned missing and extra partitions."""
+    """Flag an unpartitioned table, and missing and extra partitions."""
     rows = compare_partitions(MONTHLY, None)
     assert rows[0] == ["-", "(particionamento)", "RANGE (DATA_COMPETENCIA_MUNICIPIO)", "sem partição", "DIVERGE"]
     assert count_divergences(rows) == 3
@@ -205,7 +205,7 @@ def index(name: str, degree: str = "1", status: str = "N/A", columns: tuple[str,
 
 
 def test_compare_indexes_requires_same_definition_usable_and_without_parallel_degree() -> None:
-    """Check that compare indexes requires same definition usable and without parallel degree."""
+    """Require the same definition, usable status and no parallel degree."""
     expected = [index("BQLOAD_IX1"), index("BQLOAD_IX2"), index("BQLOAD_IX3"), index("BQLOAD_IX4")]
     actual = [
         index("BQLOAD_IX1"),
@@ -260,7 +260,7 @@ def test_metric_specs_decode_raw_stored_as_hex_when_the_load_used_hex() -> None:
 
 
 def test_metric_specs_keep_base64_decoding_by_default_and_ignore_the_encoding_for_other_types() -> None:
-    """Check that metric specs keep base64 decoding by default and ignore the encoding for other types."""
+    """Keep base64 decoding by default, and ignore the encoding for other types."""
     raw = [field("pessoa_emitente", "STRING")]
     assert metric_specs(raw, {"PESSOA_EMITENTE": "RAW"}) == metric_specs(raw, {"PESSOA_EMITENTE": "RAW"}, "base64")
     text = [field("nome", "STRING")]

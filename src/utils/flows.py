@@ -59,7 +59,7 @@ async def load_records(
     merge: MergeSpec | None = None,
     parquet: bool = False,
 ) -> None:
-    """Load the records of a pipeline into a Delta table, and publish the BigQuery table.
+    """Load the records of a pipeline into Delta, and publish the BigQuery table.
 
     The records go through a temporary folder, as JSON lines or, with `parquet`, as a
     Parquet file that keeps a text such as `2026-10-22 20:00:00` as text. Without
@@ -175,7 +175,7 @@ async def dump_database(
     options: DatabaseDumpOptions | None = None,
     dbt: DbtRun | None = None,
 ) -> None:
-    """Dump a table or a native query of a database to a BigQuery table, without repeats.
+    """Dump a table or native query of a database to BigQuery, with no repeats.
 
     DuckDB reads the source one chunk at a time and writes a Delta table in the bucket.
     A chunk that did not change is never written again, so a rerun, or a retry after a

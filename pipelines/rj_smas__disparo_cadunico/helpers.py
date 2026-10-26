@@ -22,7 +22,9 @@ def today() -> date:
 
 
 def build_query(folder: Path, campaign: Campaign, audience: Audience, day: date) -> str | None:
-    """Return the query of the appointments, or nothing if its processor says that `day` is no day to run.
+    """Return the query of the appointments, or nothing if `day` is no day to run.
+
+    Its processor decides that.
 
     The query is `queries/destinations.sql`, with the HSM and the days ahead in its
     placeholders.
@@ -34,7 +36,7 @@ def build_query(folder: Path, campaign: Campaign, audience: Audience, day: date)
 
 
 def read_texts(frame: pl.DataFrame) -> list[str]:
-    """Return the first column of the result of the query: a JSON text for each destination."""
+    """Return the first column of the query result: a JSON text for each destination."""
     if frame.is_empty() or not frame.width:
         return []
 
@@ -42,7 +44,7 @@ def read_texts(frame: pl.DataFrame) -> list[str]:
 
 
 def read_test_texts(setting: str | None) -> list[str]:
-    """Return the destinations of the setting `DESTINATIONS`, a JSON list of objects, as one JSON text each.
+    """Return the destinations of `DESTINATIONS`, a JSON list, as JSON texts.
 
     Raise `ValueError` if the setting is empty: a test with no destination must not fall
     back to the people of the query.

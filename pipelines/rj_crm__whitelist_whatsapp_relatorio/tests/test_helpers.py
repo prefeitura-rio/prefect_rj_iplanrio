@@ -2,7 +2,10 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import pytest
+from httpx2 import Response
 
+from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers import discord as discord_module
+from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers import mailman as mailman_module
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.configuracao import ler_destinatarios
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.discord import Contexto, enviar, montar_mensagem
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.janela import (
@@ -11,6 +14,7 @@ from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.janela import (
     resolver,
     ultimo_corte,
 )
+from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.mailman import ConexaoDataRelay
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.ocorrencias import (
     Ocorrencia,
     descrever_ultima_ocorrencia,
@@ -99,7 +103,7 @@ def occurrences() -> list[Ocorrencia]:
 
 
 def test_the_urls_are_unique_counted_and_flattened_for_the_email() -> None:
-    """Keep the order of the first sight, count by frequency, and write a line for each URL."""
+    """Keep first-seen order, count by frequency, and write a line for each URL."""
     assert urls_distintas(occurrences()) == ["http://a", "http://b"]
     assert frequencias(occurrences()) == [{"url": "http://b", "total": 2}, {"url": "http://a", "total": 1}]
     assert para_template(occurrences())[0] == {"datahora": "01/09/2026 08:05", "url": "http://a", "id_passo": "1"}
@@ -193,3 +197,69 @@ def test_a_message_over_the_limit_of_discord_is_refused() -> None:
     """Raise before any request."""
     with pytest.raises(ValueError, match="excede"):
         enviar("http://hook", "x" * 2001)
+
+
+def stub_post(monkeypatch: pytest.MonkeyPatch, module: object, response: Response) -> list[dict[str, object]]:
+    """Replace `post` of a helper module with a stub that records each call.
+
+    The stub gives the response.
+    """
+    calls: list[dict[str, object]] = []
+
+    def post(url: str, **options: object) -> Response:
+        """Record the call."""
+        calls.append({"url": url, **options})
+
+        return response
+
+    monkeypatch.setattr(module, "post", post)
+
+    return calls
+
+
+def test_discord_gets_the_message_as_content_and_waits_for_the_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Post the content with `wait=true` to the webhook."""
+    calls = stub_post(monkeypatch, discord_module, Response(204))
+
+    enviar("http://hook", "oi", timeout=5)
+
+    assert calls == [{"url": "http://hook", "json": {"content": "oi"}, "params": {"wait": "true"}, "timeout": 5}]
+
+
+def test_discord_refuses_a_failed_post(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Raise with the status of the answer."""
+    stub_post(monkeypatch, discord_module, Response(500, text="boom"))
+
+    with pytest.raises(ValueError, match="500"):
+        enviar("http://hook", "oi")
+
+
+@pytest.mark.parametrize(
+    ("response", "message"),
+    [
+        pytest.param(Response(500, text="boom"), "500", id="a_failed_status_is_refused"),
+        pytest.param(Response(200, json={"success": False, "message": "no"}), "recusou", id="a_refusal_is_refused"),
+    ],
+)
+def test_the_mailman_refuses_a_failed_send(monkeypatch: pytest.MonkeyPatch, response: Response, message: str) -> None:
+    """Raise when the status or the body says that the send failed."""
+    stub_post(monkeypatch, mailman_module, response)
+
+    with pytest.raises(ValueError, match=message):
+        mailman_module.enviar(ConexaoDataRelay("http://relay", "key"), ["a@b.c"], "assunto", "<p>x</p>")
+
+
+def test_the_mailman_sends_the_html_with_the_key_and_the_recipients(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Post the body as HTML, with the key in the header."""
+    calls = stub_post(monkeypatch, mailman_module, Response(200, json={"success": True}))
+
+    mailman_module.enviar(ConexaoDataRelay("http://relay", "key", 7), ["a@b.c"], "assunto", "<p>x</p>")
+
+    assert calls == [
+        {
+            "url": "http://relay",
+            "headers": {"x-api-key": "key"},
+            "json": {"to_addresses": ["a@b.c"], "subject": "assunto", "body": "<p>x</p>", "is_html_body": True},
+            "timeout": 7,
+        }
+    ]

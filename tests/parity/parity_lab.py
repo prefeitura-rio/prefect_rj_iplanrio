@@ -66,7 +66,7 @@ def build_conn(name: str) -> DBConn:
 
 
 def build_source(name: str, origin: Origin | None = None, **options: object) -> Source:
-    """Return the source of an engine, reading `orders` unless another origin is given."""
+    """Return the source of an engine, reading `orders` unless given another origin."""
     entry = environment()[name]
     conn = build_conn(name)
     origin = origin or Table(str(entry["table"]))

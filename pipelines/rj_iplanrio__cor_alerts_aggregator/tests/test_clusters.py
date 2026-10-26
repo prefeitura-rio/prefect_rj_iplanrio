@@ -46,7 +46,10 @@ def test_the_alerts_of_another_type_or_far_away_form_other_clusters(make_alert: 
 
 
 def test_a_cluster_keeps_its_alerts_in_time_order_with_the_worst_severity(make_alert: AlertFactory) -> None:
-    """Order by time then id, take `critica` if any alert has it, and the first neighborhood."""
+    """Order by time then id, take `critica` if any alert has it.
+
+    The cluster also takes the worst severity.
+    """
     early = NOW - timedelta(minutes=30)
     alerts = [
         make_alert("b", created_at=NOW),

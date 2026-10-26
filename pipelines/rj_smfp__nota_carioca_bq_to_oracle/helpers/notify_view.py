@@ -1,12 +1,12 @@
-"""Visão da carga BigQuery → Oracle no Discord: do estado agregado (``RunState``) ao ``RunView`` do embed.
+"""Show the BigQuery to Oracle load in Discord: from `RunState` to `RunView`.
 
-Só funções puras.
+Only pure functions.
 
-Porcentagem geral (fixa, simples): dbt vale 20% (só com ``run_dbt``), exportação 5%,
-tabelas 70%, espera do In-Memory 4% e troca dos sinônimos 1%; os pesos dos passos ativos
-são normalizados para somar 100%. Entre as tabelas o peso é o volume exportado; dentro
-de uma tabela os pesos são fixos (``TABLE_WEIGHTS``: a carga SQL*Loader, medida pelos
-bytes, pesa 60%, e os índices, 20%).
+The overall percentage is fixed and simple: dbt counts 20% (only with `run_dbt`), the
+export 5%, the tables 70%, the wait for the In-Memory 4% and the swap of synonyms 1%.
+The weights of the active steps are normalized to sum 100%. Among the tables the
+weight is the volume exported. Inside a table the weights are fixed (`TABLE_WEIGHTS`:
+the SQL*Loader load, measured by bytes, counts 60%, and the indexes count 20%).
 """
 
 from collections.abc import Mapping
@@ -46,18 +46,18 @@ MIN_STEP_ELAPSED_SECONDS = 60.0
 
 @dataclass(frozen=True)
 class TableState:
-    """Estado de uma tabela.
+    """The state of a table.
 
-    :param name: Nome da tabela no BigQuery. :param weight: Peso entre as tabelas (bytes
-    exportados); 1 se desconhecido. :param step: Etapa atual; ``None`` se a tabela ainda
-    não começou. :param slot: Slot A/B que recebe a carga. :param load: Último andamento
-    do SQL*Loader. :param indexes_done: Índices já criados. :param indexes_total:
-    Índices a criar. :param rows: Linhas validadas, na tabela concluída. :param
-    physical_table: Tabela física do Oracle que recebe a carga (``BQLOAD_<tabela>_A`` ou
-    ``_B``). :param bq_rows: Linhas da tabela no BigQuery, na foto exportada. :param
-    loaded_rows: Linhas carregadas pelo SQL*Loader. :param oracle_rows: Linhas contadas
-    no Oracle depois da carga, na validação. :param seconds: Duração da tabela, na
-    concluída. :param failed: Se a tabela falhou.
+    `name` is the name in BigQuery. `weight` is the weight among the tables (the bytes
+    exported), 1 if unknown. `step` is the current stage, and `None` if the table has
+    not started. `slot` is the A or B slot that receives the load, and `load` is the
+    last SQL*Loader progress. `indexes_done` and `indexes_total` count the indexes.
+    `rows` is the validated rows of a finished table. `physical_table` is the Oracle
+    table that receives the load (`BQLOAD_<table>_A` or `_B`). `bq_rows` is the rows of
+    the table in the exported BigQuery snapshot, `loaded_rows` the rows that SQL*Loader
+    loaded, and `oracle_rows` the rows counted in Oracle after the load, in the
+    validation. `seconds` is the duration of a finished table, and `failed` says whether
+    it failed.
     """
 
     name: str
@@ -78,18 +78,18 @@ class TableState:
 
 @dataclass(frozen=True)
 class RunState:
-    """O que a execução sabe num instante.
+    """What the run knows at a moment.
 
-    :param dataset_id: Dataset de origem. :param run_name: Nome do flow run. :param url:
-    Link do flow run. :param status: Estado da execução. :param mode: ``full`` ou
-    ``synonyms_only``. :param run_dbt: Se o dbt faz parte da execução. :param step:
-    Passo atual. :param tables: Estado de cada tabela, na ordem. :param sessions:
-    Sessões do SQL*Loader pedidas. :param elapsed_seconds: Tempo desde o início. :param
-    updated_at: Hora da atualização. :param current_table: Tabela em processamento.
-    :param dbt_seconds: Duração do dbt, quando concluído. :param error: Mensagem do
-    erro, na falha. :param failed_step: Passo em que a execução parou (falha ou
-    cancelamento). :param step_elapsed_seconds: Há quanto tempo a etapa atual (passo e,
-    nas tabelas, etapa da tabela) está em curso.
+    `dataset_id` is the source dataset, `run_name` the name of the flow run, and `url`
+    its link. `status` is the state of the run, `mode` is `full` or `synonyms_only`, and
+    `run_dbt` says whether dbt is part of the run. `step` is the current step, and
+    `tables` has the state of each table, in order. `sessions` are the SQL*Loader
+    sessions that were asked for. `elapsed_seconds` is the time since the start, and
+    `updated_at` the time of the update. `current_table` is the table in process.
+    `dbt_seconds` is the duration of dbt, when it is done. `error` is the message of a
+    failure, and `failed_step` the step where the run stopped (failure or cancel).
+    `step_elapsed_seconds` is how long the current stage (the step and, for the tables,
+    the stage of the table) has been going on.
     """
 
     dataset_id: str
@@ -111,24 +111,32 @@ class RunState:
 
 
 def stage_key(state: RunState) -> tuple[Step, str | None, TableStep | None]:
-    """Identifica a etapa exibida em "Etapa atual": o passo, a tabela em processamento e a etapa dela.
+    """Identify the stage that "Etapa atual" shows.
 
-    Enquanto a chave não muda, a etapa é a mesma e o relógio de ``step_elapsed_seconds``
-    segue correndo.
+    It is the step, the table in process and its stage.
+
+    While the key does not change, the stage is the same and the clock of
+    `step_elapsed_seconds` keeps running.
     """
     table = state.tables.get(state.current_table or "")
     return state.step, state.current_table, table.step if table is not None else None
 
 
 def active_steps(state: RunState) -> list[Step]:
-    """Passos que existem nesta execução: só a troca em ``synonyms_only``; o dbt só com ``run_dbt``."""
+    """List the steps of this run.
+
+    Only the swap runs in `synonyms_only`, and dbt only with `run_dbt`.
+    """
     if state.mode == "synonyms_only":
         return [Step.SWAP]
     return [step for step in Step if step is not Step.DBT or state.run_dbt]
 
 
 def table_fraction(table: TableState) -> float:
-    """Progresso de uma tabela de 0 a 1, pelos pesos das etapas e, na carga, pelos bytes enviados."""
+    """Return the progress of a table from 0 to 1, by the stage weights.
+
+    The load stage uses the bytes sent.
+    """
     if table.step is None:
         return 0.0
     if table.step is TableStep.DONE:
@@ -199,10 +207,12 @@ def table_view(table: TableState) -> TableView:
 
 
 def validation_line(table: TableState) -> ValidationLine:
-    """Compara as linhas do BigQuery (foto), do SQL*Loader e do Oracle (tabela física) com o que já se sabe.
+    """Compare the rows of BigQuery, SQL*Loader and Oracle with what is known.
 
-    :param table: Estado da tabela. :returns: A linha de validação; o lado Oracle leva o
-    nome da tabela física quando conhecido.
+    The BigQuery rows are those of the snapshot.
+
+    Return the validation line. The Oracle side carries the name of the physical table
+    when it is known.
     """
     oracle_label = f"Oracle ({table.physical_table})" if table.physical_table else "Oracle"
     sides = (
@@ -221,7 +231,10 @@ def stage_text(state: RunState, step: Step) -> str:
 
 
 def stage_elapsed(state: RunState) -> str:
-    """Sufixo ``· há 3min 05s`` da etapa em curso; vazio abaixo de 1 min, fora da execução e com a tabela concluída."""
+    """Return the suffix `· há 3min 05s` of the current stage.
+
+    It is empty below 1 minute, outside the run, and when the table is done.
+    """
     table = state.tables.get(state.current_table or "")
     concluded = state.step is Step.TABLES and table is not None and table.step is TableStep.DONE
     if state.status is not RunStatus.RUNNING or concluded or state.step_elapsed_seconds < MIN_STEP_ELAPSED_SECONDS:
@@ -261,7 +274,12 @@ def facts(state: RunState) -> tuple[Fact, ...]:
 
 
 def overall_eta(state: RunState) -> float | None:
-    """Fim da carga SQL*Loader: o que falta da tabela atual e o volume das pendentes, na taxa medida (sem índices)."""
+    """Return the end of the SQL*Loader load.
+
+    It counts what is left of the table and the pending volume.
+
+    It uses the measured rate and counts no indexes.
+    """
     table = state.tables.get(state.current_table or "")
     if state.step is not Step.TABLES or table is None or table.step is not TableStep.LOAD or table.load is None:
         return None
@@ -273,10 +291,10 @@ def overall_eta(state: RunState) -> float | None:
 
 
 def build_view(state: RunState) -> RunView:
-    """Converte o estado da execução no que o embed mostra.
+    """Turn the state of the run into what the embed shows.
 
-    :param state: Estado agregado, com o tempo decorrido e a hora da atualização.
-    :returns: A visão pronta para ``build_payload``.
+    `state` is the aggregate state, with the elapsed time and the time of the update.
+    Return the view that `build_payload` takes.
     """
     step = state.failed_step if state.failed_step is not None else state.step
     return RunView(

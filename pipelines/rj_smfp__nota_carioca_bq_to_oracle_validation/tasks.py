@@ -1,4 +1,4 @@
-"""Tasks da validação das tabelas carregadas no Oracle pela rj_smfp__nota_carioca_bq_to_oracle."""
+"""Tasks that validate the tables loaded in Oracle by the Nota Carioca pipeline."""
 
 from prefect import task
 from prefect.cache_policies import NO_CACHE
@@ -14,13 +14,13 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.types import Option
 
 @task
 def list_tables_task(source: Source) -> list[str]:
-    """Return the tables that were asked for or, with none, every table of the dataset."""
+    """Return the tables that were asked for or, with none, all of the dataset."""
     return source.table_ids or list_tables(project=source.project, dataset_id=source.dataset_id)
 
 
 @task(cache_policy=NO_CACHE)
 def log_session_task() -> None:
-    """Log the user, the database and the version that the validation is connected to."""
+    """Log the user, database and version that the validation is connected to."""
     logger.info("Sessão no Oracle\n" + describe_session(read_oracle_config()))
 
 
@@ -52,7 +52,9 @@ def validate_table_task(source: Source, table_id: str, options: Options) -> Outc
 
 @task(cache_policy=NO_CACHE)
 def summarize_task(results: list[Outcome], options: Options) -> None:
-    """Log the summary of every table, and fail the run if a table differs and `fail_on_divergence` is on.
+    """Log the summary of each table.
+
+    Fail if a table differs and `fail_on_divergence` is on.
 
     Raise `ValueError` for a divergence.
     """

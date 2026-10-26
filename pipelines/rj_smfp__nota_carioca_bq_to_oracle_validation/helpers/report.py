@@ -1,4 +1,4 @@
-"""Comparação entre BigQuery e Oracle e formatação do relatório de validação, sem I/O."""
+"""Compare BigQuery with Oracle and format the validation report, with no I/O."""
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -23,12 +23,11 @@ METRIC_LABELS = {
 
 @dataclass(frozen=True)
 class MetricSpec:
-    """Métrica agregada de uma coluna, calculada nos dois bancos.
+    """An aggregate metric of a column, computed in both databases.
 
-    :param column: Nome da coluna no BigQuery.
-    :param kind: Tipo da métrica (``nao_nulos``, ``soma``, ``minimo_num`` etc.).
-    :param bigquery_expression: Expressão SQL no BigQuery.
-    :param oracle_expression: Expressão SQL no Oracle.
+    `column` is the name of the column in BigQuery. `kind` is the kind of the metric
+    (`nao_nulos`, `soma`, `minimo_num` and so on). `bigquery_expression` and
+    `oracle_expression` are the SQL expressions in each database.
     """
 
     column: str
@@ -40,22 +39,17 @@ class MetricSpec:
 def metric_specs(
     bq_fields: list[dict[str, str]], target_types: dict[str, str], raw_text_encoding: RawTextEncoding = "base64"
 ) -> list[MetricSpec]:
-    """Define as métricas por coluna que comparam o conteúdo das duas tabelas.
+    """Define the metrics for each column that compare the content of the two tables.
 
-    Só entram as colunas carregadas (as que existem na tabela original). Strings
-    vazias do BigQuery viram ``NULL`` no Oracle, então os não-nulos de ``STRING``
-    desconsideram ``''`` no BigQuery. Datas guardadas como texto no BigQuery são
-    convertidas como na carga antes de comparar mínimo e máximo. ``RAW`` guardado em
-    base64 ou em hexadecimal no BigQuery (``raw_text_encoding``, o mesmo da carga)
-    é decodificado, e comprimento (em bytes), mínimo e máximo (em hexadecimal) são
-    comparados com os do Oracle. Nenhuma métrica expõe valores de linhas de texto,
-    apenas contagens e comprimentos.
-
-    :param bq_fields: Campos do schema do BigQuery (``name``, ``type``, ``mode``).
-    :param target_types: Tipo base no Oracle de cada coluna carregada, pelo nome
-        em maiúsculas.
-    :param raw_text_encoding: Codificação do texto das colunas ``RAW`` no BigQuery.
-    :returns: Métricas na ordem das colunas do BigQuery.
+    Only the loaded columns count (those that the original table has). An empty string
+    of BigQuery becomes `NULL` in Oracle, so the non-null count of a `STRING` ignores
+    `''` in BigQuery. A date stored as text in BigQuery is converted as in the load
+    before the minimum and the maximum are compared. A `RAW` stored in base64 or in
+    hexadecimal in BigQuery (`raw_text_encoding`, the same as the load) is decoded, and
+    its length (in bytes), minimum and maximum (in hexadecimal) are compared with those
+    of Oracle. No metric exposes the values of text rows, only counts and lengths.
+    `target_types` is the base type in Oracle of each loaded column, by its name in
+    upper case. Return the metrics in the order of the BigQuery columns.
     """
     specs = []
     for field in bq_fields:
@@ -123,14 +117,10 @@ def metric_specs(
 
 
 def normalize_metric(kind: str, value: object) -> str | None:
-    """Normaliza o valor de uma métrica para comparação e exibição.
+    """Normalize the value of a metric for the comparison and the display.
 
-    Números viram decimal sem zeros à direita, para que ``1.50`` e ``1.5`` sejam
-    iguais.
-
-    :param kind: Tipo da métrica.
-    :param value: Valor retornado pelo banco.
-    :returns: Valor normalizado, ou ``None`` se o banco retornou nulo.
+    A number becomes a decimal with no trailing zeros, so `1.50` and `1.5` are equal.
+    Return the normalized value, or `None` if the database returned null.
     """
     if value is None or value == "":
         return None
@@ -143,12 +133,10 @@ def normalize_metric(kind: str, value: object) -> str | None:
 
 
 def compare_metrics(specs: list[MetricSpec], bq_values: list[object], oracle_values: list[object]) -> list[list[str]]:
-    """Compara as métricas calculadas nos dois bancos.
+    """Compare the metrics computed in the two databases.
 
-    :param specs: Métricas, na mesma ordem dos valores.
-    :param bq_values: Valores calculados no BigQuery.
-    :param oracle_values: Valores calculados no Oracle.
-    :returns: Linhas ``[coluna, métrica, BigQuery, Oracle, status]``.
+    `specs` are in the same order as the values. Return the rows `[column, metric,
+    BigQuery, Oracle, status]`.
     """
     rows = []
     for spec, bq_value, oracle_value in zip(specs, bq_values, oracle_values, strict=True):
@@ -160,20 +148,17 @@ def compare_metrics(specs: list[MetricSpec], bq_values: list[object], oracle_val
 
 
 def count_divergences(rows: list[list[str]]) -> int:
-    """Conta as linhas de uma comparação cujo status é divergente.
+    """Count the rows of a comparison whose status is a divergence.
 
-    :param rows: Linhas cuja última coluna é o status.
-    :returns: Número de divergências.
+    The last column of each row is its status.
     """
     return sum(1 for row in rows if row[-1] == STATUS_DIVERGE)
 
 
 def format_text_table(headers: list[str], rows: list[list[str]]) -> str:
-    """Formata linhas como tabela de texto com colunas alinhadas.
+    """Format rows as a text table with aligned columns, ready for the log.
 
-    :param headers: Cabeçalhos das colunas.
-    :param rows: Linhas, com o mesmo número de colunas dos cabeçalhos.
-    :returns: Tabela pronta para o log.
+    Each row has as many columns as the headers.
     """
     table = [headers, *rows]
     widths = [max(len(str(row[index])) for row in table) for index in range(len(headers))]
@@ -186,10 +171,6 @@ def format_text_table(headers: list[str], rows: list[list[str]]) -> str:
 
 
 def format_key_values(pairs: list[tuple[str, object]]) -> str:
-    """Formata pares chave-valor alinhados, um por linha.
-
-    :param pairs: Pares ``(rótulo, valor)``.
-    :returns: Texto pronto para o log.
-    """
+    """Format aligned key and value pairs, one on each line, ready for the log."""
     width = max(len(label) for label, _ in pairs)
     return "\n".join(f"{label.ljust(width)} : {'-' if value is None else value}" for label, value in pairs)

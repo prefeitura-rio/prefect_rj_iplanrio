@@ -9,12 +9,15 @@ DEFAULT_PROJECT_ID: Final = "rj-crm-registry"
 DEFAULT_DATASET_ID: Final = "brutos_salesforce"
 SP_TZ: Final = ZoneInfo("America/Sao_Paulo")
 WINDOW_FORMAT: Final = "%Y-%m-%dT%H:%M:%SZ"
-"""The format of the windows. The `Z` is the way the source writes its time, not a zone."""
+"""The format of the windows.
+
+The `Z` is the way the source writes its time, not a zone.
+"""
 QUERY_PATH: Final = "/services/data/v67.0/ssot/query-sql"
 CRM_QUERY_PATH: Final = "/services/data/v67.0/query"
 WORKLOAD: Final = "BatchQuery"
 PAGE_SIZE: Final = 1000
-"""Rows of a Data Cloud page, under the 1400 to 1700 that one response was seen to hold."""
+"""Rows of a Data Cloud page, under the 1400 to 1700 that one response held."""
 MAX_ROWS: Final = 5_000_000
 """A stop for a pagination that does not end."""
 TIMEOUT: Final = 120
@@ -95,4 +98,7 @@ FEEDS: Final = (
         utc_window=True,
     ),
 )
-"""The tables to extract, in the order that they run. The Agentforce ones go session, interaction, step, message."""
+"""The tables to extract, in the order that they run.
+
+The Agentforce ones go session, interaction, step, message.
+"""

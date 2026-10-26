@@ -21,7 +21,9 @@ PRIORITIES: Final = {"alta": "02", "critica": "01"}
 """The COR priority of each severity."""
 DEFAULT_PRIORITY: Final = "02"
 TEST_PREFIX: Final = "[TESTE] "
-"""The prefix of the type of the events that go to the COR API, until the COR confirms them."""
+"""The prefix of the type of the events that go to the COR API.
+
+It stays until the COR confirms them."""
 EVENT_TYPE_LIMIT: Final = 500
 SHEET_TAB: Final = "alertas_agregados"
 SHEET_COLUMNS: Final = {
@@ -38,7 +40,9 @@ SHEET_COLUMNS: Final = {
     "event_id": "id_evento",
     "alert_ids": "ids_alertas",
 }
-"""The columns of the sheet, with the name of each in the aggregated table, in the order of the sheet."""
+"""The columns of the sheet, in the order of the sheet.
+
+Each one has its name in the aggregated table."""
 SHEET_TIME_FORMAT: Final = "%d/%m/%Y %H:%M:%S"
 CONCURRENCY_LIMIT: Final = "cor-alerts-aggregator"
 REPORTS_SHOWN: Final = 5

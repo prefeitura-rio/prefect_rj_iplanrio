@@ -1,4 +1,4 @@
-"""Leitura, somente consulta, das tabelas no Oracle e no BigQuery para o relatório de validação."""
+"""Read the tables in Oracle and BigQuery, query only, for the validation report."""
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -52,18 +52,16 @@ from utils.utils import render_query
 
 @dataclass(frozen=True)
 class ValidationRequest:
-    """Tabela a validar e opções da validação.
+    """The table to validate and the options of the validation.
 
-    :param project: Projeto do BigQuery.
-    :param dataset_id: Dataset de origem.
-    :param table_id: Tabela de origem; a tabela original no Oracle tem o mesmo nome.
-    :param template_schema: Schema da tabela original no Oracle.
-    :param excluded_columns: Colunas da original que a carga não cria (além das
-        ``ROWID`` ausentes no BigQuery, excluídas automaticamente).
-    :param compute_column_metrics: Se calcula as métricas por coluna, que leem a
-        tabela inteira nos dois bancos.
-    :param raw_text_encoding: Codificação do texto das colunas ``RAW`` no BigQuery
-        (``base64`` ou ``hex``), a mesma usada na carga.
+    `project`, `dataset_id` and `table_id` name the BigQuery source, and the original
+    table in Oracle has the same name. `template_schema` is the schema of the original
+    table in Oracle. `excluded_columns` are the columns of the original that the load
+    does not create (besides the `ROWID` columns that BigQuery lacks, which are excluded
+    on their own). `compute_column_metrics` says whether to compute the metrics for each
+    column, which read the whole table in both databases. `raw_text_encoding` is the
+    encoding of the text of the `RAW` columns in BigQuery (`base64` or `hex`), the one
+    that the load uses.
     """
 
     project: str
@@ -77,12 +75,11 @@ class ValidationRequest:
 
 @dataclass
 class TableReport:
-    """Resultado da validação de uma tabela.
+    """The result of the validation of one table.
 
-    :param source: Tabela de origem no BigQuery.
-    :param target: Tabela de destino no Oracle.
-    :param divergences: Número total de divergências encontradas.
-    :param sections: Seções de texto do relatório, na ordem de exibição.
+    `source` is the table in BigQuery, `target` is the table in Oracle, and
+    `divergences` is the total number of divergences found. `sections` are the text
+    sections of the report, in the order they show.
     """
 
     source: str
@@ -93,14 +90,13 @@ class TableReport:
 
 @dataclass
 class SwapState:
-    """Situação da troca A/B de uma tabela.
+    """The state of the A and B swap of a table.
 
-    :param table: Tabela física a validar: a em uso ou, antes da primeira troca,
-        a tabela única antiga.
-    :param slot: Sufixo (``A`` ou ``B``) da tabela em uso, ou ``None``.
-    :param bigquery_changed: Se o BigQuery mudou depois da foto carregada.
-    :param divergences: Divergências encontradas nos sinônimos.
-    :param sections: Seções de texto do relatório.
+    `table` is the physical table to validate: the one in use or, before the first swap,
+    the old single table. `slot` is the suffix (`A` or `B`) of the table in use, or
+    `None`. `bigquery_changed` says whether BigQuery changed after the loaded snapshot.
+    `divergences` and `sections` are the divergences found in the synonyms and the text
+    sections of the report.
     """
 
     table: str
@@ -111,13 +107,11 @@ class SwapState:
 
 
 def swap_state(cursor: oracledb.Cursor, schema: str, base: str, bigquery_modified: datetime) -> SwapState:
-    """Descreve os sinônimos, a tabela física em uso e a anterior.
+    """Describe the synonyms, the physical table in use and the previous one.
 
-    :param cursor: Cursor de uma conexão aberta.
-    :param schema: Schema das tabelas físicas.
-    :param base: Nome estável da tabela (o dos sinônimos).
-    :param bigquery_modified: Última alteração atual da tabela no BigQuery.
-    :returns: Tabela a validar e seção da troca.
+    `base` is the stable name of the table (the one of the synonyms), and
+    `bigquery_modified` is the current last change of the table in BigQuery. Return the
+    table to validate and the section of the swap.
     """
     synonyms = read_synonyms(cursor, schema, base)
     try:
@@ -178,11 +172,9 @@ def swap_state(cursor: oracledb.Cursor, schema: str, base: str, bigquery_modifie
 
 
 def validate_table(config: OracleConfig, request: ValidationRequest) -> TableReport:  # noqa: PLR0915
-    """Compara a tabela carregada no Oracle com a tabela original e com o BigQuery.
+    """Compare the table loaded in Oracle with the original table and with BigQuery.
 
-    :param config: Configuração da conexão com o Oracle.
-    :param request: Tabela a validar e opções.
-    :returns: Relatório com as seções de texto e o total de divergências.
+    Return the report with the text sections and the total of divergences.
     """
     base = oracle_table_name(request.table_id)
     template_name = f"{request.template_schema}.{validate_identifier(request.table_id)}"

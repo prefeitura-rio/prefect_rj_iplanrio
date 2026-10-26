@@ -15,7 +15,7 @@ from utils.tasks import request_json
 
 @task
 async def fetch_appointments_task(target_date: date) -> list[dict[str, JsonValue]]:
-    """Fetch the appointments of a date from the Datametrica API, through the proxy of Brazil."""
+    """Fetch the appointments of a date from the Datametrica API, via a Brazil proxy."""
     settings = Settings()
     url = (
         settings.DATAMETRICA_URL
@@ -38,5 +38,5 @@ async def fetch_appointments_task(target_date: date) -> list[dict[str, JsonValue
 
 @task
 async def trigger_dispatch_task(parameters: dict[str, JsonValue]) -> None:
-    """Start the dispatch flow of the Cadastro Único reminders, without waiting for it."""
+    """Start the dispatch flow of the Cadastro Único reminders, without waiting."""
     await arun_deployment(name=DISPATCH_DEPLOYMENT, parameters=parameters, timeout=0)

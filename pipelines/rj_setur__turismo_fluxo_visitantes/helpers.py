@@ -1,6 +1,15 @@
-import re
+"""Helpers of rj_setur__turismo_fluxo_visitantes."""
 
+import re
+from collections.abc import Mapping, Sequence
+
+import gspread
+from google.auth.credentials import Credentials
+from toolkit.telemetry import logger
 from unidecode import unidecode
+
+from pipelines.rj_setur__turismo_fluxo_visitantes.types import ExtractionJob
+from utils.types import DumpMode
 
 
 def extract_year_from_filename(filename: str) -> str:
@@ -36,7 +45,7 @@ def normalize_to_bigquery_table_name(name: str) -> str:
 
 
 def get_worksheet_ranges_config() -> dict[str, list[tuple[str, str | None]]]:
-    """Get configuration mapping worksheet names to their cell ranges and table suffixes."""
+    """Return the config that maps worksheet names to cell ranges and table suffixes."""
     return {
         "Dados atrativos": [
             ("A4:N17", "visitantes"),
@@ -59,4 +68,45 @@ def get_google_api_scopes() -> list[str]:
     return [
         "https://www.googleapis.com/auth/drive.readonly",
         "https://www.googleapis.com/auth/spreadsheets.readonly",
+    ]
+
+
+def read_worksheet_titles(spreadsheet_url: str, credentials: Credentials) -> list[str]:
+    """Read the titles of the worksheets of a spreadsheet, in the order of its tabs."""
+    sheet = gspread.authorize(credentials).open_by_url(spreadsheet_url)
+    titles = [worksheet.title for worksheet in sheet.worksheets()]
+
+    logger.info(f"Found {len(titles)} worksheets in spreadsheet: {titles}")
+
+    return titles
+
+
+def build_extraction_jobs(
+    spreadsheet: Mapping[str, str],
+    titles: Sequence[str],
+    ranges: Mapping[str, Sequence[tuple[str, str | None]]],
+    dataset_id: str,
+    dump_mode: DumpMode,
+) -> list[ExtractionJob]:
+    """Build one job for each range that the config has for the worksheets.
+
+    They are the worksheets of one spreadsheet.
+
+    A worksheet that the config does not list gives no job. The index of a worksheet is
+    the position of its title.
+    """
+    return [
+        ExtractionJob(
+            spreadsheet_url=spreadsheet["url"],
+            spreadsheet_name=spreadsheet["name"],
+            spreadsheet_year=spreadsheet["year"],
+            worksheet_index=index,
+            worksheet_title=title,
+            cell_range=cell_range,
+            table_suffix=table_suffix,
+            dataset_id=dataset_id,
+            dump_mode=dump_mode,
+        )
+        for index, title in enumerate(titles)
+        for cell_range, table_suffix in ranges.get(title, [])
     ]

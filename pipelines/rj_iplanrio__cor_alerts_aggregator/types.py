@@ -28,7 +28,10 @@ class Alert(TypedDict):
 
 @dataclass(frozen=True)
 class Cluster:
-    """The alerts of one type that lie within the radius of each other, from the oldest alert on."""
+    """The alerts of one type that lie within the radius of each other.
+
+    They run from the oldest alert on.
+    """
 
     cluster_id: int
     alert_type: str

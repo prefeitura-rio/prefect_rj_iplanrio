@@ -52,7 +52,10 @@ def test_a_cpf_column_and_a_locale_are_left_as_they_are() -> None:
 def test_a_frame_that_the_log_cannot_take_is_refused(
     data: dict[str, list[str | None]], campaign: str, message: str
 ) -> None:
-    """Raise `ValueError` for a missing column, a campaign with no name and an empty value in the first rows."""
+    """Raise `ValueError` for a missing column, unnamed campaign or empty value.
+
+    The empty value is checked in the first rows.
+    """
     with pytest.raises(ValueError, match=message):
         validate_frame(pl.DataFrame(data), campaign)
 
@@ -122,7 +125,10 @@ def test_a_frame_with_no_others_column_always_has_alternatives() -> None:
 
 
 def test_the_retry_takes_the_failed_cpfs_with_the_next_phone(make_frame: Frames) -> None:
-    """Pick the CPFs that failed and give each the phone `attempt` of its list, dropping those with none."""
+    """Pick the CPFs that failed and give each the phone `attempt` of its list.
+
+    CPFs with none are dropped.
+    """
     frame = make_frame(("1", "a", ["x1", "x2"]), ("2", "b", ["y1"]), ("3", "c", ["z1", "z2"]))
 
     second = retry_frame(frame, {"1", "2"}, 2)
@@ -180,7 +186,10 @@ def test_the_filter_of_the_dispatched_does_nothing_for_an_empty_table_or_a_missi
 def test_the_filters_of_a_try(
     make_frame: Frames, make_dispatched: Frames, audience: Audience, attempt: int, kept: list[str]
 ) -> None:
-    """Drop who got the campaign before, and who got any campaign today, by the rule of the try."""
+    """Drop who got the campaign before, and who got any campaign today.
+
+    The rule of the try decides.
+    """
     frame = make_frame(("1", "p1", None), ("2", "p2", None), ("3", "p3", None), ("4", "p4", None))
     dispatched = make_dispatched(
         ("1", "p1", "campaign", "2026-07-15"),
@@ -214,7 +223,10 @@ def test_the_frame_is_cut_in_batches(size: int | None, sizes: list[int]) -> None
 
 
 def test_the_file_of_a_batch_has_the_columns_that_were_asked_for(make_frame: Frames) -> None:
-    """Keep `telefone`, `SubscriberKey` and the columns asked for, drop the control columns, and add `LOCALE`."""
+    """Keep `telefone`, `SubscriberKey` and the asked columns, and add `LOCALE`.
+
+    The control columns are dropped.
+    """
     frame = make_frame(("111", "5521999", ["x"]), nome=["Ana"], interno=["x"])
 
     csv = build_csv(frame, "whatsapp_teste", ["nome"], ";", NOW)
@@ -248,7 +260,7 @@ def test_a_column_of_lists_is_written_as_json_in_the_file() -> None:
 
 
 def test_the_log_has_the_cpf_as_subscriber_key_and_the_other_columns_as_json(make_frame: Frames) -> None:
-    """Write a row for each destination, with the partition of the day of the dispatch."""
+    """Write one row for each destination, with the partition of the dispatch day."""
     frame = make_frame(("111", "5521999", ["x"]), nome=["Ana"])
 
     rows = build_log(frame, "2026-07-17 09:30:05", "campanha")

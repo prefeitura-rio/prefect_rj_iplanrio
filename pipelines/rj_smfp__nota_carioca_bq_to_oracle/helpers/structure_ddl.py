@@ -1,4 +1,4 @@
-"""DDL da estrutura física: cláusulas de partição e armazenamento e comandos de índice."""
+"""The DDL of the physical structure: partitions, storage and index commands."""
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import (
     IndexDefinition,
@@ -9,19 +9,14 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models impor
 
 
 def quote(name: str) -> str:
-    """Delimita um identificador com aspas duplas.
-
-    :param name: Identificador já validado.
-    :returns: Identificador entre aspas.
-    """
+    """Wrap an identifier that was already validated in double quotes."""
     return f'"{name}"'
 
 
 def partitioning_clause(partitioning: Partitioning) -> str:
-    """Monta a cláusula ``PARTITION BY`` do ``CREATE TABLE``.
+    """Build the `PARTITION BY` clause of `CREATE TABLE`.
 
-    :param partitioning: Particionamento da tabela.
-    :returns: Fragmento SQL com uma partição por linha.
+    It is a fragment with one partition on each line.
     """
     keys = ", ".join(quote(name) for name in partitioning.key_columns)
     header = f"PARTITION BY {partitioning.kind} ({keys})"
@@ -37,13 +32,11 @@ def partitioning_clause(partitioning: Partitioning) -> str:
 
 
 def storage_clause(layout: TableLayout) -> str:
-    """Monta as cláusulas de armazenamento do ``CREATE TABLE``.
+    """Build the storage clauses of `CREATE TABLE`.
 
-    Sem a cláusula ``INMEMORY`` no layout, a tabela é criada com ``NO INMEMORY``,
-    mesmo que o tablespace tenha ``INMEMORY`` como padrão.
-
-    :param layout: Tablespace, particionamento e In-Memory da tabela.
-    :returns: Fragmento SQL que segue a lista de colunas.
+    Without the `INMEMORY` clause in the layout, the table is created with `NO
+    INMEMORY`, even if the tablespace has `INMEMORY` as its default. Return the SQL
+    fragment that follows the list of columns.
     """
     clauses = [f"TABLESPACE {quote(layout.tablespace)}"] if layout.tablespace else []
     clauses.append(layout.inmemory or "NO INMEMORY")
@@ -53,13 +46,10 @@ def storage_clause(layout: TableLayout) -> str:
 
 
 def index_statement_parts(index: IndexDefinition, parallel_degree: int) -> dict[str, str]:
-    """Monta os trechos variáveis do ``CREATE INDEX``.
+    """Build the variable parts of `CREATE INDEX`.
 
-    :param index: Índice a criar.
-    :param parallel_degree: Grau de paralelismo da criação.
-    :returns: ``kind`` (``UNIQUE``, ``BITMAP`` ou vazio), ``columns`` (colunas
-        entre aspas e expressões como estão) e ``options`` (tablespace, ``LOCAL``
-        e ``PARALLEL``).
+    Return `kind` (`UNIQUE`, `BITMAP` or empty), `columns` (the columns in quotes and
+    the expressions as they are) and `options` (the tablespace, `LOCAL` and `PARALLEL`).
     """
     kind = "UNIQUE" if index.unique else ("BITMAP" if index.index_type == "BITMAP" else "")
     options = [f"TABLESPACE {quote(index.tablespace)}"] if index.tablespace else []
@@ -74,10 +64,13 @@ def index_statement_parts(index: IndexDefinition, parallel_degree: int) -> dict[
 
 
 def describe_partitioning(partitioning: Partitioning | None) -> str:
-    """Descreve o particionamento com o número de partições declaradas.
+    """Describe the partitioning with the number of declared partitions.
 
-    :param partitioning: Particionamento, ou ``None``.
-    :returns: Por exemplo ``RANGE (DATA) com 61 partições`` ou ``sem partição``.
+    ```text
+    RANGE (DATA) com 61 partições
+    ```
+
+    Return `sem partição` for `None`.
     """
     if partitioning is None:
         return "sem partição"

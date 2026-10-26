@@ -66,7 +66,7 @@ from utils.records import write_json_lines
 from utils.types import DatabaseDumpOptions, DumpMode, DumpOptions, Read
 
 READABLE = {"timestampNtz", "columnMapping", "deletionVectors"}
-"""The reader features that BigQuery supports, with reader version 3 as the most it reads."""
+"""The reader features that BigQuery supports, up to reader version 3."""
 
 BIGQUERY_TYPES = {
     "long": "INTEGER",
@@ -139,14 +139,14 @@ class FakeTable:
 
     @property
     def schema(self) -> dict[str, str]:
-        """Return the BigQuery type of each column, from the schema of the Delta log now."""
+        """Return the BigQuery type of each column, from the Delta log schema now."""
         fields = loads(DeltaTable(self.uri).schema().to_json())["fields"]
 
         return {field["name"]: bigquery_type(field["type"]) for field in fields}
 
 
 class FakeBigQuery:
-    """BigQuery over Delta tables, with the schema read from the Delta log on every query.
+    """BigQuery over Delta tables, with the schema read from the log each query.
 
     It refuses what the real BigQuery refused: a Delta table without a connection, a
     folder with no Delta log, and a protocol that it cannot read.
@@ -228,7 +228,7 @@ class ConcurrentFilesSource:
 
 @dataclass
 class ConcurrentFilesEngine(Engine):
-    """An engine that reads the files of its source through DuckDB, in `workers` chunks."""
+    """An engine that reads its source files through DuckDB, in `workers` chunks."""
 
     source_type: ClassVar[type[Source]] = ConcurrentFilesSource
 
@@ -305,7 +305,10 @@ class ProbedFilesSourceV2(ProbedFilesSource):
 
 @dataclass
 class ProbedFilesEngine(Engine):
-    """An engine that reads local files through DuckDB, and probes with canned tokens."""
+    """An engine that reads local files through DuckDB.
+
+    It probes with canned tokens.
+    """
 
     source_type: ClassVar[type[Source]] = ProbedFilesSource
 
@@ -314,7 +317,7 @@ class ProbedFilesEngine(Engine):
 
     @override
     async def probe(self, rows: Rows, known: int | None, probe: Probe) -> bool:
-        """Take the canned token of the chunk, and download unless it is the known one."""
+        """Take the canned token of the chunk, and download unless it is known."""
         key = rows.chunk.key if rows.chunk else "all"
         self.source.probes.append(key)
         self.token = self.source.tokens.get(key)
@@ -406,7 +409,10 @@ def store() -> MemoryStore:
 
 @pytest.fixture(scope="session")
 def fake_gcs() -> Iterator[FakeGcs]:
-    """Serve a fake GCS, and point `deltalake` (environment) and `obstore` (settings) at it."""
+    """Serve a fake GCS, and point `deltalake` and `obstore` at it.
+
+    `deltalake` uses the environment, and `obstore` the settings.
+    """
     server = FakeGcs()
 
     with pytest.MonkeyPatch.context() as patch:
@@ -522,7 +528,9 @@ class FakeOracleError(Exception):
 
 
 class FakeOracle:
-    """An Oracle connection that describes canned columns and answers each read with `rows_for`.
+    """An Oracle connection that describes canned columns and answers each read.
+
+    `rows_for` answers the reads.
 
     It records every read. `snapshot_error` fails the read of the system change number,
     and `read_errors` fail the next chunks that are read as of one.
@@ -533,7 +541,7 @@ class FakeOracle:
         columns: Sequence[tuple[str, str, int | None, int | None]],
         rows_for: Callable[[str, Sequence[object]], Table],
     ) -> None:
-        """Start with the description of the columns and the function that answers a read."""
+        """Start with the description of the columns and the read function."""
         self.columns = [self.column(*column) for column in columns]
         self.description = self.columns
         self.rows_for = rows_for
@@ -568,7 +576,10 @@ class FakeOracle:
         """Leave the cursor."""
 
     def parse(self, sql: str) -> None:
-        """Describe a statement: the system change number has one column, and a read has the table's."""
+        """Describe a statement: the change number has one column.
+
+        A read has the columns of the table.
+        """
         if self.snapshot_error is not None and ("v$database" in sql or "DBMS_FLASHBACK" in sql):
             raise DatabaseError(FakeOracleError(self.snapshot_error))
         self.description = [self.column("scn", "DB_TYPE_NUMBER", 18, 0)] if '"scn"' in sql else self.chosen(sql)
@@ -579,7 +590,7 @@ class FakeOracle:
     def fetch_df_batches(
         self, sql: str, params: Sequence[object], size: int, requested_schema: Schema
     ) -> Iterator[Table]:
-        """Record the size of a read, fail if asked to, and yield what `rows_for` answers."""
+        """Record the read size, fail if asked to, and yield what `rows_for` answers."""
         if '"scn"' in sql:
             self.scn_reads += 1
             yield arrow_table({"scn": arrow_array([4242], arrow_int64())})
@@ -603,7 +614,7 @@ def fake_oracle(monkeypatch: pytest.MonkeyPatch) -> Callable[[FakeOracle], FakeO
     """Return a function that makes the Oracle source connect to a fake."""
 
     def install(connection: FakeOracle) -> FakeOracle:
-        """Replace `Oracle.connect` with one that yields the fake, and close it on exit."""
+        """Replace `Oracle.connect` with one that yields the fake, closed on exit."""
 
         @asynccontextmanager
         async def connect(_: DBConn) -> AsyncGenerator[Oracle]:
@@ -620,7 +631,7 @@ def fake_oracle(monkeypatch: pytest.MonkeyPatch) -> Callable[[FakeOracle], FakeO
 
 
 UPDATE_SEQ = "616823122-g1AAAAKTeJzLYWBgEMhgTmHgzcvPy09JdcjLz8gvLskBCjPlsQBJhgdA6v___--zkph8Eo_iUJpkACST7IHqQMr"
-"""An `update_seq` in the form of the real instance: a number, a dash and opaque text."""
+"""An `update_seq` like the real instance: a number, a dash and opaque text."""
 
 PEOPLE = {
     272: ("JOSÉ AUGUSTO DE SÁ", "MARIA DA CONCEIÇÃO DE SÁ"),
@@ -631,7 +642,7 @@ PEOPLE = {
 
 
 def revision(key: str) -> str:
-    """Return a revision as CouchDB writes it: a number, a dash and 32 hexadecimal digits."""
+    """Return a revision as CouchDB writes it: a number, a dash and 32 hex digits."""
     return f"1-{md5(key.encode(), usedforsecurity=False).hexdigest()}"
 
 
@@ -669,7 +680,7 @@ def cpf_document(number: int) -> dict[str, JsonValue]:
 
 
 def cnpj_document(number: int) -> dict[str, JsonValue]:
-    """Return a company of `chcnpj_bcadastros` with two partners, as the real ones are."""
+    """Return a company of `chcnpj_bcadastros` with two partners, as the real ones."""
     key = f"{number:08d}"
 
     return {
@@ -768,7 +779,7 @@ def changes_page(changes: Sequence[tuple[int, Mapping[str, JsonValue]]], pending
 
 @pytest.fixture
 def cpf_changes_page() -> bytes:
-    """Return a page of `_changes` of `chcpf_bcadastros`: two updates and one deletion."""
+    """Return a page of `_changes` of `chcpf_bcadastros`: two updates and a deletion."""
     erased = {"_id": "00000008001", "_rev": f"2-{revision('00000008001')[2:]}", "_deleted": True}
 
     return changes_page([(2, cpf_document(272)), (4, cpf_document(353)), (12, erased)], pending=0)
@@ -806,7 +817,7 @@ class SimulatedCloud:
         await publish(destination, self.project, f"{self.project}.us.connection")
 
     def read(self, destination: Destination) -> DataFrame:
-        """Return the rows that the fake BigQuery returns, with the columns it detected."""
+        """Return the rows that the fake BigQuery returns, with the detected columns."""
         detected = self.bigquery.tables[destination.table(self.project)]
         return cast("DataFrame", from_arrow(DeltaTable(detected.uri).to_pyarrow_table(columns=list(detected.schema))))
 
@@ -821,7 +832,9 @@ class SimulatedCloud:
 
 @pytest.fixture(scope="module")
 def cloud(fake_gcs: FakeGcs, fake_bigquery: type[FakeBigQuery], read_gs_uri) -> Iterator[SimulatedCloud]:
-    """Return the simulated cloud, where `deltalake`, `obstore` and BigQuery reach the fakes.
+    """Return the simulated cloud, where the libraries reach the fakes.
+
+    The libraries are `deltalake`, `obstore` and BigQuery.
 
     `Destination.uri` is `gcs://` (OpenDAL), which has no setting for a fake endpoint,
     so it reads `gs://` here.
@@ -854,7 +867,7 @@ def capture():
     """Provide the `capture` helper."""
 
     async def capture(destination: Destination, folder, records: list[dict[str, JsonValue]], moment: datetime) -> None:
-        """Write the records as JSON lines, and add them to the table as the capture of a moment."""
+        """Write the records as JSON lines, and add them as the capture of a moment."""
         (folder / "records.json").unlink(missing_ok=True)
         write_json_lines(records, folder)
         values = Files(f"{folder}/**/*.json", "json")
@@ -868,7 +881,7 @@ def stage_page():
     """Provide the `stage_page` helper."""
 
     def stage_page(page: bytes, path: Path) -> CouchDBAllDocs:
-        """Write a page of `_all_docs` as the bcadastro source writes it, and return the page."""
+        """Write a page of `_all_docs` as the bcadastro source does, and return it."""
         parsed = CouchDBAllDocs.model_validate_json(page)
 
         with ParquetWriter(path, BCADASTRO.columns) as writer:
@@ -898,7 +911,7 @@ def dump_oracle():
     """Provide the `dump_oracle` helper."""
 
     async def dump_oracle(uri: Path, read: Read, **options: Unpack[DatabaseDumpOptions]) -> None:
-        """Dump an Oracle read to a local Delta table, with the batch size as the flow gives it."""
+        """Dump an Oracle read to a local Delta table, with the flow batch size."""
         conn = DBConn("h", 1521, "SVC", "u", "p")
         given: dict[str, int] = {"batch_size": options["batch_size"]} if "batch_size" in options else {}
         origin = read_request("oracle", read, "chunks" in options)
@@ -1037,7 +1050,10 @@ def naive():
 
 @pytest.fixture(scope="module")
 def delta_reader() -> DuckDBPyConnection:
-    """Return a DuckDB connection with the delta extension, an independent reader of the log."""
+    """Return a DuckDB connection with the delta extension, a log reader.
+
+    It is independent of our code.
+    """
     connection = duckdb_connect()
     try:
         connection.execute("INSTALL delta")

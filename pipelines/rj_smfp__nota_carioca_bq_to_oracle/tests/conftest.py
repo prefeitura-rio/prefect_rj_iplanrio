@@ -10,9 +10,11 @@ def silence(message: str) -> None:
 
 @pytest.fixture(autouse=True)
 def no_real_discord(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Nenhum teste fala com o Discord de verdade, mesmo que o webhook esteja no ambiente de quem roda.
+    """Keep every test from talking to the real Discord.
 
-    Também não consulta a API do Prefect atrás do Secret block do webhook.
+    It holds even if the webhook is in the environment.
+
+    It also does not ask the Prefect API for the Secret block of the webhook.
     """
     monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
     monkeypatch.setattr(discord, "info", silence)

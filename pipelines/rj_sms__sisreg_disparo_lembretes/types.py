@@ -39,7 +39,7 @@ class Dispatch:
 
 @dataclass(frozen=True)
 class Outcome:
-    """What went out: the rows of the batches that the API took, and the reason that a batch failed, if one did."""
+    """What went out: the rows of the batches the API took, and why a batch failed."""
 
     rows: list[Row] = field(default_factory=list)
     error: str | None = None

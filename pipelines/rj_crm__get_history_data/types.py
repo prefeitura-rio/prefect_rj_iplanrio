@@ -17,7 +17,7 @@ class Extension:
 
 @dataclass(frozen=True)
 class Field:
-    """A column of a Data Extension: its name, its type and whether it is a primary key."""
+    """A column of a Data Extension: its name, type and whether it is a primary key."""
 
     name: str
     type: str
@@ -26,7 +26,10 @@ class Field:
 
 @dataclass(frozen=True)
 class Extraction:
-    """What the extraction of a Data Extension gave: its records and its columns, or the error that stopped it."""
+    """What the extraction of a Data Extension gave.
+
+    It has the records and columns, or the error that stopped it.
+    """
 
     name: str
     records: list[dict[str, JsonValue]] = field(default_factory=list)

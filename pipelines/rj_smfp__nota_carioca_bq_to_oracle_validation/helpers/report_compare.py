@@ -1,4 +1,4 @@
-"""Comparação de colunas, partições, índices, sinônimos e permissões entre BigQuery e Oracle."""
+"""Compare columns, partitions, indexes, synonyms and grants of BigQuery and Oracle."""
 
 import re
 
@@ -20,10 +20,13 @@ DATE_BOUND_PATTERN = re.compile(r"^TO_DATE\('\s*([0-9-]+ [0-9:]+)'")
 
 
 def describe_column(column: OracleColumn | None) -> str:
-    """Descreve tipo e nulidade de uma coluna como no ``CREATE TABLE``.
+    """Describe the type and the nullability of a column as in `CREATE TABLE`.
 
-    :param column: Coluna, ou ``None`` se ausente.
-    :returns: Por exemplo ``VARCHAR2(14 BYTE) NOT NULL``, ou ``(ausente)``.
+    ```text
+    VARCHAR2(14 BYTE) NOT NULL
+    ```
+
+    Return `(ausente)` if the column is `None`.
     """
     if column is None:
         return "(ausente)"
@@ -37,14 +40,11 @@ def describe_column(column: OracleColumn | None) -> str:
 def compare_columns(
     template: list[OracleColumn], actual: list[OracleColumn], bq_types: dict[str, str]
 ) -> list[list[str]]:
-    """Compara, posição a posição, a tabela original com a tabela carregada.
+    """Compare the original table with the loaded one, position by position.
 
-    Nome, ordem, tipo, tamanho e ``NOT NULL`` precisam ser iguais.
-
-    :param template: Colunas da tabela original, na ordem dela.
-    :param actual: Colunas da tabela carregada, na ordem dela.
-    :param bq_types: Tipo no BigQuery de cada coluna, pelo nome em maiúsculas.
-    :returns: Linhas ``[#, coluna, tipo BigQuery, original, carregada, status]``.
+    The name, order, type, size and `NOT NULL` must be equal. `bq_types` is the BigQuery
+    type of each column, by its name in upper case. Return the rows `[#, column,
+    BigQuery type, original, loaded, status]`.
     """
     rows = []
     for index in range(max(len(template), len(actual))):
@@ -67,21 +67,23 @@ def compare_columns(
 
 
 def short_bound(high_value: str) -> str:
-    """Encurta o limite de uma partição por data para exibição.
+    """Shorten the limit of a date partition for display.
 
-    :param high_value: Limite no texto do dicionário.
-    :returns: ``< AAAA-MM-DD HH:MI:SS`` para limites ``TO_DATE``; o texto
-        original nos demais casos.
+    Return `< YYYY-MM-DD HH:MI:SS` for a `TO_DATE` limit, and the original text in the
+    other cases.
     """
     match = DATE_BOUND_PATTERN.match(high_value)
     return f"< {match.group(1)}" if match else high_value
 
 
 def describe_partition(partition: TablePartition | None) -> str:
-    """Descreve limite e tablespace de uma partição.
+    """Describe the limit and the tablespace of a partition.
 
-    :param partition: Partição, ou ``None`` se ausente.
-    :returns: Por exemplo ``< 2026-02-01 00:00:00 em DFEN_BIG_DATA``, ou ``(ausente)``.
+    ```text
+    < 2026-02-01 00:00:00 em DFEN_BIG_DATA
+    ```
+
+    Return `(ausente)` if the partition is `None`.
     """
     if partition is None:
         return "(ausente)"
@@ -89,15 +91,11 @@ def describe_partition(partition: TablePartition | None) -> str:
 
 
 def compare_partitions(expected: Partitioning | None, actual: Partitioning | None) -> list[list[str]]:
-    """Compara o particionamento da tabela original com o da tabela carregada.
+    """Compare the partitioning of the original table with the loaded one.
 
-    A primeira linha compara tipo, chave e intervalo; as seguintes, cada partição
-    declarada, pelo nome, na ordem da original. Partições criadas pelo
-    ``INTERVAL`` não entram.
-
-    :param expected: Particionamento da original, ou ``None``.
-    :param actual: Particionamento da carregada, ou ``None``.
-    :returns: Linhas ``[#, partição, original, carregada, status]``.
+    The first row compares the kind, the key and the interval, and the next rows compare
+    each declared partition by name, in the order of the original. The partitions that
+    `INTERVAL` created do not count.
     """
     expected_summary = expected.summary if expected else "sem partição"
     actual_summary = actual.summary if actual else "sem partição"
@@ -116,15 +114,11 @@ def compare_partitions(expected: Partitioning | None, actual: Partitioning | Non
 
 
 def compare_indexes(expected: list[IndexDefinition], actual: list[IndexDefinition]) -> list[list[str]]:
-    """Compara os índices esperados (os da original, renomeados) com os da tabela carregada.
+    """Compare the expected indexes (the original, renamed) with the loaded ones.
 
-    Além da definição, o índice precisa estar utilizável e sem grau de
-    paralelismo gravado.
-
-    :param expected: Índices esperados, já com o nome da tabela carregada.
-    :param actual: Índices da tabela carregada.
-    :returns: Linhas ``[índice, esperado, carregado, paralelismo, status do
-        índice, resultado]``.
+    Besides the definition, the index must be usable and have no stored degree of
+    parallelism. `expected` already has the name of the loaded table. Return the rows
+    `[index, expected, loaded, parallelism, index status, result]`.
     """
     found = {index.name: index for index in actual}
     rows = []
@@ -149,12 +143,12 @@ def compare_indexes(expected: list[IndexDefinition], actual: list[IndexDefinitio
 
 
 def compare_synonyms(owners: tuple[str, ...], targets: dict[str, str], active: str | None) -> list[list[str]]:
-    """Confere se todos os sinônimos da tabela apontam para a tabela física em uso.
+    """Check that all the synonyms of the table point to the physical table in use.
 
-    :param owners: Donos esperados dos sinônimos.
-    :param targets: Objeto apontado (``dono.tabela``) pelo sinônimo de cada dono.
-    :param active: Tabela em uso (``dono.tabela``), ou ``None`` se não houver.
-    :returns: Linhas ``[sinônimo, aponta para, status]``.
+    `owners` are the expected owners of the synonyms, and `targets` is the object that
+    the synonym of each owner points to (`owner.table`). `active` is the table in use
+    (`owner.table`), or `None` if there is none. Return the rows `[synonym, points to,
+    status]`.
     """
     rows = []
     for owner in owners:
@@ -165,12 +159,12 @@ def compare_synonyms(owners: tuple[str, ...], targets: dict[str, str], active: s
 
 
 def compare_grants(expected: tuple[tuple[str, str], ...], found: list[tuple[str, str]]) -> list[list[str]]:
-    """Confere os privilégios concedidos aos consumidores na tabela física.
+    """Check the privileges granted to the consumers on the physical table.
 
-    :param expected: Pares ``(grantee, privilégios separados por vírgula)``.
-    :param found: Pares ``(grantee, privilégio)`` concedidos na tabela.
-    :returns: Linhas ``[grantee, esperado, concedido, status]``; privilégios a
-        mais não contam como divergência.
+    `expected` are the pairs `(grantee, privileges separated by commas)`, and `found`
+    are the pairs `(grantee, privilege)` granted on the table. Return the rows
+    `[grantee, expected, granted, status]`. Extra privileges do not count as a
+    divergence.
     """
     granted: dict[str, set[str]] = {}
     for grantee, privilege in found:

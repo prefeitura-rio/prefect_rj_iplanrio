@@ -17,8 +17,8 @@ MERGE = MergeSpec(key=["id"])
 
 
 @pytest.fixture
-def calls(monkeypatch):
-    """Replace the tasks that `load_records` runs with fakes that record each call, in order."""
+def calls(monkeypatch) -> list[tuple[object, ...]]:
+    """Replace the tasks that `load_records` runs with fakes that record each call."""
     seen = []
 
     async def write_records(records, folder):
@@ -44,7 +44,7 @@ def calls(monkeypatch):
     return seen
 
 
-def settings(source_format, dump_mode, options):
+def settings(source_format, dump_mode, options) -> dict[str, object]:
     """Return what the upload receives besides the folder and the table."""
     return {"bucket": "b", "dump_mode": dump_mode, "source_format": source_format, "options": options}
 
@@ -97,15 +97,15 @@ def settings(source_format, dump_mode, options):
     ],
 )
 async def test_records_are_written_loaded_and_published_in_that_order(calls, arguments, writer, uploaded) -> None:
-    """Write the records in a folder that exists, load that folder, and publish the table last."""
+    """Write the records in an existing folder, load it, and publish the table last."""
     await load_records(RECORDS, TABLE, CLOUD, **arguments)
 
     assert calls == [(writer, RECORDS, True), ("upload", True, TABLE, uploaded), ("publish", TABLE, CLOUD)]
 
 
 @pytest.fixture
-def alerts(monkeypatch):
-    """Return the messages that a run of `send_alerts` sent, with a fake query that gives three rows."""
+def alerts(monkeypatch) -> tuple[list[tuple[str, str]], list[str]]:
+    """Return the messages that `send_alerts` sent, with a fake query of three rows."""
     sent = []
     logged = []
 
@@ -161,8 +161,8 @@ async def test_an_alert_goes_to_discord_for_each_row_that_builds_a_message(
 
 
 @pytest.fixture
-def dispatch(monkeypatch):
-    """Return what a run of `dispatch_hsm` did, with fakes for the sender, the notices and the load."""
+def dispatch(monkeypatch) -> tuple[list[tuple[object, ...]], dict[str, str | None]]:
+    """Return what `dispatch_hsm` did, with fakes for sender, notices and load."""
     done = []
 
     async def post_notice(text) -> None:
@@ -181,7 +181,7 @@ def dispatch(monkeypatch):
     async def no_sleep(seconds) -> None:
         done.append(("sleep", seconds))
 
-    state = {"error": None}
+    state: dict[str, str | None] = {"error": None}
     monkeypatch.setattr(flows, "post_notice", post_notice)
     monkeypatch.setattr(flows, "run_hsm", run_hsm)
     monkeypatch.setattr(flows, "post_hsm_results", post_hsm_results)
@@ -235,7 +235,7 @@ async def test_a_test_run_records_nothing(dispatch) -> None:
 
 
 async def test_a_failed_batch_is_recorded_and_then_the_run_raises(dispatch) -> None:
-    """Record the batches that went out before the error, and skip the wait and the results."""
+    """Record the batches that went out before the error, skip the wait and results."""
     done, state = dispatch
     state["error"] = "batch 2 failed"
 

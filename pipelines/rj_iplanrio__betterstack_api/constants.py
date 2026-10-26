@@ -10,4 +10,6 @@ SP_TZ: Final = ZoneInfo("America/Sao_Paulo")
 PAGE_SIZE: Final = 50
 
 MERGE: Final = MergeSpec(key=["id"], update=True, prune="data_particao")
-"""How a `merge` run matches the rows: an incident is its id, and `data_particao` never changes for a key."""
+"""How a `merge` run matches the rows: an incident is its id.
+
+`data_particao` never changes for a key."""

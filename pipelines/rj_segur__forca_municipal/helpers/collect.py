@@ -22,7 +22,9 @@ type Upload = Callable[[list[Row], int], Awaitable[None]]
 
 
 async def flush_buffer(batches: AsyncIterator[list[Row]], upload: Upload, limit: int = MAX_ROWS_PER_CYCLE) -> int:
-    """Hold the batches until there are `limit` rows, upload them as a cycle, and return how many rows came.
+    """Hold the batches until there are `limit` rows, and upload them as a cycle.
+
+    Return how many rows came.
 
     A batch that goes over the limit uploads as many cycles as it fills. The last rows
     upload as the last cycle. A cycle has its number, from 1.
@@ -47,7 +49,10 @@ async def flush_buffer(batches: AsyncIterator[list[Row]], upload: Upload, limit:
 
 
 def count_cycles(total_pages: int, page_size: int) -> tuple[int, int]:
-    """Return how many pages make a cycle of `MAX_ROWS_PER_CYCLE` rows, and how many cycles the pages need."""
+    """Return how many pages make a cycle of `MAX_ROWS_PER_CYCLE` rows.
+
+    Also return how many cycles the pages need.
+    """
     per_cycle = ceil(MAX_ROWS_PER_CYCLE / page_size)
 
     return per_cycle, ceil(total_pages / per_cycle)
@@ -56,7 +61,10 @@ def count_cycles(total_pages: int, page_size: int) -> tuple[int, int]:
 async def read_pages(
     api: Api, endpoint: str, table_id: str, page_size: int, first_page: tuple[int, list[Row]]
 ) -> AsyncIterator[list[Row]]:
-    """Return the items of a list endpoint as one batch for each cycle, the first page being already read."""
+    """Return the items of a list endpoint as one batch for each cycle.
+
+    The first page is already read.
+    """
     total_pages, first_items = first_page
 
     if total_pages > 1 and table_id in SINGLE_PAGE_ENDPOINTS:
@@ -90,7 +98,9 @@ async def read_unit_day(endpoint: Endpoint, unit_id: str, day: str) -> list[Row]
 async def read_unit_days(
     endpoint: Endpoint, unit_ids: Sequence[str], day: str, concurrency: int, tally: Tally
 ) -> AsyncIterator[list[Row]]:
-    """Return the positions of the units on a day as one batch for each group of `concurrency` units.
+    """Return the positions of the units on a day as a batch for each group of units.
+
+    A group has `concurrency` units.
 
     A unit that fails gives nothing, and the tally counts it.
     """
@@ -151,7 +161,7 @@ async def read_detail(api: Api, endpoint: str, qmd_id: str, tally: Tally) -> Row
 async def read_details(
     api: Api, endpoint: str, ids: Sequence[str], concurrency: int, tally: Tally
 ) -> AsyncIterator[list[Row]]:
-    """Return the details of the QMDs as one batch for each group of `concurrency` ids."""
+    """Return the QMD details as a batch for each group of `concurrency` ids."""
     for start in range(0, len(ids), concurrency):
         group = ids[start : start + concurrency]
         tally.attempted += len(group)
@@ -187,7 +197,7 @@ async def read_kml(api: Api, endpoint: str, qmd_id: str, tally: Tally) -> list[R
 async def read_kmls(
     api: Api, endpoint: str, ids: Sequence[str], concurrency: int, tally: Tally
 ) -> AsyncIterator[list[Row]]:
-    """Return the placemarks of the KMLs as one batch for each group of `concurrency` ids."""
+    """Return the KML placemarks as a batch for each group of `concurrency` ids."""
     for start in range(0, len(ids), concurrency):
         group = ids[start : start + concurrency]
         tally.attempted += len(group)

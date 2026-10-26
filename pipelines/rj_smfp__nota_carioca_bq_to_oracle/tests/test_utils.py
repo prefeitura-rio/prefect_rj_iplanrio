@@ -1,11 +1,14 @@
 import io
-from collections.abc import Sequence
+from asyncio import run
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import final
 
 import pytest
-from google.cloud import storage
+from obstore import put_async
+from obstore.store import MemoryStore
+from toolkit.gcs import list_sizes
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import bigquery, oracle, oracle_ddl, slots_oracle
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import changed_tables, quiet_wait_seconds
@@ -122,7 +125,7 @@ def test_oracle_column_parses_dictionary_row() -> None:
 
 
 def test_build_load_plan_follows_original_and_ignores_extra_bigquery_columns() -> None:
-    """Check that build load plan follows original and ignores extra bigquery columns."""
+    """Follow the original table, and ignore extra BigQuery columns."""
     bq = [
         field("_bigquery_uid", "STRING"),
         field("cpf_cnpj_responsavel", "STRING"),
@@ -162,7 +165,7 @@ def test_build_load_plan_excludes_rowid_columns_missing_in_bigquery() -> None:
 
 
 def test_build_load_plan_excludes_requested_columns_and_ignores_them_if_in_bigquery() -> None:
-    """Check that build load plan excludes requested columns and ignores them if in bigquery."""
+    """Exclude the requested columns, and ignore them if BigQuery has them."""
     template = [*TEMPLATE[:2], ora("DPS_ROWID", "VARCHAR2", 18, "B")]
     bq = [field("cpf_cnpj_responsavel", "STRING"), field("data_competencia_municipio", "STRING")]
     with pytest.raises(ValueError, match="excluded_template_columns"):
@@ -406,8 +409,8 @@ def fake_bigquery(
 
         return [bigquery.ExportedFile(name=f"{prefix}/part-0.csv.gz", size=1)]
 
-    def delete(project: str, bucket: str, blob_names: list[str]) -> None:
-        del project, bucket
+    def delete(bucket: str, blob_names: list[str]) -> None:
+        del bucket
         deleted.extend(blob_names)
 
     monkeypatch.setattr(bigquery, "get_last_modified", last_modified)
@@ -422,7 +425,7 @@ def fake_bigquery(
 def test_export_consistent_snapshot_waits_for_quiet_period_and_retries_on_change(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Check that export consistent snapshot waits for quiet period and retries on change."""
+    """Wait for a quiet period, and retry when a table changes."""
     old, recent, newer = T0 - timedelta(hours=1), T0 - timedelta(minutes=1), T0 - timedelta(seconds=30)
     reads = [
         {"DET": recent},
@@ -631,7 +634,7 @@ def test_index_from_dictionary_ignores_degree_and_status_in_comparison() -> None
 
 
 def test_plan_structure_renames_indexes_and_skips_materialized_view_snapshot_index() -> None:
-    """Check that plan structure renames indexes and skips materialized view snapshot index."""
+    """Rename the indexes, and skip the materialized view snapshot index."""
     template = TableLayout(
         "DFEN_BIG_DATA",
         RANGE_BY_MONTH,
@@ -791,7 +794,7 @@ def test_index_statement_parts() -> None:
 
 
 def test_layout_differences_detect_missing_partitioning_and_changed_partitions() -> None:
-    """Check that layout differences detect missing partitioning and changed partitions."""
+    """Detect a missing partitioning and changed partitions."""
     expected = TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH)
     assert layout_differences(expected, expected) == []
     assert layout_differences(TableLayout("USERS", None), expected) == [
@@ -831,7 +834,7 @@ type DbRow = tuple[object, ...]
 
 @final
 class FakeCursor:
-    """Responde às consultas de dicionário usadas na troca e registra os comandos DDL."""
+    """Answer the dictionary queries of the swap, and record the DDL commands."""
 
     def __init__(
         self,
@@ -971,7 +974,7 @@ def test_swap_changes_nothing_when_the_name_cannot_become_a_synonym(
 
 
 def test_resolve_slots_stops_before_loading_when_legacy_table_is_not_managed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Check that resolve slots stops before loading when legacy table is not managed."""
+    """Stop before the load when the legacy table is not managed."""
     cursor = fake_database(
         monkeypatch,
         objects={"BQLOAD_X": ["TABLE"]},
@@ -1094,7 +1097,7 @@ def test_raw_loader_spec_rejects_other_sources_and_quoted_names(column: OracleCo
 
 
 def test_build_load_plan_for_notas_nacionais_detalhes_excludes_rowids_and_decodes_raw() -> None:
-    """Check that build load plan for notas nacionais detalhes excludes rowids and decodes raw."""
+    """Exclude the ROWIDs and decode the RAW columns of the national notes details."""
     plan = build_load_plan(NN_DETALHES_BQ, NN_DETALHES_TEMPLATE)
     assert plan.excluded == ["NN_ROWID", "DPS_ROWID", "PE_ROWID"]
     assert plan.ignored == ["_BIGQUERY_UID", "_BIGQUERY_PARTICAO_DATA", "_BIGQUERY_UPDATED_AT"]
@@ -1163,7 +1166,7 @@ def test_plan_structure_accepts_local_function_based_index_and_renames_it() -> N
 
 
 def test_plan_structure_rejects_function_based_index_on_column_that_is_not_loaded() -> None:
-    """Check that plan structure rejects function based index on column that is not loaded."""
+    """Reject a function-based index on a column that is not loaded."""
     template = TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH, (function_based_index(),))
     with pytest.raises(ValueError, match="STATUS_NOTA"):
         plan_structure(template, ["DATA_COMPETENCIA_MUNICIPIO", "NOTA_NACIONAL"], "BQLOAD_")
@@ -1179,7 +1182,7 @@ def test_plan_structure_rejects_function_based_index_on_column_that_is_not_loade
     ],
 )
 def test_plan_structure_still_rejects_other_function_based_and_unknown_indexes(unsupported: IndexDefinition) -> None:
-    """Check that plan structure still rejects other function based and unknown indexes."""
+    """Reject other function-based indexes and unknown ones."""
     with pytest.raises(NotImplementedError):
         plan_structure(TableLayout(None, None, (unsupported,)), LOADED, "BQLOAD_")
 
@@ -1232,7 +1235,7 @@ def test_text_loader_spec_is_sized_from_the_column_with_utf8_headroom(column: Or
 
 
 def test_text_loader_spec_holds_a_max_length_multibyte_value_in_a_char_semantics_column() -> None:
-    """Check that text loader spec holds a max length multibyte value in a char semantics column."""
+    """Hold a multibyte value of maximum length in a column with character semantics."""
     column = ora("NOME", "VARCHAR2", 1200, "C")  # VARCHAR2(300 CHAR) num banco AL32UTF8: 1200 bytes
     declared = int(loader_spec(column, "STRING").removeprefix("CHAR(").removesuffix(")"))
     assert declared >= len(("😀" * 300).encode()) == 1200
@@ -1246,19 +1249,19 @@ def test_date_loader_spec_is_native_without_sql_expression() -> None:
 
 @pytest.mark.parametrize(("length", "chars"), [(16, 32), (8, 16), (2000, 4000)])
 def test_raw_hex_loader_spec_is_a_plain_char_field_sized_by_two_chars_per_byte(length: int, chars: int) -> None:
-    """Check that raw hex loader spec is a plain char field sized by two chars per byte."""
+    """Make the RAW hex spec a plain CHAR field of two chars for each byte."""
     spec = loader_spec(ora("PESSOA", "RAW", length), "STRING", "hex")
     assert spec == f"CHAR({chars})"
 
 
 def test_raw_hex_loader_spec_does_not_need_an_unquoted_name_and_base64_stays_the_default() -> None:
-    """Check that raw hex loader spec does not need an unquoted name and base64 stays the default."""
+    """Need no unquoted name for RAW hex, and keep base64 as the default."""
     assert loader_spec(ora("_PESSOA", "RAW", 16), "STRING", "hex") == "CHAR(32)"
     assert loader_spec(ora("PESSOA", "RAW", 16), "STRING", "base64") == loader_spec(ora("PESSOA", "RAW", 16), "STRING")
 
 
 def test_build_load_plan_propagates_raw_text_encoding_to_pessoa_columns_only() -> None:
-    """Check that build load plan propagates raw text encoding to pessoa columns only."""
+    """Pass the RAW text encoding to the `pessoa` columns only."""
     hex_plan = build_load_plan(NN_DETALHES_BQ, NN_DETALHES_TEMPLATE, raw_text_encoding="hex")
     specs = {loader.name: loader.spec for loader in hex_plan.fields}
     assert [specs[name] for name in ("PESSOA_EMITENTE", "PESSOA_PRESTADOR", "PESSOA_TOMADOR")] == ["CHAR(32)"] * 3
@@ -1336,91 +1339,44 @@ def test_count_rows_sends_the_parallel_hint_to_oracle(
     assert executed == [f'SELECT /*+ PARALLEL({hinted}) */ COUNT(*)\nFROM "DFEN"."BQLOAD_X_A"\n']
 
 
-@final
-class FakeBatch:
-    def __init__(self, log: list[str]) -> None:
-        """Store the arguments."""
-        self.log = log
+async def store_with(names: list[str]) -> MemoryStore:
+    """Return an in-memory bucket that holds one object for each name."""
+    store = MemoryStore()
 
-    def __enter__(self) -> "FakeBatch":
-        """Return the fake."""
-        self.log.append("batch-open")
-        return self
+    for name in names:
+        await put_async(store, name, b"x")
 
-    def __exit__(self, *exc: object) -> bool:
-        """Close the fake."""
-        self.log.append("batch-close")
-        return False
+    return store
 
 
-@final
-class FakeBlob:
-    def __init__(self, log: list[str], name: str) -> None:
-        """Store the arguments."""
-        self.log = log
-        self.name = name
+def serve(store: MemoryStore) -> Callable[[str], MemoryStore]:
+    """Return a stand-in for `create_store` that gives the same in-memory bucket."""
 
-    def delete(self) -> None:
-        self.log.append(self.name)
+    def create_store(bucket: str) -> MemoryStore:
+        """Return the bucket."""
+        del bucket
 
+        return store
 
-@final
-class FakeBucket:
-    def __init__(self, log: list[str]) -> None:
-        """Store the arguments."""
-        self.log = log
-
-    def blob(self, blob_name: str) -> FakeBlob:
-        return FakeBlob(self.log, blob_name)
+    return create_store
 
 
-@final
-class FakeStorageClient:
-    def __init__(self, log: list[str]) -> None:
-        """Store the arguments."""
-        self.log = log
-
-    def batch(self, raise_exception: bool = True) -> FakeBatch:
-        assert raise_exception is True
-        return FakeBatch(self.log)
-
-    def bucket(self, name: str) -> FakeBucket:
-        del name
-
-        return FakeBucket(self.log)
-
-
-def fake_storage(monkeypatch: pytest.MonkeyPatch, log: list[str]) -> None:
-    def client(project: str) -> FakeStorageClient:
-        del project
-
-        return FakeStorageClient(log)
-
-    monkeypatch.setattr(storage, "Client", client)
-
-
-def test_delete_blobs_removes_every_object_in_batches_of_at_most_100(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Check that delete blobs removes every object in batches of at most 100."""
-    log: list[str] = []
-    fake_storage(monkeypatch, log)
+def test_delete_blobs_removes_every_listed_object_and_keeps_the_others(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Check that delete blobs removes every listed object and keeps the others."""
     names = [f"p/part-{n}.csv.gz" for n in range(250)]
-    bigquery.delete_blobs("proj", "bucket", names)
-    batches: list[list[str]] = []
-    current: list[str] = []
-    for item in log:
-        if item == "batch-open":
-            current = []
-        elif item == "batch-close":
-            batches.append(current)
-        else:
-            current.append(item)
-    assert [len(batch) for batch in batches] == [100, 100, 50]
-    assert [name for batch in batches for name in batch] == names
+    store = run(store_with([*names, "other/keep.csv.gz"]))
+    monkeypatch.setattr(bigquery, "create_store", serve(store))
+
+    bigquery.delete_blobs("bucket", names)
+
+    assert list_sizes(store, "") == {"other/keep.csv.gz": 1}
 
 
-def test_delete_blobs_with_no_objects_makes_no_request(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Check that delete blobs with no objects makes no request."""
-    log: list[str] = []
-    fake_storage(monkeypatch, log)
-    bigquery.delete_blobs("proj", "bucket", [])
-    assert log == []
+def test_delete_blobs_with_no_objects_keeps_the_bucket(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Check that delete blobs with no objects keeps the bucket."""
+    store = run(store_with(["p/a.csv.gz"]))
+    monkeypatch.setattr(bigquery, "create_store", serve(store))
+
+    bigquery.delete_blobs("bucket", [])
+
+    assert list_sizes(store, "") == {"p/a.csv.gz": 1}

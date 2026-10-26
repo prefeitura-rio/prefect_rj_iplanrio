@@ -3,7 +3,7 @@
 import copy
 
 DBT_FLOW_NAME = "rj-iplanrio--run-dbt"
-"""Nome do flow no Prefect: o nome da função ``rj_iplanrio__run_dbt`` com ``_`` trocado por ``-``."""
+"""The name of the flow in Prefect, `rj_iplanrio__run_dbt` with `_` as `-`."""
 
 DBT_DEPLOYMENT = f"{DBT_FLOW_NAME}/rj-iplanrio--run_dbt--prod"
 """Deployment do flow de dbt, no formato ``<flow>/<deployment>``."""
@@ -23,8 +23,9 @@ DBT_DEFAULT_PARAMETERS: dict[str, object] = {
 
 
 def default_dbt_parameters() -> dict[str, object]:
-    """Retorna uma cópia dos parâmetros padrão do run de dbt.
+    """Return a copy of the default parameters of the dbt run.
 
-    :returns: Parâmetros do flow ``rj_iplanrio__run_dbt``, que o chamador pode alterar.
+    They are the parameters of the flow `rj_iplanrio__run_dbt`, and the caller may
+    change them.
     """
     return copy.deepcopy(DBT_DEFAULT_PARAMETERS)

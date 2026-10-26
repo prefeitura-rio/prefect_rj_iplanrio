@@ -1,4 +1,4 @@
-"""Callbacks that Prefect calls with a fixed signature: a retry check and a flow hook."""
+"""Callbacks that Prefect calls with a fixed signature: a retry check and a hook."""
 
 from collections.abc import Mapping
 from typing import cast

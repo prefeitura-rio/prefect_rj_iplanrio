@@ -19,7 +19,10 @@ class PrecipitationAlert:
 
 
 class Forecast(TypedDict):
-    """The forecast of the AlertaRio XML: its execution id, its rows by table, the synoptic text and its date."""
+    """The forecast of the AlertaRio XML.
+
+    It has the execution id, the rows by table, the synoptic text and the date.
+    """
 
     execution_id: str
     tables: dict[str, list[Row]]

@@ -36,7 +36,10 @@ def test_the_query_carries_the_dates() -> None:
 
 
 def test_a_message_starts_a_session_after_24_hours_from_the_start_of_the_current_one() -> None:
-    """Flag the first message, and the first one more than 24 hours after the start of a session."""
+    """Flag the first message, and the first more than 24 hours after the start.
+
+    It checks against the start of the current session.
+    """
     assert flag_new_sessions([at(1, 8), at(1, 20), at(2, 8), at(2, 9), at(3, 10)]) == [True, False, False, True, True]
     assert flag_new_sessions([]) == []
 

@@ -89,7 +89,7 @@ def summarize_dbt(request: DbtRun, outcome: DbtOutcome) -> str:
 
 
 def render_query(anchor: str, name: str, **values: TemplateValue | float | date | None) -> str:
-    """Render `queries/<name>.sql`, next to the file `anchor`, as a strict Jinja template.
+    """Render `queries/<name>.sql` next to `anchor`, as a strict Jinja template.
 
     A value that is a float, a date or `None` is written as its text. Raise
     `UndefinedError` for a variable that `values` lacks.
@@ -131,7 +131,7 @@ def capture_time() -> datetime:
 
 
 async def post_discord(webhook: str, content: str) -> str | None:
-    """Post a message to a Discord webhook, cut to the limit of Discord, and return its id.
+    """Post a message to a Discord webhook, cut to its limit, and return its id.
 
     The id is nothing when Discord answers without the message.
     Raise `HTTPStatusError` if Discord refuses it.

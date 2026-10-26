@@ -29,7 +29,7 @@ class Publish:
 
 
 class RecordingMessage(DiscordStatusMessage):
-    """Cliente falso: registra cada ``publish`` e ``announce`` sem nenhuma requisição HTTP."""
+    """A fake client that records each `publish` and `announce`, with no HTTP."""
 
     def __init__(self, on_publish: Callable[[bool], None] | None = None) -> None:
         """Store the arguments."""
@@ -52,14 +52,14 @@ class RecordingMessage(DiscordStatusMessage):
         self.announcements.append(payload)
 
     def wait_for(self, count: int) -> bool:
-        """Espera (com limite) até haver ``count`` publicações; ``False`` se o prazo estourar."""
+        """Wait up to a limit for `count` publications, or return `False`."""
         with self.changed:
             return self.changed.wait_for(lambda: len(self.publishes) >= count, WAIT_SECONDS)
 
 
 @final
 class Clock:
-    """Substitui o módulo ``time`` do notificador para controlar o relógio monotônico."""
+    """Replace the `time` module of the notifier to control the monotonic clock."""
 
     def __init__(self) -> None:
         """Store the arguments."""
@@ -109,7 +109,6 @@ def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
 
 
 # --- heartbeat thread
-# --------------------------------------------------------------------------------------------
 
 
 def test_heartbeat_republishes_the_view_while_nothing_else_happens(warnings: list[str]) -> None:
@@ -254,7 +253,6 @@ def test_a_failing_publish_neither_kills_the_heartbeat_nor_raises(warnings: list
 
 
 # --- elapsed time
-# ------------------------------------------------------------------------------------------------
 
 
 def test_heartbeat_makes_the_elapsed_and_the_step_elapsed_advance(clock: Clock, warnings: list[str]) -> None:
@@ -287,7 +285,7 @@ def test_heartbeat_makes_the_elapsed_and_the_step_elapsed_advance(clock: Clock, 
 
 def test_step_elapsed_shows_in_the_current_stage_and_resets_when_the_step_changes(clock: Clock) -> None:
     # Given a run in the export step for 2 minutes
-    """Check that step elapsed shows in the current stage and resets when the step changes."""
+    """Show the step time in the current stage, and reset it when the step changes."""
     notifier = make(None)
     notifier.begin()
     notifier.enter(Step.EXPORT)

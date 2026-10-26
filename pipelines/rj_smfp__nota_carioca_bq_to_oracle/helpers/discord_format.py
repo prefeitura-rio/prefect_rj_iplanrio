@@ -1,7 +1,7 @@
-"""Formatação de texto para as mensagens do Discord: barra de progresso, números, durações e hora de Brasília.
+"""Format text for Discord: progress bar, numbers, durations and Brasília time.
 
-Este arquivo é idêntico nas duas pipelines da Nota Carioca e não importa nada de
-``pipelines.*``.
+This file is the same in both Nota Carioca pipelines, and it imports nothing from
+`pipelines.*`.
 """
 
 import math
@@ -16,11 +16,9 @@ KILOBYTE = 1024
 
 
 def clip(text: str, limit: int) -> str:
-    """Corta o texto no limite, terminando em reticências.
+    """Cut the text at the limit, and end it with an ellipsis.
 
-    :param text: Texto original.
-    :param limit: Máximo de caracteres.
-    :returns: O texto, ou o começo dele com ``…`` se passar do limite.
+    Return the text, or its start with `…` if it is over `limit` characters.
     """
     if len(text) <= limit:
         return text
@@ -28,11 +26,10 @@ def clip(text: str, limit: int) -> str:
 
 
 def progress_bar(fraction: float, width: int = BAR_WIDTH) -> str:
-    """Desenha a barra de progresso com ``█`` e ``░``.
+    """Draw the progress bar with `█` and `░`, with no backticks.
 
-    :param fraction: Progresso; abaixo de 0 (ou NaN) vale 0 e acima de 1 vale 1.
-    :param width: Largura em caracteres.
-    :returns: A barra, sem crases.
+    A `fraction` below 0 (or NaN) counts as 0, and above 1 it counts as 1. `width` is in
+    characters.
     """
     safe = 0.0 if math.isnan(fraction) else min(max(fraction, 0.0), 1.0)
     filled = int(safe * width)
@@ -46,12 +43,15 @@ def format_percent(fraction: float) -> str:
 
 
 def format_count(value: float) -> str:
-    """Formata um inteiro com ponto de milhar (``67.987.860``)."""
+    """Format an integer with a dot as the thousands separator (`67.987.860`)."""
     return f"{round(value):,}".replace(",", ".")
 
 
 def format_size(size: float) -> str:
-    """Formata bytes na maior unidade que mantém o número abaixo de 1024, com vírgula decimal."""
+    """Format bytes in the biggest unit that keeps the number below 1024.
+
+    It uses a decimal comma.
+    """
     value = float(size)
     for unit in ("B", "KB", "MB", "GB"):
         if value < KILOBYTE:
@@ -61,7 +61,7 @@ def format_size(size: float) -> str:
 
 
 def format_duration(seconds: float) -> str:
-    """Formata a duração como ``12s``, ``4min 05s`` ou ``1h 02min``."""
+    """Format a duration as `12s`, `4min 05s` or `1h 02min`."""
     total = max(int(seconds), 0)
     hours, rest = divmod(total, SECONDS_PER_HOUR)
     minutes, secs = divmod(rest, SECONDS_PER_MINUTE)
@@ -73,7 +73,7 @@ def format_duration(seconds: float) -> str:
 
 
 def format_short_duration(seconds: float) -> str:
-    """Formata a duração para a mensagem final: ``35s``, ``41min`` ou ``1h05min``."""
+    """Format a duration for the final message: `35s`, `41min` or `1h05min`."""
     total = max(int(seconds), 0)
     hours, rest = divmod(total, SECONDS_PER_HOUR)
     minutes = rest // SECONDS_PER_MINUTE
@@ -85,21 +85,20 @@ def format_short_duration(seconds: float) -> str:
 
 
 def format_clock(moment: datetime) -> str:
-    """Formata a hora de parede em Brasília (``14:32``)."""
+    """Format the wall time in Brasília (`14:32`)."""
     return moment.astimezone(BRT).strftime("%H:%M")
 
 
 def format_stamp(moment: datetime) -> str:
-    """Formata data e hora de Brasília como ``dd/mm/YYYY HH:MM:SS``."""
+    """Format the date and time of Brasília as `dd/mm/YYYY HH:MM:SS`."""
     return moment.astimezone(BRT).strftime("%d/%m/%Y %H:%M:%S")
 
 
 def flow_run_url(ui_url: str | None, api_url: str | None, run_id: str) -> str | None:
-    """Monta o link do flow run na UI do Prefect.
+    """Build the link of the flow run in the Prefect UI.
 
-    :param ui_url: ``PREFECT_UI_URL``; se vazio, a base sai de ``api_url`` sem o
-    ``/api`` final. :param api_url: ``PREFECT_API_URL``. :param run_id: Id do flow run.
-    :returns: O link, ou ``None`` se nenhuma das duas URLs existir.
+    `ui_url` is `PREFECT_UI_URL`. If it is empty, the base comes from `api_url`
+    (`PREFECT_API_URL`) without the final `/api`. Return `None` if neither URL exists.
     """
     base = (ui_url or "").rstrip("/")
     if not base:

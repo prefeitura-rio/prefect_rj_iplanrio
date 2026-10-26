@@ -43,7 +43,7 @@ class Feed:
 
 @dataclass(frozen=True)
 class Span:
-    """A window to extract, as the text that the queries use, and the day that stamps its rows."""
+    """A window to extract, as query text, and the day that stamps its rows."""
 
     start: str
     end: str
@@ -72,9 +72,30 @@ class Window(TypedDict, total=False):
     reprocess_to: NotRequired[date]
 
 
+@dataclass(frozen=True)
+class RunPlan:
+    """What a run does: the feeds, windows, its label and whether it posts a summary."""
+
+    feeds: tuple[Feed, ...]
+    spans: tuple[Span, ...]
+    label: str
+    summarize: bool
+    started: float
+
+
+@dataclass(frozen=True)
+class Outcome:
+    """What one feed did in one window: its rows, and whether it failed."""
+
+    name: str
+    group: str
+    count: int
+    failed: bool = False
+
+
 @dataclass
 class Totals:
-    """What a run did: the rows that each feed loaded, by group, and the feeds that failed."""
+    """What a run did: the rows each feed loaded by group, and the feeds that failed."""
 
     rows: dict[str, dict[str, int]] = field(default_factory=dict)
     failed: list[str] = field(default_factory=list)

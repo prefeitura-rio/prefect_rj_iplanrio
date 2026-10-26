@@ -44,7 +44,7 @@ def test_the_date_to_fetch_follows_the_weekday_unless_one_is_given(
 
 
 def test_a_record_becomes_a_row_with_the_names_of_the_table_and_a_json_text_is_read() -> None:
-    """Rename the unit fields, parse JSON text, skip empty text, and raise for a missing field."""
+    """Rename the unit fields, parse JSON text, and skip empty values."""
     text: JsonValue = '{"id": 1, "id_capacidade": 2, "nome_completo": "A", "primeiro_nome": "A", "cpf": "1", "telefone": "2", "tipo": "x", "data_hora": "d", "nome": "U", "endereco": "E", "bairro": "B"}'
     records: list[JsonValue] = [FULL, text, "  ", 3]
     rows = build_rows(records)

@@ -17,7 +17,9 @@ STUDENTS: TypeAdapter[list[dict[str, JsonValue]]] = TypeAdapter(list[dict[str, J
 
 
 def parse_filter(text: str) -> list[str]:
-    """Return the addresses of the filter, with a quote escaped, or none if the text has no address.
+    """Return the addresses of the filter, with a quote escaped, or none.
+
+    None come back if the text has no address.
 
     ```python
     parse_filter("a@x.org, b@x.org")  # ["a@x.org", "b@x.org"]
@@ -31,7 +33,9 @@ def parse_filter(text: str) -> list[str]:
 
 
 def parse_students(text: str) -> list[dict[str, JsonValue]]:
-    """Return the students of the field `dados`, which is JSON or the text of a Python list.
+    """Return the students of the field `dados`.
+
+    It is JSON or the text of a Python list.
 
     A single object becomes a list of one, and a text that is neither gives no student.
     """
@@ -59,7 +63,10 @@ def parse_students(text: str) -> list[dict[str, JsonValue]]:
 
 
 def display_name(row: Mapping[str, str]) -> str:
-    """Return the name of the recipient, or the part of the address before `@` if the row has no name."""
+    """Return the recipient name, or the part of the address before `@`.
+
+    The address part is the fallback for a row with no name.
+    """
     email = row.get(EMAIL_COLUMN, "").strip()
 
     return (row.get(NAME_COLUMN, "").strip() or email.split("@")[0]) if email else ""

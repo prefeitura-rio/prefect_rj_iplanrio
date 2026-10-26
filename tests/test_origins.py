@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -47,7 +48,7 @@ from utils.types import Database
     ],
 )
 def test_a_read_names_the_origin_that_the_database_reads(db_type, read, batched, expected) -> None:
-    """Give a table, a query or the changes of a database, as the type of database reads."""
+    """Give a table, a query or the changes of a database, as the database reads."""
     assert read_request(db_type, read, batched) == expected
 
 
@@ -121,7 +122,7 @@ def test_a_database_expands_its_host_and_its_name_only(monkeypatch) -> None:
 
 
 @pytest.fixture
-def pipeline_folder(tmp_path, monkeypatch):
+def pipeline_folder(tmp_path, monkeypatch) -> Path:
     """Return the folder of the JSON files of the running pipeline `taxi_pipe`."""
     folder = tmp_path / "pipelines" / "taxi_pipe" / "pipelines"
     folder.mkdir(parents=True)
@@ -160,7 +161,10 @@ def test_a_pipeline_file_that_is_not_a_list_of_stages_is_refused(pipeline_folder
 
 @pytest.mark.parametrize("name", ["../secret", "Ranking", "ranking_races", "a/b", "-a", ""])
 def test_a_pipeline_name_is_words_with_dashes(name) -> None:
-    """Refuse a name that is not lowercase words with dashes, so it never leaves the folder."""
+    """Refuse a name that is not lowercase words with dashes.
+
+    It then never leaves the folder.
+    """
     with pytest.raises(ValueError, match="words with dashes"):
         read_request("mongodb", {"table": "c", "pipeline": name}, False)
 

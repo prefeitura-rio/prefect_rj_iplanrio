@@ -28,7 +28,7 @@ PAYLOAD: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
 
 @final
 class FakeWetalkie:
-    """The Wetalkie API: it logs in, answers `GET /` and records the batches that it gets.
+    """The Wetalkie API: it logs in, answers `GET /` and records the batches it gets.
 
     `replies` are the answers to the sends, in order. A send with no reply left answers
     201.
@@ -173,7 +173,7 @@ async def test_an_api_that_does_not_answer_the_root_sends_nothing() -> None:
 
 
 def test_a_destination_of_the_query_is_read_as_a_recipient() -> None:
-    """Read the phone and the id by any of their names and in any case, and keep the vars."""
+    """Read the phone and id by any name and case, and keep the vars."""
     texts = [
         '{"celular_disparo": "5521999", "externalId": "111", "vars": {"NOME": "Ana"}}',
         '{"telefone": "5521888", "CPF": " 222 "}',

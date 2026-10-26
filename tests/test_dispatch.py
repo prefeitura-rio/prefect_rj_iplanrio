@@ -62,7 +62,7 @@ def test_a_replacement_is_not_changed_by_the_weekend_rule() -> None:
 
 
 def test_a_query_is_filled_with_a_processor_or_without_one() -> None:
-    """Use the processor when it is named, ignore an unknown one, and fill the placeholders."""
+    """Use the processor if named, ignore an unknown one, and fill the placeholders."""
     replacements: dict[str, str | int] = {"days_ahead_placeholder": 1, "other": "x"}
 
     assert format_query(QUERY, replacements, "skip_weekends", MONDAY) == "SELECT 1 AS days, x AS other"
@@ -123,7 +123,10 @@ def test_the_limit_date_is_read_from_its_text(raw: object, expected: date | None
 def test_the_switch_of_a_campaign(
     row: dict[str, object] | None, environment: str, active: bool, notice: str | None
 ) -> None:
-    """Run only when the campaign is on and its limit date has not passed, and say why when it stops."""
+    """Run only when the campaign is on and its limit date has not passed.
+
+    Say why when it stops.
+    """
     switch = decide_switch(row, "campanha", environment, WEDNESDAY)
 
     assert switch.active is active

@@ -28,12 +28,9 @@ from utils.utils import render_query
 
 
 def read_synonyms(cursor: oracledb.Cursor, schema: str, base: str) -> list[SynonymTarget]:
-    """Lê os sinônimos da pipeline com o nome estável da tabela.
+    """Read the synonyms of the pipeline that have the stable name of the table.
 
-    :param cursor: Cursor de uma conexão aberta.
-    :param schema: Schema das tabelas físicas.
-    :param base: Nome estável da tabela.
-    :returns: Sinônimos do schema de destino e dos consumidores.
+    Return those of the target schema and of the consumers.
     """
     owners = synonym_owners(schema)
     return [
@@ -44,31 +41,20 @@ def read_synonyms(cursor: oracledb.Cursor, schema: str, base: str) -> list[Synon
 
 
 def create_synonym(cursor: oracledb.Cursor, owner: str, base: str, schema: str, table: str) -> None:
-    """Cria ou repõe um sinônimo apontando para uma tabela física.
-
-    :param cursor: Cursor de uma conexão aberta.
-    :param owner: Dono do sinônimo.
-    :param base: Nome do sinônimo.
-    :param schema: Schema da tabela física.
-    :param table: Tabela física.
-    """
+    """Create or replace a synonym that points to a physical table."""
     cursor.execute(
         render_query(QUERIES_ANCHOR, "create_synonym", owner=owner, synonym=base, schema=schema, table=table)
     )
 
 
 def assert_replaceable_legacy_table(cursor: oracledb.Cursor, schema: str, base: str) -> bool:
-    """Confere se a tabela única antiga, se existir, pode dar lugar ao sinônimo.
+    """Check that the old single table, if it exists, can give way to the synonym.
 
-    Roda antes de qualquer alteração, para que uma tabela que a pipeline não
-    criou com o nome ``BQLOAD_<tabela>`` interrompa o run sem mexer em nada.
-
-    :param cursor: Cursor de uma conexão aberta.
-    :param schema: Schema das tabelas físicas.
-    :param base: Nome estável da tabela.
-    :returns: Se a tabela única antiga existe.
-    :raises PermissionError: Se a tabela existir sem a marca da pipeline, ou se
-        houver com esse nome outro tipo de objeto, que impediria criar o sinônimo.
+    It runs before any change, so a table that the pipeline did not create with the name
+    `BQLOAD_<table>` stops the run without touching anything. Return whether the old
+    single table exists. Raise `PermissionError` if the table exists without the mark of
+    the pipeline, or if another kind of object has that name, which would block the
+    synonym.
     """
     types = {
         str(row["object_type"])
@@ -88,15 +74,12 @@ def assert_replaceable_legacy_table(cursor: oracledb.Cursor, schema: str, base: 
 
 
 def resolve_slots(config: OracleConfig, base: str) -> tuple[SlotPlan, list[str]]:
-    """Descobre a tabela em uso e a que recebe a carga, corrigindo trocas interrompidas.
+    """Find the table in use and the one that loads, and fix interrupted swaps.
 
-    :param config: Configuração da conexão.
-    :param base: Nome estável da tabela.
-    :returns: Plano das tabelas e donos dos sinônimos repontados para a tabela em
-        uso.
-    :raises PermissionError: Se faltar privilégio, se algum sinônimo apontar para
-        um objeto que a pipeline não gerencia ou se existir uma tabela
-        ``BQLOAD_<tabela>`` que a pipeline não criou.
+    Return the plan of the tables and the owners of the synonyms that were pointed again
+    to the table in use. Raise `PermissionError` if a privilege is missing, if a synonym
+    points to an object that the pipeline does not manage, or if a table
+    `BQLOAD_<table>` exists that the pipeline did not create.
     """
     with connect(config) as connection, connection.cursor() as cursor:
         assert_privileges(cursor, config.schema)
@@ -110,15 +93,7 @@ def resolve_slots(config: OracleConfig, base: str) -> tuple[SlotPlan, list[str]]
 
 
 def grant_access(config: OracleConfig, table: str) -> None:
-    """Concede aos consumidores o acesso à tabela física.
-
-    Roda a cada carga, antes da troca: recriar a tabela apaga os grants. Os
-    comandos podem ser repetidos sem efeito colateral.
-
-    :param config: Configuração da conexão.
-    :param table: Tabela física.
-    :raises PermissionError: Se a tabela não existir ou não pertencer à pipeline.
-    """
+    """Grant the consumers access to the physical table."""
     with connect(config) as connection, connection.cursor() as cursor:
         assert_managed_existing_table(cursor, config.schema, table)
         for grantee, privileges in CONSUMER_GRANTS:
@@ -135,14 +110,11 @@ def grant_access(config: OracleConfig, table: str) -> None:
 
 
 def record_load(config: OracleConfig, table: str, source: str, snapshot_modified: datetime) -> str:
-    """Grava no comentário da tabela física qual foto do BigQuery ela contém.
+    """Write in the comment of the physical table which BigQuery snapshot it holds.
 
-    :param config: Configuração da conexão.
-    :param table: Tabela física.
-    :param source: Tabela de origem no BigQuery.
-    :param snapshot_modified: Última alteração do BigQuery na foto carregada.
-    :returns: Comentário gravado.
-    :raises PermissionError: Se a tabela não existir ou não pertencer à pipeline.
+    `snapshot_modified` is the last change of BigQuery in the loaded snapshot. Return
+    the comment that was written. Raise `PermissionError` if the table does not exist or
+    does not belong to the pipeline.
     """
     comment = load_comment(source, snapshot_modified, datetime.now(UTC))
     with connect(config) as connection, connection.cursor() as cursor:
@@ -160,20 +132,16 @@ def record_load(config: OracleConfig, table: str, source: str, snapshot_modified
 
 
 def swap_synonyms(config: OracleConfig, plan: SlotPlan) -> list[str]:
-    """Aponta os sinônimos para a tabela recém-carregada.
+    """Point the synonyms to the table that was just loaded.
 
-    Os sinônimos dos consumidores são trocados primeiro e o do schema de destino
-    por último, porque é ele que define a tabela em uso no próximo run. Na
-    primeira troca, a antiga tabela única ``BQLOAD_<tabela>`` é apagada para dar
-    lugar ao sinônimo de mesmo nome; só nesse instante quem lê
-    ``<schema>.BQLOAD_<tabela>`` direto fica sem o objeto, por milissegundos.
-
-    :param config: Configuração da conexão.
-    :param plan: Tabela em uso e tabela recém-carregada.
-    :returns: Ações executadas, em texto, para o log.
-    :raises PermissionError: Se a tabela carregada ou a tabela única antiga não
-        pertencerem à pipeline; a conferência acontece antes de qualquer
-        sinônimo ser repontado.
+    The synonyms of the consumers change first, and the one of the target schema last,
+    because that one defines the table in use in the next run. In the first swap, the
+    old single table `BQLOAD_<table>` is dropped to make room for the synonym of the
+    same name. Only at that moment, for milliseconds, whoever reads
+    `<schema>.BQLOAD_<table>` directly has no object. Return the actions that ran, as
+    text for the log. Raise `PermissionError` if the loaded table or the old single
+    table does not belong to the pipeline. The check happens before any synonym points
+    elsewhere.
     """
     actions = []
     with connect(config) as connection, connection.cursor() as cursor:
@@ -191,19 +159,15 @@ def swap_synonyms(config: OracleConfig, plan: SlotPlan) -> list[str]:
 
 
 def refresh_synonyms(config: OracleConfig, base: str) -> list[str]:
-    """Reaponta todos os sinônimos para a tabela física já em uso, sem carga.
+    """Point all the synonyms again to the physical table that is in use, with no load.
 
-    Serve para criar sinônimos de um dono novo ou corrigir um sinônimo removido
-    sem esperar uma carga completa. Os grants dos consumidores são reaplicados na
-    tabela em uso antes, para o sinônimo novo já funcionar.
-
-    :param config: Configuração da conexão.
-    :param base: Nome estável da tabela.
-    :returns: Ações executadas, em texto, para o log.
-    :raises LookupError: Se ainda não houver tabela A/B em uso.
-    :raises PermissionError: Se faltar privilégio, se algum sinônimo apontar para
-        um objeto que a pipeline não gerencia ou se a migração para A/B não tiver
-        terminado (a tabela única antiga ainda existe).
+    It serves to create the synonyms of a new owner, or to fix a removed synonym,
+    without a full load. The grants of the consumers are applied again on the table in
+    use first, so the new synonym works at once. Return the actions that ran, as text
+    for the log. Raise `LookupError` if no A or B table is in use yet. Raise
+    `PermissionError` if a privilege is missing, if a synonym points to an object that
+    the pipeline does not manage, or if the migration to A and B has not finished (the
+    old single table still exists).
     """
     with connect(config) as connection, connection.cursor() as cursor:
         assert_privileges(cursor, config.schema)

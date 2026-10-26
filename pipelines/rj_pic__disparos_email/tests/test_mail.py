@@ -11,7 +11,7 @@ from pipelines.rj_pic__disparos_email.types import Mail
 def test_the_payload_has_the_mail_and_the_options_of_the_relay(
     make_relay: Callable[..., Relay], make_mail: Callable[..., Mail]
 ) -> None:
-    """Send the address as a list, the HTML flag and the Gmail flag, and the sender when there is one."""
+    """Send the address as a list, the HTML and Gmail flags, and the sender if set."""
     plain = build_payload(make_relay(use_gmail_api=False), make_mail())
     from_sender = build_payload(make_relay(from_address="noreply@example.org"), make_mail())
 
@@ -75,7 +75,7 @@ async def test_a_failure_that_may_pass_is_tried_again(
     pauses: list[float],
     sent: bool,
 ) -> None:
-    """Try up to three times, with the retry delay between tries, and give up after the last."""
+    """Try up to three times, with the retry delay between tries, and give up after."""
     relay = FakeDataRelay(*replies)
     waits: list[float] = []
 
@@ -112,7 +112,10 @@ async def test_the_sends_keep_the_pace_of_the_throttle(
     make_mail: Callable[..., Mail],
     timeline: Timeline,
 ) -> None:
-    """Wait the rest of the interval before a send that comes too soon, and do not wait for the first one."""
+    """Wait the rest of the interval before a send that is too soon.
+
+    The first send does not wait.
+    """
     relay = FakeDataRelay()
     pacer = make_pacer(2)
 

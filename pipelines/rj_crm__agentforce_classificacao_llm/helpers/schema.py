@@ -49,8 +49,9 @@ SCHEMA: Final = [
 ]
 """The columns, in the physical order of the table.
 
-`relacao_hsm` should never be empty, but it stays nullable so an answer of the model that lacks the key does not
-fail the load of the whole batch. `tema_nome` and `causa_nome` are arrays, so a category that matches many rules
-is `ARRAY_LENGTH > 1`. The two last columns were added after the table existed."""
+`relacao_hsm` should never be empty, but it stays nullable so an answer of the model
+that lacks the key does not fail the load of the whole batch. `tema_nome` and
+`causa_nome` are arrays, so a category that matches many rules is
+`ARRAY_LENGTH > 1`. The two last columns were added after the table existed."""
 COLUMNS: Final = [cast("str", field.name) for field in SCHEMA]
 PRIMARY_KEY: Final = "id_sessao"

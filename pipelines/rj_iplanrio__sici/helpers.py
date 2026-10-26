@@ -8,7 +8,7 @@ from pipelines.rj_iplanrio__sici.constants import SP_TZ
 
 
 def read_rows(units: Iterable[Element]) -> list[dict[str, str | None]]:
-    """Return one row for each unit of the XML, with the text of each child and `updated_at`.
+    """Return a row for each XML unit, with the text of each child and `updated_at`.
 
     `updated_at` is the time of the read in São Paulo, in ISO format.
     """

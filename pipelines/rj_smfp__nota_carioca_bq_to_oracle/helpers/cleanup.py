@@ -5,7 +5,7 @@ from typing import Protocol
 
 
 class Pending(Protocol):
-    """Work that runs in the background and gives its result, or raises, when it is asked for."""
+    """Background work that gives its result, or raises, when it is asked for."""
 
     def result(self) -> object:
         """Wait for the work and return its result. Raise what it raised."""

@@ -1,4 +1,4 @@
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from datetime import date
 from json import dumps
 from pathlib import Path
@@ -39,7 +39,7 @@ KEYS = ["w0", "w1", "w2"]
 CHUNKS = [Chunk(key, 0, 1) for key in KEYS]
 
 
-def build_plan(known: dict[str, int | None]):
+def build_plan(known: dict[str, int | None]) -> Callable[[Chunk], ChunkPlan]:
     """Return a `plan` that gives the ledger number of each chunk."""
 
     def plan(chunk: Chunk) -> ChunkPlan:
@@ -242,7 +242,9 @@ DUCKDB_TOKEN = hash_summary(10, "2024-03-02", "")
 DUCKDB_ANSWER = {"n": [10], "last": ["2024-03-02"]}
 
 
-def build_duckdb_engine(monkeypatch, source, answer=None, *, fails=False):
+def build_duckdb_engine(
+    monkeypatch, source, answer=None, *, fails=False
+) -> tuple[DuckDBEngine, list[str]]:
     """Return an engine over a source, whose queries are recorded and answered."""
     engine = DuckDBEngine(source)
     sent: list[str] = []
@@ -260,7 +262,7 @@ def build_duckdb_engine(monkeypatch, source, answer=None, *, fails=False):
     return engine, sent
 
 
-def postgres(origin: Origin | None = None):
+def postgres(origin: Origin | None = None) -> PostgresSource:
     """Return a Postgres source over an origin, the table `public.items` by default."""
     return PostgresSource(conn=DUCKDB_CONN, origin=origin or Table("public.items"))
 
@@ -404,7 +406,7 @@ async def test_a_failed_probe_downloads_the_chunk_and_never_raises(monkeypatch) 
 COUCHDB_WHOLE = Rows(column="id", chunk=Chunk("a", 0, 100))
 
 
-def build_couchdb_source(conn, **options):
+def build_couchdb_source(conn, **options) -> CouchDBSource:
     """Return a source over the fake database, in the database `people`."""
     return CouchDBSource(conn, secure=False, origin=Table("people"), **options)
 
@@ -561,7 +563,7 @@ def build_oracle_engine(
     *,
     scn: int | None = 123,
     fails: bool = False,
-):
+) -> tuple[OracleEngine, list[tuple[str, list[object]]]]:
     """Return an engine over a table, whose queries are recorded and answered."""
     engine = OracleEngine(
         OracleSource(conn=ORACLE_CONN, origin=origin or Table("APP.ORDERS"))
@@ -711,7 +713,9 @@ MONGODB_CHUNK = Rows(column="id", chunk=Chunk("a", 0, 100))
 MONGODB_ANSWER: list[dict[str, object]] = [{"_id": None, "n": 10, "last": "2024-03-02"}]
 
 
-def build_mongodb_engine(monkeypatch, origin=None, answer=None, *, fails=False):
+def build_mongodb_engine(
+    monkeypatch, origin=None, answer=None, *, fails=False
+) -> tuple[MongoDBEngine, list[tuple[str, list[dict[str, object]]]]]:
     """Return an engine whose probe aggregation is recorded and answered."""
     source = MongoDBSource(
         conn=MONGODB_CONN, shape=MONGODB_SHAPE, origin=origin or Table("people")

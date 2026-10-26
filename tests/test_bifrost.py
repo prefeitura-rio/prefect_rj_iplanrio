@@ -22,7 +22,7 @@ def answer(*parts: dict[str, JsonValue]) -> JsonValue:
 
 
 def gateway(*replies: Response | Exception, attempts: int = 3) -> tuple[Bifrost, list[Request]]:
-    """Build a client whose gateway gives the replies in order, with the requests that it saw."""
+    """Build a client whose gateway gives the replies in order, and keeps requests."""
     seen: list[Request] = []
     queue = list(replies)
 

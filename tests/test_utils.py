@@ -92,7 +92,7 @@ def test_the_capture_time_is_the_scheduled_start_in_sao_paulo() -> None:
     ],
 )
 def test_the_dbt_message_names_the_repository_and_never_its_url(outcome, expected) -> None:
-    """Show the name of the repository and the nodes, with no URL (it can hold a token)."""
+    """Show the repository name and the nodes, with no URL, which may hold a token."""
     request = DbtRun(
         repository="https://TOKEN@github.com/org/queries-x.git", command="build", target="prod", select="tag:daily"
     )

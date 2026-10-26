@@ -127,7 +127,10 @@ def test_a_table_is_read_from_its_title_and_its_notes_join_the_row_above() -> No
 
 
 def test_a_header_that_reaches_the_next_table_empties_the_notes() -> None:
-    """Treat a last header cell `reg` as the start of the next table, so it has no notes."""
+    """Treat a last header cell `reg` as the start of the next table.
+
+    It then has no notes.
+    """
     rows = read_tables(layout_cells(header_end="reg"), "REG_01")
 
     assert [row["observacoes"] for row in rows] == [None, None]

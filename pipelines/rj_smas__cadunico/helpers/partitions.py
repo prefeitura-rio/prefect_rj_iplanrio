@@ -40,7 +40,10 @@ def parse_partition(blob_name: str) -> str:
 
 
 def read_header(path: Path) -> tuple[str, str]:
-    """Return the layout version and the date `YYYY-MM-DD` of the extraction, from the first line of a file."""
+    """Return the layout version and the extraction date `YYYY-MM-DD` of a file.
+
+    They come from its first line.
+    """
     with path.open(encoding="utf-8", errors="replace") as lines:
         first = lines.readline()
 

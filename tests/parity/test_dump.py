@@ -13,6 +13,7 @@ import pytest
 from deltalake import DeltaTable
 from parity_helpers import DOCUMENTS, canonical, column, expected
 from parity_lab import available, build_source, environment
+from pyarrow import Table
 from pymongo import MongoClient
 from pymongoarrow.api import find_arrow_all
 from toolkit.chunks import split_chunks
@@ -33,7 +34,7 @@ def build_chunks(engine: str) -> Chunks:
     return Chunks(column=column(engine), width=100, begin=0, end=399)
 
 
-def load_table(uri: Path, engine: str):
+def load_table(uri: Path, engine: str) -> tuple[Table, dict[int, str]]:
     """Return the rows of the Delta table, and the chunk of each id.
 
     MongoDB keeps `_id` as `id` and the business id as `id_1`, because the names of
@@ -136,7 +137,7 @@ UPDATES = {"postgres": postgres_update, "couchdb": couchdb_update, "mongodb": mo
 
 @pytest.mark.parametrize("name", sorted(UPDATES))
 async def test_a_changed_row_replaces_its_chunk_and_only_that_one(name, tmp_path) -> None:
-    """Replace the chunk of id 150 with one commit, and keep every other row as it was."""
+    """Replace the chunk of id 150 with one commit, and keep every other row."""
     if name not in available():
         pytest.skip(f"{name} is not up")
 
@@ -161,7 +162,10 @@ async def test_a_changed_row_replaces_its_chunk_and_only_that_one(name, tmp_path
 
 
 async def test_date_chunks_load_every_row_in_the_chunk_of_its_month(engine, tmp_path) -> None:
-    """Cut by month over the date column, and load the null chunk last, on every engine with a date."""
+    """Cut by month over the date column, and load the null chunk last.
+
+    It runs on every engine with a date.
+    """
     if engine == "couchdb":
         pytest.skip("CouchDB chunks cut only the id")
 
@@ -178,7 +182,10 @@ async def test_date_chunks_load_every_row_in_the_chunk_of_its_month(engine, tmp_
 
 
 async def test_chunks_really_overlap_on_the_real_server(monkeypatch, tmp_path) -> None:
-    """Hold more than one request in flight on CouchDB, and more than one fetch on MongoDB, with 4 workers."""
+    """Hold more than one request in flight on CouchDB, and fetch on MongoDB.
+
+    It uses 4 workers.
+    """
     flying = {"now": 0, "peak": 0}
 
     original_get = couchdb_module.CouchDBClient.get
@@ -231,7 +238,7 @@ async def test_mongodb_keeps_its_business_id_when_select_leaves_the_object_id_ou
 
 
 async def test_select_loads_only_the_columns_that_it_names(engine, tmp_path) -> None:
-    """Keep the chosen columns and the chunk key, in the order of `select`, on every engine."""
+    """Keep the chosen columns and the chunk key, in `select` order, on every engine."""
     names = [column(engine), "NOME" if engine == "oracle" else "nome"]
 
     await dump_to_delta(

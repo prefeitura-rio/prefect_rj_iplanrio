@@ -42,7 +42,7 @@ def test_two_names_that_differ_in_form_are_the_same_label(first: str, second: st
 
 
 def test_the_catalog_keeps_the_first_spelling_and_never_adds_on_a_find() -> None:
-    """Register once per normalized name, and let a find return nothing for an unknown one."""
+    """Register once per normalized name, and let a find give nothing if unknown."""
     catalog = Catalog()
 
     assert catalog.register("BENEFICIO_SOCIAL", " ajuda ") == "BENEFICIO_SOCIAL"
@@ -66,7 +66,7 @@ def test_the_catalog_prompt_is_sorted_or_says_that_it_is_empty() -> None:
 
 
 def test_a_conversation_has_the_citizen_and_the_agent_lines_without_the_hsm(make_message: MessageFactory) -> None:
-    """Order by time, label each line, keep the HSM text apart, and count every session in the totals."""
+    """Order by time, label each line, keep the HSM text apart, count each session."""
     messages = [
         make_message("s1", "AI_AGENT_AGENTE", "resposta", minute=2),
         make_message("s1", "HSM", "texto do hsm", minute=0),

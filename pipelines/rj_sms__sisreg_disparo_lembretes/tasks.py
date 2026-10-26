@@ -38,7 +38,9 @@ async def read_recipients_task(dispatch: Dispatch, given: list[Recipient] | None
 
 @task
 async def send_batches_task(dispatch: Dispatch, recipients: list[Recipient]) -> Outcome:
-    """Send the recipients to the Wetalkie API, one batch at a time, and keep the rows of the batches that went out.
+    """Send the recipients to the Wetalkie API in batches.
+
+    Keep the rows of the batches that went out.
 
     Raise `RuntimeError` if the API does not answer. A batch that fails stops the run,
     and the outcome keeps the rows of the batches before it and the reason.

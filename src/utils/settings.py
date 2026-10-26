@@ -51,7 +51,7 @@ class WhitelistSettings(ToolkitSettings):
 
 
 class InfisicalSettings(ToolkitSettings):
-    """Where a job reads its secrets: the server, the identity, the project and the folders.
+    """Where a job reads its secrets: the server, identity, project and folders.
 
     `INFISICAL_PATHS` lists the folders in order, separated by commas, and the first
     folder that holds a key wins.

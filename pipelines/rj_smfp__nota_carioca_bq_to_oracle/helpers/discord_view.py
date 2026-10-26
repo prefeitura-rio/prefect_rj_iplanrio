@@ -94,10 +94,10 @@ class Fact:
 
 @dataclass(frozen=True)
 class CountSide:
-    """Um lado da comparação de contagens.
+    """One side of the comparison of counts.
 
-    :param label: Nome do lado, como ``Oracle (SCN)`` ou ``BigQuery``. :param rows:
-    Linhas contadas nesse lado; ``None`` se ainda não se sabe (aparece como ``—``).
+    `label` names the side, such as `Oracle (SCN)` or `BigQuery`. `rows` is the count of
+    that side, or `None` if it is not known yet (shown as `—`).
     """
 
     label: str
@@ -106,11 +106,11 @@ class CountSide:
 
 @dataclass(frozen=True)
 class ValidationLine:
-    """A comparação de contagens de uma tabela entre a origem e o destino.
+    """The comparison of the counts of a table between the source and the target.
 
-    :param table: Nome da tabela. :param sides: Contagens a comparar, na ordem em que
-    aparecem. :param note: Complemento mostrado só quando todas as contagens são iguais
-    (por exemplo, o checksum conferido).
+    `sides` are the counts to compare, in the order they show. `note` is an addition
+    that shows only when all the counts are equal (the checksum that was checked, for
+    example).
     """
 
     table: str
@@ -131,13 +131,13 @@ class ValidationLine:
 
 @dataclass(frozen=True)
 class TableView:
-    """O bloco de uma tabela na descrição.
+    """The block of a table in the description.
 
-    :param name: Nome da tabela. :param stage: Etapa da tabela, já em texto. :param
-    status: Estado da tabela. :param fraction: Progresso da tabela de 0 a 1; ``None``
-    esconde a barra. :param detail: Linhas, taxa e volume já formatados; no sucesso, o
-    resumo final (linhas e duração). :param eta_seconds: Segundos que faltam para a
-    tabela; ``None`` se não há estimativa.
+    `stage` is the stage of the table as text, and `status` is its state. `fraction` is
+    the progress from 0 to 1, and `None` hides the bar. `detail` has the rows, the rate
+    and the volume, already formatted, and on success the final summary (rows and
+    duration). `eta_seconds` is the time left for the table, or `None` without an
+    estimate.
     """
 
     name: str
@@ -150,19 +150,17 @@ class TableView:
 
 @dataclass(frozen=True)
 class RunView:
-    """Tudo que o embed mostra, sem nenhum I/O.
+    """All that the embed shows, with no I/O.
 
-    :param flow_label: Nome curto do fluxo, como ``Oracle → BigQuery``. :param
-    dataset_id: Dataset de destino, que completa o título. :param url: Link do flow run
-    na UI do Prefect, se houver. :param status: Estado da execução. :param stage: Etapa
-    atual (ou a última, no fim). :param fraction: Progresso geral de 0 a 1. :param
-    elapsed_seconds: Tempo desde o início. :param run_name: Nome do flow run, no rodapé.
-    :param updated_at: Hora da atualização, com fuso. :param checklist: Etapas e seus
-    estados. :param tables: Blocos por tabela. :param facts: Campos específicos do
-    fluxo. :param eta_seconds: Segundos que faltam para o fim; ``None`` esconde a
-    previsão. :param error: Mensagem do erro, em caso de falha. :param failed_stage:
-    Etapa em que a falha ocorreu. :param validation: Comparação de contagens por tabela,
-    mostrada na mensagem final; vazio a esconde.
+    `flow_label` is the short name of the flow, such as `Oracle → BigQuery`.
+    `dataset_id` is the target dataset, which completes the title. `url` is the link of
+    the flow run in the Prefect UI. `stage` is the current stage, or the last at the
+    end. `fraction` is the overall progress from 0 to 1. `run_name` goes in the footer,
+    and `updated_at` has a time zone. `checklist` has the stages and their states,
+    `tables` the blocks of each table, and `facts` the fields that belong to the flow.
+    `eta_seconds` is the time to the end, and `None` hides the forecast. `error` and
+    `failed_stage` describe a failure. `validation` is the comparison of counts for each
+    table, shown in the final message, and empty hides it.
     """
 
     flow_label: str

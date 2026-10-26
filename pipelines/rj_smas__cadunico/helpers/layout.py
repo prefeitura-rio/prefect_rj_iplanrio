@@ -52,7 +52,10 @@ def name_version(version: str) -> str:
 
 
 def text_of(value: object) -> str | None:
-    """Return a cell as text, or nothing if it is empty. A whole number has no decimals."""
+    """Return a cell as text, or nothing if it is empty.
+
+    A whole number has no decimals.
+    """
     if value is None or value == "":
         return None
 
@@ -81,7 +84,10 @@ def read_sheets(path: Path) -> dict[str, Cells]:
 
 
 def join_notes(rows: list[Record]) -> list[Record]:
-    """Move the description of a row with no `reg` to the row above that has one, and drop the rows with no position."""
+    """Move the description of a row with no `reg` to the row above that has one.
+
+    Rows with no position are dropped.
+    """
     last: Record | None = None
 
     for row in rows:
@@ -122,7 +128,10 @@ def read_table(cells: Cells, title_row: int, title_column: int, title: str, shee
 
 
 def read_tables(cells: Cells, sheet: str) -> list[Record]:
-    """Return the rows of every table of a sheet, from each cell whose text has the layout title."""
+    """Return the rows of every table of a sheet.
+
+    Each table starts at a cell whose text has the layout title.
+    """
     records: list[Record] = []
 
     for row_number, row in enumerate(cells):
@@ -134,14 +143,20 @@ def read_tables(cells: Cells, sheet: str) -> list[Record]:
 
 
 def clean_name(name: str | None) -> str:
-    """Return a column name without accents, in lower case, with `_` where it had a space, `-` or `/`."""
+    """Return a column name without accents, in lower case.
+
+    A space, `-` or `/` becomes `_`.
+    """
     text = unidecode(name or UNNAMED_COLUMN)
 
     return text.replace("-", "_").replace(" ", "_").replace("/", "_").lower().strip()
 
 
 def name_columns(records: Sequence[Record]) -> list[Record]:
-    """Add the `column` of each row: its clean name, with `_2`, `_3` for a repeat in its table and version."""
+    """Add the `column` of each row: its clean name.
+
+    A repeat in its table and version gets `_2`, `_3`.
+    """
     counts: dict[tuple[str | None, str | None], dict[str, int]] = {}
     named: list[Record] = []
 

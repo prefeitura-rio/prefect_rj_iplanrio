@@ -37,7 +37,7 @@ JSON: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
 
 def is_retryable(error: BaseException) -> bool:
-    """Tell whether a request that failed with this error is worth a new try: a network error or a 5xx."""
+    """Tell whether a failed request is worth a new try: a network error or a 5xx."""
     if isinstance(error, HTTPStatusError):
         return error.response.status_code >= SERVER_ERROR
 
@@ -52,10 +52,13 @@ def log_retry(state: RetryCallState) -> None:
 
 @final
 class FMApi:
-    """A logged-in client of the API with a pool of connections, retries and a new login after a 401."""
+    """A logged-in API client with a pool of connections and retries.
+
+    It logs in again after a 401.
+    """
 
     def __init__(self, client: AsyncClient, login: tuple[str, str], concurrency: int) -> None:
-        """Wrap a client with the user and the password, and the most requests at one time."""
+        """Wrap a client with the user, the password and the most requests at once."""
         self.client = client
         self.login = login
         self.slots = Semaphore(concurrency)
@@ -104,7 +107,10 @@ class FMApi:
         self.token = str(token["accessToken"])
 
     async def relog(self, stale: str | None) -> None:
-        """Log in again only if the token is still the one that got the 401, so one request does it."""
+        """Log in again only if the token is the one that got the 401.
+
+        One request then does it.
+        """
         async with self.lock:
             if self.token == stale:
                 logger.warning("The token expired, logging in again")
@@ -122,7 +128,7 @@ class FMApi:
         reraise=True,
     )
     async def get(self, path: str, params: dict[str, str | int] | None = None) -> Response:
-        """Send a GET, log in again after a 401, and try again after a network error or a 5xx.
+        """Send a GET, log in again after a 401, and retry a network error or 5xx.
 
         Raise `HTTPStatusError` for any other error status.
         """
@@ -156,7 +162,9 @@ class FMApi:
     async def get_pages(
         self, path: str, first: int, last: int, page_size: int, extra: dict[str, str] | None = None
     ) -> list[Row]:
-        """Return the items of the pages `first` to `last`, read at one time, in the order of the pages.
+        """Return the items of the pages `first` to `last`, in page order.
+
+        The pages are read at the same time.
 
         The pages that fail go again in up to two more rounds.
         Raise `RuntimeError` if a page still fails.

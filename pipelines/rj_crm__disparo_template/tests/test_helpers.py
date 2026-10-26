@@ -117,7 +117,7 @@ def test_the_success_flag_of_the_api_is_read(value: object, expected: bool) -> N
 
 
 def test_a_value_is_escaped_for_sfmc() -> None:
-    """Escape the inner quotes with a backslash, with no quotes around, and keep a null."""
+    """Escape inner quotes with a backslash, add no quotes, and keep a null."""
     assert escape_json({"a": "b"}) == '{\\"a\\": \\"b\\"}'
     assert escape_json(None) is None
     assert escape_json(["x"]) == '[\\"x\\"]'
@@ -166,7 +166,7 @@ async def test_the_debts_of_a_cpf_give_nothing_after_every_try_fails() -> None:
 
 
 async def test_only_the_cpfs_with_a_confirmed_debt_stay_in_the_frame() -> None:
-    """Keep the CPF that the API confirms, with its columns, and drop the one that it does not confirm or that fails."""
+    """Keep the CPF that the API confirms, and drop the rest."""
     client, _ = make_client(
         Response(
             200,

@@ -1,4 +1,7 @@
-"""The rows of the history: one for each record of each Data Extension, and the window of days that a run takes."""
+"""The rows of the history: one for each record of each Data Extension.
+
+It also gives the window of days of a run.
+"""
 
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
@@ -13,7 +16,10 @@ from pipelines.rj_crm__get_history_data.types import Extension, Extraction, Fiel
 
 
 def normalize_field_name(name: str) -> str:
-    """Return a field name to compare: lower case, with each run of spaces, `_` and `-` made one space."""
+    """Return a field name to compare: lower case, with separators as one space.
+
+    Spaces, `_` and `-` are separators.
+    """
     return sub(r"[\s_-]+", " ", name.strip().lower())
 
 
@@ -23,7 +29,7 @@ def keep_history(extensions: Sequence[Extension]) -> list[Extension]:
 
 
 def find_columns(fields: Sequence[Field]) -> tuple[str | None, str | None, str | None]:
-    """Return the names of the phone column, the primary key column and the entry date column of a Data Extension.
+    """Return the phone, primary key and entry date column names of a Data Extension.
 
     The entry date column is the one whose name has `data de entrada`. Failing that, it
     is the only column of type `date`, if there is just one.
@@ -85,7 +91,7 @@ def build_rows(results: Sequence[Extraction]) -> list[Row]:
 
 
 def parse_entry_date(value: JsonValue) -> datetime | None:
-    """Return an entry date as a time in UTC without a zone, or nothing if it is not a date.
+    """Return an entry date as a UTC time without a zone, or nothing if not a date.
 
     The ISO format comes first. Then the formats of SFMC, month first before day first,
     so `9/15/2026 3:04:05 PM` and `15/09/2026` both read. A time with no zone counts as
@@ -114,7 +120,9 @@ def parse_entry_date(value: JsonValue) -> datetime | None:
 
 
 def filter_recent(rows: Sequence[Row], window_days: int, now: datetime) -> list[Row]:
-    """Return the rows of the last `window_days` days, with `data_particao`, and without repeats of the merge key.
+    """Return the rows of the last `window_days` days, with `data_particao`.
+
+    A repeat of the merge key is dropped.
 
     A row with no entry date that can be read is always kept, since its age is unknown,
     and takes the day of the run as `data_particao`. The first row of each key stays.

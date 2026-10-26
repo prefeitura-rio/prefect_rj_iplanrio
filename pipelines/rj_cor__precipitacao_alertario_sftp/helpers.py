@@ -6,7 +6,7 @@ from re import search
 from xml.etree.ElementTree import Element
 
 from defusedxml.ElementTree import fromstring
-from google.cloud import storage
+from toolkit.gcs import create_store, list_sizes, read_chunks
 
 from pipelines.rj_cor__precipitacao_alertario_sftp.constants import (
     FILE_PATTERN,
@@ -19,7 +19,7 @@ Record = dict[str, str | float | None]
 
 
 def parse_float(value: str | None) -> float | None:
-    """Return an attribute as a number, or nothing if it is missing or is not a number."""
+    """Return an attribute as a number, or nothing if it is missing or not a number."""
     try:
         return float(value) if value is not None else None
     except ValueError:
@@ -27,10 +27,13 @@ def parse_float(value: str | None) -> float | None:
 
 
 def read_file_time(name: str) -> datetime | None:
-    """Return the time in a file name such as `Chuvas_20260717113729.xml`, in São Paulo, or nothing.
+    """Return the time in a file name in São Paulo, or nothing.
+
+    The name looks like `Chuvas_20260717113729.xml`.
 
     ```python
-    read_file_time("landing/Chuvas_20260717113729.xml")  # datetime(2026, 7, 17, 11, 37, 29, tzinfo=SP_TZ)
+    read_file_time("landing/Chuvas_20260717113729.xml")
+    # datetime(2026, 7, 17, 11, 37, 29, tzinfo=SP_TZ)
     ```
     """
     match = search(FILE_PATTERN, name)
@@ -45,7 +48,7 @@ def read_file_time(name: str) -> datetime | None:
 
 
 def read_watermark(text: str | None) -> datetime | None:
-    """Return the latest time of the table as a time in São Paulo, or nothing if there is none."""
+    """Return the latest time of the table in São Paulo, or nothing if there is none."""
     if not text:
         return None
 
@@ -56,7 +59,9 @@ def read_watermark(text: str | None) -> datetime | None:
 
 
 def keep_new_files(names: Sequence[str], watermark: datetime | None) -> list[str]:
-    """Return the XML files that the table has not seen: those after the watermark, all without one.
+    """Return the XML files that the table has not seen: those after the watermark.
+
+    Without a watermark, all the files are new.
 
     Without a watermark every XML file stays. With one, a file whose name has no time is
     dropped.
@@ -117,13 +122,13 @@ def drop_repeats(records: Sequence[Mapping[str, str | float | None]]) -> list[Ma
 
 def list_new_files(bucket_name: str, prefix: str, watermark: str | None) -> list[str]:
     """List the XML files of the landing zone that come after the watermark."""
-    blobs = storage.Client().bucket(bucket_name).list_blobs(prefix=prefix)
+    names = list(list_sizes(create_store(bucket_name), prefix))
 
-    return keep_new_files([blob.name for blob in blobs], read_watermark(watermark))
+    return keep_new_files(names, read_watermark(watermark))
 
 
 def download_files(bucket_name: str, names: list[str]) -> list[str]:
     """Download the XML files of the landing zone as text."""
-    bucket = storage.Client().bucket(bucket_name)
+    store = create_store(bucket_name)
 
-    return [bucket.blob(name).download_as_text(encoding="utf-8") for name in names]
+    return [b"".join(read_chunks(store, name)).decode("utf-8") for name in names]

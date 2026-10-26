@@ -1,4 +1,4 @@
-"""Carga no Oracle com SQL*Loader em direct path, lendo os CSV gzip direto do GCS."""
+"""Load into Oracle with SQL*Loader in direct path, reading gzip CSV from GCS."""
 
 import gzip
 import os
@@ -11,9 +11,9 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO, cast
+from typing import BinaryIO
 
-from google.cloud import storage
+from toolkit.gcs import ObjectReader, create_store
 from toolkit.telemetry import logger
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import ExportedFile
@@ -22,7 +22,6 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import OracleCo
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr_progress import (
     CountingReader,
     ProgressSnapshot,
-    Readable,
     SessionProgress,
 )
 
@@ -40,13 +39,11 @@ POLL_SECONDS = 0.5
 
 @dataclass(frozen=True)
 class LoadJob:
-    """Carga de uma tabela a partir dos arquivos exportados pelo BigQuery.
+    """The load of one table from the files that BigQuery exported.
 
-    :param table: Tabela de destino no Oracle, já vazia.
-    :param fields: Campos do CSV, na ordem do schema do BigQuery.
-    :param bucket: Bucket dos arquivos.
-    :param files: Arquivos ``.csv.gz`` exportados, com tamanho.
-    :param sessions: Número máximo de sessões simultâneas do SQL*Loader.
+    `table` is the target table in Oracle, already empty. `fields` are the fields of the
+    CSV, in the order of the BigQuery schema. `files` are the exported `.csv.gz` files,
+    with their sizes. `sessions` is the most SQL*Loader sessions at the same time.
     """
 
     table: str
@@ -58,12 +55,7 @@ class LoadJob:
 
 @dataclass(frozen=True)
 class SessionResult:
-    """Resultado de uma sessão do SQL*Loader.
-
-    :param index: Número da sessão.
-    :param files: Quantidade de arquivos enviados à sessão.
-    :param rows: Linhas carregadas pela sessão.
-    """
+    """The result of one SQL*Loader session: its number, files sent and rows."""
 
     index: int
     files: int
@@ -72,12 +64,7 @@ class SessionResult:
 
 @dataclass(frozen=True)
 class LoadResult:
-    """Resultado da carga de uma tabela.
-
-    :param rows: Total de linhas carregadas.
-    :param sessions: Resultado de cada sessão.
-    :param elapsed_seconds: Duração da carga.
-    """
+    """The result of the load of one table: rows, sessions and time."""
 
     rows: int
     sessions: list[SessionResult]
@@ -85,17 +72,13 @@ class LoadResult:
 
 
 def build_control_file(schema: str, table: str, fields: list[LoaderField]) -> str:
-    """Gera o control file do SQL*Loader para o CSV exportado pelo BigQuery.
+    """Build the SQL*Loader control file for the CSV that BigQuery exported.
 
-    ``CSV WITH EMBEDDED`` aceita quebras de linha dentro de valores entre aspas.
-    ``PRESERVE BLANKS`` mantém espaços em campos sem aspas, que o SQL*Loader
-    removeria por padrão; ele precisa vir entre o método de carga e o
-    ``INTO TABLE``. Campos ``FILLER`` são lidos do CSV e descartados.
-
-    :param schema: Schema da tabela de destino.
-    :param table: Nome da tabela de destino.
-    :param fields: Campos na ordem do CSV.
-    :returns: Conteúdo do control file.
+    `CSV WITH EMBEDDED` accepts line breaks inside quoted values. `PRESERVE BLANKS`
+    keeps the spaces of fields with no quotes, which SQL*Loader would remove by default.
+    It must come between the load method and `INTO TABLE`. `FILLER` fields are read from
+    the CSV and dropped. `fields` are in the order of the CSV. Return the content of the
+    file.
     """
     field_lines = ",\n".join(f'  "{field.name}" {field.spec}' for field in fields)
     return (
@@ -111,36 +94,31 @@ def build_control_file(schema: str, table: str, fields: list[LoaderField]) -> st
 
 
 def split_round_robin[T](items: list[T], parts: int) -> list[list[T]]:
-    """Divide uma lista em até ``parts`` grupos não vazios, alternando os itens.
-
-    :param items: Itens a distribuir.
-    :param parts: Número máximo de grupos.
-    :returns: Grupos na ordem de distribuição.
-    """
+    """Split a list into up to `parts` groups that are not empty, round robin."""
     groups = [items[index::parts] for index in range(parts)]
     return [group for group in groups if group]
 
 
 def stream_blobs(
-    bucket: storage.Bucket,
+    bucket: str,
     files: list[ExportedFile],
     target: BinaryIO,
     progress: SessionProgress,
     errors: list[BaseException],
 ) -> None:
-    """Descompacta os arquivos do GCS e escreve o CSV na entrada do SQL*Loader.
+    """Unzip the files from GCS and write the CSV to the input of SQL*Loader.
 
-    :param bucket: Bucket dos arquivos.
-    :param files: Arquivos ``.csv.gz`` a enviar, em ordem.
-    :param target: Entrada padrão do processo do SQL*Loader.
-    :param progress: Contadores da sessão.
-    :param errors: Lista onde uma exceção da thread é registrada.
+    `files` are the `.csv.gz` files to send, in order. `target` is the standard input of
+    the SQL*Loader process, and `progress` has the counters of the session. `errors` is
+    the list where the exception of the thread is recorded.
     """
     try:
+        store = create_store(bucket)
+
         for exported in files:
-            with bucket.blob(exported.name).open("rb") as raw:
-                with gzip.GzipFile(fileobj=CountingReader(cast("Readable", raw), progress)) as unzipped:
-                    shutil.copyfileobj(unzipped, target, COPY_BUFFER_BYTES)
+            raw = ObjectReader(store, exported.name)
+            with gzip.GzipFile(fileobj=CountingReader(raw, progress)) as unzipped:
+                shutil.copyfileobj(unzipped, target, COPY_BUFFER_BYTES)
             progress.add_file()
     except BaseException as error:
         errors.append(error)
@@ -154,23 +132,16 @@ def load_from_gcs(
     on_progress: Callable[[ProgressSnapshot], None] | None = None,
     progress_interval_seconds: float = 30.0,
 ) -> LoadResult:
-    """Carrega os arquivos exportados no Oracle com N sessões em direct path.
+    """Load the exported files into Oracle with N sessions in direct path.
 
-    Cada sessão recebe um grupo de arquivos pela entrada padrão, sem gravar nada
-    em disco. Com mais de uma sessão, usa ``PARALLEL=TRUE``, que exige tabela sem
-    índices. ``ERRORS=0`` faz qualquer linha rejeitada falhar a carga. Enquanto os
-    arquivos são enviados, ``on_progress`` recebe o andamento a cada intervalo e
-    uma última vez ao fim do envio.
-
-    :param config: Configuração da conexão.
-    :param job: Tabela, colunas, arquivos e número de sessões da carga.
-    :param on_progress: Função chamada com o andamento da carga.
-    :param progress_interval_seconds: Intervalo entre chamadas de ``on_progress``.
-    :returns: Linhas carregadas no total e por sessão, e a duração.
-    :raises RuntimeError: Se alguma sessão falhar.
+    Each session gets a group of files through its standard input, and nothing goes to
+    disk. With more than one session it uses `PARALLEL=TRUE`, which needs a table with
+    no indexes. `ERRORS=0` makes any rejected row fail the load. While the files go,
+    `on_progress` gets the progress every interval, and once more at the end of the
+    send. Return the rows loaded, in total and for each session, and the time. Raise
+    `RuntimeError` if a session fails.
     """
     groups = split_round_robin(job.files, max(job.sessions, 1))
-    storage_bucket = storage.Client().bucket(job.bucket)
     env = {**os.environ, "NLS_LANG": "AMERICAN_AMERICA.AL32UTF8"}
     options = [
         "direct=true",
@@ -209,9 +180,7 @@ def load_from_gcs(
             )
             errors: list[BaseException] = []
             progress = SessionProgress()
-            writer = threading.Thread(
-                target=stream_blobs, args=(storage_bucket, group, process.stdin, progress, errors)
-            )
+            writer = threading.Thread(target=stream_blobs, args=(job.bucket, group, process.stdin, progress, errors))
             writer.start()
             sessions_state.append((index, group, process, writer, errors, log_file, progress))
 

@@ -33,7 +33,7 @@ async def rj_smas__disparo_cadunico(
     audience: Audience = DEFAULT_AUDIENCE,
     waits: Waits = DEFAULT_WAITS,
 ) -> None:
-    """Remind the families with an appointment of the CadÚnico, by an HSM message of the Wetalkie API.
+    """Remind the CadÚnico families that have an appointment, by a Wetalkie HSM.
 
     The run ends if the control sheet has the campaign off or past its limit date, if
     the processor of the query says that today is a weekend, or if the query gives

@@ -15,7 +15,7 @@ RUN_ID = "7f1d6c1e-6f4b-4a53-9b1e-3b7d1d6c1e00"
 
 @final
 class FakeClient:
-    """A Prefect client that gives one flow run and records the state that it is set to."""
+    """A Prefect client that gives one flow run and records the state it is set to."""
 
     def __init__(self, state: object | None) -> None:
         """Store the arguments."""
@@ -41,7 +41,10 @@ def use_client(monkeypatch: pytest.MonkeyPatch, client: FakeClient) -> None:
 
 
 def test_a_started_run_has_its_link_when_the_ui_url_is_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Start the deployment as a subflow without waiting, and build the link with no slash doubled."""
+    """Start the deployment as a subflow with no wait, and build the link well.
+
+    A slash is never doubled.
+    """
     calls: list[dict[str, object]] = []
 
     def run_deployment(**arguments: object) -> SimpleNamespace:

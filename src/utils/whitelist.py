@@ -20,7 +20,9 @@ NINTH_DIGIT_POSITION = 2
 
 
 def normalize_numbers(number: str) -> list[str]:
-    """Return a Brazilian number as `55`, the area code and the number, with and without the 9 after the area code.
+    """Return a Brazilian number as `55`, area code and number.
+
+    It gives the forms with and without the 9.
 
     ```python
     normalize_numbers("21987654321")  # ["5521987654321", "552187654321"]
@@ -39,7 +41,10 @@ def normalize_numbers(number: str) -> list[str]:
 
 
 def sample_numbers(numbers: Sequence[str], percentage: int, rng: Random) -> list[str]:
-    """Return a random share of the different numbers: `percentage` percent, rounded down. 100 or more gives all."""
+    """Return a random share of the different numbers, rounded down.
+
+    `percentage` is a percent, and 100 or more gives all.
+    """
     unique = sorted(set(numbers))
     count = int(len(unique) * percentage / 100)
 
@@ -51,7 +56,7 @@ class Whitelist:
     """A client of the whitelist API. Call `authenticate` before any other method."""
 
     def __init__(self, client: AsyncClient, issuer: str, credentials: tuple[str, str]) -> None:
-        """Wrap a client with the issuer of the token and the id and the secret of the client."""
+        """Wrap a client with the token issuer and the client id and secret."""
         self.client = client
         self.issuer = issuer
         self.credentials = credentials
@@ -139,7 +144,10 @@ class Whitelist:
         return str(created) if created is not None else None
 
     async def existing_numbers(self) -> set[str]:
-        """Return every number of the whitelist, with and without the 9, reading it page by page."""
+        """Return every number of the whitelist, with and without the 9.
+
+        It reads page by page.
+        """
         numbers: set[str] = set()
         page = 1
 
@@ -170,7 +178,7 @@ class Whitelist:
 
 @dataclass(frozen=True)
 class Selection:
-    """A share of the phones for a group: `percentage` percent, into the group named `group`.
+    """A share of the phones for a group: `percentage` percent, into `group`.
 
     With `force`, the numbers that the whitelist already has are sent again.
     """
@@ -181,7 +189,7 @@ class Selection:
 
 
 async def add_to_whitelist(whitelist: Whitelist, phones: Sequence[str], selection: Selection, rng: Random) -> int:
-    """Add a random share of the phones to a group, and create the group if it does not exist.
+    """Add a random share of the phones to a group, and create the group if missing.
 
     A number that the whitelist already has, with or without the 9, is skipped, unless
     `selection.force` is on. Each number goes in with and without the 9 after the area

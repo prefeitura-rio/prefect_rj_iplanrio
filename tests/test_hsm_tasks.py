@@ -20,7 +20,7 @@ RECIPIENTS = [
 
 @final
 class Spies:
-    """The doubles of what `run_hsm` calls: the API, the whitelist, the pause and the channel of Discord."""
+    """The doubles of what `run_hsm` calls: API, whitelist, pause and Discord."""
 
     def __init__(self, sent: Sent) -> None:
         """Store the arguments."""
@@ -70,7 +70,10 @@ def two_batches() -> Sent:
 
 
 async def test_a_dispatch_waits_sends_and_posts_the_notice(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Wait the minutes first, send once, return the rows of every batch and post a notice with an example."""
+    """Wait the minutes first, send once, return all batch rows, and post a notice.
+
+    The notice has an example.
+    """
     spies = install(monkeypatch, two_batches())
 
     run = await tasks.run_hsm.fn(HSM, RECIPIENTS, None, 5, test_mode=False)
@@ -91,7 +94,10 @@ async def test_a_dispatch_waits_sends_and_posts_the_notice(monkeypatch: pytest.M
 
 
 async def test_the_whitelist_gets_the_phones_before_the_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Put the phones on the whitelist with the selection, and skip it for 0 percent or no selection."""
+    """Put the phones on the whitelist with the selection, and skip it for 0 percent.
+
+    No selection skips it too.
+    """
     spies = install(monkeypatch, two_batches())
 
     await tasks.run_hsm.fn(HSM, RECIPIENTS, Selection(30, "group"), 0, test_mode=False)
@@ -104,7 +110,10 @@ async def test_the_whitelist_gets_the_phones_before_the_dispatch(monkeypatch: py
 async def test_a_failed_batch_keeps_the_rows_that_went_out_and_posts_no_success_notice(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Return the rows of batch 1 and the reason, so the flow records them and then raises."""
+    """Return the rows of batch 1 and the reason, so the flow records them.
+
+    Then it raises.
+    """
     sent = Sent([SentBatch("C-2026-07-17-lote1", RECIPIENTS[:2])], "Dispatch failed for batch 2: 500 boom")
     spies = install(monkeypatch, sent)
 

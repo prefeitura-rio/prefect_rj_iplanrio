@@ -8,14 +8,19 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.text import normalize_l
 
 
 class Catalog:
-    """The categories found for a dispatch, each with its description, looked up by a normalized name."""
+    """The categories found for a dispatch, each with a description.
+
+    They are looked up by a normalized name.
+    """
 
     def __init__(self) -> None:
         """Start with no category."""
         self.entries: dict[str, tuple[str, str]] = {}
 
     def register(self, name: str, description: str = "") -> str:
-        """Add a category if it is new, and return its canonical name, the one that goes in the result.
+        """Add a category if it is new, and return its canonical name.
+
+        That name is the one that goes in the result.
 
         A name that differs only in accents, capitals or spaces is the same category.
         """
@@ -37,7 +42,10 @@ class Catalog:
         return dict(self.entries.values())
 
     def as_prompt(self) -> str:
-        """Return the catalog as the lines of a prompt, in alphabetical order, or a note that it is empty."""
+        """Return the catalog as prompt lines in alphabetical order.
+
+        An empty catalog gives a note.
+        """
         if not self.entries:
             return "(nenhuma categoria criada ainda — você pode criar as primeiras)"
 

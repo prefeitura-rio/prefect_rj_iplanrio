@@ -17,7 +17,7 @@ from utils.hsm import Waits as HsmWaits
 
 @dataclass(frozen=True)
 class Campaign(HsmCampaign):
-    """The campaign of the reminders of the delivery of the Cartão PIC, with its defaults."""
+    """The campaign of the Cartão PIC delivery reminders, with its defaults."""
 
     name: str = CAMPAIGN_NAME
     id_hsm: int = HSM_ID
@@ -27,7 +27,7 @@ class Campaign(HsmCampaign):
 
 @dataclass(frozen=True)
 class Audience:
-    """Who gets the reminder: a phone and a CPF once each, and the share of the phones on the whitelist."""
+    """Who gets the reminder: one per phone and CPF, and the whitelist share."""
 
     drop_duplicate_phones: bool = True
     drop_duplicate_cpfs: bool = True

@@ -10,7 +10,7 @@ from utils.hooks import notify_failure
 
 @flow(log_prints=True, flow_run_name="disparos-email", on_failure=[notify_failure])
 async def rj_pic__disparos_email(*, email_subject: str = DEFAULT_SUBJECT) -> None:
-    """Send an HTML mail to each recipient of a BigQuery table, through the Data Relay API.
+    """Send an HTML mail to each recipient of a BigQuery table, via the Data Relay.
 
     The table and the filter come from the settings. Each row becomes a personal mail
     from `email_template.html`, with the students of the field `dados`. The mails go one

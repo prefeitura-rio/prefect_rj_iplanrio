@@ -18,7 +18,7 @@ def summarize(rows: list[Record]) -> list[tuple[str | None, ...]]:
 
 
 def test_a_new_column_is_marked_missing_in_the_version_before(make_record: Callable[..., Record]) -> None:
-    """Compare each version with the one before it, and warn about the missing column."""
+    """Compare each version with the one before, and warn about the new column."""
     rows = [
         make_record("a", particao="0701"),
         make_record("a", particao="0702"),
@@ -36,7 +36,7 @@ def test_a_new_column_is_marked_missing_in_the_version_before(make_record: Calla
 
 
 def test_a_column_that_a_version_lacks_is_added_to_that_version_as_a_row(make_record: Callable[..., Record]) -> None:
-    """Keep every row as it is, and add a row that tells the older version to select the column as null."""
+    """Keep every row, and add a row that tells the older version to select null."""
     rows = [
         make_record("a", particao="0701"),
         make_record("a", particao="0702"),

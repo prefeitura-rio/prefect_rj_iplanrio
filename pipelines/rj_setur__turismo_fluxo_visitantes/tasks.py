@@ -13,13 +13,17 @@ from toolkit.telemetry import logger
 
 from pipelines.rj_setur__turismo_fluxo_visitantes.helpers import (
     build_drive_query,
+    build_extraction_jobs,
     build_spreadsheet_url,
     extract_year_from_filename,
     get_base_table_name,
     get_google_api_scopes,
+    get_worksheet_ranges_config,
     normalize_to_bigquery_table_name,
+    read_worksheet_titles,
 )
 from pipelines.rj_setur__turismo_fluxo_visitantes.types import ExtractionJob
+from utils.types import DumpMode
 
 
 @task
@@ -61,23 +65,30 @@ def list_spreadsheets_in_folder(
 
 
 @task
-def get_worksheet_info(spreadsheet_url: str, credentials: Credentials) -> list[dict[str, str | int]]:
-    """Get information about all worksheets in a spreadsheet."""
-    gspread_client = gspread.authorize(credentials)
-    sheet = gspread_client.open_by_url(spreadsheet_url)
-    worksheets = [{"title": worksheet.title, "index": idx} for idx, worksheet in enumerate(sheet.worksheets())]
+def plan_extraction_jobs(
+    spreadsheets: list[dict[str, str]], credentials: Credentials, dataset_id: str, dump_mode: DumpMode
+) -> list[ExtractionJob]:
+    """List the ranges to extract from every spreadsheet, one job for each."""
+    ranges = get_worksheet_ranges_config()
+    jobs = [
+        job
+        for spreadsheet in spreadsheets
+        for job in build_extraction_jobs(
+            spreadsheet, read_worksheet_titles(spreadsheet["url"], credentials), ranges, dataset_id, dump_mode
+        )
+    ]
 
-    logger.info(f"Found {len(worksheets)} worksheets in spreadsheet")
+    logger.info(f"Prepared {len(jobs)} extraction jobs")
 
-    for ws in worksheets:
-        logger.info(f"  - {ws['title']} (index: {ws['index']})")
-
-    return worksheets
+    return jobs
 
 
 @task
 def extract_range_to_csv(job: ExtractionJob, credentials: Credentials) -> tuple[Path, str]:
-    """Read a range of a worksheet into a CSV file, and return its folder and the table id."""
+    """Read a range of a worksheet into a CSV file.
+
+    Return its folder and the table id.
+    """
     table_id = normalize_to_bigquery_table_name(get_base_table_name(job["worksheet_title"], job["table_suffix"]))
     table_id_with_year = f"{table_id}_{job['spreadsheet_year']}"
 

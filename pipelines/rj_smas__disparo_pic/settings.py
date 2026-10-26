@@ -4,6 +4,6 @@ from toolkit.settings import ToolkitSettings
 
 
 class Settings(ToolkitSettings):
-    """The destinations of a test, as JSON: a list of objects with the phone, the id and the vars."""
+    """The destinations of a test, as JSON objects with the phone, id and vars."""
 
     DESTINATIONS: str | None = None

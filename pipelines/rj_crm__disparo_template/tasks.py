@@ -61,7 +61,7 @@ from utils.whitelist import Selection, Whitelist, add_to_whitelist, remove_from_
 
 @task
 async def read_switch_task(campaign: Campaign) -> Switch:
-    """Read the row of the campaign in the control sheet and decide whether it may run today."""
+    """Read the campaign row in the control sheet and decide if it may run today."""
     query = render_query(
         dispatch_module.__file__,
         "flow_status",
@@ -76,7 +76,7 @@ async def read_switch_task(campaign: Campaign) -> Switch:
 
 @task
 async def check_campaign_task(campaign: str) -> bool:
-    """Check that the campaign is in the table of the journeys of Salesforce, and alert if it is not.
+    """Check that the campaign is in the table of the journeys, and alert if not.
 
     A campaign that is not there never gets a status, so its results would be lost.
     """
@@ -98,7 +98,9 @@ async def read_frame_task(query: str) -> pl.DataFrame:
 
 @task
 async def read_dispatched_task(interval_days: int) -> pl.DataFrame:
-    """Read who got a message in the last `interval_days` days, with an empty frame if the read fails.
+    """Read who got a message in the last `interval_days` days.
+
+    An empty frame comes back if the read fails.
 
     The columns are `cpf`, `telefone`, `status`, `nome_campanha` and `data_particao`.
     """
@@ -219,7 +221,9 @@ async def materialize_task() -> None:
 
 @task
 async def monitor_task(campaign: str, dispatch_date: str, total: int, delivery: Delivery, *, test_mode: bool) -> bool:
-    """Wait, build the status model and look for the status of the dispatch, until it shows or the time ends.
+    """Wait and look for the status of the dispatch, until it shows or time ends.
+
+    It builds the status model first.
 
     It counts as sent when at least a fifth of the sends have a status of that day. If
     none shows in `max_wait_minutes`, it alerts. Return whether the status showed.
@@ -262,8 +266,10 @@ async def wait_task(minutes: float) -> None:
 
 @task
 async def prepare_task(campaign: Campaign, audience: Audience, query: str) -> pl.DataFrame:
-    """Read the frame of the destinations and clean it: the columns, the duplicate CPFs, the phones that failed
-    before, and the enricher.
+    """Read the frame of the destinations and clean it.
+
+    It fixes the columns, drops duplicate CPFs and phones that failed before, and runs
+    the enricher.
 
     Return an empty frame, after a notice, if nobody is left. Raise `ValueError` if
     `cpf` or `telefone` is missing.
@@ -323,7 +329,9 @@ async def select_task(frame: pl.DataFrame, campaign: Campaign, audience: Audienc
 
 @task
 async def deliver_task(current: pl.DataFrame, campaign: Campaign, delivery: Delivery) -> Delivered:
-    """Put the phones on the whitelist, and send the frame to the SFTP, one file for each batch.
+    """Put the phones on the whitelist and send the frame to the SFTP.
+
+    It writes one file for each batch.
 
     The task waits `sleep_minutes` before each file and `batch_sleep_minutes` between
     files. Unless `campaign.test_mode` is on, it returns the rows of the log of what it
@@ -379,7 +387,10 @@ async def watch_task(
 
 @task
 async def record_task(rows: list[dict[str, JsonValue]], table: Table, cloud: Cloud, attempt: int) -> None:
-    """Load the log of a try into the table, with its own capture time, so a later try is not dropped as a repeat."""
+    """Load the log of a try into the table, with its own capture time.
+
+    A later try is then not dropped as a repeat.
+    """
     options = DumpOptions(capture=capture_time() + timedelta(seconds=attempt))
 
     with TemporaryDirectory() as directory:

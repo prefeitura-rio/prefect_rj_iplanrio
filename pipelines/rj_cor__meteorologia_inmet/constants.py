@@ -32,4 +32,4 @@ MEASURES: Final = {
 """The measures of the API that the table keeps, with their names in the table."""
 
 MERGE: Final = MergeSpec(key=["id_estacao", "data", "horario"], update=True, prune="data")
-"""How a `merge` run matches the rows: a measurement is a station, a date and an hour."""
+"""How a `merge` run matches the rows: a station, a date and an hour."""

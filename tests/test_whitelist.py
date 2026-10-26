@@ -19,7 +19,10 @@ BODY: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
 
 @final
 class FakeApi:
-    """The whitelist API: it gives a token, keeps the groups and the numbers, and records the calls that change them."""
+    """The whitelist API: it gives a token, keeps groups and numbers.
+
+    It records the calls that change them.
+    """
 
     def __init__(
         self, groups: list[dict[str, JsonValue]] | None = None, numbers: list[str] | None = None, login: int = 200

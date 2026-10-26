@@ -31,7 +31,10 @@ def test_the_next_page_is_the_url_of_the_pagination_if_there_is_one(page: JsonVa
 
 
 def test_a_row_has_text_columns_and_the_day_it_started() -> None:
-    """Turn nested values into JSON text, and take the day from `started_at`, else `created_at`."""
+    """Turn nested values into JSON text, and take the day from `started_at`.
+
+    It uses `created_at` if there is no start.
+    """
     rows = build_rows(
         [
             {"id": "1", "attributes": {"started_at": "2026-01-02T10:00:00Z", "name": "a"}, "empty": None},

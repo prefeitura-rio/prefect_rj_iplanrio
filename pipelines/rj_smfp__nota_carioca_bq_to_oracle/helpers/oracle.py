@@ -1,4 +1,4 @@
-"""Acesso ao Oracle de destino: configuração, criação protegida e contagem de tabelas."""
+"""Access the target Oracle: configuration, protected creation and table counts."""
 
 import re
 from dataclasses import dataclass
@@ -46,14 +46,10 @@ IDENTIFIER_PATTERN = re.compile(r"^[A-Z][A-Z0-9_$#]{0,127}$")
 
 @dataclass(frozen=True)
 class OracleConfig:
-    """Conexão com o Oracle de destino, lida do Infisical.
+    """The connection to the target Oracle, read from Infisical.
 
-    :param user: Usuário do banco.
-    :param password: Senha do usuário.
-    :param host: Host ou IP do banco.
-    :param port: Porta do listener.
-    :param service_name: Service name do banco.
-    :param schema: Schema onde as tabelas são criadas.
+    `host` is the host or IP of the database, `port` is the port of the listener, and
+    `service_name` is its service name. `schema` is where the tables are created.
     """
 
     user: str
@@ -65,16 +61,14 @@ class OracleConfig:
 
     @property
     def dsn(self) -> str:
-        """Retorna o DSN no formato easy connect (``host:porta/service``)."""
+        """Return the DSN in the easy connect format (`host:port/service`)."""
         return f"{self.host}:{self.port}/{self.service_name}"
 
 
 def validate_identifier(name: str) -> str:
-    """Normaliza e valida um identificador do Oracle.
+    """Normalize and validate an Oracle identifier, and return it in upper case.
 
-    :param name: Nome do schema ou da tabela.
-    :returns: O nome em maiúsculas.
-    :raises ValueError: Se o nome não for um identificador válido.
+    Raise `ValueError` if the name is not a valid identifier.
     """
     upper = name.upper()
     if not IDENTIFIER_PATTERN.match(upper):
@@ -83,11 +77,10 @@ def validate_identifier(name: str) -> str:
 
 
 def read_oracle_config() -> OracleConfig:
-    """Lê do ambiente a configuração do Oracle.
+    """Read the Oracle configuration from the environment.
 
-    :returns: Configuração da conexão.
-    :raises pydantic.ValidationError: Se alguma variável estiver ausente.
-    :raises ValueError: Se o schema for inválido.
+    Raise `pydantic.ValidationError` if a variable is missing, and `ValueError` if the
+    schema is not valid.
     """
     settings = Settings()
 
@@ -102,22 +95,17 @@ def read_oracle_config() -> OracleConfig:
 
 
 def oracle_table_name(bq_table_id: str) -> str:
-    """Retorna o nome da tabela de destino, sempre com o prefixo de proteção.
+    """Return the name of the target table, always with the protection prefix.
 
-    :param bq_table_id: Nome da tabela no BigQuery.
-    :returns: Nome da tabela no Oracle.
-    :raises ValueError: Se o nome resultante não for um identificador válido.
+    Raise `ValueError` if the resulting name is not a valid identifier.
     """
     return validate_identifier(f"{TABLE_PREFIX}{bq_table_id}")
 
 
 def assert_managed_table(table: str, comment: str | None) -> None:
-    """Garante que a tabela foi criada por esta pipeline antes de alterá-la.
+    """Make sure that this pipeline made the table before it changes it.
 
-    :param table: Nome da tabela no Oracle.
-    :param comment: Comentário atual da tabela.
-    :raises PermissionError: Se a tabela não tiver o prefixo ou a marca da
-        pipeline.
+    Raise `PermissionError` if the table has no prefix or no mark of the pipeline.
     """
     if not table.startswith(TABLE_PREFIX):
         raise PermissionError(f"{table} não começa com {TABLE_PREFIX}; a pipeline não altera essa tabela.")
@@ -126,32 +114,26 @@ def assert_managed_table(table: str, comment: str | None) -> None:
 
 
 def missing_privileges(session_user: str, schema: str, privileges: set[str]) -> list[str]:
-    """Lista os privilégios que faltam para operar as tabelas do schema.
+    """List the privileges that are missing to operate the tables of the schema.
 
-    O dono do schema precisa apenas criar sinônimos nos schemas dos
-    consumidores. Os demais usuários precisam de todos: criar e comentar a
-    tabela, esvaziá-la com ``TRUNCATE``, travá-la e inserir no direct path do
-    SQL*Loader, contar as linhas, apagar e criar os índices, tirar o paralelismo
-    deles, coletar estatísticas, conceder acesso e criar os sinônimos.
-
-    :param session_user: Usuário efetivo da sessão (o alvo, em conexões proxy).
-    :param schema: Schema onde as tabelas ficam.
-    :param privileges: Privilégios de sistema da sessão.
-    :returns: Privilégios ausentes, em ordem alfabética.
+    The owner of the schema only needs to create synonyms in the schemas of the
+    consumers. The other users need all of them: to create and comment the table, empty
+    it with `TRUNCATE`, lock it and insert in the direct path of SQL*Loader, count the
+    rows, drop and create the indexes, remove their parallelism, gather statistics,
+    grant access and create the synonyms. `session_user` is the effective user of the
+    session (the target, in proxy connections). Return the missing privileges in
+    alphabetical order.
     """
     required = OWNER_PRIVILEGES if session_user == schema else CROSS_SCHEMA_PRIVILEGES
     return sorted(set(required) - privileges)
 
 
 def assert_privileges(cursor: oracledb.Cursor, schema: str) -> None:
-    """Falha antes de qualquer alteração se a sessão não puder operar o schema.
+    """Fail before any change if the session cannot operate the schema.
 
-    Sem essa checagem, o ``CREATE TABLE`` podia funcionar e o ``COMMENT`` falhar,
-    deixando uma tabela sem a marca da pipeline que bloqueia os runs seguintes.
-
-    :param cursor: Cursor de uma conexão aberta.
-    :param schema: Schema onde as tabelas ficam.
-    :raises PermissionError: Se faltar algum privilégio.
+    Without this check, `CREATE TABLE` could work and `COMMENT` fail, and leave a table
+    without the mark of the pipeline, which blocks the next runs. Raise
+    `PermissionError` if a privilege is missing.
     """
     cursor.execute(render_query(QUERIES_ANCHOR, "get_session_privileges"))
     rows = fetch_all(cursor)
@@ -168,14 +150,11 @@ def assert_privileges(cursor: oracledb.Cursor, schema: str) -> None:
 
 
 def connect(config: OracleConfig) -> oracledb.Connection:
-    """Abre uma conexão em modo thick com o Oracle.
+    """Open a thick mode connection to Oracle.
 
-    O modo thick usa o Instant Client da imagem base e aceita usuários com
-    verifier de senha 10G, que o modo thin rejeita (``DPY-3015``). A conexão
-    envia uma sonda a cada ``KEEPALIVE_MINUTES`` enquanto espera o banco.
-
-    :param config: Configuração da conexão.
-    :returns: Conexão aberta.
+    The thick mode uses the Instant Client of the base image, and it accepts users with
+    a 10G password verifier, which the thin mode rejects (`DPY-3015`). The connection
+    sends a probe every `KEEPALIVE_MINUTES` while it waits for the database.
     """
     if oracledb.is_thin_mode():
         oracledb.init_oracle_client()

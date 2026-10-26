@@ -1,4 +1,7 @@
-"""Regras do passo opcional de dbt: parâmetros, espera pelo run filho e espera do BigQuery."""
+"""The rules of the optional dbt step: its parameters and the waits.
+
+The waits are for the child run and for BigQuery.
+"""
 
 import time
 from collections.abc import Callable
@@ -30,47 +33,37 @@ class RunClient(Protocol):
 
 
 def should_run_dbt(run_dbt: bool, mode: Literal["full", "synonyms_only"]) -> bool:
-    """Decide se o dbt roda: só se pedido e fora do modo que apenas atualiza sinônimos.
-
-    :param run_dbt: Parâmetro ``run_dbt`` do flow.
-    :param mode: Modo do flow.
-    :returns: ``True`` se o dbt deve rodar antes da carga.
-    """
+    """Decide whether dbt runs: if asked, and not in the synonyms-only mode."""
     return run_dbt and mode == "full"
 
 
 def resolve_dbt_parameters(parameters: dict[str, object] | None) -> dict[str, object]:
-    """Escolhe os parâmetros do run de dbt.
+    """Choose the parameters of the dbt run.
 
-    :param parameters: Parâmetros informados; ``None`` usa os padrões da pipeline.
-    :returns: Parâmetros informados, sem mesclar com os padrões, ou os padrões.
+    `None` gives the defaults of the pipeline. Parameters that are given replace the
+    defaults and are not merged with them.
     """
     return default_dbt_parameters() if parameters is None else parameters
 
 
 def skip_initial_quiet_wait(last_modified: list[datetime], dbt_finished_at: datetime | None) -> bool:
-    """Decide se a espera inicial sem alterações no BigQuery pode ser dispensada.
+    """Decide whether the first wait for no changes in BigQuery can be skipped.
 
-    Só pode se o dbt rodou aqui e nenhuma tabela foi alterada depois do fim dele:
-    as alterações vistas são as do próprio dbt, que já terminou.
-
-    :param last_modified: Última alteração de cada tabela.
-    :param dbt_finished_at: Fim do run de dbt, em UTC; ``None`` se o dbt não rodou.
-    :returns: ``True`` se todas as tabelas foram alteradas até o fim do dbt.
+    It can only if dbt ran here and no table changed after it ended: the changes seen
+    are those of dbt itself, which has finished. `dbt_finished_at` is in UTC and `None`
+    if dbt did not run.
     """
     return dbt_finished_at is not None and all(modified <= dbt_finished_at for modified in last_modified)
 
 
 @dataclass(frozen=True)
 class RunWaiter:
-    """Espera o run filho de dbt terminar, consultando o estado de tempos em tempos.
+    """Wait for the child dbt run to end, and poll its state from time to time.
 
-    :param runs: Acesso ao estado e ao cancelamento do run.
-    :param timeout_seconds: Tempo máximo de espera; passado dele o run é cancelado.
-    :param poll_seconds: Intervalo entre as consultas.
-    :param report: Recebe as mensagens de andamento.
-    :param sleep: Função de espera, em segundos.
-    :param monotonic: Relógio monotônico, em segundos.
+    `runs` gives access to the state and the cancellation of the run. After
+    `timeout_seconds` the run is cancelled. `poll_seconds` is the time between polls,
+    `report` gets the progress messages, `sleep` waits for a number of seconds, and
+    `monotonic` is the monotonic clock.
     """
 
     runs: RunClient
@@ -81,14 +74,11 @@ class RunWaiter:
     monotonic: Callable[[], float] = time.monotonic
 
     def wait(self, run_id: str) -> datetime:
-        """Espera o run terminar com sucesso.
+        """Wait for the run to end with success, and return its end in UTC.
 
-        Se a espera for interrompida (cancelamento do flow pai, sinal de término) o run
-        filho é cancelado antes de a interrupção seguir.
-
-        :param run_id: Id do flow run de dbt.
-        :returns: Fim do run, em UTC.
-        :raises DbtRunError: Se o run terminar sem sucesso ou estourar o tempo limite.
+        If the wait is interrupted (cancel of the parent flow, a termination signal) the
+        child run is cancelled before the interruption goes on. Raise `DbtRunError` if
+        the run ends without success or runs out of time.
         """
         started = self.monotonic()
         try:

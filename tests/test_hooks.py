@@ -23,7 +23,7 @@ def dump() -> object:
     ],
 )
 async def test_only_a_run_that_is_not_a_shard_posts_its_failure(monkeypatch, parameters, posted) -> None:
-    """Post once for the parent of a dump in shards, and not for each of its child runs."""
+    """Post once for the parent of a sharded dump, and not for each child run."""
     messages: list[str] = []
 
     async def post_discord(*arguments: str) -> None:

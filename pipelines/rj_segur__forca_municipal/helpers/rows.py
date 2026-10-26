@@ -14,7 +14,9 @@ from pipelines.rj_segur__forca_municipal.types import Row
 
 
 def add_id_hash(rows: Sequence[Row]) -> list[Row]:
-    """Return the rows with an `id_hash`: the MD5 of the row as sorted JSON, so the same content has the same id.
+    """Return the rows with an `id_hash`, the MD5 of the row as sorted JSON.
+
+    The same content then has the same id.
 
     The hash is of the columns of the API, before any column of ours.
     """
@@ -32,7 +34,9 @@ def read_partition_date(text: str | None) -> date | None:
 
 
 def add_partition_columns(rows: Sequence[Row], column: str) -> list[Row]:
-    """Return the rows with `ano_particao`, `mes_particao` and `data_particao`, taken from a date column.
+    """Return the rows with `ano_particao`, `mes_particao` and `data_particao`.
+
+    They come from a date column.
 
     A row whose column is not a date gets empty partition columns. Raise `ValueError` if
     a row has one of them.
@@ -58,7 +62,10 @@ def add_partition_columns(rows: Sequence[Row], column: str) -> list[Row]:
 
 
 def stringify(value: JsonValue) -> str | None:
-    """Return a value as text, so a column has one type in every run: JSON for a list or an object."""
+    """Return a value as text, so a column has one type in every run.
+
+    A list or an object becomes JSON.
+    """
     if value is None:
         return None
 
@@ -66,7 +73,9 @@ def stringify(value: JsonValue) -> str | None:
 
 
 def build_frame(rows: Sequence[Row], updated_at: datetime, column: str) -> pl.DataFrame:
-    """Return the rows as a frame of text columns, with `id_hash`, `updated_at` and the partition columns.
+    """Return the rows as a frame of text columns.
+
+    It adds `id_hash`, `updated_at` and the partition columns.
 
     `column` is the date column of the partition: `updated_at`, or the one the API
     gives.
@@ -116,5 +125,8 @@ def date_range(first: str, last: str) -> Iterator[str]:
 
 
 def cycle_prefix(cycle: int, total: int | None) -> str:
-    """Return the prefix of the log of a load: `[Cycle 2/5 (40%)]`, or `[Cycle 2]` when the total is not known."""
+    """Return the prefix of a load log, such as `[Cycle 2/5 (40%)]`.
+
+    It is `[Cycle 2]` when the total is not known.
+    """
     return f"[Cycle {cycle}]" if total is None else f"[Cycle {cycle}/{total} ({round(cycle / total * 100)}%)]"

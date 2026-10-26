@@ -29,7 +29,10 @@ class Limits(TypedDict, total=False):
 
 
 class Window(TypedDict, total=False):
-    """The days that `unit_positions` reads, as `YYYY-MM-DD`: yesterday if none, and one day without an end."""
+    """The days that `unit_positions` reads, as `YYYY-MM-DD`.
+
+    It is yesterday if none, and one day without an end.
+    """
 
     data_inicio: str
     data_fim: str
@@ -37,7 +40,7 @@ class Window(TypedDict, total=False):
 
 @dataclass
 class Tally:
-    """The ids that a read tried, and how many of them gave nothing because of an error."""
+    """The ids that a read tried, and how many gave nothing because of an error."""
 
     attempted: int = 0
     errors: int = 0
@@ -63,7 +66,7 @@ class Api(Protocol):
 
 @dataclass(frozen=True)
 class Target:
-    """Where a run loads its rows: the table, the cloud, the dump mode, the start time and the date column."""
+    """Where a run loads its rows: table, cloud, dump mode, start and date column."""
 
     table: Table
     cloud: Cloud

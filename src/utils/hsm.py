@@ -35,7 +35,10 @@ class Recipient(BaseModel):
     vars: dict[str, JsonValue] | None = None
 
     def as_destination(self) -> dict[str, JsonValue]:
-        """Return the destination in the format of the API: `to`, and `externalId` and `vars` if there are any."""
+        """Return the destination as the API wants it.
+
+        `externalId` and `vars` appear if there are any.
+        """
         destination: dict[str, JsonValue] = {"to": self.to}
 
         if self.external_id is not None:
@@ -79,7 +82,7 @@ class Campaign:
     test_mode: bool = True
 
     def as_hsm(self) -> Hsm:
-        """Return the HSM of the dispatch, with the name of the campaign as it is sent."""
+        """Return the HSM of the dispatch, with the campaign name as it is sent."""
         name = f"{TEST_PREFIX}{self.name}" if self.test_mode else self.name
 
         return Hsm(self.id_hsm, name, self.cost_center_id, self.chunk_size)
@@ -87,7 +90,10 @@ class Campaign:
 
 @dataclass(frozen=True)
 class Waits:
-    """The pauses of a dispatch, in minutes: before it, to let a person stop it, and before the results."""
+    """The pauses of a dispatch, in minutes: before it, and before the results.
+
+    The first one lets a person stop it.
+    """
 
     before_dispatch: int
     before_results: int
@@ -114,7 +120,7 @@ class Sent:
 
 @dataclass(frozen=True)
 class HsmRun:
-    """What a dispatch of an HSM did: the rows of the batches that went out, the time, and the reason of a failure."""
+    """What a dispatch of an HSM did: its batch rows, time and failure reason."""
 
     rows: list[dict[str, JsonValue]] = field(default_factory=list)
     dispatch_date: str = ""
@@ -239,7 +245,7 @@ def parse_recipients(texts: Sequence[str], *, require_id: bool = False) -> list[
 
 
 def drop_repeats(recipients: Sequence[Recipient], *, by_id: bool = False) -> list[Recipient]:
-    """Keep the first recipient of each phone, or of each id, in the order that they came."""
+    """Keep the first recipient of each phone or id, in the order they came."""
     seen: set[str] = set()
     kept: list[Recipient] = []
 
@@ -287,7 +293,7 @@ def build_rows(hsm: Hsm, batches: Sequence[SentBatch], sent_at: datetime) -> lis
 def success_notice(
     hsm: Hsm, dispatch_date: str, total: int, sample: Mapping[str, JsonValue] | None, *, test_mode: bool
 ) -> str:
-    """Return the notice of a dispatch that went out, with an example of a destination."""
+    """Return the notice of a dispatch that went out, with an example destination."""
     title = "✅ **[TESTE] Disparo Realizado com Sucesso**" if test_mode else "✅ **Disparo Realizado com Sucesso**"
     batches = len(split_batches(range(total), hsm.chunk_size))
     text = (
@@ -305,7 +311,7 @@ def success_notice(
 def results_notice(
     hsm: Hsm, dispatch_date: str, total: int, statuses: Sequence[tuple[str, int, float]], *, test_mode: bool
 ) -> str:
-    """Return the notice of the status of a dispatch: how many CPFs and what share have each status."""
+    """Return the notice of the status of a dispatch: CPFs and share of each status."""
     title = "📊 **[TESTE] Resultados do Disparo**" if test_mode else "📊 **Resultados do Disparo**"
     text = (
         f"{title}\n📋 **Campanha:** {hsm.campaign_name}\n🆔 **Template ID:** {hsm.id_hsm}\n"

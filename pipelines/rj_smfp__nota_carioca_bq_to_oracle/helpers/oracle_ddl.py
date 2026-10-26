@@ -29,11 +29,9 @@ from utils.utils import render_query
 
 
 def definition_differences(existing: list[str], expected: list[str]) -> list[str]:
-    """Lista, posição a posição, as colunas cuja definição difere da original.
+    """List, position by position, the columns that differ from the original.
 
-    :param existing: Definições das colunas da tabela existente.
-    :param expected: Definições das colunas da tabela original.
-    :returns: Diferenças no formato ``atual → esperada``; vazia se forem iguais.
+    Return the differences as `current → expected`, empty if they are equal.
     """
     size = max(len(existing), len(expected))
     padded_existing = existing + [""] * (size - len(existing))
@@ -47,11 +45,10 @@ def definition_differences(existing: list[str], expected: list[str]) -> list[str
 
 @dataclass(frozen=True)
 class TableDefinition:
-    """Definição completa da tabela de destino.
+    """The full definition of the target table.
 
-    :param columns: Colunas, na ordem da tabela original.
-    :param layout: Tablespace e particionamento da tabela original.
-    :param source: Tabela de origem, gravada no comentário.
+    `columns` are in the order of the original table, `layout` has its tablespace and
+    partitioning, and `source` is the source table, written in the comment.
     """
 
     columns: list[OracleColumn]
@@ -60,13 +57,7 @@ class TableDefinition:
 
 
 def create_managed_table(cursor: oracledb.Cursor, schema: str, table: str, definition: TableDefinition) -> None:
-    """Cria a tabela de destino e grava a marca da pipeline no comentário.
-
-    :param cursor: Cursor de uma conexão aberta.
-    :param schema: Schema da tabela.
-    :param table: Nome da tabela.
-    :param definition: Colunas, tablespace, particionamento e origem.
-    """
+    """Create the target table and write the mark of the pipeline in the comment."""
     cursor.execute(
         render_query(
             QUERIES_ANCHOR,
@@ -82,19 +73,14 @@ def create_managed_table(cursor: oracledb.Cursor, schema: str, table: str, defin
 
 
 def ensure_table(config: OracleConfig, table: str, definition: TableDefinition) -> str:
-    """Deixa a tabela de destino com a mesma definição da tabela original.
+    """Give the target table the same definition as the original table.
 
-    Cria a tabela se ela não existir. Se existir e tiver sido criada pela
-    pipeline (prefixo e marca no comentário), é reaproveitada quando colunas,
-    tablespace e partições são iguais aos da original, ou apagada e recriada
-    quando divergem. Tabelas sem a marca da pipeline nunca são alteradas.
-
-    :param config: Configuração da conexão.
-    :param table: Nome da tabela no Oracle.
-    :param definition: Colunas, tablespace, particionamento e origem.
-    :returns: O que foi feito, em texto, para registrar no log.
-    :raises PermissionError: Se a sessão não tiver os privilégios necessários ou
-        se a tabela existir sem a marca da pipeline.
+    It creates the table if it does not exist. If it exists and the pipeline made it
+    (the prefix and the mark in the comment), it is reused when the columns, the
+    tablespace and the partitions equal those of the original, and dropped and created
+    again when they differ. A table without the mark of the pipeline is never changed.
+    Return what was done, as text for the log. Raise `PermissionError` if the session
+    lacks the privileges or if the table exists without the mark of the pipeline.
     """
     target = f"{config.schema}.{table}"
     binds = {"owner": config.schema, "table_name": table}
@@ -126,12 +112,10 @@ def comment_of(row: Row) -> str | None:
 
 
 def assert_managed_existing_table(cursor: oracledb.Cursor, schema: str, table: str) -> None:
-    """Confirma que a tabela existe e pertence à pipeline antes de alterá-la.
+    """Confirm that the table exists and belongs to the pipeline before it changes it.
 
-    :param cursor: Cursor de uma conexão aberta.
-    :param schema: Schema da tabela.
-    :param table: Nome da tabela.
-    :raises PermissionError: Se a tabela não existir ou não pertencer à pipeline.
+    Raise `PermissionError` if the table does not exist or does not belong to the
+    pipeline.
     """
     cursor.execute(render_query(QUERIES_ANCHOR, "get_table_comment"), {"owner": schema, "table_name": table})
     row = fetch_one(cursor)
@@ -141,11 +125,10 @@ def assert_managed_existing_table(cursor: oracledb.Cursor, schema: str, table: s
 
 
 def truncate_table(config: OracleConfig, table: str) -> None:
-    """Esvazia a tabela de destino, após confirmar que ela pertence à pipeline.
+    """Empty the target table, after it confirms that it belongs to the pipeline.
 
-    :param config: Configuração da conexão.
-    :param table: Nome da tabela no Oracle.
-    :raises PermissionError: Se a tabela não existir ou não pertencer à pipeline.
+    Raise `PermissionError` if the table does not exist or does not belong to the
+    pipeline.
     """
     with connect(config) as connection, connection.cursor() as cursor:
         assert_managed_existing_table(cursor, config.schema, table)
@@ -154,12 +137,10 @@ def truncate_table(config: OracleConfig, table: str) -> None:
 
 
 def foreign_indexes(indexes: list[IndexDefinition], schema: str) -> list[str]:
-    """Lista os índices que a pipeline não criou e, por isso, não pode apagar.
+    """List the indexes that the pipeline did not create and so cannot drop.
 
-    :param indexes: Índices da tabela de destino.
-    :param schema: Schema da tabela de destino.
-    :returns: Nomes, no formato ``dono.índice``, dos índices fora do schema ou sem
-        o prefixo da pipeline.
+    Return their names as `owner.index`: the indexes out of the schema or without the
+    prefix of the pipeline.
     """
     return [
         f"{index.owner}.{index.name}"
@@ -169,16 +150,12 @@ def foreign_indexes(indexes: list[IndexDefinition], schema: str) -> list[str]:
 
 
 def drop_managed_indexes(config: OracleConfig, table: str) -> list[str]:
-    """Apaga os índices da tabela de destino, que a carga paralela não aceita.
+    """Drop the indexes of the target table, which the parallel load does not accept.
 
-    Só apaga índices com o prefixo da pipeline, no schema de destino e em tabela
-    criada pela pipeline. Se houver qualquer outro índice, nada é apagado.
-
-    :param config: Configuração da conexão.
-    :param table: Nome da tabela no Oracle.
-    :returns: Nomes dos índices apagados.
-    :raises PermissionError: Se a tabela não pertencer à pipeline ou tiver índice
-        que a pipeline não criou.
+    It drops only indexes with the prefix of the pipeline, in the target schema, on a
+    table that the pipeline made. If there is any other index, nothing is dropped.
+    Return the names of the dropped indexes. Raise `PermissionError` if the table does
+    not belong to the pipeline or has an index that the pipeline did not create.
     """
     with connect(config) as connection, connection.cursor() as cursor:
         assert_managed_existing_table(cursor, config.schema, table)
@@ -196,16 +173,12 @@ def drop_managed_indexes(config: OracleConfig, table: str) -> list[str]:
 
 
 def create_index(config: OracleConfig, table: str, index: IndexDefinition, parallel_degree: int) -> None:
-    """Cria um índice na tabela de destino e depois tira o paralelismo dele.
+    """Create an index on the target table, and then remove its parallelism.
 
-    O ``PARALLEL`` acelera a criação, mas, se ficasse gravado no índice, faria o
-    otimizador usar consultas paralelas em quem lê a tabela.
-
-    :param config: Configuração da conexão.
-    :param table: Nome da tabela no Oracle.
-    :param index: Índice a criar, já com o nome da tabela de destino.
-    :param parallel_degree: Grau de paralelismo da criação.
-    :raises PermissionError: Se a tabela não pertencer à pipeline.
+    `PARALLEL` speeds up the creation, but if it stayed on the index, the optimizer
+    would use parallel queries for whoever reads the table. `index` already has the name
+    of the target table, and `parallel_degree` is the degree of the creation. Raise
+    `PermissionError` if the table does not belong to the pipeline.
     """
     with connect(config) as connection, connection.cursor() as cursor:
         assert_managed_existing_table(cursor, config.schema, table)
@@ -217,13 +190,10 @@ def create_index(config: OracleConfig, table: str, index: IndexDefinition, paral
 
 
 def gather_table_stats(config: OracleConfig, table: str, parallel_degree: int) -> None:
-    """Coleta as estatísticas da tabela de destino para o otimizador.
+    """Gather the statistics of the target table for the optimizer.
 
-    As estatísticas dos índices já são calculadas no ``CREATE INDEX``.
-
-    :param config: Configuração da conexão.
-    :param table: Nome da tabela no Oracle.
-    :param parallel_degree: Grau de paralelismo da coleta.
+    The statistics of the indexes are already computed in `CREATE INDEX`.
+    `parallel_degree` is the degree of the gather.
     """
     with connect(config) as connection, connection.cursor() as cursor:
         cursor.execute(
@@ -233,11 +203,10 @@ def gather_table_stats(config: OracleConfig, table: str, parallel_degree: int) -
 
 
 def count_rows(config: OracleConfig, table: str, parallel_degree: int = 1) -> int:
-    """Conta as linhas da tabela de destino, com varredura paralela.
+    """Count the rows of the target table, with a parallel scan.
 
-    :param config: Configuração da conexão. :param table: Nome da tabela no Oracle.
-    :param parallel_degree: Grau da dica ``PARALLEL`` do ``COUNT(*)``; 1 equivale a
-    varredura serial. :returns: Número de linhas.
+    `parallel_degree` is the degree of the `PARALLEL` hint of `COUNT(*)`, and 1 is a
+    serial scan.
     """
     query = render_query(
         QUERIES_ANCHOR, "count_rows", schema=config.schema, table=table, degree=max(int(parallel_degree), 1)

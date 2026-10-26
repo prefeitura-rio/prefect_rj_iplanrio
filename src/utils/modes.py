@@ -31,21 +31,21 @@ class Replace:
 
 @dataclass(frozen=True, slots=True)
 class Overwrite:
-    """Load by chunks, write every chunk again, and delete the chunks that left the range."""
+    """Load by chunks, rewrite each chunk, and delete the chunks out of the range."""
 
     spec: Chunks | None
 
 
 @dataclass(frozen=True, slots=True)
 class Capture:
-    """Add the rows of one run, in the chunk of its day, and never add the same run twice."""
+    """Add the rows of one run in the chunk of its day, and never add a run twice."""
 
     at: datetime
 
 
 @dataclass(frozen=True, slots=True)
 class Merge:
-    """Match the rows of one run to the table by key, and write the new and changed ones."""
+    """Match the rows of one run to the table by key, and write new and changed ones."""
 
     spec: MergeSpec
 
@@ -54,7 +54,7 @@ type Mode = Replace | Overwrite | Capture | Merge
 
 
 def check_shard(spec: Chunks | None, shard: Shard | None) -> None:
-    """Raise `ValueError` for a shard with no `chunks` to slice, or with an index out of range."""
+    """Raise `ValueError` for a shard with no `chunks` or an index out of range."""
     if shard is None:
         return
 
@@ -98,7 +98,7 @@ def pick_mode(dump_mode: DumpMode, options: DumpOptions) -> Mode:
 
 
 def cut_range(spec: Chunks | None) -> list[Chunk]:
-    """Return the chunks of a range, then the chunk of the null rows, or `all` with no range."""
+    """Return the chunks of a range, then the null-row chunk, or `all` for no range."""
     if spec is None:
         return [Chunk(ALL_KEY, 0, 0)]
     return [*split_chunks(spec, now_sao_paulo().date()), NULL_CHUNK]
@@ -126,7 +126,7 @@ def pick_shard(cut: Sequence[Chunk], shard: Shard) -> list[Chunk]:
 
 
 def plan_shards(dump_mode: DumpMode, options: DatabaseDumpOptions) -> int:
-    """Return how many child runs a dump takes: its `shards`, and never more than its chunks.
+    """Return how many child runs a dump takes: its `shards`, at most its chunks.
 
     Raise `ValueError` for fewer than one shard, for `shards` in a run that is a shard,
     and for a dump that has no `chunks` or that is not a load by chunks.
@@ -146,7 +146,7 @@ def plan_shards(dump_mode: DumpMode, options: DatabaseDumpOptions) -> int:
 
 
 def build_ledger_key(mode: Mode, chunk: Chunk) -> str:
-    """Return the key of a chunk in the ledger: the time of a capture, or the chunk itself."""
+    """Return the key of a chunk in the ledger: the capture time, or the chunk."""
     match mode:
         case Capture(at):
             return at.isoformat()

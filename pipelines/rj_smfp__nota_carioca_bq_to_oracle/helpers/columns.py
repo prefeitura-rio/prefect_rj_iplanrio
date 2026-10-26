@@ -1,4 +1,7 @@
-"""Plano de carga: colunas da tabela original no Oracle e campos correspondentes no CSV do BigQuery."""
+"""The load plan: the columns of the original Oracle table and the CSV fields.
+
+The fields come from BigQuery.
+"""
 
 import re
 from dataclasses import dataclass
@@ -32,15 +35,11 @@ RawTextEncoding = Literal["base64", "hex"]
 
 @dataclass(frozen=True)
 class OracleColumn:
-    """Definição de uma coluna no Oracle, como em ``all_tab_columns``.
+    """The definition of a column in Oracle, as in `all_tab_columns`.
 
-    :param name: Nome da coluna, em maiúsculas.
-    :param data_type: Tipo base (``VARCHAR2``, ``NUMBER``, ``DATE``...).
-    :param data_length: Tamanho em bytes da coluna.
-    :param char_used: ``B`` para tamanho em bytes, ``C`` para caracteres.
-    :param precision: Precisão de ``NUMBER``, ou ``None``.
-    :param scale: Escala de ``NUMBER``, ou ``None``.
-    :param nullable: Se a coluna aceita nulo.
+    `data_type` is the base type (`VARCHAR2`, `NUMBER`, `DATE`...), and `data_length` is
+    the size in bytes. `char_used` is `B` for a size in bytes and `C` for characters.
+    `precision` and `scale` are those of a `NUMBER`, or `None`.
     """
 
     name: str
@@ -53,9 +52,9 @@ class OracleColumn:
 
     @property
     def ddl_type(self) -> str:
-        """Retorna o tipo no formato do ``CREATE TABLE``.
+        """Return the type in the format of `CREATE TABLE`.
 
-        :raises NotImplementedError: Se o tipo não tiver suporte na carga.
+        Raise `NotImplementedError` if the load does not support the type.
         """
         if self.data_type in CHARACTER_TYPES:
             unit = "CHAR" if self.char_used == "C" else "BYTE"
@@ -72,16 +71,16 @@ class OracleColumn:
 
     @property
     def definition(self) -> str:
-        """Retorna a definição da coluna no ``CREATE TABLE``, com ``NOT NULL`` quando houver."""
+        """Return the column in `CREATE TABLE`, with `NOT NULL` if it applies."""
         return f'"{self.name}" {self.ddl_type}' + ("" if self.nullable else " NOT NULL")
 
 
 @dataclass(frozen=True)
 class LoaderField:
-    """Campo do CSV no control file do SQL*Loader.
+    """A field of the CSV in the control file of SQL*Loader.
 
-    :param name: Nome do campo, em maiúsculas; igual ao da coluna quando carregado.
-    :param spec: Especificação do campo, incluindo conversão SQL ou ``FILLER``.
+    `name` is in upper case, and it is the name of the column when the field loads.
+    `spec` is the specification of the field, with the SQL conversion or `FILLER`.
     """
 
     name: str
@@ -90,12 +89,12 @@ class LoaderField:
 
 @dataclass(frozen=True)
 class LoadPlan:
-    """Como uma tabela do BigQuery é carregada na cópia da tabela original.
+    """How a BigQuery table loads into the copy of the original table.
 
-    :param columns: Colunas da tabela de destino, na ordem da tabela original.
-    :param fields: Campos do CSV exportado, na ordem do schema do BigQuery.
-    :param ignored: Colunas do BigQuery que não existem na tabela original.
-    :param excluded: Colunas da tabela original que não são criadas na de destino.
+    `columns` are the columns of the target table, in the order of the original.
+    `fields` are the fields of the exported CSV, in the order of the BigQuery schema.
+    `ignored` are the BigQuery columns that the original does not have. `excluded` are
+    the columns of the original that the target does not create.
     """
 
     columns: list[OracleColumn]
@@ -119,11 +118,10 @@ def read_int(value: object) -> int | None:
 
 
 def oracle_column(row: dict[str, object]) -> OracleColumn:
-    """Converte uma linha de ``all_tab_columns`` em :class:`OracleColumn`.
+    """Convert a row of `all_tab_columns` to an `OracleColumn`.
 
-    :param row: Linha com ``column_name``, ``data_type``, ``data_length``,
-        ``char_used``, ``data_precision``, ``data_scale`` e ``nullable``.
-    :returns: Definição da coluna.
+    The row has `column_name`, `data_type`, `data_length`, `char_used`,
+    `data_precision`, `data_scale` and `nullable`.
     """
     return OracleColumn(
         name=str(row["column_name"]),
@@ -137,19 +135,16 @@ def oracle_column(row: dict[str, object]) -> OracleColumn:
 
 
 def text_field(column: OracleColumn) -> str:
-    """Define o campo de texto do CSV (UTF-8) para uma coluna de caracteres.
+    """Define the CSV text field (UTF-8) of a character column.
 
-    O control file declara ``CHARACTERSET AL32UTF8`` e a sessão usa ``NLS_LANG`` em
-    UTF-8, então o tamanho do ``CHAR(n)`` é em bytes do CSV. Um valor que cabe na coluna
-    nunca pode ser rejeitado por tamanho: com semântica de bytes num banco UTF-8 ele
-    ocupa no máximo ``data_length`` bytes, mas num banco de byte único (ou com semântica
-    de caracteres) cada caractere pode ocupar até 4 bytes no CSV. Por isso o campo tem
-    ``4 * data_length`` bytes, limitado a 4000, que é o máximo de um ``VARCHAR2``.
-    Tamanhos pequenos mantêm a reserva de memória do SQL*Loader por coluna muito menor
-    que os 4000 bytes fixos.
-
-    :param column: Coluna de destino do tipo caractere.
-    :returns: Especificação do campo no control file.
+    The control file declares `CHARACTERSET AL32UTF8` and the session uses `NLS_LANG` in
+    UTF-8, so the size of `CHAR(n)` is in bytes of the CSV. A value that fits the column
+    must never be rejected for its size. With byte semantics in a UTF-8 database it
+    takes at most `data_length` bytes, but in a single-byte database, or with character
+    semantics, each character may take up to 4 bytes in the CSV. So the field has `4 *
+    data_length` bytes, capped at 4000, the most that a `VARCHAR2` holds. Small sizes
+    keep the memory that SQL*Loader reserves for each column far below the fixed 4000
+    bytes.
     """
     if column.data_length is None:
         return f"CHAR({TEXT_FIELD_MAX_BYTES})"
@@ -157,22 +152,18 @@ def text_field(column: OracleColumn) -> str:
 
 
 def loader_spec(column: OracleColumn, bq_type: str, raw_text_encoding: RawTextEncoding = "base64") -> str:
-    """Define como o SQL*Loader lê um campo do CSV para a coluna de destino.
+    """Define how SQL*Loader reads a CSV field into the target column.
 
-    Datas guardadas como texto no BigQuery (``AAAA-MM-DDTHH:MI:SS``) são lidas
-    como ``DATE`` com máscara pelo próprio SQL*Loader; nulo ou vazio é nulo.
-    ``RAW`` guardado como texto no BigQuery vem em base64, decodificado por
-    SQL para os bytes originais, ou em hexadecimal, que o SQL*Loader converte
-    sozinho ao carregar um campo ``CHAR`` numa coluna ``RAW``. Em ambos, valor
-    nulo ou vazio continua nulo.
+    Dates stored as text in BigQuery (`YYYY-MM-DDTHH:MI:SS`) are read as `DATE` with a
+    mask by SQL*Loader itself, and null or empty is null. A `RAW` stored as text in
+    BigQuery comes in base64, which SQL decodes to the original bytes, or in
+    hexadecimal, which SQL*Loader converts alone when it loads a `CHAR` field into a
+    `RAW` column. In both, a null or empty value stays null. `raw_text_encoding` is the
+    encoding of the text of the `RAW` columns in BigQuery.
 
-    :param column: Coluna de destino.
-    :param bq_type: Tipo do campo no BigQuery.
-    :param raw_text_encoding: Codificação do texto das colunas ``RAW`` no BigQuery.
-    :returns: Especificação do campo no control file.
-    :raises NotImplementedError: Se a combinação de tipos não tiver suporte, ou se
-        a coluna ``RAW`` em base64 tiver um nome que exige aspas (a expressão SQL
-        do control file já é delimitada por aspas duplas).
+    Raise `NotImplementedError` if the pair of types is not supported, or if a base64
+    `RAW` column has a name that needs quotes, because the SQL expression of the control
+    file is already inside double quotes.
     """
     ddl_type = column.ddl_type
     if column.data_type in CHARACTER_TYPES and bq_type in ("STRING", "JSON"):
@@ -199,24 +190,18 @@ def build_load_plan(
     excluded_columns: list[str] | None = None,
     raw_text_encoding: RawTextEncoding = "base64",
 ) -> LoadPlan:
-    """Monta o plano de carga a partir do schema do BigQuery e da tabela original.
+    """Build the load plan from the BigQuery schema and the original table.
 
-    A tabela de destino repete tipos, tamanhos, ``NOT NULL`` e ordem da tabela
-    original, exceto pelas colunas excluídas. Colunas ``ROWID``/``UROWID`` da
-    original que não existem no BigQuery são excluídas automaticamente: guardam
-    endereços físicos de linhas no próprio banco (por exemplo, em views
-    materializadas de join) e não têm como vir de outra origem. Campos do
-    BigQuery que não existem na tabela de destino são lidos e descartados (``FILLER``).
+    The target table repeats the types, sizes, `NOT NULL` and order of the original
+    table, except for the excluded columns. The `ROWID` and `UROWID` columns of the
+    original that BigQuery lacks are excluded on their own: they hold the physical
+    addresses of rows in the same database (in materialized join views, for example) and
+    cannot come from another source. A BigQuery field that the target lacks is read and
+    dropped (`FILLER`).
 
-    :param bq_fields: Campos do schema do BigQuery (``name``, ``type``, ``mode``).
-    :param template_columns: Colunas da tabela original, na ordem dela.
-    :param excluded_columns: Outras colunas da original que não devem ser criadas.
-    :param raw_text_encoding: Codificação do texto das colunas ``RAW`` no BigQuery.
-    :returns: Plano com colunas de destino, campos do CSV e colunas ignoradas e
-        excluídas.
-    :raises ValueError: Se faltar no BigQuery alguma coluna da original que não
-        foi excluída, ou se um nome não for um identificador válido.
-    :raises NotImplementedError: Se algum tipo não tiver suporte.
+    Raise `ValueError` if BigQuery lacks a column of the original that was not excluded,
+    or if a name is not a valid identifier. Raise `NotImplementedError` if a type is not
+    supported.
     """
     bq_names = {field["name"].upper() for field in bq_fields}
     requested = {name.upper() for name in excluded_columns or []}

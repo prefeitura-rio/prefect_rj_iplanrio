@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from logging import INFO, LogRecord
 from types import SimpleNamespace
 from typing import cast
@@ -27,7 +28,7 @@ ATTRIBUTES = {
 
 
 @pytest.fixture
-def in_flow_run(monkeypatch):
+def in_flow_run(monkeypatch) -> Callable[[list[str]], None]:
     """Run the code as if a flow run with the given tags were active."""
 
     def activate(tags) -> None:

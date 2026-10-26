@@ -50,7 +50,7 @@ COLUMN = {"range_column": "updated_at"}
     ],
 )
 def test_the_mode_follows_the_dump_mode_and_the_options(dump_mode: DumpMode, options: DumpOptions, expected) -> None:
-    """Pick the way to load, from the mode that the flow asks and the options that it gives."""
+    """Pick the way to load, from the mode that the flow asks and the options."""
     assert pick_mode(dump_mode, options) == expected
 
 
@@ -147,7 +147,7 @@ def test_each_mode_picks_the_chunks_to_read(mode, seen, expected) -> None:
     ],
 )
 def test_only_an_overwrite_writes_an_unchanged_chunk_and_sweeps_the_old_ones(mode, skips, cleans) -> None:
-    """State what each mode does with a chunk that did not change, and with the old chunks."""
+    """State what each mode does with an unchanged chunk and with old chunks."""
     assert (skips_unchanged(mode), sweeps(mode)) == (skips, cleans)
 
 
@@ -165,7 +165,7 @@ CUT = [Chunk(key, 0, 1) for key in KEYS]
     ],
 )
 def test_a_shard_takes_every_nth_chunk_from_its_index(shard: Shard, expected) -> None:
-    """Slice the whole cut round-robin, so a dense area of the range spreads over the shards."""
+    """Slice the whole cut round robin, so a dense area spreads over the shards."""
     assert [chunk.key for chunk in pick_shard(CUT, shard)] == expected
 
 
@@ -251,7 +251,7 @@ def test_only_a_replace_can_skip_a_chunk_before_its_download(mode, expected) -> 
     ],
 )
 def test_the_probe_follows_the_options_the_source_and_the_mode(source, mode, options, expected) -> None:
-    """Probe a database by its column, Oracle and CouchDB by default, and never an overwrite."""
+    """Probe a database by its column, Oracle and CouchDB by default, not overwrite."""
     assert pick_probe(source, mode, options) == expected
 
 
@@ -264,6 +264,6 @@ def test_the_probe_follows_the_options_the_source_and_the_mode(source, mode, opt
     ],
 )
 def test_a_probe_that_cannot_run_is_refused(source, options, message) -> None:
-    """Raise with the reason, so a misspelled deployment never falls back to a download."""
+    """Raise with the reason, so a bad deployment name never falls back to a download."""
     with pytest.raises(ValueError, match=message):
         pick_probe(source, Replace(DAYS), options)

@@ -45,7 +45,7 @@ def test_no_observation_gives_no_margin() -> None:
 
 
 def test_the_categories_are_counted_judged_and_sorted_by_size(make_classification: ClassificationFactory) -> None:
-    """Count the judged and the correct, keep up to N examples with a text, and put the biggest first."""
+    """Count judged and correct, keep up to N examples, and put the biggest first."""
     items = [
         make_classification("a1", "A", verdict="CORRETO"),
         make_classification("a2", "A", verdict="INCORRETO"),

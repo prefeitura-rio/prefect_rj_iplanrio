@@ -25,7 +25,9 @@ INDENT_OFFSET = 2
 
 
 def parse_attributes(row: Record) -> dict[str, str] | None:
-    """Return the dictionary of values of a column, which the sheet writes as a JSON object, or nothing.
+    """Return the dictionary of values of a column, or nothing.
+
+    The sheet writes it as a JSON object.
 
     Raise `ValueError` for a text that is not JSON, and `TypeError` for JSON that is not
     an object.
@@ -49,7 +51,9 @@ def parse_attributes(row: Record) -> dict[str, str] | None:
 
 
 def prepare_rows(rows: Sequence[Record]) -> list[Record]:
-    """Return the rows with a two-digit `reg` and a four-digit `version`, and without the columns that are empty.
+    """Return the rows with a two-digit `reg` and a four-digit `version`.
+
+    Empty columns are dropped.
 
     A column that a version lacks takes the version that comes before it, so the model
     of that version selects it as `NULL`.
@@ -73,7 +77,10 @@ def prepare_rows(rows: Sequence[Record]) -> list[Record]:
 
 
 def describe(text: str | None, version: str) -> str:
-    """Return the description of a column for a schema file: one line for each sentence, and the version."""
+    """Return the description of a column for a schema file.
+
+    It has one line for each sentence, and the version.
+    """
     cleaned = (
         sub(r"\s+", " ", text or "Sem descrição")
         .replace(";", "\n")
@@ -87,7 +94,10 @@ def describe(text: str | None, version: str) -> str:
 
 
 def kind_of(row: Record, bigquery_type: str) -> str:
-    """Return how a column is read: `null` if its version lacks it, else `date`, `int`, `float` or `text`."""
+    """Return how a column is read: `null` if its version lacks it.
+
+    Otherwise it is `date`, `int`, `float` or `text`.
+    """
     if row["coluna_esta_versao_anterior"] == "False":
         return "null"
 
@@ -127,7 +137,10 @@ def make_field(row: Record) -> Field:
 
 
 def schema_columns(row: Record, field: Field, version: str) -> list[SchemaColumn]:
-    """Return the columns that a row adds to the schema file: the column, and its meaning if it has one."""
+    """Return the columns that a row adds to the schema file.
+
+    They are the column, and its meaning if it has one.
+    """
     description = describe(row["descricao"], version)
     names = [field["alias"], *([field["mapped_alias"]] if field["mapped_alias"] else [])]
 

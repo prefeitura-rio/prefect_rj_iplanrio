@@ -18,13 +18,9 @@ from utils.utils import render_query
 
 
 def read_column_definitions(cursor: oracledb.Cursor, owner: str, table: str) -> list[OracleColumn]:
-    """Lê as colunas de uma tabela no dicionário do Oracle, na ordem da tabela.
+    """Read the columns of a table in the Oracle dictionary, in the order of the table.
 
-    :param cursor: Cursor de uma conexão aberta.
-    :param owner: Dono da tabela.
-    :param table: Nome da tabela.
-    :returns: Colunas da tabela, ou lista vazia se ela não existir ou não estiver
-        visível para a sessão.
+    Return an empty list if the table does not exist or the session cannot see it.
     """
     cursor.execute(render_query(QUERIES_ANCHOR, "get_column_definitions"), {"owner": owner, "table_name": table})
     names = column_names(cursor)
@@ -32,13 +28,11 @@ def read_column_definitions(cursor: oracledb.Cursor, owner: str, table: str) -> 
 
 
 def fetch_template_columns(config: OracleConfig, template_schema: str, table: str) -> list[OracleColumn]:
-    """Lê a definição da tabela original, que serve de modelo para a de destino.
+    """Read the definition of the original table, which is the model of the target one.
 
-    :param config: Configuração da conexão.
-    :param template_schema: Schema da tabela original.
-    :param table: Nome da tabela original (o mesmo da tabela no BigQuery).
-    :returns: Colunas da tabela original, na ordem dela.
-    :raises LookupError: Se a tabela original não existir ou não estiver visível.
+    `table` is the name of the original table, the same as the table in BigQuery. Return
+    its columns in its order. Raise `LookupError` if the original table does not exist
+    or is not visible.
     """
     with connect(config) as connection, connection.cursor() as cursor:
         columns = read_column_definitions(cursor, template_schema, table)
@@ -50,12 +44,10 @@ def fetch_template_columns(config: OracleConfig, template_schema: str, table: st
 
 
 def fetch_rows(cursor: oracledb.Cursor, query: str, binds: Mapping[str, object]) -> list[dict[str, object]]:
-    """Executa uma consulta e retorna as linhas como dicionários.
+    """Run a query and return the rows as dictionaries, with the columns in lower case.
 
-    :param cursor: Cursor de uma conexão aberta.
-    :param query: Nome do arquivo em ``queries/``, sem a extensão.
-    :param binds: Valores das variáveis de bind.
-    :returns: Linhas com as colunas em minúsculas.
+    `query` is the name of the file in `queries/`, with no extension, and `binds` are
+    the values of the bind variables.
     """
     cursor.execute(render_query(QUERIES_ANCHOR, query), dict(binds))
     names = column_names(cursor)
@@ -63,13 +55,11 @@ def fetch_rows(cursor: oracledb.Cursor, query: str, binds: Mapping[str, object])
 
 
 def read_table_layout(cursor: oracledb.Cursor, owner: str, table: str) -> TableLayout | None:
-    """Lê tablespace, particionamento, índices e In-Memory de uma tabela no dicionário do Oracle.
+    """Read the tablespace, partitioning, indexes and In-Memory of a table.
 
-    :param cursor: Cursor de uma conexão aberta.
-    :param owner: Dono da tabela.
-    :param table: Nome da tabela.
-    :returns: Estrutura da tabela, ou ``None`` se ela não existir ou não estiver
-        visível para a sessão.
+    They come from the Oracle dictionary.
+
+    Return `None` if the table does not exist or the session cannot see it.
     """
     binds = {"owner": owner, "table_name": table}
     storage = fetch_rows(cursor, "get_table_tablespace", binds)
@@ -99,13 +89,9 @@ def read_table_layout(cursor: oracledb.Cursor, owner: str, table: str) -> TableL
 
 
 def fetch_template_layout(config: OracleConfig, template_schema: str, table: str) -> TableLayout:
-    """Lê tablespace, particionamento e índices da tabela original.
+    """Read the tablespace, partitioning and indexes of the original table.
 
-    :param config: Configuração da conexão.
-    :param template_schema: Schema da tabela original.
-    :param table: Nome da tabela original.
-    :returns: Estrutura da tabela original.
-    :raises LookupError: Se a tabela original não existir ou não estiver visível.
+    Raise `LookupError` if the original table does not exist or is not visible.
     """
     with connect(config) as connection, connection.cursor() as cursor:
         layout = read_table_layout(cursor, template_schema, table)

@@ -104,7 +104,6 @@ def state(**overrides: object) -> RunState:
 
 
 # --- weights
-# -----------------------------------------------------------------------------------------------------
 
 
 def test_table_fraction_follows_stage_weights_and_load_bytes() -> None:
@@ -122,7 +121,7 @@ def test_table_fraction_follows_stage_weights_and_load_bytes() -> None:
 
 def test_overall_fraction_normalizes_active_steps_and_weights_tables_by_volume() -> None:
     # Given two tables, A (3x the bytes of B) done and B untouched
-    """Check that overall fraction normalizes active steps and weights tables by volume."""
+    """Normalize the active steps, and weight tables by volume."""
     tables = {"A": TableState("A", weight=3, step=TableStep.DONE), "B": TableState("B", weight=1)}
     without_dbt = state(tables=tables)
     with_dbt = state(tables=tables, run_dbt=True, step=Step.TABLES)
@@ -135,7 +134,6 @@ def test_overall_fraction_normalizes_active_steps_and_weights_tables_by_volume()
 
 
 # --- notifier
-# ----------------------------------------------------------------------------------------------------
 
 
 def test_full_run_walks_the_steps_and_ends_green_with_per_table_summary() -> None:
@@ -290,7 +288,6 @@ def test_a_bug_in_the_notifier_never_reaches_the_flow(monkeypatch: pytest.Monkey
 
 
 # --- validation comparison
-# ---------------------------------------------------------------------------------------
 
 
 def fields_by_name(embed: dict[str, object]) -> dict[str, str]:
@@ -309,7 +306,7 @@ def count_tables(notifier: LoadNotifier, names: tuple[str, ...], validated: tupl
 
 def test_success_message_compares_bigquery_sqlloader_and_oracle_with_the_physical_table() -> None:
     # Given two tables loaded and validated
-    """Check that success message compares bigquery sqlloader and oracle with the physical table."""
+    """Compare BigQuery, SQL*Loader and Oracle, with the physical table name."""
     discord = Discord()
     notifier = make(discord)
     with notifier.guard():
@@ -329,7 +326,7 @@ def test_success_message_compares_bigquery_sqlloader_and_oracle_with_the_physica
 
 def test_failure_keeps_validated_tables_and_shows_what_is_known_of_the_failing_one() -> None:
     # Given A validated and B failing in the SQL*Loader, after its slot is known
-    """Check that failure keeps validated tables and shows what is known of the failing one."""
+    """Keep the validated tables, and show what is known of the failing one."""
     discord = Discord()
     notifier = make(discord)
     with pytest.raises(RuntimeError, match="sqlldr"), notifier.guard():
@@ -375,7 +372,6 @@ def test_running_and_synonyms_only_views_have_no_validation_section() -> None:
 
 
 # --- reachability from tasks
-# -------------------------------------------------------------------------------------
 
 
 def fake_artifact(**kwargs: object) -> str:

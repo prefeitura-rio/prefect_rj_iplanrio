@@ -311,7 +311,7 @@ def test_missing_or_empty_webhook_disables_the_client_without_requests(
 
 def test_first_publish_posts_with_wait_and_the_next_patches_the_same_message(clock: Clock) -> None:
     # Given a server that returns the message id
-    """Check that first publish posts with wait and the next patches the same message."""
+    """Post the first publish with wait, and patch the same message after."""
     server = Server(httpx2.Response(200, json={"id": "777"}), httpx2.Response(200, json={"id": "777"}))
     message = client(server)
     # When publishing twice, the second time after the interval
@@ -462,7 +462,6 @@ def test_never_raises_swallows_and_warns(warnings: list[str]) -> None:
 
 
 # --- validation comparison
-# ---------------------------------------------------------------------------------------
 
 
 def equal_line() -> ValidationLine:
@@ -497,7 +496,7 @@ def test_a_mismatch_renders_a_red_line_and_drops_the_note() -> None:
 
 def test_a_missing_side_is_a_dash_and_never_valid_and_no_counts_at_all_is_pending() -> None:
     # Given a table with only the source counted, and one never reached
-    """Check that a missing side is a dash and never valid and no counts at all is pending."""
+    """Show a dash for a missing side, and never validate with no counts."""
     partial = ValidationLine("DPS", (CountSide("Oracle (SCN)", 5), CountSide("BigQuery", None)))
     untouched = ValidationLine("NOTAS", (CountSide("Oracle (SCN)", None), CountSide("BigQuery", None)))
     # Then the first is ❌ with "—", the second is ⬜ and neither counts as validated

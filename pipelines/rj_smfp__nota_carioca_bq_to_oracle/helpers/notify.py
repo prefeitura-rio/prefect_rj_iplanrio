@@ -1,21 +1,20 @@
-"""Mensagem da carga BigQuery → Oracle no Discord: estado agregado, publicação e finalização.
+"""Show the BigQuery to Oracle load in Discord: aggregate state, publishing and the end.
 
-Uma execução, um pod, tabelas em sequência: o próprio flow muda os passos (``enter``,
-``table_step``...) e as tasks de carga e de índices informam o andamento pelo
-notificador ativo (``current``), um ponteiro de módulo definido por
-``LoadNotifier.guard``. As tasks usam ``NO_CACHE``; passar o notificador (com trava e
-cliente HTTP) como parâmetro faria o Prefect percorrê-lo ao registrar as entradas, e há
-um flow run por processo, então o ponteiro é seguro. Nada aqui levanta exceção para a
-carga.
+One run is one pod, with the tables in sequence. The flow itself changes the steps
+(`enter`, `table_step`...), and the load and index tasks report the progress to the
+active notifier (`current`), a module pointer that `LoadNotifier.guard` sets. The
+tasks use `NO_CACHE`. Passing the notifier (with its lock and HTTP client) as a
+parameter would make Prefect walk it when it records the inputs, and there is one flow
+run for each process, so the pointer is safe. Nothing here raises for the load.
 
-Batimento (``heartbeat``): com o Discord ligado, ``begin`` inicia uma thread daemon que,
-a cada ``heartbeat_seconds``, republica a visão atual (sem forçar; o intervalo mínimo do
-cliente continua valendo). Sem ele a mensagem parece congelada nos passos que não
-informam andamento (``DROP`` de índices, ``TRUNCATE``, contagem, estatísticas, espera do
-In-Memory): o "Decorrido" e o "há X" da etapa só avançam quando algo publica. A thread
-para quando a execução é finalizada (``succeed``/``fail``) e quando o ``guard`` termina,
-e o batimento publica sob a mesma trava das demais mudanças, então nunca sobrescreve a
-mensagem final.
+The heartbeat: with Discord on, `begin` starts a daemon thread that publishes the
+current view every `heartbeat_seconds` (without force, so the minimum interval of the
+client still holds). Without it the message looks frozen in the steps that report no
+progress (`DROP` of indexes, `TRUNCATE`, the count, the statistics, the wait for the
+In-Memory): the "Decorrido" and the "há X" of the stage only move when something
+publishes. The thread stops when the run ends (`succeed` or `fail`) and when `guard`
+ends. It publishes under the same lock as the other changes, so it never overwrites
+the final message.
 """
 
 import asyncio
@@ -51,15 +50,15 @@ HEARTBEAT_JOIN_TIMEOUT_SECONDS = 2.0
 
 @dataclass(frozen=True)
 class NotifierConfig:
-    """Como criar o notificador.
+    """How to create the notifier.
 
-    :param dataset_id: Dataset de origem. :param url: Link do flow run, ou ``None`` sem
-    URL do Prefect. :param run_name: Nome do flow run, no rodapé. :param table_ids:
-    Tabelas da execução (vazio até a listagem, em ``synonyms_only`` também). :param
-    sessions: Sessões do SQL*Loader pedidas. :param run_dbt: Se o dbt roda antes. :param
-    mode: ``full`` ou ``synonyms_only``. :param enabled: ``False``
-    (``discord_notifications=false``) desliga o Discord. :param heartbeat_seconds:
-    Intervalo do batimento que republica a mensagem; ``0`` ou menos desliga o batimento.
+    `url` is the link of the flow run, or `None` without a Prefect URL. `run_name` goes
+    in the footer. `table_ids` are the tables of the run (empty until the listing, and
+    also in `synonyms_only`). `sessions` are the SQL*Loader sessions that were asked
+    for. `run_dbt` says whether dbt runs before, and `mode` is `full` or
+    `synonyms_only`. `enabled=False` (`discord_notifications=false`) turns Discord off.
+    `heartbeat_seconds` is the interval of the heartbeat that publishes the message
+    again, and `0` or less turns it off.
     """
 
     dataset_id: str
@@ -75,16 +74,21 @@ class NotifierConfig:
 
 
 def is_cancellation(error: BaseException, extra: tuple[type[BaseException], ...] = ()) -> bool:
-    """Tell whether an exception is an interruption (Ctrl+C, a cancellation, or one of `extra`) and no data failure."""
+    """Tell whether an exception is an interruption and not a data failure.
+
+    Ctrl+C, a cancellation or one of `extra` is an interruption.
+    """
     return isinstance(error, (*CANCELLATIONS, *extra))
 
 
 @final
 class LoadNotifier:
-    """Estado agregado da carga e a mensagem única do Discord; seguro para chamadas de qualquer thread.
+    """The aggregate state of the load and the one Discord message.
 
-    :param config: Execução.
-    :param message: Cliente do webhook; ``None`` desliga o Discord.
+    Any thread may call it.
+
+    `config` describes the run. `message` is the client of the webhook, and `None` turns
+    Discord off.
     """
 
     def __init__(self, config: NotifierConfig, message: DiscordStatusMessage | None) -> None:
@@ -115,13 +119,19 @@ class LoadNotifier:
 
     @classmethod
     def create(cls, config: NotifierConfig) -> "LoadNotifier":
-        """Cria o notificador; webhook da variável do Infisical ou do Secret block (sem nenhum = desligado)."""
+        """Create the notifier, with the webhook from Infisical or the Secret block.
+
+        With neither, Discord is off.
+        """
         message = DiscordStatusMessage(resolve_webhook()) if config.enabled else None
         return cls(config, message if message is not None and message.enabled else None)
 
     @property
     def state(self) -> RunState:
-        """Estado atual, com o tempo decorrido (da execução e da etapa) e a hora de agora."""
+        """Return the current state, with the elapsed times and the time now.
+
+        The times are those of the run and of the stage.
+        """
         with self.lock:
             now = time.monotonic()
             return replace(
@@ -158,14 +168,20 @@ class LoadNotifier:
 
     @never_raises
     def begin(self) -> None:
-        """Cria a mensagem do Discord e, com ele ligado, inicia o batimento que a mantém atualizada."""
+        """Create the Discord message and, if on, start the heartbeat.
+
+        The heartbeat keeps the message updated.
+        """
         with self.lock:
             self.step_started = time.monotonic()
         self.push(force=True)
         self.start_heartbeat()
 
     def start_heartbeat(self) -> None:
-        """Inicia a thread do batimento (uma só); sem Discord, sem intervalo ou depois do fim, não faz nada."""
+        """Start the heartbeat thread (only one).
+
+        It does nothing without Discord, an interval or after the end.
+        """
         with self.lock:
             if self.message is None or self.heartbeat_seconds <= 0 or self.finalized:
                 return
@@ -180,7 +196,10 @@ class LoadNotifier:
             self.beat()
 
     def beat(self) -> None:
-        """Republica a visão atual sem forçar; uma falha é avisada uma vez e o laço segue vivo."""
+        """Publish the current view with no force.
+
+        A failure warns once, and the loop stays alive.
+        """
         with self.lock:
             if self.finalized or self.heartbeat_stop.is_set():
                 return
@@ -190,7 +209,10 @@ class LoadNotifier:
                 self.warn(f"Batimento do Discord falhou: {type(error).__name__}: {error}")
 
     def stop_heartbeat(self) -> None:
-        """Para a thread do batimento e a espera um instante; chamar fora da trava, que a thread pode estar pedindo."""
+        """Stop the heartbeat thread and wait a moment for it.
+
+        Call it outside the lock, which the thread may be asking for.
+        """
         self.heartbeat_stop.set()
         thread = self.heartbeat_thread
         if thread is not None and thread is not threading.current_thread():
@@ -198,20 +220,23 @@ class LoadNotifier:
 
     @never_raises
     def enter(self, step: Step) -> None:
-        """Entra num passo (dbt, exportação, tabelas, espera do In-Memory, troca) e atualiza a mensagem na hora."""
+        """Enter a step and update the message at once.
+
+        The steps are dbt, export, tables, the In-Memory wait and the swap.
+        """
         self.change(step=step)
 
     @never_raises
     def dbt_finished(self, seconds: float) -> None:
-        """Guarda a duração do dbt, que aparece nos campos."""
+        """Keep the duration of dbt, which shows in the fields."""
         self.change(force=False, dbt_seconds=seconds)
 
     @never_raises
     def set_tables(self, sizes: Mapping[str, int]) -> None:
-        """Registra as tabelas da execução e o peso de cada uma na barra geral.
+        """Record the tables of the run and the weight of each one in the overall bar.
 
-        :param sizes: Bytes exportados por tabela, na ordem de carga; use 1 enquanto o
-        volume for desconhecido.
+        `sizes` are the bytes exported for each table, in the load order. Use 1 while
+        the volume is not known.
         """
         with self.lock:
             known = self.run_state.tables
@@ -223,7 +248,10 @@ class LoadNotifier:
 
     @never_raises
     def table_step(self, table: str, step: TableStep, slot: str | None = None) -> None:
-        """Muda a etapa da tabela em processamento (atualiza na hora); ``slot`` só vem quando conhecido."""
+        """Change the stage of the table in process (it updates at once).
+
+        `slot` comes only when it is known.
+        """
         with self.lock:
             self.table_started.setdefault(table, time.monotonic())
             current = self.run_state.tables.get(table)
@@ -231,17 +259,16 @@ class LoadNotifier:
 
     @never_raises
     def exported(self, sizes: Mapping[str, int], rows: Mapping[str, object]) -> None:
-        """Registra o fim da exportação: o peso de cada tabela e as linhas dela na foto do BigQuery."""
+        """Record the end of the export: table weights and BigQuery snapshot rows."""
         self.set_tables(sizes)
         self.set_bigquery_rows(rows)
 
     def set_bigquery_rows(self, rows: Mapping[str, object]) -> None:
-        """Guarda as linhas de cada tabela na foto do BigQuery, o lado de origem da comparação.
+        """Keep the rows of each table in the BigQuery snapshot, the source side.
 
-        :param rows: Linhas por tabela, como vêm do schema da foto exportada
-        (``num_rows``); a conversão acontece
-            aqui, dentro do ``never_raises``, para um valor inesperado não chegar ao
-            flow.
+        `rows` are the rows of each table as the schema of the exported snapshot gives
+        them (`num_rows`). The conversion happens here, inside `never_raises`, so an
+        unexpected value never reaches the flow.
         """
         counts = {name: int(str(count)) for name, count in rows.items() if count is not None}
         with self.lock:
@@ -254,7 +281,7 @@ class LoadNotifier:
 
     @never_raises
     def set_physical_table(self, table: str, physical_table: str) -> None:
-        """Guarda a tabela física do Oracle (slot) que recebe a carga da tabela."""
+        """Keep the physical Oracle table (slot) that receives the load of the table."""
         self.change_table(table, force=False, physical_table=physical_table)
 
     @never_raises
@@ -269,13 +296,16 @@ class LoadNotifier:
 
     @never_raises
     def table_done(self, table: str, rows: int) -> None:
-        """Marca a tabela como concluída, com as linhas validadas e o tempo gasto nela."""
+        """Mark the table as done, with its validated rows and the time spent on it."""
         seconds = time.monotonic() - self.table_started.get(table, self.started)
         self.change_table(table, step=TableStep.DONE, rows=rows, seconds=seconds)
 
     @never_raises
     def loading(self, snapshot: ProgressSnapshot) -> None:
-        """Andamento do SQL*Loader da tabela em processamento (chamado pela task de carga, sem forçar a edição)."""
+        """Report the SQL*Loader progress of the table in process, with no force.
+
+        The load task calls it.
+        """
         table = self.run_state.current_table
         if table is not None:
             self.change_table(table, force=False, load=snapshot)
@@ -289,7 +319,10 @@ class LoadNotifier:
 
     @never_raises
     def succeed(self) -> None:
-        """Finaliza em verde com o tempo total e o resumo por tabela, e envia a mensagem final avulsa."""
+        """Finish as a success with the total time and the summary of each table.
+
+        Then send the final separate message.
+        """
         with self.lock:
             if not self.finalized:
                 self.run_state = replace(self.run_state, status=RunStatus.SUCCESS)
@@ -298,7 +331,10 @@ class LoadNotifier:
 
     @never_raises
     def fail(self, error: BaseException) -> None:
-        """Finaliza como falha (ou cancelado, se for uma interrupção) no passo e na tabela em que estava."""
+        """Finish as a failure, or as cancelled for an interruption.
+
+        It marks the step and table it was in.
+        """
         with self.lock:
             if self.finalized:
                 return
@@ -329,7 +365,10 @@ class LoadNotifier:
 
     @contextmanager
     def guard(self) -> Generator["LoadNotifier"]:
-        """Torna este o notificador ativo; ao sair, finaliza (sucesso, ou falha/cancelamento antes de repropagar)."""
+        """Make this the active notifier, and finish when the block exits.
+
+        It finishes as a success, or as a failure or cancel before it raises again.
+        """
         global active  # noqa: PLW0603 - ponteiro de módulo restaurado ao sair
         previous, active = active, self
         try:
@@ -348,5 +387,8 @@ active: LoadNotifier | None = None
 
 
 def current() -> LoadNotifier | None:
-    """Notificador em curso, ou ``None`` fora do flow (as tasks o encontram aqui, sem recebê-lo por parâmetro)."""
+    """Return the notifier in use, or `None` outside the flow.
+
+    The tasks find it here and do not get it as a parameter.
+    """
     return active

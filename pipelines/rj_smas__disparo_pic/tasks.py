@@ -13,7 +13,10 @@ from utils.utils import render_query
 
 @task
 async def read_event_date_task() -> str | None:
-    """Return the date of the event if the table of approvals has the dispatch of today as approved, else nothing."""
+    """Return the event date if today's dispatch is approved, else nothing.
+
+    The table of approvals says whether it is approved.
+    """
     approval = await read_bq.fn(render_query(__file__, "approval"), project=BILLING_PROJECT)
 
     return read_event_date(approval)

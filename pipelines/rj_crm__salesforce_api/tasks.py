@@ -17,7 +17,7 @@ from utils.tasks import request_json
 
 @task
 async def fetch_rows_task(request: SfmcRequest) -> list[dict[str, str]]:
-    """Read every page of a route of the SFMC REST API and return the records as rows."""
+    """Read every page of an SFMC REST route and return the records as rows."""
     settings = SfmcSettings()
     token_body: dict[str, JsonValue] = {
         "grant_type": "client_credentials",

@@ -1,4 +1,7 @@
-"""Estrutura física da tabela original (tablespace, partições e índices) e o DDL equivalente na tabela carregada."""
+"""The physical structure of the original table (tablespace, partitions, indexes).
+
+It gives the equivalent DDL for the loaded table.
+"""
 
 from dataclasses import replace
 
@@ -26,14 +29,14 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models impor
 def partitioning_from_dictionary(
     table_row: dict[str, object], key_columns: list[str], partition_rows: list[dict[str, object]]
 ) -> Partitioning:
-    """Monta o particionamento a partir das linhas do dicionário do Oracle.
+    """Build the partitioning from the rows of the Oracle dictionary.
 
-    :param table_row: Linha de ``all_part_tables`` (``partitioning_type``,
-        ``subpartitioning_type`` e ``interval``).
-    :param key_columns: Colunas de ``all_part_key_columns``, na ordem.
-    :param partition_rows: Linhas de ``all_tab_partitions`` (``partition_name``,
-        ``high_value``, ``tablespace_name`` e ``interval``), na ordem.
-    :returns: Particionamento, sem as partições criadas pelo ``INTERVAL``.
+    `table_row` is the row of `all_part_tables` (`partitioning_type`,
+    `subpartitioning_type` and `interval`). `key_columns` are the columns of
+    `all_part_key_columns`, in order. `partition_rows` are the rows of
+    `all_tab_partitions` (`partition_name`, `high_value`, `tablespace_name` and
+    `interval`), in order. Return the partitioning, without the partitions that
+    `INTERVAL` created.
     """
     interval = str(table_row["interval"]).strip() if table_row["interval"] else None
     partitions = tuple(
@@ -53,13 +56,10 @@ def partitioning_from_dictionary(
 
 
 def inmemory_option(row: dict[str, object], key: str, allowed: tuple[str, ...]) -> str | None:
-    """Lê uma opção do In-Memory e confere se ela pode entrar no DDL.
+    """Read an In-Memory option and check that it can go in the DDL.
 
-    :param row: Linha do dicionário do Oracle.
-    :param key: Nome da coluna.
-    :param allowed: Valores aceitos.
-    :returns: O valor, ou ``None`` se a coluna for nula.
-    :raises NotImplementedError: Se o valor não for aceito.
+    Return the value, or `None` if the column is null. Raise `NotImplementedError` if
+    the value is not accepted.
     """
     value = row[key]
     if value is None:
@@ -70,18 +70,19 @@ def inmemory_option(row: dict[str, object], key: str, allowed: tuple[str, ...]) 
 
 
 def inmemory_from_dictionary(row: dict[str, object]) -> str | None:
-    """Monta a cláusula ``INMEMORY`` a partir do dicionário do Oracle.
+    """Build the `INMEMORY` clause from the Oracle dictionary.
 
-    Em tabela particionada, a linha deve trazer o padrão das partições
-    (``all_part_tables.def_inmemory*``), que as partições declaradas e as do
-    ``INTERVAL`` herdam.
+    In a partitioned table, the row must bring the default of the partitions
+    (`all_part_tables.def_inmemory*`), which the declared partitions and those of
+    `INTERVAL` inherit. The row has `inmemory`, `inmemory_priority`,
+    `inmemory_compression`, `inmemory_distribute` and `inmemory_duplicate`.
 
-    :param row: Linha com ``inmemory``, ``inmemory_priority``,
-        ``inmemory_compression``, ``inmemory_distribute`` e ``inmemory_duplicate``.
-    :returns: Por exemplo ``INMEMORY PRIORITY HIGH MEMCOMPRESS FOR QUERY HIGH
-        DISTRIBUTE AUTO NO DUPLICATE``, ou ``None`` se o In-Memory não estiver
-        ativo.
-    :raises NotImplementedError: Se alguma opção tiver valor desconhecido.
+    ```text
+    INMEMORY PRIORITY HIGH MEMCOMPRESS FOR QUERY HIGH DISTRIBUTE AUTO NO DUPLICATE
+    ```
+
+    Return `None` if the In-Memory is not on. Raise `NotImplementedError` if an option
+    has an unknown value.
     """
     if row["inmemory"] != "ENABLED":
         return None
@@ -102,15 +103,14 @@ def inmemory_from_dictionary(row: dict[str, object]) -> str | None:
 
 
 def index_key(row: dict[str, object]) -> str:
-    """Lê a chave de uma posição do índice a partir do dicionário do Oracle.
+    """Read the key of one position of the index from the Oracle dictionary.
 
-    Nas posições de um índice baseado em função, ``all_ind_columns`` traz só um
-    nome oculto (``SYS_NC...$``); a expressão vem de ``all_ind_expressions``. Uma
-    coluna descendente também é guardada como expressão, e o ``DESC`` entra no texto.
-
-    :param row: Linha com ``column_name``, ``descend`` e ``column_expression``
-        (nulo se a posição for uma coluna comum).
-    :returns: Nome da coluna, ou :class:`IndexExpression` com a expressão.
+    In the positions of a function-based index, `all_ind_columns` gives only a hidden
+    name (`SYS_NC...$`), and the expression comes from `all_ind_expressions`. A
+    descending column is also kept as an expression, and the `DESC` goes in the text.
+    The row has `column_name`, `descend` and `column_expression` (null if the position
+    is a plain column). Return the column name, or an `IndexExpression` with the
+    expression.
     """
     expression = row["column_expression"]
     if expression is None:
@@ -120,13 +120,12 @@ def index_key(row: dict[str, object]) -> str:
 
 
 def index_from_dictionary(row: dict[str, object], columns: list[str]) -> IndexDefinition:
-    """Monta a definição de um índice a partir das linhas do dicionário do Oracle.
+    """Build the definition of an index from the rows of the Oracle dictionary.
 
-    :param row: Linha com ``owner``, ``index_name``, ``index_type``,
-        ``uniqueness``, ``locality``, ``tablespace_name``, ``degree`` e ``status``.
-    :param columns: Chaves do índice, na ordem: nomes de coluna ou
-        :class:`IndexExpression` nas posições com expressão.
-    :returns: Definição do índice.
+    The row has `owner`, `index_name`, `index_type`, `uniqueness`, `locality`,
+    `tablespace_name`, `degree` and `status`. `columns` are the keys of the index, in
+    order: the column names, or an `IndexExpression` in the positions with an
+    expression.
     """
     return IndexDefinition(
         name=str(row["index_name"]),
@@ -142,21 +141,15 @@ def index_from_dictionary(row: dict[str, object], columns: list[str]) -> IndexDe
 
 
 def plan_structure(template: TableLayout, loaded_columns: list[str], index_prefix: str) -> StructurePlan:
-    """Define a estrutura da tabela carregada a partir da tabela original.
+    """Define the structure of the loaded table from the original table.
 
-    Tablespace e particionamento são copiados, e a tabela vai sempre para o
-    In-Memory (``LOADED_TABLE_INMEMORY``). Os índices são copiados com o
-    nome ``<prefixo><nome original>``, exceto os ``I_SNAP$`` de views
-    materializadas.
-
-    :param template: Estrutura da tabela original.
-    :param loaded_columns: Colunas criadas na tabela carregada.
-    :param index_prefix: Prefixo dos índices da tabela carregada.
-    :returns: Estrutura da tabela carregada e índices da original não replicados.
-    :raises NotImplementedError: Se o particionamento ou algum índice não tiver
-        suporte na carga.
-    :raises ValueError: Se a chave de partição ou um índice usar coluna que não é
-        carregada, ou se o nome de um índice ficar inválido com o prefixo.
+    The tablespace and the partitioning are copied, and the table always goes to the
+    In-Memory (`LOADED_TABLE_INMEMORY`). The indexes are copied with the name
+    `<prefix><original name>`, except the `I_SNAP$` of materialized views. Return the
+    structure of the loaded table and the indexes of the original that were not copied.
+    Raise `NotImplementedError` if the load does not support the partitioning or an
+    index. Raise `ValueError` if the partition key or an index uses a column that is not
+    loaded, or if the name of an index becomes invalid with the prefix.
     """
     available = set(loaded_columns)
     partitioning = template.partitioning
@@ -200,15 +193,11 @@ def plan_structure(template: TableLayout, loaded_columns: list[str], index_prefi
 
 
 def slot_indexes(indexes: tuple[IndexDefinition, ...], slot: str) -> tuple[IndexDefinition, ...]:
-    """Renomeia os índices para uma das tabelas físicas (``A`` ou ``B``).
+    """Rename the indexes for one of the physical tables (`A` or `B`).
 
-    Nomes de índice são únicos no schema, então cada tabela física tem os seus,
-    com o sufixo dela.
-
-    :param indexes: Índices com o nome base (``BQLOAD_<índice original>``).
-    :param slot: Sufixo da tabela física.
-    :returns: Índices com o nome ``<nome base>_<slot>``.
-    :raises ValueError: Se algum nome ficar inválido para o Oracle.
+    Index names are unique in the schema, so each physical table has its own, with its
+    suffix. The indexes come with the base name (`BQLOAD_<original index>`), and they go
+    out as `<base name>_<slot>`. Raise `ValueError` if a name is not valid for Oracle.
     """
     renamed = []
     for index in indexes:
@@ -220,13 +209,10 @@ def slot_indexes(indexes: tuple[IndexDefinition, ...], slot: str) -> tuple[Index
 
 
 def layout_differences(existing: TableLayout, expected: TableLayout) -> list[str]:
-    """Lista as diferenças de tablespace, In-Memory e particionamento entre duas tabelas.
+    """List the differences of tablespace, In-Memory and partitioning of two tables.
 
-    Índices não entram: a carga os apaga e recria a cada execução.
-
-    :param existing: Estrutura da tabela existente.
-    :param expected: Estrutura esperada.
-    :returns: Diferenças no formato ``atual → esperado``; vazia se forem iguais.
+    The indexes do not count: the load drops and creates them again on every run. Return
+    the differences as `current → expected`, empty if they are equal.
     """
     differences = []
     if existing.tablespace != expected.tablespace:

@@ -42,7 +42,7 @@ async def fetch_forecast_task() -> str:
 
 @task
 def build_tables_task(xml: str) -> Forecast:
-    """Read the forecast XML into the rows of the four tables, which share one execution id."""
+    """Read the forecast XML into the rows of four tables, with one execution id."""
     forecast = build_tables(xml, str(uuid4()), capture_time())
     logger.info("Forecast read: %s", {name: len(rows) for name, rows in forecast["tables"].items()})
 

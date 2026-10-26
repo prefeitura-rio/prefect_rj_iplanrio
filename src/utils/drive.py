@@ -25,7 +25,7 @@ def connect() -> Resource:
 
 
 def list_files(drive: Resource, query: str) -> Files:
-    """Return the id and the name of the files that a Drive query finds, in all drives."""
+    """Return the id and name of the files that a Drive query finds, in all drives."""
     api = drive.files()  # pyright: ignore[reportAttributeAccessIssue]
     answer = api.list(
         q=query, fields="files(id, name)", spaces="drive", supportsAllDrives=True, includeItemsFromAllDrives=True
@@ -59,7 +59,7 @@ def confirm_root(drive: Resource, root_id: str) -> None:
 
 
 def ensure_folder(drive: Resource, root_id: str, name: str) -> str:
-    """Return the id of the subfolder of the root with a name, and create it if it does not exist."""
+    """Return the id of the named subfolder of the root, and create it if missing."""
     if folder_id := find_folder(drive, name, root_id):
         return folder_id
 

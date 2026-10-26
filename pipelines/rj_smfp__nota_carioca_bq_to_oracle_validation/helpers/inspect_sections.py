@@ -33,10 +33,10 @@ MEGABYTE = 1024 * 1024
 
 
 def describe_session(config: OracleConfig) -> str:
-    """Descreve a sessão aberta no Oracle, sem expor senha ou host.
+    """Describe the session open in Oracle, with no password and no host.
 
-    :param config: Configuração da conexão.
-    :returns: Texto com usuário efetivo, usuário proxy, banco e versão.
+    Return the text with the effective user, the proxy user, the database and the
+    version.
     """
     with connect(config) as connection, connection.cursor() as cursor:
         cursor.execute(render_query(QUERIES_ANCHOR, "get_session_info"))
@@ -55,12 +55,9 @@ def describe_session(config: OracleConfig) -> str:
 
 
 def fetch_table_size_mb(cursor: oracledb.Cursor, owner: str, table: str) -> str:
-    """Lê o tamanho alocado da tabela, se a sessão tiver acesso ao dicionário.
+    """Read the allocated size of the table, if the session can read the dictionary.
 
-    :param cursor: Cursor de uma conexão aberta.
-    :param owner: Dono da tabela.
-    :param table: Nome da tabela.
-    :returns: Tamanho em MB, ou uma explicação se não for possível ler.
+    Return the size in MB, or an explanation if it is not possible to read it.
     """
     try:
         cursor.execute(render_query(QUERIES_ANCHOR, "get_table_size_dba"), {"owner": owner, "table_name": table})
@@ -71,12 +68,9 @@ def fetch_table_size_mb(cursor: oracledb.Cursor, owner: str, table: str) -> str:
 
 
 def fetch_indexes_size_mb(cursor: oracledb.Cursor, owner: str, table: str) -> str:
-    """Lê o tamanho alocado dos índices da tabela, se a sessão puder ler ``dba_segments``.
+    """Read the allocated size of the table indexes, if `dba_segments` is readable.
 
-    :param cursor: Cursor de uma conexão aberta.
-    :param owner: Dono da tabela.
-    :param table: Nome da tabela.
-    :returns: Tamanho em MB, ou uma explicação se não for possível ler.
+    Return the size in MB, or an explanation if it is not possible to read it.
     """
     try:
         cursor.execute(render_query(QUERIES_ANCHOR, "get_indexes_size_dba"), {"owner": owner, "table_name": table})
@@ -87,13 +81,7 @@ def fetch_indexes_size_mb(cursor: oracledb.Cursor, owner: str, table: str) -> st
 
 
 def table_comment(cursor: oracledb.Cursor, owner: str, table: str) -> tuple[bool, str | None]:
-    """Lê se a tabela existe e o comentário dela.
-
-    :param cursor: Cursor de uma conexão aberta.
-    :param owner: Dono da tabela.
-    :param table: Nome da tabela.
-    :returns: ``(existe, comentário)``.
-    """
+    """Read whether the table exists and its comment, and return `(exists, comment)`."""
     rows = fetch_rows(cursor, "get_table_comment", {"owner": owner, "table_name": table})
     if not rows:
         return False, None
@@ -102,22 +90,20 @@ def table_comment(cursor: oracledb.Cursor, owner: str, table: str) -> tuple[bool
 
 
 def describe_load(comment: str | None) -> str:
-    """Descreve a foto do BigQuery e o horário de carga gravados no comentário.
+    """Describe the BigQuery snapshot and the load time that the comment holds.
 
-    :param comment: Comentário da tabela física.
-    :returns: Texto para o relatório.
+    `comment` is the comment of the physical table. Return the text for the report.
     """
     loaded = parse_load_comment(comment)
     return f"foto do BigQuery de {loaded[0]} UTC, carregada em {loaded[1]} UTC" if loaded else "sem carga concluída"
 
 
 def grants_section(cursor: oracledb.Cursor, schema: str, table: str) -> tuple[int, str]:
-    """Confere os privilégios dos consumidores na tabela física, se a sessão puder ler ``dba_tab_privs``.
+    """Check the consumer privileges on the physical table.
 
-    :param cursor: Cursor de uma conexão aberta.
-    :param schema: Schema da tabela.
-    :param table: Tabela física.
-    :returns: Número de divergências e seção do relatório.
+    It runs if the session can read `dba_tab_privs`.
+
+    Return the number of divergences and the section of the report.
     """
     try:
         cursor.execute(render_query(QUERIES_ANCHOR, "get_table_grants_dba"), {"owner": schema, "table_name": table})
@@ -131,12 +117,9 @@ def grants_section(cursor: oracledb.Cursor, schema: str, table: str) -> tuple[in
 
 
 def inmemory_section(cursor: oracledb.Cursor, schema: str, table: str) -> str:
-    """Descreve a população da tabela física no In-Memory, sem contar divergência.
+    """Describe the In-Memory population of the physical table, with no divergence.
 
-    :param cursor: Cursor de uma conexão aberta.
-    :param schema: Schema da tabela.
-    :param table: Tabela física.
-    :returns: Seção do relatório.
+    Return the section of the report.
     """
     try:
         status = read_status(cursor, schema, table)
@@ -149,14 +132,11 @@ def inmemory_section(cursor: oracledb.Cursor, schema: str, table: str) -> str:
 def structure_sections(
     template: TableLayout, loaded: TableLayout, loaded_columns: list[str], slot: str | None
 ) -> tuple[int, list[str]]:
-    """Compara partições, In-Memory e índices da tabela original com os da tabela carregada.
+    """Compare the partitions, In-Memory and indexes of the original and the load.
 
-    :param template: Estrutura da tabela original.
-    :param loaded: Estrutura da tabela carregada.
-    :param loaded_columns: Colunas criadas na tabela carregada.
-    :param slot: Sufixo da tabela física (``A`` ou ``B``), que vai no nome dos
-        índices; ``None`` para a tabela única antiga.
-    :returns: Número de divergências e seções de texto do relatório.
+    `slot` is the suffix of the physical table (`A` or `B`), which goes in the name of
+    the indexes, and `None` for the old single table. Return the number of divergences
+    and the text sections of the report.
     """
     try:
         expected = plan_structure(template, loaded_columns, TABLE_PREFIX)
@@ -193,13 +173,10 @@ def structure_sections(
 
 
 def fetch_bigquery_metrics(project: str, dataset_id: str, table_id: str, expressions: list[str]) -> list[object]:
-    """Calcula as métricas agregadas no BigQuery.
+    """Compute the aggregate metrics in BigQuery.
 
-    :param project: Projeto da tabela.
-    :param dataset_id: Dataset da tabela.
-    :param table_id: Nome da tabela.
-    :param expressions: Expressões SQL, na ordem das métricas.
-    :returns: Valores na mesma ordem das expressões.
+    `expressions` are SQL expressions, in the order of the metrics. Return the values in
+    the same order.
     """
     sql = render_query(
         QUERIES_ANCHOR,

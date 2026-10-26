@@ -21,7 +21,9 @@ async def rj_iplanrio__sisbicho_images(
     storage: Storage,
     limits: Limits | None = None,
 ) -> None:
-    """Read the QR code and upload the photo of each new animal of the SISBICHO, and load them to BigQuery.
+    """Read the QR code and upload the photo of each new SISBICHO animal.
+
+    Then load them to BigQuery.
 
     An animal is new when it has a QR code or a photo and its id is not in `table` yet.
     The animals go in batches of `limits["batch_size"]` (1000), at most

@@ -56,7 +56,7 @@ class ColumnOptions(TypedDict, total=False):
 
 
 class Read(TypedDict, total=False):
-    """What to read from the source: one of a `table` (`schema.name`) or a native `query`.
+    """What to read from the source: a `table` (`schema.name`) or a native `query`.
 
     A CouchDB read takes a `table` (the database), a `query` (a Mango selector) and a
     `since` (a sequence of `_changes`), with no more than one of `query` and `since`. A

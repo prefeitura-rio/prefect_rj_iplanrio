@@ -45,7 +45,7 @@ TABLE_FIELDS: Final = (
 )
 """The columns of a table of the layout sheets, from the left."""
 VERSION_DIGITS: Final = 4
-"""The digits of a version in the name of a file, such as `0701` for the version 7.01."""
+"""The digits of a version in a file name, such as `0701` for the version 7.01."""
 SKIPPED_TABLE: Final = "REG_99_DIARIA"
 UNNAMED_COLUMN: Final = "sem_nome"
 VERSION_CONTROL_SUFFIX: Final = "_columns_version_control"

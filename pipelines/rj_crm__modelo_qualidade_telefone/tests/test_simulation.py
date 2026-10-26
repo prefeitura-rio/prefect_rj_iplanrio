@@ -26,10 +26,10 @@ type Events = Callable[..., pl.DataFrame]
 
 @pytest.fixture
 def make_events(make_features: Events) -> Events:
-    """Return a factory of pools of events, from the rows of (send, candidate, used phone, failed)."""
+    """Return a factory of event pools from (send, candidate, used phone, failed)."""
 
     def build(rows: list[tuple[str, str, str, bool]], **columns: list[float]) -> pl.DataFrame:
-        """Build the frame, with the features at 0 and the columns that the test sets."""
+        """Build the frame with the features at 0 and the columns the test sets."""
         return make_features(
             len(rows),
             id_interacao=[row[0] for row in rows],
@@ -53,7 +53,10 @@ POOL = [
 
 
 def test_a_send_with_a_phone_in_the_training_set_is_dropped_whole(make_events: Events) -> None:
-    """Drop the rows of all the candidates of a send when one phone, or the used one, is in training."""
+    """Drop all the candidate rows of a send when any phone is in the training set.
+
+    The used phone counts too.
+    """
     events = make_events(POOL)
 
     clean, fraction = drop_contaminated(events, frozenset({"b", "x"}))
@@ -122,7 +125,7 @@ def test_a_group_with_no_evaluated_send_gives_nan_shares() -> None:
 def test_the_heuristic_prefers_a_rate_above_the_threshold_and_then_the_reliability_of_the_system(
     make_events: Events,
 ) -> None:
-    """Pick the high rate first, then the system with the best reliability, and a phone with no system last."""
+    """Pick a rate above the threshold first, then the more reliable system."""
     rows = [
         ("s1", "a", "a", False),
         ("s1", "b", "a", False),
@@ -174,7 +177,7 @@ def test_the_model_ranking_picks_the_candidate_with_the_top_probability(
 
 
 def test_a_gap_that_is_clearly_above_zero_is_significant() -> None:
-    """Reject the hypothesis of no gap when failed sends change much more than good ones."""
+    """Reject no gap when failed sends change much more than good ones."""
     failed = np.array([True] * 100 + [False] * 100)
     changes = np.array([True] * 90 + [False] * 10 + [True] * 10 + [False] * 90)
 
@@ -190,7 +193,7 @@ def test_a_pair_test_needs_both_algorithms() -> None:
 
 
 def test_a_pair_test_compares_the_difference_of_the_gaps() -> None:
-    """Find a difference when one algorithm changes the failed sends and the other changes none."""
+    """Find a difference when one algorithm changes failed sends and the other none."""
     failed = np.array([True] * 50 + [False] * 50)
     good = np.array([True] * 45 + [False] * 5 + [False] * 50)
     flat = np.zeros(100, dtype=bool)

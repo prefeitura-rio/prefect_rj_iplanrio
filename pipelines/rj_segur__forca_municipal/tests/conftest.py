@@ -11,7 +11,7 @@ from pipelines.rj_segur__forca_municipal.types import Row
 
 @final
 class FakeApi:
-    """An API that answers from tables of pages and of responses, and records its calls."""
+    """An API that answers from tables of pages and responses, and records its calls."""
 
     def __init__(
         self,
@@ -37,7 +37,7 @@ class FakeApi:
         return reply
 
     async def get_first(self, path: str, page_size: int, extra: dict[str, str] | None = None) -> tuple[int, list[Row]]:
-        """Return the number of pages and the first page, or fail for a unit that is bad."""
+        """Return the number of pages and the first page, or fail for a bad unit."""
         if extra and extra.get("unitId") in self.bad_units:
             raise OSError("down")
 

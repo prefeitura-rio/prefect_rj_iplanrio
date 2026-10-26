@@ -1,4 +1,4 @@
-"""Delta tables in the bucket: where they live, how a dump loads them and how BigQuery sees them."""
+"""Delta tables in the bucket: where they live, how a dump loads them, BigQuery."""
 
 from asyncio import Lock, to_thread
 from collections.abc import Mapping, Sequence
@@ -8,7 +8,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import uuid4
 
-from deltalake import DeltaTable
 from obstore.store import ObjectStore
 from polars import DataFrame, concat
 from toolkit.bigquery import BigQuery
@@ -27,6 +26,7 @@ from toolkit.delta import (
     maintain,
     read_known_fingerprints,
     sweep,
+    table_exists,
 )
 from toolkit.executor.engines.base import Engine, require_origin
 from toolkit.executor.engines.duckdb import DuckDBEngine
@@ -99,7 +99,7 @@ async def publish(
     project: str,
     connection: str | None,
 ) -> None:
-    """Create the BigQuery table over the Delta table of the bucket, or refresh its schema.
+    """Create the BigQuery table over the Delta table of the bucket, or refresh it.
 
     A Delta table is a BigLake table, so it needs `connection`. Raise
     `ValueError` without it.
@@ -271,7 +271,7 @@ async def dump_to_delta(
             return ChunkPlan(rows, [*base, build_batch_column(chunk.key)], known.get(ids[chunk.key]))
 
         async def handle(chunk: Chunk, folder: Path, token: int | None) -> None:
-            """Write a downloaded chunk, with its token, or with its fingerprint without one."""
+            """Write a downloaded chunk, with its token or its fingerprint."""
             nonlocal written, skipped
             number = token
 
@@ -313,7 +313,7 @@ async def clear_legacy(destination: Destination, dump_mode: DumpMode) -> None:
 
     A Delta table is never deleted: `overwrite` rewrites its chunks instead.
     """
-    if dump_mode == "overwrite" and not await to_thread(DeltaTable.is_deltatable, destination.uri):
+    if dump_mode == "overwrite" and not await to_thread(table_exists, destination.uri):
         await clear_prefix(create_store(destination.bucket), destination)
 
 
@@ -337,7 +337,7 @@ async def load_to_delta(
 
 
 def without_chunks(options: DumpOptions | None, source: str) -> DumpOptions:
-    """Return the options of a source that DuckDB cannot filter, which are not cut in chunks.
+    """Return the source options that DuckDB cannot filter and that are not chunked.
 
     Chunks over such a source would read it whole once for each chunk. Raise
     `ValueError` if `options` has `chunks`.
@@ -354,7 +354,9 @@ async def dump_in_batches(
     dump_mode: DumpMode,
     batch_size: int,
 ) -> None:
-    """Copy the rows of a source to Parquet files in the bucket, `batch_size` rows at a time.
+    """Copy the rows of a source to Parquet files in the bucket, in batches.
+
+    `batch_size` is the rows in a batch.
 
     It reads the origin of the source and uploads each batch, so memory holds one batch.
     This is plain batching: a rerun in `append` adds the rows again. `overwrite` deletes

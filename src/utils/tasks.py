@@ -98,7 +98,7 @@ async def upload_files_to_gcs(
 
 @retrying
 async def publish_table_in_bq(table: Table, cloud: Cloud) -> None:
-    """Create the BigQuery table over the Delta table in the bucket, or refresh its schema.
+    """Create the BigQuery table over the Delta table in the bucket, or refresh it.
 
     BigQuery reads a Delta table through a BigLake connection, so `connection`
     in `cloud` is required.
@@ -190,7 +190,7 @@ async def dump_db_to_gcs(
 
 @retrying
 async def prepare_delta_table(table: Table, *, bucket: str, dump_mode: DumpMode) -> None:
-    """Clear the files of an older layout before the shards of an `overwrite` dump start."""
+    """Clear the files of an older layout before the shards of an `overwrite` dump."""
     await clear_legacy(Destination(bucket, table["dataset_id"], table["table_id"]), dump_mode)
 
 
@@ -369,7 +369,9 @@ async def run_bq_sql(sql: str, *, project: str) -> int:
 
 @task
 async def notify_discord(message: str, *, webhook: str | None = None) -> str | None:
-    """Post a message to Discord, to `webhook` or to the `DISCORD_WEBHOOK_URL` setting, and return its id.
+    """Post a message to Discord and return its id.
+
+    It uses `webhook` or the `DISCORD_WEBHOOK_URL` setting.
 
     Raise `ValueError` if there is no webhook.
     """
@@ -448,7 +450,9 @@ async def run_dbt(request: DbtRun, *, report: bool = False) -> None:
 
 @task
 async def send_hsm(hsm: Hsm, recipients: Sequence[Recipient]) -> tuple[Sent, datetime]:
-    """Send the recipients to the Wetalkie API as a campaign of an HSM, in batches, and return what went out.
+    """Send the recipients to the Wetalkie API as an HSM campaign, in batches.
+
+    Return what went out.
 
     The result has the batches that the API took and the reason that one failed, if one
     did, and the time of the dispatch. Raise `RuntimeError` if the API does not answer.
@@ -461,14 +465,20 @@ async def send_hsm(hsm: Hsm, recipients: Sequence[Recipient]) -> tuple[Sent, dat
 
 @task
 async def whitelist_phones(phones: Sequence[str], selection: Selection) -> int:
-    """Put a random share of the phones on a group of the whitelist, and return how many numbers were sent."""
+    """Put a random share of the phones on a whitelist group.
+
+    Return how many numbers were sent.
+    """
     async with Whitelist.connect() as whitelist:
         return await add_to_whitelist(whitelist, phones, selection, Random())
 
 
 @task
 async def read_switch(campaign: str, environment: str, *, project: str = "rj-crm-registry") -> Switch:
-    """Read the row of a campaign in the control sheet of the dispatches and decide whether it may run today."""
+    """Read the campaign row in the dispatch control sheet.
+
+    Decide whether it may run today.
+    """
     query = render_query(__file__, "flow_status", campaign=Literal(campaign), environment=Literal(environment))
     frame = await read_bq.fn(query, project=project)
     row = frame.row(0, named=True) if frame.height else None
@@ -480,7 +490,9 @@ async def read_switch(campaign: str, environment: str, *, project: str = "rj-crm
 async def run_hsm(
     hsm: Hsm, recipients: Sequence[Recipient], selection: Selection | None, pause_minutes: float, *, test_mode: bool
 ) -> HsmRun:
-    """Put a share of the phones on the whitelist, wait, send the HSM in batches and post the notice of the dispatch.
+    """Whitelist a share of the phones, wait, send the HSM and post the notice.
+
+    The HSM goes in batches.
 
     The wait is for a person to stop a wrong dispatch. The result has the rows of the
     batches that went out, even when one fails later, so the caller can record them
@@ -504,7 +516,7 @@ async def run_hsm(
 
 @task
 async def post_hsm_results(hsm: Hsm, dispatch_date: str, total: int, *, test_mode: bool) -> None:
-    """Read the status of the messages of the HSM from the last two hours and post it."""
+    """Read the status of the HSM messages of the last two hours, and post it."""
     frame = await read_bq.fn(render_query(__file__, "hsm_results", id_hsm=hsm.id_hsm), project="rj-crm-registry")
     names = cast("list[str]", frame.get_column("status").cast(String).to_list())
     counts = cast("list[int]", frame.get_column("quantidade_cpfs").cast(Int64).to_list())

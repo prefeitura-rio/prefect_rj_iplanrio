@@ -34,7 +34,7 @@ CREDENTIAL_SCOPES: Final = (
     "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/cloud-platform",
 )
-"""The scopes of the credentials that a pipeline gives to a Google client, by default."""
+"""The scopes of the credentials that a pipeline gives a Google client."""
 
 DBT_FAILED: Final = ("error", "fail", "runtime error")
 """The statuses of a dbt node that mean the node failed."""
@@ -49,10 +49,10 @@ STAGES_FOLDER: Final = "pipelines"
 """The folder of a pipeline with the JSON files of its MongoDB aggregations."""
 
 STAGES_NAME: Final = compile_pattern(r"[a-z0-9]+(-[a-z0-9]+)*")
-"""A name of an aggregation: lowercase words with dashes, so it never leaves its folder."""
+"""A name of an aggregation: lowercase words with dashes, never out of its folder."""
 
 PLACEHOLDER_NAME: Final = r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)*"
-"""The name in a `${NAME}` placeholder: `UPPER_SNAKE_CASE`, as an environment variable."""
+"""The name in a `${NAME}` placeholder: `UPPER_SNAKE_CASE`, like a variable."""
 
 TOKEN_KEYS: Final = ("token", "access_token", "authToken", "jwt")
 """The places of a login response where an API puts its token, in the order to look."""
@@ -71,10 +71,15 @@ BIFROST_FIRST_WAIT_SECONDS: Final = 2.0
 
 BIFROST_CALIBRATED_BATCH: Final = 50
 BIFROST_CALIBRATED_TOKENS: Final = 8192
-"""The batch size for which 8192 output tokens were enough, so the limit scales with the batch."""
+"""The batch size for which 8192 output tokens were enough.
+
+The limit scales with the batch from there."""
 
 USER_AGENT: Final = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-"""The User-Agent of an API request. INMET resets the connection of a library User-Agent such as `python-httpx`."""
+"""The User-Agent of an API request.
+
+INMET resets the connection of a library User-Agent such as `python-httpx`.
+"""
 
 DRIVE_FOLDER_MIME: Final = "application/vnd.google-apps.folder"
 
@@ -85,7 +90,7 @@ DEFAULT_CLOUD: Final = Cloud(bucket="rj-iplanrio", project="rj-iplanrio", connec
 """The bucket and the BigQuery project of a flow that does not set its own `cloud`."""
 
 INFISICAL_LOGIN_PATH: Final = "/api/v1/auth/kubernetes-auth/login"
-"""The Infisical route that exchanges a Kubernetes service account token for an access token."""
+"""The Infisical route that swaps a Kubernetes token for an access token."""
 
 INFISICAL_SECRETS_PATH: Final = "/api/v3/secrets/raw"
 """The Infisical route that lists the secrets of one folder."""

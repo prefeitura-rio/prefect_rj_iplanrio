@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import pytest
 from httpx2 import AsyncClient, MockTransport, Request, Response
 
@@ -10,7 +12,9 @@ PROJECT = "project-id"
 ENVIRONMENT = "staging"
 
 
-def handler(folders: dict[str, dict[str, str]], login: int = 200, seen: list[str] | None = None):
+def handler(
+    folders: dict[str, dict[str, str]], login: int = 200, seen: list[str] | None = None
+) -> Callable[[Request], Response]:
     """Return the Infisical API: a login, and the secrets of each folder."""
 
     def handle(request: Request) -> Response:
@@ -40,7 +44,7 @@ def handler(folders: dict[str, dict[str, str]], login: int = 200, seen: list[str
     return handle
 
 
-async def run(folders, paths, login=200, seen=None):
+async def run(folders, paths, login=200, seen=None) -> dict[str, str]:
     """Read the paths through the fake API."""
     client = AsyncClient(transport=MockTransport(handler(folders, login, seen)), base_url=URL)
     settings = InfisicalSettings(

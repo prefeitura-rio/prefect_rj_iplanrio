@@ -9,14 +9,16 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.types import Conversation, Extr
 
 
 def message_order(message: Message) -> tuple[str, bool, datetime]:
-    """Return the key that orders messages by session and time, with a message that has no time last."""
+    """Return the key that orders messages by session and time, with no time last."""
     moment = message["msg_data"]
 
     return message["id_sessao_48h"], moment is None, moment or datetime.min.replace(tzinfo=UTC)
 
 
 def build_conversations(messages: Sequence[Message]) -> Extraction:
-    """Group the messages by session, and return a conversation for each one that has a citizen message.
+    """Group the messages by session and return a conversation for each.
+
+    A session needs a citizen message.
 
     A conversation has the lines `CIDADÃO: ...` and `AGENTE: ...` in time order. The HSM
     text is kept apart as `hsm_text`, the same for all the sessions of a dispatch, and

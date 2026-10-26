@@ -71,7 +71,7 @@ def test_a_value_becomes_text(value: JsonValue, expected: str | None) -> None:
 
 
 def test_the_frame_has_text_columns_with_the_hash_the_time_and_the_partition() -> None:
-    """Keep the columns of every row, in order of appearance, and fill the absent ones with nothing."""
+    """Keep the columns of every row, in order of appearance, and fill the gaps."""
     rows: list[Row] = [{"a": 1, "day": "2026-07-17"}, {"b": {"x": 1}, "day": "2026-07-18"}]
 
     frame = build_frame(rows, datetime(2026, 7, 17, 12, 0), "day")

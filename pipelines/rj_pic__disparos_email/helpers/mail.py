@@ -17,7 +17,7 @@ from utils.records import dig, read_json
 
 @dataclass(frozen=True)
 class Relay:
-    """The address, the key and the options of the Data Relay, and the pace of the sending."""
+    """The address, key and options of the Data Relay, and the pace of the sending."""
 
     url: str
     api_key: str
@@ -60,7 +60,7 @@ class Pacer:
         self.last: float | None = None
 
     async def wait(self) -> None:
-        """Wait until `interval` seconds have passed since the last send, then mark a send."""
+        """Wait until `interval` seconds pass since the last send, then mark a send."""
         if self.last is not None:
             remaining = self.interval - (self.clock() - self.last)
 

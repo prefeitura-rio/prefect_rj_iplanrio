@@ -26,7 +26,7 @@ class Tables(TypedDict):
 
 
 class RetrainOptions(TypedDict, total=False):
-    """The options of the retrain: the search, the pool of the simulation and the gate."""
+    """The options of the retrain: the search, the simulation pool and the gate."""
 
     n_trials: int
     recent_days: int
@@ -57,7 +57,7 @@ class ScoreStats:
 
 @dataclass(frozen=True)
 class ShapSample:
-    """A sample of the training rows with the raw SHAP values, for the plots of the report."""
+    """A sample of the training rows with the raw SHAP values, for the plots."""
 
     features: Matrix
     values: Matrix
@@ -65,7 +65,7 @@ class ShapSample:
 
 @dataclass(frozen=True)
 class Training:
-    """The result of a training: the model, its metrics and what the simulation needs."""
+    """The result of a training: the model, metrics and the simulation inputs."""
 
     booster: Booster
     hyperparameters: dict[str, object]
@@ -128,7 +128,7 @@ class Simulation:
 
 @dataclass(frozen=True)
 class Gate:
-    """The decision to promote a model, with the values that were measured even when a criterion passed."""
+    """The decision to promote a model, with the values measured even if one passed."""
 
     promoted: bool
     reasons: list[str]
@@ -147,7 +147,7 @@ class Judgement:
 
 
 class Release(NamedTuple):
-    """The version of a retrain, as the name of its folder, and the date of the run `YYYY-MM-DD`."""
+    """The version of a retrain, as its folder name, and the run date `YYYY-MM-DD`."""
 
     version: str
     date: str

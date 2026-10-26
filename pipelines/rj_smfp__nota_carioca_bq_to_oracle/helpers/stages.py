@@ -1,4 +1,4 @@
-"""Passos da carga BigQuery → Oracle, etapas de cada tabela e os pesos da barra de progresso."""
+"""The steps of the load, the stages of each table and the progress weights."""
 
 from enum import IntEnum
 
@@ -14,7 +14,7 @@ class Step(IntEnum):
 
 
 class TableStep(IntEnum):
-    """Etapas de cada tabela, em ordem; ``DONE`` é a tabela concluída."""
+    """The stages of each table, in order. `DONE` is a finished table."""
 
     PREPARATION = 0
     LOAD = 1

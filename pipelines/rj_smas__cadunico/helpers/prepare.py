@@ -1,4 +1,4 @@
-"""Prepare the raw files for the load: records as Parquet files, and the layout as rows."""
+"""Prepare the raw files for the load: the records as Parquet, the layout as rows."""
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -21,7 +21,7 @@ def to_records(frame: DataFrame) -> list[Record]:
 
 
 def prepare_partition(bucket: str, name: str, folder: Path) -> Partition:
-    """Download a ZIP of records and write its text files as Parquet files in the folder.
+    """Download a ZIP of records and write its text files as Parquet in the folder.
 
     Every row has the columns of the partition: the layout version of the first line of
     the last text file, and the year, the month and the date of the name of the ZIP.
@@ -74,7 +74,10 @@ def read_layouts(bucket: str, files: Mapping[str, str], folder: Path) -> list[Re
 
 
 def write_table(rows: Sequence[Record], folder: Path) -> Path:
-    """Write the rows as a Parquet file of text columns in the folder, and return the folder."""
+    """Write the rows as a Parquet file of text columns in the folder.
+
+    Return the folder.
+    """
     columns = list(dict.fromkeys(column for row in rows for column in row))
     frame: DataFrame = from_dicts(list(rows), schema=dict.fromkeys(columns, String))
     frame.write_parquet(folder / "data.parquet")

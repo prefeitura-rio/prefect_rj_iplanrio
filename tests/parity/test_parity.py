@@ -1,4 +1,4 @@
-"""The same checks on every engine: the answers must be the same, or the difference is on the list."""
+"""The same checks on every engine: the answers match, or the difference is listed."""
 
 from datetime import date
 from decimal import Decimal
@@ -158,7 +158,10 @@ async def test_the_decimal_keeps_every_digit(engine) -> None:
 
 
 async def test_read_returns_every_row_in_datadataframes_where_the_engine_reads_whole(engine) -> None:
-    """Read the 304 rows as datadataframes of at most `batch_size`, and refuse on Oracle, which only writes chunks."""
+    """Read the 304 rows as dataframes of at most `batch_size`, and refuse on Oracle.
+
+    It applies where the engine reads whole.
+    """
     async with Engine.from_source(build_source(engine)) as opened:
         if engine == "oracle":
             with pytest.raises(UnsupportedRequestError):
@@ -182,7 +185,7 @@ async def test_a_clone_is_a_new_engine_that_works(engine) -> None:
 
 
 async def test_a_mongodb_pipeline_returns_the_rows_of_a_plain_read() -> None:
-    """Project two fields with a pipeline, and get the same rows as a plain read gives."""
+    """Project two fields with a pipeline, and get the rows of a plain read."""
     if "mongodb" not in available():
         pytest.skip("MongoDB is not up")
 

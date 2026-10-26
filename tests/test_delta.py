@@ -1,5 +1,5 @@
 from asyncio import gather
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Coroutine, Mapping, Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from json import loads
@@ -93,7 +93,10 @@ DAYS: Chunks = {"column": "dia", "width": "day", "begin": "2024-03-01", "end": "
 
 
 class Lake:
-    """A folder that stands in for the source, and a local Delta table for the bucket."""
+    """A folder that stands in for the source, and a local Delta table.
+
+    The table stands in for the bucket.
+    """
 
     def __init__(self, root: Path) -> None:
         """Keep the paths of the source files and of the table."""
@@ -106,7 +109,10 @@ class Lake:
         write_table(Table.from_pylist(rows), self.source / "rows.parquet")
 
     def put_expression(self, expression: str) -> None:
-        """Replace the source with one row, `id` 1 and a column `valor` that DuckDB computes."""
+        """Replace the source with one row: `id` 1 and a computed `valor`.
+
+        DuckDB computes the `valor` column.
+        """
         with duckdb_connect() as connection:
             connection.execute(
                 f"COPY (SELECT 1 AS id, {expression} AS valor) TO '{self.source / 'rows.parquet'}' (FORMAT parquet)"
@@ -151,7 +157,7 @@ async def test_the_first_dump_loads_every_chunk(lake) -> None:
 
 
 async def test_the_same_data_is_never_written_again(lake) -> None:
-    """Skip every chunk whose fingerprint is in the ledger, so the table gets no commit."""
+    """Skip each chunk whose fingerprint is in the ledger, so there is no commit."""
     first = await lake.dump(chunks=DAYS)
 
     second = await lake.dump(chunks=DAYS)
@@ -182,7 +188,7 @@ async def test_a_chunk_that_became_empty_loses_its_rows(lake) -> None:
 
 
 async def test_regression_rows_with_no_value_in_the_chunk_column_are_loaded(lake) -> None:
-    """Regression: a real table had NULL dates, and the chunks left them out silently."""
+    """Regression: a real table had NULL dates, and the chunks left them out."""
     lake.put([*ROWS, {"id": 5, "nome": "Eli", "dia": None, "valor": 50.0}])
 
     await lake.dump(chunks=DAYS)
@@ -193,7 +199,10 @@ async def test_regression_rows_with_no_value_in_the_chunk_column_are_loaded(lake
 
 
 async def test_the_day_of_a_timestamp_with_a_time_zone_is_the_day_in_sao_paulo(lake) -> None:
-    """Cut the days of an instant in São Paulo, as `to_sao_paulo` does, wherever the dump runs."""
+    """Cut the days of an instant in São Paulo, as `to_sao_paulo` does.
+
+    It holds wherever the dump runs.
+    """
     zone = arrow_timestamp("us", tz="UTC")
     write_table(
         arrow_table(
@@ -277,7 +286,10 @@ async def test_filters_are_where_statements_joined_by_and(lake, filters, ids) ->
 async def test_regression_a_type_that_delta_lacks_arrives_as_text_or_a_wider_number(
     lake, expression, arrow_type, value
 ) -> None:
-    """Regression: real databases gave `TIME`, `UUID` and unsigned numbers, which `deltalake` refused."""
+    """Regression: real databases gave `TIME`, `UUID` and unsigned numbers.
+
+    The `deltalake` library refused them.
+    """
     lake.put_expression(expression)
 
     await lake.dump()
@@ -307,7 +319,7 @@ async def test_a_capture_adds_its_rows_and_keeps_the_ones_of_the_earlier_capture
 
 
 async def test_regression_the_same_capture_again_adds_nothing_even_if_the_source_changed(lake) -> None:
-    """Regression: a retry that finds new data must not add the rows of its first try twice."""
+    """Regression: a retry with new data must not add its first rows twice."""
     await lake.dump(capture=FIRST_RUN)
     commits = await lake.dump(capture=FIRST_RUN)
     lake.put([*ROWS, {"id": 5, "nome": "Eli", "dia": date(2024, 3, 3), "valor": 50.0}])
@@ -317,7 +329,7 @@ async def test_regression_the_same_capture_again_adds_nothing_even_if_the_source
 
 
 async def test_regression_a_capture_from_another_folder_is_still_the_same_capture(lake, tmp_path) -> None:
-    """Regression: a rerun of a flow runs in a new temp folder, and must not add the rows twice."""
+    """Regression: a rerun runs in a new temp folder, and must not add rows twice."""
     await lake.dump(capture=FIRST_RUN)
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
@@ -359,7 +371,7 @@ async def test_a_capture_refuses_what_would_replace_the_earlier_ones(lake, dump_
 
 
 async def test_the_extraction_time_is_added_and_only_a_changed_chunk_gets_a_new_one(lake, stamps) -> None:
-    """Keep the time of a chunk that did not change, and stamp the one that was replaced."""
+    """Keep the time of an unchanged chunk, and stamp the one that was replaced."""
     await lake.dump(chunks=DAYS, columns={"add_timestamp": True})
     first = stamps(lake)
 
@@ -403,7 +415,7 @@ async def test_a_new_config_loads_every_chunk_again(lake) -> None:
 
 
 async def test_append_refuses_a_change_of_columns_and_overwrite_applies_it(lake) -> None:
-    """Keep one schema in append, and replace it when the dump is rebuilt in overwrite."""
+    """Keep one schema in append, and replace it when overwrite rebuilds the dump."""
     await lake.dump(chunks=DAYS)
 
     with pytest.raises(SchemaMismatchError):
@@ -417,7 +429,7 @@ async def test_append_refuses_a_change_of_columns_and_overwrite_applies_it(lake)
 
 
 async def test_overwrite_writes_every_chunk_again_and_sweeps_the_old_ones(lake) -> None:
-    """Rewrite the same data in overwrite mode, and delete the chunks outside the range."""
+    """Rewrite the same data in overwrite mode, and delete the chunks out of range."""
     await lake.dump(chunks=DAYS)
     before = lake.writes()
 
@@ -428,7 +440,7 @@ async def test_overwrite_writes_every_chunk_again_and_sweeps_the_old_ones(lake) 
 
 
 async def test_overwrite_ignores_lookback_and_rebuilds_every_chunk(lake) -> None:
-    """Rewrite all the chunks in overwrite mode, even when lookback names only the last one."""
+    """Rewrite all chunks in overwrite mode, even if lookback names only the last."""
     await lake.dump(chunks=DAYS)
     before = lake.writes()
 
@@ -438,7 +450,7 @@ async def test_overwrite_ignores_lookback_and_rebuilds_every_chunk(lake) -> None
 
 
 async def test_an_earlier_chunk_never_loaded_is_loaded_even_with_lookback(lake) -> None:
-    """Let lookback limit the re-checks only, and not the first load of an older chunk."""
+    """Let lookback limit only the re-checks, not the first load of an older chunk."""
     await lake.dump(chunks={**DAYS, "begin": "2024-03-02"})
 
     await lake.dump(chunks={**DAYS, "lookback": 1})
@@ -447,7 +459,7 @@ async def test_an_earlier_chunk_never_loaded_is_loaded_even_with_lookback(lake) 
 
 
 async def test_a_new_filter_reaches_the_chunks_that_lookback_does_not_recheck(lake) -> None:
-    """Treat every chunk as not loaded after a new filter, so no old chunk keeps its rows."""
+    """Treat each chunk as not loaded after a new filter, so no old chunk keeps rows."""
     await lake.dump(chunks=DAYS)
 
     await lake.dump(chunks={**DAYS, "lookback": 1}, filters=["valor > 15"])
@@ -523,7 +535,7 @@ async def test_a_delta_table_without_a_connection_is_refused() -> None:
 
 
 @pytest.fixture
-def batches_in_a_bucket(store, lake, monkeypatch):
+def batches_in_a_bucket(store, lake, monkeypatch) -> Callable[[DumpMode, int], Coroutine[None, None, None]]:
     """Return a function that copies the lake in batches to an in-memory bucket."""
     monkeypatch.setattr(delta, "create_store", lambda *_: store)
     values = Files(f"{lake.source}/*.parquet", "parquet")
@@ -566,7 +578,7 @@ async def test_append_keeps_the_old_objects_and_overwrite_deletes_them(store, ba
     ],
 )
 def test_a_source_read_whole_is_never_cut_into_chunks(options, fails) -> None:
-    """Refuse chunks over a source that DuckDB cannot filter, so it is not read many times."""
+    """Refuse chunks over a source that DuckDB cannot filter, so it is read once."""
     if fails:
         with pytest.raises(ValueError, match="one chunk"):
             without_chunks(options, "A layer")
@@ -659,7 +671,7 @@ async def test_a_date_width_also_cuts_a_timestamp_column(lake, naive) -> None:
     ],
 )
 async def test_the_chunk_column_must_have_the_type_that_the_chunks_need(lake, chunks, message) -> None:
-    """Refuse a column of another type before any write, as a database would fail on the compare."""
+    """Refuse a column of another type before any write, as a database would fail."""
     with pytest.raises(ValueError, match=message):
         await lake.dump(chunks=chunks)
 
@@ -669,14 +681,14 @@ async def test_the_chunk_column_must_have_the_type_that_the_chunks_need(lake, ch
 READABLE = {"timestampNtz", "columnMapping", "deletionVectors"}
 
 
-"""The reader features that BigQuery supports, with reader version 3 as the most it reads."""
+"""The reader features that BigQuery supports, up to reader version 3."""
 
 
 IDENTIFIER = compile_pattern(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
 def delta_log(uri: str) -> tuple[dict[str, object], dict[str, str]]:
-    """Return the last protocol and the schema, name to type, that the log of a table records."""
+    """Return the last protocol and the schema, name to type, in a table log."""
     protocol: dict[str, object] = {}
     schema: dict[str, str] = {}
     for entry in sorted(Path(uri, "_delta_log").glob("*.json")):
@@ -691,7 +703,7 @@ def delta_log(uri: str) -> tuple[dict[str, object], dict[str, str]]:
 
 
 def assert_bigquery_can_read(uri: str) -> None:
-    """Check the limits that Google lists for a Delta table of BigLake, on the log itself."""
+    """Check the limits that Google lists for a BigLake Delta table, on the log."""
     protocol, schema = delta_log(uri)
     features = set(cast("list[str]", protocol.get("readerFeatures", [])))
 
@@ -739,7 +751,10 @@ async def after_an_overwrite_with_other_columns(lake: Lake) -> None:
 async def test_a_reader_that_is_not_ours_sees_what_we_wrote_and_the_log_fits_bigquery(
     lake, delta_reader, scenario
 ) -> None:
-    """Read the table with DuckDB after each kind of write, as BigQuery reads the log, and check its limits."""
+    """Read the table with DuckDB after each write, as BigQuery reads the log.
+
+    It also checks that the log fits BigQuery.
+    """
     await scenario(lake)
 
     names = [field.name for field in DeltaTable(lake.uri).schema().fields if field.name != "batch"]
@@ -751,7 +766,10 @@ async def test_a_reader_that_is_not_ours_sees_what_we_wrote_and_the_log_fits_big
 
 
 async def test_the_types_of_the_pipelines_get_the_delta_types_that_bigquery_maps(tmp_path) -> None:
-    """Pin the Delta type of each column, which BigQuery reads as INTEGER, NUMERIC, DATETIME and so on."""
+    """Pin the Delta type of each column.
+
+    BigQuery reads them as INTEGER, NUMERIC, DATETIME and so on.
+    """
     instant = datetime(2024, 3, 1, 10, tzinfo=UTC)
     dataframe = arrow_table(
         {
@@ -850,7 +868,7 @@ def test_the_maintenance_message_stays_within_the_limit_of_discord() -> None:
 
 
 def test_the_stages_of_a_pipeline_change_the_hash_of_the_config() -> None:
-    """Reload the chunks when the stages change, and keep them when the stages are the same."""
+    """Reload the chunks when the stages change, and keep them when they do not."""
     first = Aggregate('[{"$project": {"a": 1}}]', "c")
     same = Aggregate('[{"$project": {"a": 1}}]', "c")
     other = Aggregate('[{"$project": {"a": 1, "b": 1}}]', "c")
@@ -863,7 +881,7 @@ MERGE_ON_ID: DumpOptions = {"merge": {"key": ["id"]}}
 
 
 async def test_a_merge_adds_the_new_keys_and_keeps_the_old_rows(lake) -> None:
-    """Add what the new run brings, once, so that overlapping windows add no duplicate."""
+    """Add what the new run brings once, so overlapping windows add no duplicate."""
     lake.put(ROWS[:3])
     await lake.dump("merge", **MERGE_ON_ID)
     lake.put(ROWS[1:])
@@ -884,7 +902,7 @@ async def test_a_merge_changes_a_row_whose_values_changed(lake) -> None:
 
 
 async def test_a_merge_of_data_that_was_merged_before_makes_no_commit(lake) -> None:
-    """Skip a run whose data is the one that the ledger already knows, like an append does."""
+    """Skip a run whose data the ledger knows, as an append does, and make no commit."""
     first = await lake.dump("merge", **MERGE_ON_ID)
 
     assert await lake.dump("merge", **MERGE_ON_ID) == first
@@ -961,7 +979,7 @@ async def test_two_shards_load_their_own_chunks_and_together_all_of_them(lake) -
 
 
 async def test_shards_that_run_together_create_one_table_with_every_chunk(lake) -> None:
-    """Run the shards at the same time over a table that does not exist yet, and lose no chunk."""
+    """Run the shards together over a new table, and lose no chunk."""
     values = Files(f"{lake.source}/*.parquet", "parquet")
 
     await gather(
@@ -973,7 +991,10 @@ async def test_shards_that_run_together_create_one_table_with_every_chunk(lake) 
 
 
 async def test_a_shard_leaves_the_sweep_and_the_checkpoint_to_the_end_of_the_dump(lake) -> None:
-    """Keep the old chunk and write no checkpoint in a shard, then close the dump once with both."""
+    """Keep the old chunk and write no checkpoint in a shard.
+
+    The dump closes once with both at the end.
+    """
     await lake.dump(chunks=DAYS)
     inside: Chunks = {**DAYS, "begin": "2024-03-02"}
     log = Path(lake.uri, "_delta_log")
@@ -1016,7 +1037,7 @@ async def test_a_shard_does_not_clear_the_older_layout(monkeypatch) -> None:
 TOKENS = {"2024-03-01": 11, "2024-03-02": 12, "2024-03-03": 13, "null": 14}
 
 
-def probed(lake, source_class=ProbedFilesSource, tokens=None):
+def probed(lake, source_class=ProbedFilesSource, tokens=None) -> ProbedFilesSource:
     """Return a source over the files of the lake, with canned tokens for its chunks."""
     origin = Files(f"{lake.source}/*.parquet", "parquet")
 

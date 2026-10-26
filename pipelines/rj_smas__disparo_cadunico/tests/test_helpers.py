@@ -25,7 +25,7 @@ def test_the_query_has_the_hsm_and_the_days_ahead() -> None:
 
 
 def test_the_query_looks_past_the_weekend_and_skips_it() -> None:
-    """Look two days further when the day lands on a weekend, and give nothing on a weekend."""
+    """Look two days ahead when the day is a weekend, and give nothing on a weekend."""
     thursday = build_query(FOLDER, Campaign(), Audience(days_ahead=2), THURSDAY)
 
     assert thursday is not None
@@ -42,7 +42,7 @@ def test_the_first_column_of_the_query_has_the_destinations() -> None:
 
 
 def test_the_test_destinations_come_from_the_setting() -> None:
-    """Read a JSON list as one JSON text for each destination, and read them as recipients."""
+    """Read a JSON list as one JSON text for each destination, and as recipients."""
     texts = read_test_texts('[{"celular_disparo": "5521999", "externalId": "111", "vars": {"NOME": "Ana"}}]')
 
     recipients = parse_recipients(texts, require_id=True)

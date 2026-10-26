@@ -10,7 +10,9 @@ from re import fullmatch
 
 from cv2 import IMREAD_GRAYSCALE, QRCodeDetector, imdecode
 from numpy import frombuffer, uint8
+from obstore.store import ObjectStore
 from pydantic import JsonValue, TypeAdapter, ValidationError
+from toolkit.gcs import has_key, write_bytes
 from toolkit.telemetry import logger
 
 from pipelines.rj_iplanrio__sisbicho_images.constants import (
@@ -23,7 +25,7 @@ from pipelines.rj_iplanrio__sisbicho_images.constants import (
     MEDIA_COLUMNS,
     UNKNOWN_EXTENSION,
 )
-from pipelines.rj_iplanrio__sisbicho_images.types import Animal, PhotoBucket, Row, Storage
+from pipelines.rj_iplanrio__sisbicho_images.types import Animal, Row, Storage
 
 ANIMALS: TypeAdapter[list[Animal]] = TypeAdapter(list[Animal])
 JSON: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
@@ -42,7 +44,7 @@ def read_animals(rows: Sequence[Mapping[str, object]]) -> list[Animal]:
 
 
 def pick_identifier(columns: Sequence[str]) -> str:
-    """Return the column that holds the id of the animal: a known name, else the first column of no media.
+    """Return the animal id column: a known name, else the first with no media.
 
     Raise `ValueError` if the table has no such column.
     """
@@ -60,7 +62,9 @@ def pick_identifier(columns: Sequence[str]) -> str:
 
 
 def quote_ids(identifiers: Sequence[str]) -> list[str]:
-    """Return the ids that are safe to write in a query, and raise `ValueError` for one that is not.
+    """Return the ids that are safe in a query.
+
+    Raise `ValueError` for one that is not safe.
 
     An id has letters, digits, dashes, dots and underscores.
     """
@@ -72,7 +76,7 @@ def quote_ids(identifiers: Sequence[str]) -> list[str]:
 
 
 def to_text(value: bytes | str | None) -> str:
-    """Return a Base64 value as text without the `data:` prefix, or empty text if there is none.
+    """Return a Base64 value as text without the `data:` prefix, or empty text.
 
     Raise `ValueError` if bytes are not ASCII.
     """
@@ -90,7 +94,7 @@ def to_text(value: bytes | str | None) -> str:
 
 
 def looks_like_base64(text: str) -> bool:
-    """Tell whether the text could be Base64: its alphabet, and a length of whole blocks."""
+    """Tell whether the text could be Base64: its alphabet and whole block length."""
     text = text.strip()
 
     return bool(text) and set(text) <= BASE64_ALPHABET and len(text) % BASE64_BLOCK == 0
@@ -182,7 +186,7 @@ def normalize_payload(text: str) -> str | None:
 
 
 def extract_qrcode(value: bytes | str | None) -> str | None:
-    """Return the JSON payload of the QR code in a Base64 image, or nothing if it has none.
+    """Return the JSON payload of the QR code in a Base64 image, or nothing.
 
     A PDF, text that is not Base64, a file that is not a known image and an image
     without a QR code give nothing.
@@ -202,7 +206,10 @@ def extract_qrcode(value: bytes | str | None) -> str | None:
 
 
 def sanitize_identifier(identifier: str) -> str:
-    """Return an id that is safe in the name of a file: letters, digits, dashes and underscores."""
+    """Return an id that is safe in a file name.
+
+    It keeps letters, digits, dashes and underscores.
+    """
     text = identifier.strip()
 
     return "".join(char if char.isalnum() or char in "-_" else "_" for char in text) if text else "sem_identificador"
@@ -224,8 +231,8 @@ def name_photo(image: bytes, identifier: str, prefix: str) -> tuple[str, str, st
     )
 
 
-def upload_photo(bucket: PhotoBucket, storage: Storage, animal: Animal) -> str | None:
-    """Upload the photo of an animal to the bucket, unless it is there, and return its public URL.
+def upload_photo(store: ObjectStore, storage: Storage, animal: Animal) -> str | None:
+    """Upload the photo of an animal unless it is there, and return its public URL.
 
     An animal with no photo or a PDF gives nothing. Raise `ValueError` if the photo is
     not Base64 or not a known file, so a batch never takes a broken photo.
@@ -246,18 +253,15 @@ def upload_photo(bucket: PhotoBucket, storage: Storage, animal: Animal) -> str |
         raise ValueError(f"The photo of the animal {identifier} does not decode: {error}") from error
 
     name, content_type, digest = name_photo(image, identifier, storage["prefix"])
-    blob = bucket.blob(name)
 
-    if not blob.exists():
-        blob.upload_from_string(image, content_type=content_type)
-        blob.metadata = {"sha1": digest}
-        blob.patch()
+    if not has_key(store, name):
+        write_bytes(store, name, image, content_type=content_type, metadata={"sha1": digest})
 
     return f"https://storage.googleapis.com/{storage['bucket']}/{name}"
 
 
-def build_rows(animals: Sequence[Animal], bucket: PhotoBucket, storage: Storage, now: datetime) -> list[Row]:
-    """Return the rows of the table for the animals, with the QR code payload and the URL of the photo.
+def build_rows(animals: Sequence[Animal], store: ObjectStore, storage: Storage, now: datetime) -> list[Row]:
+    """Return the table rows for the animals, with the QR code payload and photo URL.
 
     Each photo goes to the bucket on the way.
     """
@@ -266,7 +270,7 @@ def build_rows(animals: Sequence[Animal], bucket: PhotoBucket, storage: Storage,
             "id_animal": animal["animal_identifier"],
             "cpf": animal["cpf"],
             "qrcode_payload": extract_qrcode(animal["qrcode_dados"]),
-            "foto_url": upload_photo(bucket, storage, animal),
+            "foto_url": upload_photo(store, storage, animal),
             "ingestao_data": now.isoformat(),
         }
         for animal in animals

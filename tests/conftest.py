@@ -5,5 +5,8 @@ import pytest
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Register `fixtures.py` under a name of its own, because pytest keeps `fixtures` for its plugin."""
+    """Register `fixtures.py` under its own name, because pytest keeps `fixtures`.
+
+    The name is for its plugin.
+    """
     config.pluginmanager.register(fixtures, "project-fixtures")

@@ -1,25 +1,24 @@
-"""Leitura de schema, exportação consistente para o GCS e limpeza dos arquivos exportados."""
+"""Read the schema, export a consistent snapshot to GCS, clean the files."""
 
 import time
+from asyncio import run
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from google.cloud import bigquery, storage
+from google.cloud import bigquery
+from toolkit.gcs import create_store, delete_keys, list_sizes
 from toolkit.telemetry import logger
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.dbt import skip_initial_quiet_wait
 
-DELETE_BATCH_SIZE = 100
-"""Máximo de objetos por requisição batch do GCS."""
-
 
 @dataclass(frozen=True)
 class ExportedFile:
-    """Arquivo CSV gzip gerado pelo extract no GCS.
+    """A gzip CSV file that the extract wrote to GCS.
 
-    :param name: Nome do objeto no bucket.
-    :param size: Tamanho do objeto em bytes (comprimido).
+    `name` is the name of the object in the bucket, and `size` is its compressed size in
+    bytes.
     """
 
     name: str
@@ -27,12 +26,7 @@ class ExportedFile:
 
 
 def list_tables(project: str, dataset_id: str) -> list[str]:
-    """Lista as tabelas (sem views) de um dataset do BigQuery.
-
-    :param project: Projeto do dataset.
-    :param dataset_id: Dataset de origem.
-    :returns: Nomes das tabelas em ordem alfabética.
-    """
+    """List the tables of a BigQuery dataset, without views, in alphabetical order."""
     client = bigquery.Client(project=project)
     tables = client.list_tables(f"{project}.{dataset_id}")
     return sorted(table.table_id for table in tables if table.table_type == "TABLE")
@@ -40,9 +34,9 @@ def list_tables(project: str, dataset_id: str) -> list[str]:
 
 @dataclass(frozen=True)
 class TableSchema:
-    """O schema de uma tabela do BigQuery e o número de linhas.
+    """The schema of a BigQuery table and its number of rows.
 
-    ``fields`` tem ``name``, ``type`` e ``mode`` de cada coluna.
+    `fields` has the `name`, `type` and `mode` of each column.
     """
 
     fields: list[dict[str, str]]
@@ -50,14 +44,10 @@ class TableSchema:
 
 
 def get_table_schema(project: str, dataset_id: str, table_id: str) -> TableSchema:
-    """Lê o schema e a contagem de linhas de uma tabela do BigQuery.
+    """Read the schema and the row count of a BigQuery table.
 
-    :param project: Projeto da tabela.
-    :param dataset_id: Dataset da tabela.
-    :param table_id: Nome da tabela.
-    :returns: O schema e o número de linhas.
-    :raises ValueError: Se a tabela tiver linhas no streaming buffer, que o
-        extract não exporta.
+    Raise `ValueError` if the table has rows in the streaming buffer, which the extract
+    does not export.
     """
     client = bigquery.Client(project=project)
     table = client.get_table(f"{project}.{dataset_id}.{table_id}")
@@ -69,13 +59,9 @@ def get_table_schema(project: str, dataset_id: str, table_id: str) -> TableSchem
 
 
 def get_last_modified(project: str, dataset_id: str, table_id: str) -> datetime:
-    """Lê a data da última alteração de uma tabela do BigQuery.
+    """Read the date of the last change of a BigQuery table, in UTC.
 
-    :param project: Projeto da tabela.
-    :param dataset_id: Dataset da tabela.
-    :param table_id: Nome da tabela.
-    :returns: Última alteração, em UTC.
-    :raises ValueError: Se o BigQuery não informar a última alteração.
+    Raise `ValueError` if BigQuery does not report it.
     """
     modified = bigquery.Client(project=project).get_table(f"{project}.{dataset_id}.{table_id}").modified
     if modified is None:
@@ -84,14 +70,9 @@ def get_last_modified(project: str, dataset_id: str, table_id: str) -> datetime:
 
 
 def extract_table_to_gcs(project: str, dataset_id: str, table_id: str, bucket: str, prefix: str) -> list[ExportedFile]:
-    """Exporta uma tabela do BigQuery para o GCS como CSV gzip, sem cabeçalho.
+    """Export a BigQuery table to GCS as gzip CSV, with no header.
 
-    :param project: Projeto da tabela e do job de extract.
-    :param dataset_id: Dataset da tabela.
-    :param table_id: Nome da tabela.
-    :param bucket: Bucket de destino.
-    :param prefix: Prefixo dos objetos no bucket.
-    :returns: Arquivos gerados, com tamanho, em ordem de nome.
+    Return the files that were written, with their sizes, in the order of their names.
     """
     client = bigquery.Client(project=project)
     table = client.get_table(f"{project}.{dataset_id}.{table_id}")
@@ -104,48 +85,28 @@ def extract_table_to_gcs(project: str, dataset_id: str, table_id: str, bucket: s
         table, f"gs://{bucket}/{prefix}/part-*.csv.gz", job_config=job_config, location=table.location
     )
     job.result()
-    blobs = storage.Client(project=project).list_blobs(bucket, prefix=f"{prefix}/")
-    files = sorted((ExportedFile(name=blob.name, size=int(blob.size or 0)) for blob in blobs), key=lambda f: f.name)
+    sizes = list_sizes(create_store(bucket), f"{prefix}/")
+    files = [ExportedFile(name=name, size=size) for name, size in sorted(sizes.items())]
     logger.info("Extract de %s gerou %d arquivos em gs://%s/%s", table_id, len(files), bucket, prefix)
     return files
 
 
-def delete_blobs(project: str, bucket: str, blob_names: list[str]) -> None:
-    """Remove do GCS os arquivos exportados, em lotes de até 100 objetos por requisição.
-
-    Cada lote é uma única requisição HTTP (batch do GCS), em vez de uma por objeto.
-
-    :param project: Projeto usado pelo client do GCS. :param bucket: Bucket dos
-    arquivos. :param blob_names: Nomes dos objetos a remover. :raises
-    google.api_core.exceptions.GoogleAPICallError: Se algum objeto não puder ser
-    removido,
-        depois de tentar todos os do lote.
-    """
-    client = storage.Client(project=project)
-    storage_bucket = client.bucket(bucket)
-    for start in range(0, len(blob_names), DELETE_BATCH_SIZE):
-        with client.batch(raise_exception=True):
-            for name in blob_names[start : start + DELETE_BATCH_SIZE]:
-                storage_bucket.blob(name).delete()
+def delete_blobs(bucket: str, blob_names: list[str]) -> None:
+    """Delete the exported files from GCS, one object for each request."""
+    run(delete_keys(create_store(bucket), blob_names))
     logger.info("Removidos %d arquivos de gs://%s", len(blob_names), bucket)
 
 
 @dataclass(frozen=True)
 class SnapshotRequest:
-    """Tabelas a exportar juntas, como uma foto única do BigQuery.
+    """The tables to export together, as one snapshot of BigQuery.
 
-    :param project: Projeto das tabelas e dos jobs de extract.
-    :param dataset_id: Dataset das tabelas.
-    :param table_ids: Tabelas a exportar.
-    :param bucket: Bucket de destino.
-    :param prefix: Prefixo dos objetos no bucket, exclusivo do flow run.
-    :param quiet_seconds: Tempo mínimo sem alterações em nenhuma das tabelas
-        antes do extract.
-    :param max_attempts: Extracts descartados, no máximo, por alteração durante
-        a exportação.
-    :param max_wait_seconds: Espera máxima, somada, por um período sem alterações.
-    :param dbt_finished_at: Fim do run de dbt feito antes da carga, em UTC. Se nenhuma
-        tabela mudou depois dele, a espera inicial é dispensada.
+    `prefix` is the prefix of the objects in the bucket, and it is private to the flow
+    run. `quiet_seconds` is the least time without changes in any table before the
+    extract. `max_attempts` is the most extracts that a change during the export may
+    discard. `max_wait_seconds` is the longest total wait for a period without changes.
+    `dbt_finished_at` is the end of the dbt run before the load, in UTC. If no table
+    changed after it, the first wait is skipped.
     """
 
     project: str
@@ -161,13 +122,11 @@ class SnapshotRequest:
 
 @dataclass(frozen=True)
 class TableSnapshot:
-    """Tabela exportada na foto do BigQuery.
+    """A table that the snapshot of BigQuery exported.
 
-    :param table_id: Nome da tabela.
-    :param schema: Schema e contagem de linhas, lidos na mesma foto do extract.
-    :param last_modified: Última alteração da tabela na foto, igual antes e
-        depois do extract.
-    :param files: Arquivos exportados.
+    `schema` has the schema and the row count, read in the same snapshot as the extract.
+    `last_modified` is the last change of the table in the snapshot, the same before and
+    after the extract. `files` are the exported files.
     """
 
     table_id: str
@@ -177,12 +136,9 @@ class TableSnapshot:
 
 
 def quiet_wait_seconds(last_modified: list[datetime], now: datetime, quiet_seconds: float) -> float:
-    """Calcula quanto falta para as tabelas completarem o período sem alterações.
+    """Return how long until the tables complete the period without changes.
 
-    :param last_modified: Última alteração de cada tabela.
-    :param now: Horário atual.
-    :param quiet_seconds: Período mínimo sem alterações.
-    :returns: Segundos de espera; zero se o período já foi cumprido.
+    The result is zero if the period has passed.
     """
     if not last_modified:
         return 0.0
@@ -190,12 +146,7 @@ def quiet_wait_seconds(last_modified: list[datetime], now: datetime, quiet_secon
 
 
 def changed_tables(before: dict[str, datetime], after: dict[str, datetime]) -> list[str]:
-    """Lista as tabelas alteradas entre duas leituras da última alteração.
-
-    :param before: Última alteração de cada tabela antes do extract.
-    :param after: Última alteração de cada tabela depois do extract.
-    :returns: Tabelas cuja última alteração mudou, em ordem alfabética.
-    """
+    """List the tables whose last change moved between two reads, alphabetically."""
     return sorted(table_id for table_id, modified in before.items() if after.get(table_id) != modified)
 
 
@@ -204,18 +155,14 @@ def export_consistent_snapshot(
     report: Callable[[str], None],
     sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, TableSnapshot]:
-    """Exporta as tabelas como uma foto única do BigQuery.
+    """Export the tables as one snapshot of BigQuery.
 
-    O dbt atualiza as tabelas uma depois da outra. Para que todas venham do mesmo
-    run, o extract só começa depois de ``quiet_seconds`` sem alterações em
-    nenhuma delas, e é refeito se alguma mudar enquanto ele roda. Os jobs de
-    extract não têm custo.
-
-    :param request: Tabelas, destino e limites de espera.
-    :param report: Função que recebe as mensagens de andamento.
-    :param sleep: Função de espera, em segundos.
-    :returns: Tabelas exportadas, pelo nome.
-    :raises RuntimeError: Se as tabelas não ficarem estáveis dentro dos limites.
+    dbt updates the tables one after the other. For all of them to come from the same
+    run, the extract starts only after `quiet_seconds` without changes in any of them,
+    and it runs again if one changes while it runs. The extract jobs cost nothing.
+    `report` gets the progress messages, and `sleep` waits for a number of seconds.
+    Return the exported tables by name. Raise `RuntimeError` if the tables do not settle
+    within the limits.
     """
     waited = 0.0
     attempt = 0
@@ -269,9 +216,5 @@ def export_consistent_snapshot(
         if not changed:
             return snapshot
         report(f"BigQuery mudou durante o extract em {changed}; descartando os arquivos e repetindo")
-        delete_blobs(
-            request.project,
-            request.bucket,
-            [exported.name for table in snapshot.values() for exported in table.files],
-        )
+        delete_blobs(request.bucket, [exported.name for table in snapshot.values() for exported in table.files])
     raise RuntimeError(f"O BigQuery mudou durante {request.max_attempts} extracts seguidos; nada foi carregado.")

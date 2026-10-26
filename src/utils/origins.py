@@ -126,7 +126,10 @@ def read_request(db_type: str, read: Read, batched: bool) -> Origin:
 
 
 def read_document_origin(db_type: str, table: str | None, query: str | None, since: str | None) -> Origin:
-    """Return the origin of a CouchDB or MongoDB read: changes, a selector or a whole database."""
+    """Return the origin of a CouchDB or MongoDB read.
+
+    It is changes, a selector or a whole database.
+    """
     if query is not None and since is not None:
         raise ValueError("Give one of query and since, not both")
     if since is not None and db_type != "couchdb":

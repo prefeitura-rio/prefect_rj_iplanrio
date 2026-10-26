@@ -14,7 +14,7 @@ DESTINATION: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue
 
 
 def parse_recipients(texts: Sequence[str]) -> list[Recipient]:
-    """Return the recipients of the JSON texts of the query, with `celular_disparo` as the phone `to`."""
+    """Return the recipients of the query JSON texts, with `celular_disparo` as `to`."""
     recipients: list[Recipient] = []
 
     for text in texts:
@@ -44,7 +44,7 @@ def drop_duplicate_phones(recipients: Sequence[Recipient]) -> list[Recipient]:
 
 
 def build_rows(hsm: Hsm, batches: Sequence[SentBatch], sent_at: datetime) -> list[Row]:
-    """Return one row for each recipient of the batches that went out, with the columns of the partition.
+    """Return a row for each recipient of the batches that went out, with partitions.
 
     `vars` is JSON text. `data_particao` is the day of `sent_at`, with its year and
     month as text.

@@ -14,7 +14,7 @@ NOW = datetime(2026, 7, 17, 12, 0, tzinfo=SP_TZ)
 
 @pytest.fixture
 def make_alert() -> AlertFactory:
-    """Return a factory of alerts at a place, ten minutes old, with changes for any field."""
+    """Return a factory of alerts at a place, ten minutes old, changeable by field."""
 
     def build(alert_id: str, latitude: float = -22.9, longitude: float = -43.2, **changes: object) -> Alert:
         alert = {
@@ -37,7 +37,10 @@ def make_alert() -> AlertFactory:
 
 @pytest.fixture
 def make_cluster() -> ClusterFactory:
-    """Return a factory of clusters of `count` alerts, whose oldest alert has the age, with changes for any field."""
+    """Return a factory of `count` alerts with an oldest alert of the age.
+
+    It accepts changes for any field.
+    """
 
     def build(count: int = 1, age_minutes: float = 1, **changes: object) -> Cluster:
         base = {

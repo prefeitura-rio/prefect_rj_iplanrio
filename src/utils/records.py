@@ -42,7 +42,7 @@ def read_token(data: JsonValue) -> str:
 
 
 def read_json(response: Response) -> JsonValue:
-    """Return the JSON of a response with a type, so the code that reads it can check it.
+    """Return the JSON of a response with a type, so the reading code can check it.
 
     Raise `ValidationError` if the body is not JSON.
     """
@@ -52,7 +52,7 @@ def read_json(response: Response) -> JsonValue:
 
 
 def extract_records(data: JsonValue, key: str | None) -> list[dict[str, JsonValue]]:
-    """Return the records of a JSON document: the list itself, or the list at a dotted `key`.
+    """Return the records of a JSON document: the list, or the list at a dotted key.
 
     ```python
     extract_records({"data": {"items": [{"id": 1}]}}, "data.items")  # [{"id": 1}]

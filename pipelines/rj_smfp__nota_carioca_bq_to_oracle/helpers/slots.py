@@ -1,4 +1,7 @@
-"""Tabelas físicas A e B atrás de sinônimos: a carga vai para a inativa e a troca é só repontar os sinônimos."""
+"""The A and B physical tables behind synonyms.
+
+The load goes to the idle one, and the swap only points the synonyms again.
+"""
 
 import re
 from dataclasses import dataclass
@@ -36,12 +39,7 @@ TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 @dataclass(frozen=True)
 class SynonymTarget:
-    """Sinônimo e o objeto para o qual ele aponta, como em ``all_synonyms``.
-
-    :param owner: Dono do sinônimo.
-    :param table_owner: Dono do objeto apontado.
-    :param table_name: Nome do objeto apontado.
-    """
+    """A synonym and the object that it points to, as in `all_synonyms`."""
 
     owner: str
     table_owner: str
@@ -50,13 +48,11 @@ class SynonymTarget:
 
 @dataclass(frozen=True)
 class SlotPlan:
-    """Qual tabela física está em uso e qual recebe a carga.
+    """Which physical table is in use and which one receives the load.
 
-    :param base: Nome estável que a aplicação usa (``BQLOAD_<tabela>``), dado aos
-        sinônimos.
-    :param active: Tabela física para a qual os sinônimos apontam, ou ``None``
-        antes da primeira troca.
-    :param inactive: Tabela física que recebe a carga.
+    `base` is the stable name that the application uses (`BQLOAD_<table>`), given to the
+    synonyms. `active` is the physical table that the synonyms point to, or `None`
+    before the first swap. `inactive` is the physical table that receives the load.
     """
 
     base: str
@@ -65,43 +61,35 @@ class SlotPlan:
 
     @property
     def slot(self) -> str:
-        """Retorna o sufixo (``A`` ou ``B``) da tabela que recebe a carga."""
+        """Return the suffix (`A` or `B`) of the table that receives the load."""
         return self.inactive.rsplit("_", 1)[1]
 
 
 def slot_table_name(base: str, slot: str) -> str:
-    """Retorna o nome de uma das tabelas físicas.
+    """Return the name of one of the physical tables, `<base>_<slot>`.
 
-    :param base: Nome estável da tabela (``BQLOAD_<tabela>``).
-    :param slot: ``A`` ou ``B``.
-    :returns: ``<base>_<slot>``.
-    :raises ValueError: Se o nome não for um identificador válido.
+    `base` is the stable name of the table (`BQLOAD_<table>`) and `slot` is `A` or `B`.
+    Raise `ValueError` if the name is not a valid identifier.
     """
     return validate_identifier(f"{base}_{slot}")
 
 
 def synonym_owners(schema: str) -> tuple[str, ...]:
-    """Lista os donos dos sinônimos da tabela, começando pelo schema de destino.
+    """List the owners of the synonyms of the table, and start with the target schema.
 
-    :param schema: Schema das tabelas físicas.
-    :returns: Schema de destino e schemas dos consumidores.
+    Return the target schema and the schemas of the consumers.
     """
     return (schema, *CONSUMER_SYNONYM_OWNERS)
 
 
 def choose_slots(base: str, schema: str, synonyms: list[SynonymTarget]) -> SlotPlan:
-    """Define a tabela em uso e a que recebe a carga a partir dos sinônimos.
+    """Choose the table in use and the one that receives the load, from the synonyms.
 
-    A tabela em uso é a apontada pelo sinônimo do schema de destino ou, se ele
-    ainda não existir (troca interrompida), pela primeira tabela física apontada
-    por um sinônimo dos consumidores.
-
-    :param base: Nome estável da tabela.
-    :param schema: Schema das tabelas físicas.
-    :param synonyms: Sinônimos com o nome ``base``, de qualquer dono.
-    :returns: Tabela em uso e tabela que recebe a carga.
-    :raises PermissionError: Se algum sinônimo da pipeline apontar para um objeto
-        que ela não gerencia.
+    The table in use is the one that the synonym of the target schema points to. If that
+    synonym does not exist yet (an interrupted swap), it is the first physical table
+    that a synonym of the consumers points to. `synonyms` have the name `base`, of any
+    owner. Raise `PermissionError` if a synonym of the pipeline points to an object that
+    it does not manage.
     """
     slot_tables = {slot_table_name(base, slot): slot for slot in SLOTS}
     owners = synonym_owners(schema)
@@ -119,14 +107,11 @@ def choose_slots(base: str, schema: str, synonyms: list[SynonymTarget]) -> SlotP
 
 
 def synonyms_to_realign(plan: SlotPlan, synonyms: list[SynonymTarget]) -> list[str]:
-    """Lista os donos de sinônimos que apontam para a tabela que vai receber a carga.
+    """List the owners of synonyms that point to the table that will load.
 
-    Acontece quando uma troca foi interrompida no meio. Esses sinônimos voltam
-    para a tabela em uso antes da carga, para ninguém ler uma tabela vazia.
-
-    :param plan: Tabela em uso e tabela que recebe a carga.
-    :param synonyms: Sinônimos da pipeline.
-    :returns: Donos dos sinônimos a repontar, na ordem recebida.
+    It happens when a swap stopped in the middle. These synonyms go back to the table in
+    use before the load, so nobody reads an empty table. Return the owners in the order
+    they came.
     """
     if plan.active is None:
         return []
@@ -134,12 +119,11 @@ def synonyms_to_realign(plan: SlotPlan, synonyms: list[SynonymTarget]) -> list[s
 
 
 def load_comment(source: str, snapshot_modified: datetime, loaded_at: datetime) -> str:
-    """Monta o comentário da tabela física após uma carga completa.
+    """Build the comment of the physical table after a full load.
 
-    :param source: Tabela de origem no BigQuery.
-    :param snapshot_modified: Última alteração do BigQuery na foto carregada.
-    :param loaded_at: Fim da carga.
-    :returns: Comentário com a marca da pipeline, a origem, a foto e o horário.
+    It has the mark of the pipeline, the source, the snapshot and the time.
+    `snapshot_modified` is the last change of BigQuery in the loaded snapshot, and
+    `loaded_at` is the end of the load.
     """
     return (
         f"{MANAGED_TABLE_MARKER}: carga a partir de {source}; "
@@ -149,11 +133,10 @@ def load_comment(source: str, snapshot_modified: datetime, loaded_at: datetime) 
 
 
 def parse_load_comment(comment: str | None) -> tuple[str, str] | None:
-    """Extrai do comentário a foto do BigQuery carregada e o horário da carga.
+    """Read the loaded BigQuery snapshot and the load time from the comment.
 
-    :param comment: Comentário da tabela física.
-    :returns: ``(foto do BigQuery, horário da carga)`` em UTC, ou ``None`` se a
-        tabela ainda não terminou uma carga.
+    Return `(BigQuery snapshot, load time)` in UTC, or `None` if the table has not
+    finished a load.
     """
     match = SNAPSHOT_PATTERN.search(comment or "")
     return (match.group(1), match.group(2)) if match else None

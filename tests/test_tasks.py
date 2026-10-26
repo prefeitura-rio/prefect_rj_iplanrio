@@ -140,7 +140,7 @@ async def test_the_crs_of_a_layer_reaches_the_read_as_a_srid(monkeypatch, crs, e
 
 
 async def test_maintenance_merges_the_small_files_and_keeps_the_rows(tmp_path, monkeypatch) -> None:
-    """Report fewer files after the run, with the same rows and a layout that looks right."""
+    """Report fewer files after the run, with the same rows and a sound layout."""
     uri = str(tmp_path / "table")
     monkeypatch.setattr(Destination, "uri", property(lambda _: uri))
     for number in range(3):
@@ -192,7 +192,7 @@ async def test_a_node_that_fails_raises_with_its_name(fake_runner, dbt_node) -> 
 async def test_the_report_goes_to_discord_with_the_nodes_that_went_wrong(
     fake_runner, fake_api, monkeypatch, dbt_node
 ) -> None:
-    """Post the result, also of a run that failed, when `report` is on and a webhook is set."""
+    """Post the result, also for a failed run, when `report` and a webhook are set."""
     monkeypatch.setenv("DISCORD_WEBHOOK_URL", f"{fake_api.url}/hook")
     fake_runner.result = SimpleNamespace(
         success=False, result=SimpleNamespace(results=[dbt_node("b", "error", "boom")])

@@ -286,7 +286,7 @@ async def test_a_dump_describes_the_columns_of_the_schema(duckdb_memory) -> None
 
 
 @pytest.fixture
-def shapes(monkeypatch):
+def shapes(monkeypatch) -> ModuleType:
     """Put a module with a schema, one without `_id` and a value that is no schema."""
     module = ModuleType("mongo_shapes_of_the_test")
     setattr(module, "GOOD", SCHEMA)  # noqa: B010

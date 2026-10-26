@@ -122,7 +122,10 @@ def test_the_rows_get_two_digits_for_the_register_and_four_for_the_version(make_
 
 
 def test_a_column_that_a_version_lacks_takes_the_version_before_it(make_record: Callable[..., Record]) -> None:
-    """Move the row of a missing column to the version before, so that version selects null."""
+    """Move the row of a missing column to the version before.
+
+    That version then selects null.
+    """
     rows = controlled(
         [
             make_record("a", version="7.01", particao="0701"),
@@ -144,7 +147,10 @@ def test_a_column_that_a_version_lacks_takes_the_version_before_it(make_record: 
 def test_a_model_has_a_select_for_each_version_and_the_schema_of_the_last_one(
     make_record: Callable[..., Record],
 ) -> None:
-    """Build the versions in order, with the missing column as null, and describe only the last version."""
+    """Build the versions in order, with the missing column as null.
+
+    Only the last version describes the schema.
+    """
     rows = controlled(
         [
             make_record("a", version="7.01", particao="0701"),
@@ -185,7 +191,7 @@ def test_a_type_of_record_with_no_name_is_refused(make_record: Callable[..., Rec
 
 
 def test_the_schema_file_has_the_model_and_its_columns(make_record: Callable[..., Record]) -> None:
-    """Write the dbt schema with the name of the model, its description and its columns."""
+    """Write the dbt schema with the model name, its description and its columns."""
     model = build_models(controlled([make_record("a")]), "brutos_cadunico")[0]
 
     schema = dump_schema(model)

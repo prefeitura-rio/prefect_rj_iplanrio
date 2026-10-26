@@ -43,7 +43,10 @@ def staging_name(cloud: Cloud, tables: Tables, table_id: str) -> str:
 
 
 async def load_folder(folder: Path, tables: Tables, table_id: str, cloud: Cloud, *, overwrite: bool) -> None:
-    """Load the Parquet files of a folder into a table: replace it, or add a day to it, and refresh BigQuery."""
+    """Load the Parquet files of a folder into a table, and refresh BigQuery.
+
+    It replaces the table, or adds one day to it.
+    """
     destination = Table(dataset_id=tables["dataset_id"], table_id=table_id)
     await upload_files_to_gcs.fn(
         folder, destination, bucket=cloud["bucket"], dump_mode="overwrite" if overwrite else "append"
@@ -53,7 +56,7 @@ async def load_folder(folder: Path, tables: Tables, table_id: str, cloud: Cloud,
 
 @task
 async def list_new_archives_task(raw: RawFolders, tables: Tables, cloud: Cloud) -> list[str]:
-    """Return the ZIP files of records in the raw bucket whose date the staging table does not hold, oldest first."""
+    """Return the record ZIPs in the raw bucket that staging lacks, oldest first."""
     staged = await to_thread(read_staging_dates, cloud["bucket"], tables["dataset_id"], tables["records"])
     archives = await to_thread(list_record_archives, raw["bucket"], raw["records_prefix"])
     new = [name for date, name in sorted(archives.items()) if date not in staged]
@@ -64,7 +67,7 @@ async def list_new_archives_task(raw: RawFolders, tables: Tables, cloud: Cloud) 
 
 @task
 async def ingest_archives_task(names: list[str], raw: RawFolders, tables: Tables, cloud: Cloud) -> None:
-    """Load each ZIP of records as one day of the staging table, `MAX_CONCURRENT` at a time.
+    """Load each ZIP of records as one day of staging, `MAX_CONCURRENT` at a time.
 
     The load is an `append` whose capture is the date of the ZIP, so a rerun adds
     nothing twice. A ZIP that fails does not stop the others, and the task raises
@@ -112,7 +115,7 @@ async def ingest_archives_task(names: list[str], raw: RawFolders, tables: Tables
 
 @task
 async def sync_layouts_task(raw: RawFolders, tables: Tables, cloud: Cloud) -> bool:
-    """Load the layout spreadsheets into the layout table if the raw bucket has a version that the table lacks.
+    """Load the layout spreadsheets if the raw bucket has a version the table lacks.
 
     A new version replaces the table, so every spreadsheet is read again. Return whether
     the table changed.
@@ -139,7 +142,7 @@ async def sync_layouts_task(raw: RawFolders, tables: Tables, cloud: Cloud) -> bo
 
 @task
 async def read_layout_task(tables: Tables, cloud: Cloud) -> list[Record]:
-    """Return the layout of the versions of the records, with the dictionary of its columns.
+    """Return the layout of the record versions, with the dictionary of its columns.
 
     Raise `ValueError` if a column of the layout has no row in the sheet of the
     dictionary, or if a version of the records has no layout.
@@ -175,7 +178,10 @@ async def read_layout_task(tables: Tables, cloud: Cloud) -> list[Record]:
 
 @task
 async def control_versions_task(rows: list[Record], tables: Tables, cloud: Cloud) -> list[Record]:
-    """Add the control of the columns between versions to the layout, and load it to a table of its own."""
+    """Add the control of the columns between versions to the layout.
+
+    It loads the result to a table of its own.
+    """
     controlled, warnings = control_versions(rows)
 
     for warning in warnings:
@@ -190,7 +196,9 @@ async def control_versions_task(rows: list[Record], tables: Tables, cloud: Cloud
 
 @task
 async def push_models_task(rows: list[Record], tables: Tables, cloud: Cloud, dbt: DbtRun) -> bool:
-    """Write the dbt models of the records, one for each type of record, and push them to the branch of `dbt`.
+    """Write the dbt models of the records, one for each record type, and push them.
+
+    They go to the `dbt` branch.
 
     Return whether the push changed the repository.
     """

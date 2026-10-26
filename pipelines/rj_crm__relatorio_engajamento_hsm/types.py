@@ -19,7 +19,7 @@ class Message(TypedDict):
 
 
 class Limits(TypedDict, total=False):
-    """The sizes of a run: its batches for the model, the samples, and the examples of the report."""
+    """The sizes of a run: the batches for the model, the samples and the examples."""
 
     classification_batch: int
     discovery_batch: int
@@ -32,7 +32,7 @@ class Limits(TypedDict, total=False):
 
 @dataclass(frozen=True)
 class Dispatch:
-    """A dispatch of an HSM that asked for a report: the name of the HSM and the day it went out."""
+    """A dispatch of an HSM that asked for a report: the HSM name and the day."""
 
     hsm_name: str
     sent_on: date
@@ -40,7 +40,10 @@ class Dispatch:
 
 @dataclass(frozen=True)
 class Conversation:
-    """The talk of a citizen with the agent in one session, without the HSM text, that all of them share."""
+    """The talk of a citizen with the agent in one session, without the HSM text.
+
+    All the conversations share that text.
+    """
 
     session_id: str
     cpf: str | None
@@ -53,7 +56,10 @@ class Conversation:
 
 @dataclass(frozen=True)
 class Extraction:
-    """The conversations with a citizen answer, and how many sessions the dispatch had and how many engaged."""
+    """The conversations with a citizen answer.
+
+    Also how many sessions the dispatch had and how many engaged.
+    """
 
     conversations: list[Conversation]
     total_dispatches: int
@@ -62,7 +68,7 @@ class Extraction:
 
 @dataclass(frozen=True)
 class Classification:
-    """A conversation with its category and summary, and the verdict of the judge once it has judged it."""
+    """A conversation with its category and summary, and the judge verdict."""
 
     conversation: Conversation
     category: str
@@ -83,7 +89,7 @@ class Example:
 
 @dataclass(frozen=True)
 class Category:
-    """A category of the report: its size, how many the judge looked at, how many it found right, and examples."""
+    """A category of the report: its size, how many were judged and right, examples."""
 
     name: str
     description: str
@@ -96,7 +102,7 @@ class Category:
 
 @dataclass(frozen=True)
 class Report:
-    """What a report is made of: the dispatch, the classifications, the catalog and the totals."""
+    """What a report holds: the dispatch, classifications, catalog and totals."""
 
     dispatch: Dispatch
     reference: date

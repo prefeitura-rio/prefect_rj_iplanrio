@@ -26,7 +26,9 @@ FIELDS = {
 
 
 def read_target_date(today: date, given: str | None) -> date | None:
-    """Return the date to fetch: the one given, or two days ahead, or four on Thursday and Friday.
+    """Return the date to fetch: the one given, or two days ahead.
+
+    It is four days ahead on Thursday and Friday.
 
     On Saturday and Sunday there is nothing to fetch, and the result is nothing.
     """

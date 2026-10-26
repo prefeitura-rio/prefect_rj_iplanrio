@@ -9,12 +9,17 @@ DISPATCHES_TABLE: Final = f"{PROJECT_ID}.brutos_salesforce_staging.disparos_ativ
 CHATBOT_DATASET: Final = "rmi_conversas"
 CHATBOT_TABLE: Final = "chatbot"
 SOURCES: Final = ("HSM", "AI_AGENT_CIDADAO", "AI_AGENT_AGENTE")
-"""The sources of the messages of a conversation. CUSTOMER stays out: AI_AGENT_CIDADAO repeats it with a time."""
+"""The sources of the messages of a conversation.
+
+CUSTOMER stays out: AI_AGENT_CIDADAO repeats it with a time.
+"""
 SOURCE_LABELS: Final = {"HSM": "HSM", "AI_AGENT_CIDADAO": "CIDADÃO", "AI_AGENT_AGENTE": "AGENTE"}
 CITIZEN_SOURCE: Final = "AI_AGENT_CIDADAO"
 HSM_SOURCE: Final = "HSM"
 NO_CATEGORY: Final = "NENHUMA_DO_CATALOGO"
-"""What the model answers when no category of the catalog fits, and the conversation waits for a next discovery."""
+"""What the model answers when no category of the catalog fits.
+
+The conversation then waits for a next discovery."""
 VALID_VERDICTS: Final = frozenset({"CORRETO", "INCORRETO"})
 INCORRECT: Final = "INCORRETO"
 CORRECT: Final = "CORRETO"
@@ -30,9 +35,9 @@ DEFAULT_LARGE_CATEGORY_PCT: Final = 30.0
 DEFAULT_JUDGE_BATCH: Final = 50
 DEFAULT_EXAMPLES: Final = 5
 DRIVE_ROOT_ID: Final = "1wpZzSMv6dQ5Y50qWIooqRikpkVCh5u2f"
-"""The folder "Relatórios de Engajamento" in Drive, by id and not by name, so no other folder gets the files.
+"""The folder "Relatórios de Engajamento" in Drive, by id and not by name.
 
-It needs Editor access for the service account."""
+No other folder then gets the files. It needs Editor access for the service account."""
 DOCX_MIME: Final = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 CSV_SEP: Final = ";"
 CATEGORY_COLUMNS: Final = (

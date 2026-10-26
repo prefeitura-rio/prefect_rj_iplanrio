@@ -16,7 +16,7 @@ MESSAGES: TypeAdapter[list[Message]] = TypeAdapter(list[Message])
 
 
 def connect() -> bigquery.Client:
-    """Return a client with the credentials of the environment, which carry the Drive scope too.
+    """Return a client with the environment credentials, with the Drive scope too.
 
     The table of dispatches is a Google Sheet imported into BigQuery, so reading it
     needs that scope.

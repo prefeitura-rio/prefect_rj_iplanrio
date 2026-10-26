@@ -33,7 +33,7 @@ async def rj_smas__disparo_pic(
     audience: Audience = DEFAULT_AUDIENCE,
     waits: Waits = DEFAULT_WAITS,
 ) -> None:
-    """Remind the families of the delivery date of the Cartão PIC, by an HSM message of the Wetalkie API.
+    """Remind the families of the Cartão PIC delivery date, by a Wetalkie HSM.
 
     The run ends if the control sheet has the campaign off or past its limit date, if
     the table of approvals has no approved dispatch for today, or if the query gives

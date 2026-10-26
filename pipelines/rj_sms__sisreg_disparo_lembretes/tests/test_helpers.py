@@ -26,7 +26,7 @@ def test_a_phone_gets_one_recipient_in_the_order_of_the_first() -> None:
 
 
 def test_the_rows_have_one_line_for_each_recipient_of_each_batch_with_its_campaign() -> None:
-    """Record the HSM, the campaign of the batch, the phone, the vars as text and the day as the partition."""
+    """Record the HSM, the batch campaign and the other columns of each row."""
     batches = [
         SentBatch("SISREG-2026-07-17-lote1", [Recipient(to="1", external_id="e", vars={"NOME": "Ação"})]),
         SentBatch("SISREG-2026-07-17-lote2", [Recipient(to="2")]),

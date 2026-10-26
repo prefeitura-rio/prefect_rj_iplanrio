@@ -1,4 +1,4 @@
-"""Testes do passo opcional de dbt: parâmetros, espera pelo run filho, espera do BigQuery e posição no flow."""
+"""Tests of the optional dbt step: parameters, the waits and the place in the flow."""
 
 from datetime import UTC, datetime, timedelta
 from typing import Literal, final
@@ -217,8 +217,8 @@ def fake_bigquery(monkeypatch: pytest.MonkeyPatch, modified_reads: list[dict[str
 
         return [bigquery.ExportedFile(name=f"{prefix}/part-0.csv.gz", size=1)]
 
-    def delete(project: str, bucket: str, blob_names: list[str]) -> None:
-        del project, bucket, blob_names
+    def delete(bucket: str, blob_names: list[str]) -> None:
+        del bucket, blob_names
 
     monkeypatch.setattr(bigquery, "get_last_modified", last_modified)
     monkeypatch.setattr(bigquery, "get_table_schema", schema)
@@ -244,7 +244,7 @@ def request(dbt_finished_at: datetime | None) -> bigquery.SnapshotRequest:
 def test_export_skips_the_initial_wait_when_tables_changed_only_before_dbt_ended(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Check that export skips the initial wait when tables changed only before dbt ended."""
+    """Skip the first wait when tables changed only before dbt ended."""
     recent = T0 - timedelta(seconds=30)
     reads = [{"A": recent, "B": recent}, {"A": recent, "B": recent}]
     extracted = fake_bigquery(monkeypatch, reads)
@@ -280,7 +280,7 @@ def test_export_without_dbt_keeps_the_normal_wait(monkeypatch: pytest.MonkeyPatc
 def test_export_still_discards_and_repeats_when_tables_change_during_the_extract_after_a_skip(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Check that export still discards and repeats when tables change during the extract after a skip."""
+    """Discard and repeat when tables change during the extract after a skip."""
     recent = T0 - timedelta(seconds=30)
     quiet = T0 - timedelta(hours=1)
     changed = {"A": recent, "B": T0}

@@ -13,7 +13,7 @@ HEADER = " " * 69 + "7.01 " + " " * 8 + "31012024" + " " * 20
 def test_a_zip_becomes_parquet_files_with_the_partition_columns(
     serve_archive: Callable[[Path], None], make_archive: Callable[[str, dict[str, str]], Path], tmp_path: Path
 ) -> None:
-    """Take the layout version from the header, and the date from the name of the ZIP."""
+    """Take the layout version from the header, and the date from the ZIP name."""
     archive = make_archive("base_20240131.zip", {"a.txt": f"{HEADER}\nsecond\n"})
     serve_archive(archive)
 

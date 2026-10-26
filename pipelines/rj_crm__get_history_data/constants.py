@@ -23,5 +23,5 @@ DATE_FORMATS: Final = (
     "%d/%m/%Y %H:%M:%S",
     "%d/%m/%Y",
 )
-"""The formats of the dates of SFMC after the ISO format, month first before day first."""
+"""The SFMC date formats after the ISO format: month first, then day first."""
 HTTP_TIMEOUT: Final = 60

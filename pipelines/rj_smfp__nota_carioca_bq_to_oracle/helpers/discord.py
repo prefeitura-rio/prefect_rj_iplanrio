@@ -1,14 +1,16 @@
-"""Cliente do webhook do Discord para o progresso das cargas: uma mensagem criada uma vez e editada no lugar.
+"""The Discord webhook client for the load progress.
 
-Este arquivo é idêntico nas duas pipelines da Nota Carioca e não importa nada de
-``pipelines.*``.
+It keeps one message, made once and edited in place.
 
-Regra de ouro: um problema de notificação NUNCA falha nem atrasa uma carga. Toda falha
-(rede, 4xx/5xx, 429, JSON) é registrada uma vez em log de aviso e engolida; depois de
-uma falha o cliente espera mais antes de tentar de novo (``min_interval_seconds``
-dobrando a cada falha seguida, até 5 min), o que limita o tempo perdido com um Discord
-fora do ar ao timeout de uma requisição (10 s) por tentativa. A URL do webhook é um
-segredo e nunca vai para o log.
+This file is the same in both Nota Carioca pipelines, and it imports nothing from
+`pipelines.*`.
+
+The golden rule: a notification problem NEVER fails or delays a load. Each failure
+(network, 4xx and 5xx, 429, JSON) is logged once as a warning and swallowed. After a
+failure the client waits longer before it tries again (`min_interval_seconds` doubles
+at each failure in a row, up to 5 minutes), which limits the time lost to a Discord
+that is down to the timeout of one request (10 s) for each try. The URL of the webhook
+is a secret and never goes to the log.
 """
 
 import logging
@@ -36,7 +38,7 @@ fallback_logger = logging.getLogger(__name__)
 
 
 def log_safely(message: str, level: str) -> None:
-    """Escreve no log do Prefect; fora de um run (testes, scripts) cai no ``logging`` padrão."""
+    """Write to the Prefect log, or to `logging` outside a run (tests, scripts)."""
     try:
         logger.info(message, level)
     except Exception:
@@ -44,18 +46,21 @@ def log_safely(message: str, level: str) -> None:
 
 
 def warn(message: str) -> None:
-    """Registra um aviso de notificação pelo log do Prefect (``toolkit.pipelines_utils.logging.log``)."""
+    """Log a warning about a notification through the Prefect log."""
     log_safely(message, "warning")
 
 
 def info(message: str) -> None:
-    """Registra uma informação de notificação pelo log do Prefect."""
+    """Log an information about a notification through the Prefect log."""
     log_safely(message, "info")
 
 
 @final
 class Warner:
-    """Emite um aviso por falha, sem repetir a mesma mensagem em seguida (rede fora do ar não vira mil linhas)."""
+    """Emit one warning for each failure, and do not repeat the same message in a row.
+
+    A network that is down then does not become a thousand lines.
+    """
 
     def __init__(self, emit: Callable[[str], None] | None = None) -> None:
         self.emit = emit
@@ -73,10 +78,10 @@ class Warner:
 
 
 def never_raises[**P](func: Callable[P, None]) -> Callable[P, None]:
-    """Decora um método de notificação para engolir qualquer exceção, registrando um aviso.
+    """Decorate a notification method to swallow any exception and log a warning.
 
-    Garante que um bug de notificação não derrube a carga nem esconda a exceção original
-    de quem a finaliza.
+    A bug in a notification then neither stops the load nor hides the original exception
+    of the code that finishes it.
     """
 
     @wraps(func)
@@ -90,32 +95,32 @@ def never_raises[**P](func: Callable[P, None]) -> Callable[P, None]:
 
 
 def webhook_from_env() -> str | None:
-    """Lê a URL do webhook de ``DISCORD_WEBHOOK_URL``.
+    """Read the URL of the webhook from `DISCORD_WEBHOOK_URL`.
 
-    :returns: A URL, ou ``None`` se a variável não existir ou estiver vazia.
+    Return `None` if the variable does not exist or is empty.
     """
     value = NoticeSettings().DISCORD_WEBHOOK_URL.get_secret_value().strip()
     return value or None
 
 
 def resolve_webhook() -> str | None:
-    """Return the webhook URL from `DISCORD_WEBHOOK_URL`, or nothing if it is not set."""
+    """Return the webhook URL from `DISCORD_WEBHOOK_URL`, or nothing if not set."""
     return webhook_from_env()
 
 
 class DiscordStatusMessage:
-    """Uma mensagem de webhook por execução: o primeiro ``publish`` cria (POST), os seguintes editam (PATCH).
+    """One webhook message for each run: `publish` creates it, then edits it.
 
-    O POST usa ``?wait=true`` para receber o id da mensagem.
+    The first `publish` is a POST and the next ones are a PATCH.
 
-    Sem URL o cliente fica desligado e nenhuma requisição é feita. Mensagem apagada (404
-    no PATCH) é recriada no próximo ``publish``. ``force`` ignora o intervalo mínimo, o
-    recuo depois de falhas e o prazo de um 429: a atualização final tenta sempre uma
-    vez.
+    The POST uses `?wait=true` to get the id of the message.
 
-    :param webhook_url: URL do webhook; ``None`` ou vazia desliga o cliente.
-    :param min_interval_seconds: Intervalo mínimo entre edições sem ``force``.
-    :param transport: Transporte do ``httpx2`` (os testes passam um ``MockTransport``).
+    Without a URL the client is off and makes no request. A deleted message (404 on the
+    PATCH) is created again at the next `publish`. `force` ignores the minimum interval,
+    the back-off after failures and the deadline of a 429, so the last update always
+    tries once. A `webhook_url` of `None` or empty turns the client off.
+    `min_interval_seconds` is the least time between edits without `force`, and
+    `transport` is the `httpx2` transport (the tests pass a `MockTransport`).
     """
 
     def __init__(
@@ -141,10 +146,11 @@ class DiscordStatusMessage:
         return self.url is not None
 
     def publish(self, payload: Mapping[str, object], force: bool = False) -> None:
-        """Cria a mensagem na primeira chamada e a edita nas seguintes; nunca levanta exceção.
+        """Create the message on the first call, edit it later, and never raise.
 
-        :param payload: Corpo do webhook (``embeds``, ``allowed_mentions``). :param
-        force: Ignora o intervalo mínimo e o recuo (etapas novas e o estado final).
+        `payload` is the body of the webhook (`embeds`, `allowed_mentions`). `force`
+        ignores the minimum interval and the back-off, for the new steps and the final
+        state.
         """
         if self.url is None:
             return
@@ -156,9 +162,9 @@ class DiscordStatusMessage:
             self.send(payload, now)
 
     def announce(self, payload: Mapping[str, object]) -> None:
-        """Envia uma mensagem nova e avulsa (a que notifica as pessoas); nunca levanta exceção.
+        """Send a new, separate message (the one that notifies people), and never raise.
 
-        :param payload: Corpo do webhook, normalmente só ``content``.
+        `payload` is the body of the webhook, usually only `content`.
         """
         if self.url is None:
             return
@@ -186,7 +192,7 @@ class DiscordStatusMessage:
             self.failed(self.describe(error), now, 0.0)
 
     def handle(self, response: httpx2.Response, now: float) -> None:
-        """Interpreta a resposta: guarda o id, recria a mensagem apagada, respeita o 429."""
+        """Read the answer: keep the id, recreate a deleted message, respect a 429."""
         if response.status_code == HTTP_RATE_LIMITED:
             self.failed(
                 "Discord limitou as requisições (HTTP 429); pulando até o prazo.", now, self.retry_after(response)
@@ -208,7 +214,7 @@ class DiscordStatusMessage:
 
     @staticmethod
     def retry_after(response: httpx2.Response) -> float:
-        """Lê ``retry_after`` (segundos) do JSON do 429, ou o cabeçalho ``Retry-After``."""
+        """Read `retry_after` (seconds) from the JSON of a 429, or from the header."""
         try:
             return float(str(dig(read_json(response), "retry_after")))
         except ValueError:
@@ -222,7 +228,7 @@ class DiscordStatusMessage:
         self.warn.reset()
 
     def failed(self, message: str, now: float, retry_after: float) -> None:
-        """Registra o aviso uma vez e adia as próximas tentativas sem ``force``."""
+        """Log the warning once and delay the next tries that have no `force`."""
         self.warn(message)
         self.failures += 1
         backoff: float = min(self.interval * 2.0**self.failures, MAX_BACKOFF_SECONDS)

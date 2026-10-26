@@ -12,7 +12,10 @@ from pipelines.rj_segur__forca_municipal.types import Row
 
 
 def iter_placemarks(node: KML | Document | Folder, folder: str | None = None) -> Iterator[tuple[Placemark, str | None]]:
-    """Return the placemarks at any depth of a KML node, each with the name of the folder around it."""
+    """Return the placemarks at any depth of a KML node.
+
+    Each has the name of the folder around it.
+    """
     for feature in node.features:
         if isinstance(feature, Placemark):
             yield feature, folder
@@ -21,7 +24,9 @@ def iter_placemarks(node: KML | Document | Folder, folder: str | None = None) ->
 
 
 def parse_placemarks(text: str, qmd_id: str) -> list[Row]:
-    """Return a row for each placemark of the KML of a QMD, or no row if the KML has no document or is bad.
+    """Return a row for each placemark of the KML of a QMD.
+
+    A KML with no document, or a bad one, gives no row.
 
     A row has the id of the QMD, the folder, the name, the description, the geometry as
     WKT with its type, and the extended data as JSON.

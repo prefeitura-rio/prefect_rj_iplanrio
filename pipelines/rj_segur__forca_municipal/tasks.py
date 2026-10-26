@@ -51,7 +51,9 @@ async def read_ids_task(project: str, table: str, name: str, column: str) -> lis
 
 @task
 async def upload_cycle_task(rows: list[Row], target: Target, cycle: int) -> None:
-    """Load the rows of a cycle to the Delta table, as text columns with the hash, the time and the date partition.
+    """Load the rows of a cycle to the Delta table as text columns.
+
+    It adds the hash, the time and the date partition.
 
     Each cycle of a run has its own capture time, so a retry of the run does not repeat
     a cycle.
@@ -141,7 +143,7 @@ async def run_unit_positions_task(
 
 @task
 async def run_qmd_task(table: Table, cloud: Cloud, dump_mode: DumpMode, limits: Limits) -> None:
-    """Read the detail or the KML of every QMD of the latest `qmd` partition, and load it.
+    """Read the detail or KML of every QMD of the latest partition, and load it.
 
     `qmd_detalhes` reads `/api/qmd/{id}` and `qmd_kml` reads its KML. The ids run
     `qmd_id_concurrency` at one time. The run fails if the share of failed ids is over

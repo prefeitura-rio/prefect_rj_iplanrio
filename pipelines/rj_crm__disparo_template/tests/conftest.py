@@ -17,7 +17,7 @@ TODAY = date(2026, 7, 17)
 
 @final
 class FakeSession:
-    """A session of the SFTP that records what it is asked to put: the remote path and the text of the file."""
+    """An SFTP session that records the remote path and text of each put."""
 
     def __init__(self, sent: list[tuple[str, str]], error: Exception | None = None) -> None:
         """Store the arguments."""
@@ -34,7 +34,7 @@ class FakeSession:
 
 @final
 class FakeSftp:
-    """An SFTP server: its opener gives sessions, and it keeps the targets that it was opened for."""
+    """An SFTP server: its opener gives sessions, and it keeps the targets opened."""
 
     def __init__(self, open_error: Exception | None = None, put_error: Exception | None = None) -> None:
         """Store the arguments."""
@@ -44,7 +44,7 @@ class FakeSftp:
         self.put_error = put_error
 
     def opener(self, target: SftpTarget):
-        """Open a session for the target, or fail as a server that refuses the host key."""
+        """Open a session, or fail as a server that refuses the host key."""
         self.targets.append(target)
         error = self.open_error
         session = FakeSession(self.sent, self.put_error)
@@ -61,10 +61,10 @@ class FakeSftp:
 
 @pytest.fixture
 def make_frame() -> Callable[..., pl.DataFrame]:
-    """Return a factory of frames of destinations from the rows of (cpf, telefone, others, extra)."""
+    """Return a factory of destination frames from (cpf, telefone, others, extra)."""
 
     def build(*rows: tuple[str | None, str | None, list[str] | None], **columns: list[str]) -> pl.DataFrame:
-        """Build the frame with `cpf`, `telefone` and `others`, and the extra columns."""
+        """Build the frame with `cpf`, `telefone`, `others` and the extra columns."""
         return pl.DataFrame(
             {
                 "cpf": [row[0] for row in rows],
@@ -80,7 +80,7 @@ def make_frame() -> Callable[..., pl.DataFrame]:
 
 @pytest.fixture
 def make_dispatched() -> Callable[..., pl.DataFrame]:
-    """Return a factory of tables of what was dispatched, from the rows of (cpf, telefone, campaign, day)."""
+    """Return a factory of dispatched tables from (cpf, telefone, campaign, day)."""
 
     def build(*rows: tuple[str, str, str, str]) -> pl.DataFrame:
         """Build the table with the columns of the query `already_dispatched`."""
@@ -115,7 +115,7 @@ def fixed_today(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def make_client(*replies: Response | Exception) -> tuple[AsyncClient, list[Request]]:
-    """Return a client whose server gives the replies in order, with the requests that it saw."""
+    """Return a client that gives the replies in order, and keeps the requests."""
     seen: list[Request] = []
     queue = list(replies)
 

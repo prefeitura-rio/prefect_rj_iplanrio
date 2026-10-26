@@ -53,7 +53,10 @@ def features_sql(mode: Literal["training", "now"]) -> str:
 
 
 def kind_of(feature: str) -> str:
-    """Return `categorica` for a group of dummies, `sentinela` for a feature with `-1` as no data, else `cold_start`."""
+    """Return the kind of a feature: `categorica`, `sentinela` or `cold_start`.
+
+    A group of dummies is `categorica`, and `-1` as no data is `sentinela`.
+    """
     if feature in DUMMY_GROUPS:
         return "categorica"
 
@@ -97,7 +100,11 @@ class Coverage:
             self.filled[feature] += int(count)
 
     def table(self) -> pl.DataFrame:
-        """Return `feature`, `tipo`, `pct_preenchido`, `n_preenchido` and `n_total`, from the least filled up."""
+        """Return the share of filled rows of each feature, from the least filled up.
+
+        The columns are `feature`, `tipo`, `pct_preenchido`, `n_preenchido` and
+        `n_total`.
+        """
         rows = [
             {
                 "feature": feature,

@@ -11,7 +11,7 @@ from pipelines.rj_smas__cadunico.helpers.files import unzip_texts, write_text_pa
 def test_the_zip_gives_its_text_files_by_name(
     make_archive: Callable[[str, dict[str, str]], Path], tmp_path: Path
 ) -> None:
-    """Extract the text files, in any case of the extension, and leave out the others."""
+    """Extract the text files, in any case of the extension, and skip the others."""
     archive = make_archive("a.zip", {"b.TXT": "1", "a.txt": "2", "c.csv": "3"})
 
     texts = unzip_texts(archive, tmp_path / "out")
@@ -33,7 +33,7 @@ def test_the_text_becomes_parquet_files_with_the_constant_columns(
     first_part: int,
     names: list[str],
 ) -> None:
-    """Write a file for every `BATCHES_PER_FILE` batches, with every line and the constants."""
+    """Write a file for each `BATCHES_PER_FILE` batches, with lines and constants."""
     monkeypatch.setattr(files, "BATCHES_PER_FILE", batches_per_file)
     monkeypatch.setattr(files, "BLOCK_SIZE", 2048)
     lines = [f"{number:04d}" + "x" * 96 for number in range(60)] if batches_per_file == 1 else ["a", "b"]

@@ -20,7 +20,9 @@ async def rj_segur__forca_municipal(
     limits: Limits | None = None,
     window: Window | None = None,
 ) -> None:
-    """Read a table of the Forca Municipal API (HxGN OnCall, the Municipal Guard) and load it to BigQuery.
+    """Read a table of the Forca Municipal API and load it to BigQuery.
+
+    The API is HxGN OnCall, of the Municipal Guard.
 
     `table["table_id"]` is one of the keys of `TABLE_CONFIG`: a list endpoint
     (`unidades_historico`, `qmd`, `ocorrencias_ativas_v2` and others), `unit_positions`

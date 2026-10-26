@@ -39,20 +39,14 @@ def column_names(cursor: oracledb.Cursor) -> list[str]:
 
 
 def column_definitions(columns: list[OracleColumn]) -> str:
-    """Monta a lista de colunas do ``CREATE TABLE``.
-
-    :param columns: Colunas da tabela.
-    :returns: Fragmento SQL com uma coluna por linha.
-    """
+    """Build the `CREATE TABLE` column list, with one column on each line."""
     return ",\n".join(f"  {column.definition}" for column in columns)
 
 
 def to_int(value: object) -> int:
-    """Converte para inteiro um número lido do banco, tratando nulo como zero.
+    """Return a number that the database gave as an integer, and treat null as zero.
 
-    :param value: Valor de uma coluna numérica.
-    :returns: O valor inteiro.
-    :raises TypeError: Se o valor não for numérico.
+    Raise `TypeError` if the value is not numeric.
     """
     if value is None:
         return 0

@@ -30,7 +30,7 @@ def read_alerts(rows: Sequence[Mapping[str, object]]) -> list[Alert]:
 
 
 def distance_meters(first: tuple[float, float], second: tuple[float, float]) -> float:
-    """Return the distance on the surface of the Earth between two points of latitude and longitude."""
+    """Return the Earth surface distance between two latitude and longitude points."""
     lat1, lng1, lat2, lng2 = map(radians, (*first, *second))
     half = sin((lat2 - lat1) / 2) ** 2 + cos(lat1) * cos(lat2) * sin((lng2 - lng1) / 2) ** 2
 
@@ -38,7 +38,10 @@ def distance_meters(first: tuple[float, float], second: tuple[float, float]) -> 
 
 
 def link_components(alerts: Sequence[Alert], radius_meters: float) -> list[list[Alert]]:
-    """Group the alerts so that each one is within the radius of another of its group, or of a chain of them."""
+    """Group the alerts so that each is within the radius of one of its group.
+
+    A chain of alerts counts.
+    """
     parent = list(range(len(alerts)))
 
     def root(index: int) -> int:
@@ -67,7 +70,7 @@ def link_components(alerts: Sequence[Alert], radius_meters: float) -> list[list[
 
 
 def group_alerts(alerts: Sequence[Alert], radius_meters: float) -> list[Cluster]:
-    """Cluster the alerts of each type, and return the clusters by type and then by oldest alert.
+    """Cluster the alerts of each type, and return them by type and oldest alert.
 
     The alerts of a cluster are in order of time. Its severity is `critica` if one alert
     has it, and its neighborhood is the first one that an alert has.
@@ -127,7 +130,7 @@ def should_send_cluster(
 
 
 def describe_event(cluster: Cluster, prefix: str = "") -> str:
-    """Return the type of the event of a cluster: its code, and the reports with their addresses.
+    """Return the type of the event of a cluster: its code and report addresses.
 
     One report reads `CODE: report [address]`. Many read `CODE: (1) report [address] |
     (2) ...` for the first five, with the count of the rest. The text has at most 500

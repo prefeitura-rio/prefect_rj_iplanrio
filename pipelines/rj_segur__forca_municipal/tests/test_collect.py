@@ -74,7 +74,7 @@ def test_the_pages_of_a_cycle_depend_on_the_page_size(pages: int, page_size: int
 
 
 async def test_the_pages_after_the_first_come_in_cycles(fake_api: Callable[..., FakeApi]) -> None:
-    """Yield the first page, then one batch for each range of pages that fills a cycle."""
+    """Yield the first page, then a batch for each range of pages that fills a cycle."""
     api = fake_api(pages={number: [{"page": number}] for number in range(1, 6)})
 
     found = [batch async for batch in read_pages(api, "/api/x", "x", 25_000, (5, [{"page": 1}]))]
@@ -136,7 +136,10 @@ async def test_the_details_come_in_groups_and_the_gone_ones_are_dropped(fake_api
 
 
 async def test_a_kml_without_placemarks_counts_as_an_error(fake_api: Callable[..., FakeApi]) -> None:
-    """Count a KML that fails, one that does not parse and one with no placemark, and keep the placemarks of the good one."""
+    """Count a KML that fails, one that does not parse and one with no placemark.
+
+    It keeps the placemarks that are good.
+    """
     api = fake_api(
         replies={
             "/k/1": reply(KML),
@@ -175,7 +178,10 @@ def test_the_run_fails_when_too_many_ids_fail(errors: int, attempted: int, fails
 
 
 async def test_the_positions_of_a_unit_carry_the_day_and_a_failed_unit_is_counted() -> None:
-    """Read the pages of each unit of the group, skip the one that fails, and tag the rows with the day."""
+    """Read the pages of each unit of the group, skip the one that fails, and tally.
+
+    The positions carry the day.
+    """
     api = FakeApi(pages={1: [{"p": 1}], 2: [{"p": 2}]}, bad_units={"bad"})
     tally = Tally()
 

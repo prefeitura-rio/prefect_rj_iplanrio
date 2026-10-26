@@ -18,7 +18,7 @@ RECORDS = TypeAdapter(list[dict[str, object]])
 
 @task
 async def read_recipients_task() -> list[dict[str, str]]:
-    """Read the table of the recipients, all of it or only the addresses of `FILTER_EMAILS`.
+    """Read the table of the recipients, all of it or the `FILTER_EMAILS` addresses.
 
     Every value comes as text, and a null as an empty text.
     """

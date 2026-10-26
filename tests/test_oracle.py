@@ -62,7 +62,7 @@ def oracle(fake_oracle) -> FakeOracle:
 
 
 async def test_a_table_is_dumped_in_chunks_as_of_one_scn(oracle, tmp_path, dump_oracle) -> None:
-    """Read each day, and the rows with no day, all as of the same system change number."""
+    """Read each day, and the rows with no day, all as of the same change number."""
     await dump_oracle(tmp_path / "t", {"table": "APP.ORDERS"}, chunks=DAYS)
 
     table = DeltaTable(str(tmp_path / "t")).to_pyarrow_table().to_pylist()
@@ -97,7 +97,7 @@ async def test_the_same_dump_again_writes_nothing(tmp_path, commits, dump_oracle
 
 
 async def test_a_query_is_cut_into_chunks_too(oracle, tmp_path, dump_oracle) -> None:
-    """Filter the query inside parentheses, and never read it as of a system change number."""
+    """Filter the query inside parentheses, and never read it as of a change number."""
     await dump_oracle(tmp_path / "t", {"query": "SELECT * FROM orders;"}, chunks=DAYS)
 
     assert all("(SELECT * FROM orders\n)" in sql and "AS OF" not in sql for sql, _ in oracle.reads)
@@ -119,7 +119,7 @@ async def test_filters_go_to_oracle_as_text_and_the_chunk_as_binds(oracle, tmp_p
 
 
 async def test_a_filter_with_a_second_statement_is_refused_before_a_read(oracle, tmp_path, dump_oracle) -> None:
-    """Raise for a filter that holds more than one predicate, so nothing reaches Oracle."""
+    """Raise for a filter with more than one predicate, so nothing reaches Oracle."""
     with pytest.raises(ValueError, match="one predicate"):
         await dump_oracle(tmp_path / "t", {"table": "APP.ORDERS"}, filters=["ID = 1; DROP TABLE T"])
 
@@ -141,7 +141,7 @@ async def test_the_batch_size_is_the_rows_of_one_fetch(oracle, tmp_path, options
 
 
 async def test_the_scn_and_the_columns_live_in_the_session_and_not_in_the_source(oracle, tmp_path) -> None:
-    """Read the system change number once for each dump, and leave the source as it was."""
+    """Read the change number once for each dump, and leave the source as it was."""
     conn = DBConn("h", 1521, "SVC", "u", "p")
     source = OracleSource(conn)
     reading = replace(source, origin=read_request("oracle", {"table": "APP.ORDERS"}, False))
@@ -171,7 +171,7 @@ async def test_a_user_without_the_scn_grant_still_dumps(oracle, tmp_path, dump_o
 async def test_a_table_that_cannot_be_read_as_of_the_scn_is_read_without_it_once(
     oracle, tmp_path, code, dump_oracle
 ) -> None:
-    """Retry a chunk without `AS OF SCN` after an error about it, and keep reading without it."""
+    """Retry a chunk without `AS OF SCN` after an error, and keep reading without it."""
     oracle.read_errors = [code]
 
     await dump_oracle(tmp_path / "t", {"table": "APP.ORDERS"}, chunks=DAYS)
@@ -191,7 +191,7 @@ async def test_another_oracle_error_is_not_swallowed(oracle, tmp_path, dump_orac
 
 
 async def test_a_column_that_goes_away_between_two_chunks_is_a_schema_error(fake_oracle, tmp_path, dump_oracle) -> None:
-    """Check every chunk against the columns of the first read, and name the column that changed."""
+    """Check each chunk against the first read, and name the column that changed."""
 
     def drifting(sql: str, params: Sequence[object]) -> Table:
         """Answer a chunk, and drop a column after the first one, as a DDL would."""

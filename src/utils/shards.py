@@ -19,7 +19,9 @@ WAITING = frozenset({StateType.SCHEDULED, StateType.PENDING})
 
 
 def build_shard_parameters(parameters: Mapping[str, object], index: int, count: int) -> dict[str, object]:
-    """Return the parameters of one child run: those of its parent, as its `shard` and not its `shards`.
+    """Return the parameters of one child run: those of its parent, with `shard`.
+
+    The parent `shards` parameter is dropped.
 
     ```python
     build_shard_parameters({"options": {"shards": 4, "concurrency": 2}}, 1, 4)
@@ -40,7 +42,7 @@ async def read_shards(ids: Sequence[UUID]) -> list[FlowRun]:
 
 
 async def wait_for_shards(ids: Sequence[UUID], poll: float) -> list[FlowRun]:
-    """Read the child runs every `poll` seconds until each one has ended, and return them."""
+    """Read the child runs every `poll` seconds until all ended, and return them."""
     while True:
         runs = await read_shards(ids)
 
@@ -51,7 +53,10 @@ async def wait_for_shards(ids: Sequence[UUID], poll: float) -> list[FlowRun]:
 
 
 async def cancel_shards(ids: Sequence[UUID]) -> None:
-    """Cancel the child runs that have not ended: a run that did not start is cancelled at once."""
+    """Cancel the child runs that have not ended.
+
+    A run that did not start is cancelled at once.
+    """
     runs = await read_shards(ids)
 
     async with get_client() as client:
@@ -71,7 +76,7 @@ async def run_shards(
     name: str,
     poll: float = SHARD_POLL_SECONDS,
 ) -> None:
-    """Run a dump in `count` child runs of the deployment, and wait until every one has ended.
+    """Run a dump in `count` child runs of the deployment, and wait for all of them.
 
     Child `index` of `count` gets the parameters of the parent with `options.shard` set
     (see `build_shard_parameters`). They go to the work queue `SHARD_QUEUE`, whose

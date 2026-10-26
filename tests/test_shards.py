@@ -19,14 +19,17 @@ PARAMETERS = {"table": {"table_id": "tbl"}, "options": {"shards": 3, "concurrenc
 
 @pytest.fixture(scope="module", autouse=True)
 def temporary_server() -> Iterator[None]:
-    """Run the tests of this module against a temporary Prefect server, and drop it after."""
+    """Run the tests of this module against a temporary Prefect server, then drop it."""
     with prefect_test_harness(server_startup_timeout=60):
         yield
 
 
 @pytest.fixture
 async def deployment() -> AsyncIterator[UUID]:
-    """Create a deployment with a work pool that has the queue of the shards, and give its id."""
+    """Create a deployment with a work pool that has the shards queue.
+
+    Give its id.
+    """
     name = uuid4().hex
 
     async with get_client() as client:
@@ -38,7 +41,7 @@ async def deployment() -> AsyncIterator[UUID]:
 
 
 async def read_children(deployment: UUID, count: int) -> list[FlowRun]:
-    """Wait until the parent has created `count` child runs, and return them in shard order."""
+    """Wait until the parent made `count` child runs, and return them by shard."""
     runs: list[FlowRun] = []
 
     async with get_client() as client:
@@ -79,7 +82,7 @@ def test_the_parameters_of_a_child_run_are_those_of_its_parent_with_its_shard(pa
 
 
 async def test_the_parent_waits_for_every_child_run_and_ends_when_all_complete(deployment) -> None:
-    """Create one run for each shard, in the queue and with the tag, and wait for all of them."""
+    """Create a run for each shard, in the queue and with the tag, and wait for all."""
     parent = create_task(run_shards(deployment, PARAMETERS, 3, "tbl", POLL))
     children = await read_children(deployment, 3)
 
@@ -118,7 +121,10 @@ async def test_a_failed_child_run_fails_the_parent_after_the_others_have_ended(d
 
 
 async def test_a_parent_that_stops_cancels_the_child_runs_that_have_not_ended(deployment) -> None:
-    """Cancel a waiting run at once and a running one in two steps, and keep a completed run."""
+    """Cancel a waiting run at once and a running one in two steps.
+
+    A completed run is kept.
+    """
     parent = create_task(run_shards(deployment, PARAMETERS, 3, "tbl", POLL))
     children = await read_children(deployment, 3)
 

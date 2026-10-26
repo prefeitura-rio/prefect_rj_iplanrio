@@ -1,4 +1,4 @@
-"""Rules that the dispatch pipelines share: the query of the day, the switch of a campaign and the notices."""
+"""Rules that the dispatch pipelines share: the day query, campaign switch, notices."""
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -78,19 +78,19 @@ def format_query(query: str, replacements: Replacements, processor: str | None, 
 
 @dataclass(frozen=True)
 class Switch:
-    """The switch of a campaign: whether it may run, and the notice that tells why not."""
+    """The switch of a campaign: whether it may run, and the notice of why not."""
 
     active: bool
     notice: str | None = None
 
 
 def is_active(raw: object) -> bool:
-    """Tell whether the value of the column `ativo` is on: `1`, `true`, `yes`, `sim` or `ativo`, in any case."""
+    """Tell whether `ativo` is on: `1`, `true`, `yes`, `sim` or `ativo`, in any case."""
     return raw is not None and str(raw).strip().lower() in ACTIVE_VALUES
 
 
 def read_expiration(raw: object) -> date | None:
-    """Read the limit date of a campaign from its text, or nothing if it has none or cannot be read."""
+    """Read the limit date of a campaign from text, or nothing if none or unreadable."""
     if raw is None:
         return None
 

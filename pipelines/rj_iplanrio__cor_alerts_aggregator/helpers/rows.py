@@ -29,7 +29,10 @@ def number_lines(values: Sequence[str], placeholder: str) -> str:
 def build_cluster_row(
     cluster: Cluster, *, group_id: str, event_id: str, environment: Environment, now: datetime
 ) -> Row:
-    """Return the row of a cluster for the aggregated table, which also fills the sheet."""
+    """Return the row of a cluster for the aggregated table.
+
+    It also fills the sheet.
+    """
     return {
         "aggregation_group_id": group_id,
         "event_id": event_id,
@@ -52,7 +55,7 @@ def build_cluster_row(
 
 
 def build_sent_rows(alert_ids: Sequence[str], *, group_id: str, environment: Environment, now: datetime) -> list[Row]:
-    """Return the rows of the sent table: one for each alert that went out in a group."""
+    """Return the rows of the sent table: one for each alert sent in a group."""
     return [
         {
             "alert_id": alert_id,
@@ -66,7 +69,7 @@ def build_sent_rows(alert_ids: Sequence[str], *, group_id: str, environment: Env
 
 
 def read_sheet_time(text: str) -> datetime | None:
-    """Return the time of a cell of the sheet as a time in São Paulo, or nothing if it is not a time."""
+    """Return the time of a sheet cell in São Paulo, or nothing if it is not a time."""
     try:
         return datetime.strptime(text, SHEET_TIME_FORMAT).replace(tzinfo=SP_TZ)
     except ValueError:

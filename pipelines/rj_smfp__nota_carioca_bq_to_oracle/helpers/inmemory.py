@@ -1,4 +1,4 @@
-"""População do In-Memory da tabela recém-carregada, para a troca acontecer com os dados já em memória."""
+"""Populate the In-Memory of the table just loaded, so the swap finds data in memory."""
 
 import time
 from collections.abc import Callable
@@ -14,24 +14,21 @@ from utils.utils import render_query
 
 
 def oracle_message(error: oracledb.DatabaseError) -> str:
-    """Resume em uma linha a mensagem de um erro do Oracle, com todas as linhas.
+    """Summarize the message of an Oracle error, with all its lines, in one line.
 
-    :param error: Erro do Oracle.
-    :returns: Mensagem em uma linha, com no máximo 300 caracteres.
+    The result has at most 300 characters.
     """
     return " ".join(str(error).split())[:300]
 
 
 @dataclass(frozen=True)
 class InMemoryStatus:
-    """Andamento da população de uma tabela no In-Memory.
+    """The progress of the population of a table in the In-Memory.
 
-    :param table: Tabela física.
-    :param expected_segments: Segmentos com linhas (partições, ou a tabela se não
-        for particionada).
-    :param populated_segments: Segmentos que já aparecem no In-Memory.
-    :param bytes_not_populated: Bytes ainda fora do In-Memory.
-    :param incomplete_segments: Segmentos com população em andamento.
+    `expected_segments` are the segments with rows (the partitions, or the table if it
+    is not partitioned). `populated_segments` are those that already show in the
+    In-Memory. `bytes_not_populated` is what is still out of it, and
+    `incomplete_segments` are the segments whose population is going on.
     """
 
     table: str
@@ -60,18 +57,14 @@ class InMemoryStatus:
 
 
 def start_population(config: OracleConfig, table: str, partitioned: bool) -> list[str]:
-    """Pede ao Oracle para popular a tabela no In-Memory agora.
+    """Ask Oracle to populate the table in the In-Memory now.
 
-    Com ``PRIORITY HIGH`` o Oracle popularia sozinho em alguns minutos; o pedido
-    só adianta o início, enquanto as outras tabelas ainda carregam. Em tabela
-    particionada o pedido é feito por partição com linhas, porque a tabela em si
-    não tem segmento (``ORA-03211``).
-
-    :param config: Configuração da conexão.
-    :param table: Tabela física.
-    :param partitioned: Se a tabela é particionada.
-    :returns: Erros do Oracle, em texto; vazio se todos os pedidos foram aceitos.
-    :raises PermissionError: Se a tabela não existir ou não pertencer à pipeline.
+    With `PRIORITY HIGH`, Oracle would populate it alone in a few minutes. The request
+    only brings the start forward, while the other tables still load. In a partitioned
+    table the request goes by partition that has rows, because the table has no segment
+    itself (`ORA-03211`). Return the Oracle errors as text, empty if every request was
+    accepted. Raise `PermissionError` if the table does not exist or does not belong to
+    the pipeline.
     """
     binds = {"owner": config.schema, "table_name": table}
     errors = []
@@ -92,16 +85,11 @@ def start_population(config: OracleConfig, table: str, partitioned: bool) -> lis
 
 
 def read_status(cursor: oracledb.Cursor, owner: str, table: str) -> InMemoryStatus:
-    """Lê o andamento da população de uma tabela.
+    """Read the progress of the population of a table.
 
-    Os segmentos esperados vêm das estatísticas, coletadas logo após a carga:
-    partições sem linhas não entram no In-Memory.
-
-    :param cursor: Cursor de uma conexão aberta.
-    :param owner: Dono da tabela.
-    :param table: Tabela física.
-    :returns: Andamento da população.
-    :raises oracledb.DatabaseError: Se a sessão não puder ler ``gv$im_segments``.
+    The expected segments come from the statistics, which are gathered right after the
+    load: a partition with no rows does not enter the In-Memory. Raise
+    `oracledb.DatabaseError` if the session cannot read `gv$im_segments`.
     """
     binds = {"owner": owner, "table_name": table}
     expected = fetch_rows(cursor, "get_inmemory_expected_segments", binds)
@@ -122,17 +110,12 @@ def wait_for_population(
     report: Callable[[str], None],
     poll_seconds: float = 30.0,
 ) -> bool:
-    """Espera as tabelas ficarem inteiras no In-Memory, até o limite de tempo.
+    """Wait for the tables to be whole in the In-Memory, up to the time limit.
 
-    Não espera se o In-Memory estiver desligado no banco ou se a sessão não puder
-    ler as views ``gv$``; nesses casos, informa o motivo.
-
-    :param config: Configuração da conexão.
-    :param tables: Tabelas físicas.
-    :param timeout_seconds: Espera máxima, somando todas as tabelas.
-    :param report: Função que recebe as mensagens de andamento.
-    :param poll_seconds: Intervalo entre as consultas de andamento.
-    :returns: Se todas as tabelas ficaram inteiras no In-Memory.
+    It does not wait if the In-Memory is off in the database or if the session cannot
+    read the `gv$` views, and then it reports why. `timeout_seconds` is the longest
+    wait, summed over all the tables. `report` gets the progress messages. Return
+    whether all the tables became whole in the In-Memory.
     """
     deadline = time.monotonic() + timeout_seconds
     with connect(config) as connection, connection.cursor() as cursor:
