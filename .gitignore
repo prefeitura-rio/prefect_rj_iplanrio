@@ -1,6 +1,8 @@
 **/**/test*
 !packages/toolkit/tests/
 !packages/toolkit/tests/**
+!pipelines/*/tests/
+!pipelines/*/tests/**
 !tests/
 !tests/**
 **/**/api.pdf

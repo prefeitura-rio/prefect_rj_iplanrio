@@ -13,6 +13,7 @@ class FakeBlob:
     """A blob of a fake bucket that records its uploads."""
 
     def __init__(self, bucket: "FakeBucket", name: str) -> None:
+        """Store the arguments."""
         self.bucket = bucket
         self.name = name
         self.metadata: dict[str, str] | None = {}
@@ -35,6 +36,7 @@ class FakeBucket:
     """A bucket that keeps its uploads in memory."""
 
     def __init__(self) -> None:
+        """Store the arguments."""
         self.files: dict[str, tuple[bytes, str]] = {}
         self.patched: list[str] = []
 

@@ -11,9 +11,10 @@ SIMPLE_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_$#]{0,127}$")
 CHARACTER_TYPES = ("VARCHAR2", "CHAR", "NVARCHAR2", "NCHAR")
 ROWID_TYPES = ("ROWID", "UROWID")
 TIMESTAMP_TYPE_PATTERN = re.compile(r"^TIMESTAMP\(\d\)( WITH TIME ZONE)?$")
-# Data guardada como texto no BigQuery é sempre ``AAAA-MM-DDTHH:MI:SS`` (19 caracteres, sem fração, fuso ou espaço).
-# O campo ``DATE`` com máscara é convertido pelo próprio SQL*Loader, sem expressão SQL por linha. O ``T`` literal vai
-# entre aspas duplas escapadas dentro da máscara. Valor fora desse formato é rejeitado, e como a carga usa
+# Data guardada como texto no BigQuery é sempre ``AAAA-MM-DDTHH:MI:SS`` (19 caracteres,
+# sem fração, fuso ou espaço). O campo ``DATE`` com máscara é convertido pelo próprio
+# SQL*Loader, sem expressão SQL por linha. O ``T`` literal vai entre aspas duplas
+# escapadas dentro da máscara. Valor fora desse formato é rejeitado, e como a carga usa
 # ``ERRORS=0`` a carga inteira falha: nenhuma linha é truncada ou perdida em silêncio.
 DATE_FIELD = 'DATE "YYYY-MM-DD\\"T\\"HH24:MI:SS"'
 TIMESTAMP_TZ_FIELD = 'TIMESTAMP WITH TIME ZONE "YYYY-MM-DD HH24:MI:SS.FF TZR"'
@@ -21,8 +22,9 @@ TEXT_FIELD_MAX_BYTES = 4000
 FILLER_TEXT_FIELD = f"FILLER CHAR({TEXT_FIELD_MAX_BYTES})"
 UTF8_MAX_BYTES_PER_CHAR = 4
 NUMBER_FIELD = "CHAR(64)"
-# O BigQuery guarda os bytes do RAW como STRING em base64 padrão (4 caracteres a cada 3 bytes, com preenchimento).
-# O BASE64_DECODE falha com ORA-29261 em valor nulo; o CASE mantém nulo e vazio como nulo.
+# O BigQuery guarda os bytes do RAW como STRING em base64 padrão (4 caracteres a cada 3
+# bytes, com preenchimento). O BASE64_DECODE falha com ORA-29261 em valor nulo; o CASE
+# mantém nulo e vazio como nulo.
 RAW_FROM_BASE64 = "CASE WHEN :{name} IS NOT NULL THEN UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(:{name})) END"
 RAW_TEXT_MIN_CHARS = 64
 RawTextEncoding = Literal["base64", "hex"]
@@ -103,7 +105,10 @@ class LoadPlan:
 
 
 def read_int(value: object) -> int | None:
-    """Return a number that the database gave as an integer, or nothing for a null. Raise `TypeError` for others."""
+    """Return a number that the database gave as an integer, or nothing for a null.
+
+    Raise `TypeError` for others.
+    """
     if value is None:
         return None
 
@@ -134,12 +139,14 @@ def oracle_column(row: dict[str, object]) -> OracleColumn:
 def text_field(column: OracleColumn) -> str:
     """Define o campo de texto do CSV (UTF-8) para uma coluna de caracteres.
 
-    O control file declara ``CHARACTERSET AL32UTF8`` e a sessão usa ``NLS_LANG`` em UTF-8, então o tamanho do
-    ``CHAR(n)`` é em bytes do CSV. Um valor que cabe na coluna nunca pode ser rejeitado por tamanho: com
-    semântica de bytes num banco UTF-8 ele ocupa no máximo ``data_length`` bytes, mas num banco de byte único
-    (ou com semântica de caracteres) cada caractere pode ocupar até 4 bytes no CSV. Por isso o campo tem
-    ``4 * data_length`` bytes, limitado a 4000, que é o máximo de um ``VARCHAR2``. Tamanhos pequenos mantêm
-    a reserva de memória do SQL*Loader por coluna muito menor que os 4000 bytes fixos.
+    O control file declara ``CHARACTERSET AL32UTF8`` e a sessão usa ``NLS_LANG`` em
+    UTF-8, então o tamanho do ``CHAR(n)`` é em bytes do CSV. Um valor que cabe na coluna
+    nunca pode ser rejeitado por tamanho: com semântica de bytes num banco UTF-8 ele
+    ocupa no máximo ``data_length`` bytes, mas num banco de byte único (ou com semântica
+    de caracteres) cada caractere pode ocupar até 4 bytes no CSV. Por isso o campo tem
+    ``4 * data_length`` bytes, limitado a 4000, que é o máximo de um ``VARCHAR2``.
+    Tamanhos pequenos mantêm a reserva de memória do SQL*Loader por coluna muito menor
+    que os 4000 bytes fixos.
 
     :param column: Coluna de destino do tipo caractere.
     :returns: Especificação do campo no control file.

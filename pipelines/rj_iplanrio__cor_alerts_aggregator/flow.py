@@ -42,11 +42,12 @@ async def rj_iplanrio__cor_alerts_aggregator(
 ) -> None:
     """Group the pending COR alerts by place, and send each group that is ready.
 
-    The alerts of one type within the radius of each other (500 meters) form a cluster. A cluster
-    goes out when it has 5 alerts, or when its oldest alert is 7 minutes old, and waits until then.
-    `destination` is `cor_api` (an event in the COR API), `google_sheets` (a row in the aggregated
-    table and in the sheet) or `dry_run` (only a log). Each sent alert enters the sent table, so
-    no alert goes out twice. Only one run works at a time.
+    The alerts of one type within the radius of each other (500 meters) form a cluster.
+    A cluster goes out when it has 5 alerts, or when its oldest alert is 7 minutes old,
+    and waits until then. `destination` is `cor_api` (an event in the COR API),
+    `google_sheets` (a row in the aggregated table and in the sheet) or `dry_run` (only
+    a log). Each sent alert enters the sent table, so no alert goes out twice. Only one
+    run works at a time.
     """
     rules = rules or {}
     threshold = rules.get("immediate_threshold", DEFAULT_IMMEDIATE_THRESHOLD)

@@ -1,12 +1,13 @@
 """Send a file to the SFTP of Salesforce.
 
-The server is checked by its pinned host key: the connection is refused (`HostKeyNotVerifiable`) if the key that
-the server shows is not the one of the setting. The files carry the CPF and the phone of citizens, so a man in the
-middle would leak personal data.
+The server is checked by its pinned host key: the connection is refused
+(`HostKeyNotVerifiable`) if the key that the server shows is not the one of the setting.
+The files carry the CPF and the phone of citizens, so a man in the middle would leak
+personal data.
 
-The server (Globalscape EFT) offers only the old host key algorithm `ssh-rsa`. Paramiko 5 dropped it and has
-no public way to allow it, so the client is asyncssh, which takes it by a documented argument and still checks the
-signature of the server.
+The server (Globalscape EFT) offers only the old host key algorithm `ssh-rsa`. Paramiko
+5 dropped it and has no public way to allow it, so the client is asyncssh, which takes
+it by a documented argument and still checks the signature of the server.
 """
 
 from collections.abc import Callable
@@ -107,8 +108,8 @@ def open_session(target: SftpTarget) -> AbstractAsyncContextManager[Uploader]:
 async def upload(target: SftpTarget, csv: Csv, opener: Opener = open_session) -> str:
     """Send a file to the SFTP and return its path on the server.
 
-    `opener` makes the session, and the tests give another one. Raise `asyncssh.HostKeyNotVerifiable` if
-    the host key is not the pinned one.
+    `opener` makes the session, and the tests give another one. Raise
+    `asyncssh.HostKeyNotVerifiable` if the host key is not the pinned one.
     """
     remote = remote_file(target, csv.name)
 

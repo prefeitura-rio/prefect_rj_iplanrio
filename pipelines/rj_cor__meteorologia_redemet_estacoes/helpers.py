@@ -10,7 +10,8 @@ from pipelines.rj_cor__meteorologia_redemet_estacoes.constants import CITY, COLU
 
 def build_stations(records: Sequence[Mapping[str, JsonValue]], updated_on: str) -> list[dict[str, JsonValue]]:
     """Return the stations of Rio de Janeiro, renamed, without accents and with the update date and its
-    year, month and day as text, like the legacy table."""
+    year, month and day as text, like the legacy table.
+    """
     stations: list[dict[str, JsonValue]] = []
 
     for record in records:

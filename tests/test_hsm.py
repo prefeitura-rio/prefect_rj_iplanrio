@@ -30,10 +30,12 @@ PAYLOAD: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
 class FakeWetalkie:
     """The Wetalkie API: it logs in, answers `GET /` and records the batches that it gets.
 
-    `replies` are the answers to the sends, in order. A send with no reply left answers 201.
+    `replies` are the answers to the sends, in order. A send with no reply left answers
+    201.
     """
 
     def __init__(self, replies: list[Response | Exception] | None = None, root_status: int = 200) -> None:
+        """Store the arguments."""
         self.replies = list(replies or [])
         self.root_status = root_status
         self.logins = 0

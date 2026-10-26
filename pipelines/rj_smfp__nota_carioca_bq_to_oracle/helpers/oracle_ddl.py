@@ -235,10 +235,9 @@ def gather_table_stats(config: OracleConfig, table: str, parallel_degree: int) -
 def count_rows(config: OracleConfig, table: str, parallel_degree: int = 1) -> int:
     """Conta as linhas da tabela de destino, com varredura paralela.
 
-    :param config: Configuração da conexão.
-    :param table: Nome da tabela no Oracle.
-    :param parallel_degree: Grau da dica ``PARALLEL`` do ``COUNT(*)``; 1 equivale a varredura serial.
-    :returns: Número de linhas.
+    :param config: Configuração da conexão. :param table: Nome da tabela no Oracle.
+    :param parallel_degree: Grau da dica ``PARALLEL`` do ``COUNT(*)``; 1 equivale a
+    varredura serial. :returns: Número de linhas.
     """
     query = render_query(
         QUERIES_ANCHOR, "count_rows", schema=config.schema, table=table, degree=max(int(parallel_degree), 1)

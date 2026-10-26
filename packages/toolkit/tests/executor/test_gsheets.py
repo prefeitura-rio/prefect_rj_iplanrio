@@ -18,7 +18,7 @@ POLL_SECONDS = 0.01
 @given(first=st.text(min_size=1), second=st.text(min_size=1))
 def test_the_access_token_is_a_bound_value_that_never_reaches_the_statement_text(
     first, second, fake_engine
-):
+) -> None:
     """Bind the access token, so it never reaches the statement text."""
     engines = [fake_engine(), fake_engine()]
     for engine, token in zip(engines, (first, second), strict=True):
@@ -29,7 +29,7 @@ def test_the_access_token_is_a_bound_value_that_never_reaches_the_statement_text
 
 
 @pytest.mark.extensions
-async def test_the_secret_is_valid_for_the_real_extension():
+async def test_the_secret_is_valid_for_the_real_extension() -> None:
     """Create a secret that the real extension accepts."""
     source = GSheetsSource(token=lambda: "token")
 
@@ -77,7 +77,7 @@ def http_server() -> Iterator[str]:
 )
 def test_the_google_auth_transport_reads_the_response_of_an_httpx2_request(
     http_server, method, body, expected
-):
+) -> None:
     """Read the response of an `httpx2` request through the `google-auth` transport."""
     with Client() as client:
         response = HttpxRequest(client)(
@@ -88,7 +88,7 @@ def test_the_google_auth_transport_reads_the_response_of_an_httpx2_request(
     assert response.headers["x-seen"] == "yes"
 
 
-def test_a_failed_connection_is_a_transport_error():
+def test_a_failed_connection_is_a_transport_error() -> None:
     """Raise a transport error if the connection fails."""
     with Client() as client, pytest.raises(TransportError):
         HttpxRequest(client)("http://127.0.0.1:1", timeout=2)

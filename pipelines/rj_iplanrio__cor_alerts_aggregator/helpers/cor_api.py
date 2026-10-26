@@ -36,7 +36,8 @@ async def login(client: AsyncClient, base_url: str, username: str, password: str
 async def open_event(base_url: str, username: str, password: str, event: Mapping[str, JsonValue]) -> None:
     """Open an event in the COR API, and log in again once if the token has expired.
 
-    Raise `ValueError` if the login fails, and `HTTPStatusError` if the API refuses the event.
+    Raise `ValueError` if the login fails, and `HTTPStatusError` if the API refuses the
+    event.
     """
     async with AsyncClient(timeout=30) as client:
         token = await login(client, base_url, username, password)

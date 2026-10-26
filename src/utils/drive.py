@@ -1,8 +1,8 @@
 """Google Drive: find and create folders, and upload files to them.
 
 A root folder can live in a shared drive, not in My Drive, so every call passes
-`supportsAllDrives`. Without it the API treats an item of a shared drive as if it did not
-exist, and answers 404 even when the service account has access.
+`supportsAllDrives`. Without it the API treats an item of a shared drive as if it did
+not exist, and answers 404 even when the service account has access.
 """
 
 from io import BytesIO
@@ -48,7 +48,8 @@ def find_folder(drive: Resource, name: str, parent_id: str) -> str | None:
 def confirm_root(drive: Resource, root_id: str) -> None:
     """Check that the root folder exists and the service account can reach it.
 
-    Raise `RuntimeError` if not. The id is used, not a name, so no other folder with that name gets the files.
+    Raise `RuntimeError` if not. The id is used, not a name, so no other folder with
+    that name gets the files.
     """
     try:
         api = drive.files()  # pyright: ignore[reportAttributeAccessIssue]

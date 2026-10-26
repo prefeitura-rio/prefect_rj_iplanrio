@@ -7,7 +7,10 @@ from utils.utils import post_discord
 
 
 async def post_notice(message: str, *, errors: bool) -> None:
-    """Post a message to the channel of the errors, or of the dispatches. Only log it if the setting has no webhook."""
+    """Post a message to the channel of the errors, or of the dispatches.
+
+    Only log it if the setting has no webhook.
+    """
     settings = NoticeSettings()
     webhook = (settings.DISCORD_ERRORS_WEBHOOK_URL if errors else settings.DISCORD_WEBHOOK_URL).get_secret_value()
 

@@ -20,13 +20,13 @@ TEMPLATES = [
 ]
 
 
-def test_every_converted_pipeline_has_templates():
+def test_every_converted_pipeline_has_templates() -> None:
     """Guard the table below: a folder that moved would leave the table empty."""
     assert {str(param.id).split("/")[0] for param in TEMPLATES} == set(CONVERTED)
 
 
 @pytest.mark.parametrize(("queries", "name"), TEMPLATES)
-def test_a_template_renders_with_every_variable_and_leaves_no_placeholder(queries, name):
+def test_a_template_renders_with_every_variable_and_leaves_no_placeholder(queries, name) -> None:
     """Render under `StrictUndefined` with one value for each variable, and find no `$name`.
 
     A `$` inside a name, such as the Oracle view `gv$sql`, is not a placeholder.

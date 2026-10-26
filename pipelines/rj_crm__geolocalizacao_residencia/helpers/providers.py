@@ -1,7 +1,8 @@
 """The geocoding services: the request for an address, and how to read the answer.
 
-Each service answers in its own shape, and the parsers bring them to the same fields. A parser gives nothing
-when the answer has no match, or the service refuses the request with the status of an exhausted quota.
+Each service answers in its own shape, and the parsers bring them to the same fields. A
+parser gives nothing when the answer has no match, or the service refuses the request
+with the status of an exhausted quota.
 """
 
 from collections.abc import Callable
@@ -37,7 +38,8 @@ class Query:
 class Provider:
     """A geocoding service: its name in the `geocode` column, the request of an address, and the reader of the answer.
 
-    `parse` takes the address, the response and the day, and gives the geocode or nothing.
+    `parse` takes the address, the response and the day, and gives the geocode or
+    nothing.
     """
 
     name: str
@@ -91,7 +93,10 @@ def add_rio(address: str) -> str:
 
 
 def nominatim(domain: str, user_agent: str) -> Provider:
-    """Return the Nominatim server of a domain. The address gets `Rio de Janeiro`, and `Brasil` goes to English."""
+    """Return the Nominatim server of a domain.
+
+    The address gets `Rio de Janeiro`, and `Brasil` goes to English.
+    """
 
     def build(address: str) -> Query:
         search = add_rio(address).replace(" RJ,", "").replace("Brasil", "Brazil")
@@ -162,7 +167,10 @@ WAZE: Final = Provider("waze", waze_query, parse_waze)
 
 
 def maptiler(key: str) -> Provider:
-    """Return MapTiler with a key. The address goes in the path, with `Rio de Janeiro` and `Brazil` added."""
+    """Return MapTiler with a key.
+
+    The address goes in the path, with `Rio de Janeiro` and `Brazil` added.
+    """
 
     def build(address: str) -> Query:
         search = f"{address}, {RIO_CONTEXT}, Brazil" if RIO_CONTEXT not in address else f"{address}, Brazil"
@@ -209,7 +217,10 @@ def maptiler(key: str) -> Provider:
 
 
 def opencage(key: str) -> Provider:
-    """Return OpenCage with a key. Its confidence goes from 0 to 10, and is brought to 0 to 1."""
+    """Return OpenCage with a key.
+
+    Its confidence goes from 0 to 10, and is brought to 0 to 1.
+    """
 
     def build(address: str) -> Query:
         return Query(
@@ -247,7 +258,10 @@ def opencage(key: str) -> Provider:
 
 
 def locationiq(key: str) -> Provider:
-    """Return LocationIQ with a key. Only a result whose city part of the name is Rio de Janeiro counts."""
+    """Return LocationIQ with a key.
+
+    Only a result whose city part of the name is Rio de Janeiro counts.
+    """
 
     def build(address: str) -> Query:
         return Query("https://us1.locationiq.com/v1/search.php", {"key": key, "q": address, "format": "json"})

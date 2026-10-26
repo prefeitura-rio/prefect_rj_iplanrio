@@ -22,11 +22,12 @@ async def rj_segur__forca_municipal(
 ) -> None:
     """Read a table of the Forca Municipal API (HxGN OnCall, the Municipal Guard) and load it to BigQuery.
 
-    `table["table_id"]` is one of the keys of `TABLE_CONFIG`: a list endpoint (`unidades_historico`,
-    `qmd`, `ocorrencias_ativas_v2` and others), `unit_positions` (the GPS of each unit, one day at a
-    time, from `window`), `qmd_detalhes` or `qmd_kml` (one request for each QMD of the latest `qmd`).
-    `limits` sets the page size and how many requests, units and QMDs run at one time.
-    Raise `ValueError` for a table that is not in `TABLE_CONFIG`.
+    `table["table_id"]` is one of the keys of `TABLE_CONFIG`: a list endpoint
+    (`unidades_historico`, `qmd`, `ocorrencias_ativas_v2` and others), `unit_positions`
+    (the GPS of each unit, one day at a time, from `window`), `qmd_detalhes` or
+    `qmd_kml` (one request for each QMD of the latest `qmd`). `limits` sets the page
+    size and how many requests, units and QMDs run at one time. Raise `ValueError` for a
+    table that is not in `TABLE_CONFIG`.
     """
     table_id = table["table_id"]
 

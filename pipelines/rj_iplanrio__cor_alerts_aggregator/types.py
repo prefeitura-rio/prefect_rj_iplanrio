@@ -57,7 +57,10 @@ class Rules(TypedDict, total=False):
 
 
 class Sheet(TypedDict):
-    """The Google Sheet that gets the clusters. The rows older than `retention_hours` leave it."""
+    """The Google Sheet that gets the clusters.
+
+    The rows older than `retention_hours` leave it.
+    """
 
     spreadsheet_id: str
     retention_hours: NotRequired[int]

@@ -1,7 +1,8 @@
 """The server of the fake GCS, with only the standard library.
 
 It runs in a process of its own and `fixtures.py` starts it. This module imports nothing
-heavy, so the process starts in milliseconds and not in the 3 seconds that `fixtures.py` takes.
+heavy, so the process starts in milliseconds and not in the 3 seconds that `fixtures.py`
+takes.
 """
 
 from collections.abc import Mapping
@@ -240,7 +241,10 @@ def make_handler(state: FakeBucket) -> type[BaseHTTPRequestHandler]:
 
 
 def serve(connection: Connection) -> None:
-    """Serve a fake GCS on a free port, and send the port to the parent. It runs in a process."""
+    """Serve a fake GCS on a free port, and send the port to the parent.
+
+    It runs in a process.
+    """
     server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(FakeBucket()))
 
     connection.send(server.server_port)

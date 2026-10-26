@@ -35,13 +35,16 @@ async def rj_smas__disparo_pic(
 ) -> None:
     """Remind the families of the delivery date of the Cartão PIC, by an HSM message of the Wetalkie API.
 
-    The run ends if the control sheet has the campaign off or past its limit date, if the table of approvals has no
-    approved dispatch for today, or if the query gives nobody. A phone and a CPF that come twice get one message each,
-    unless the audience says otherwise. A share of the phones, `audience.whitelist_percentage`, goes to the whitelist of
-    the day. The flow waits `waits.before_dispatch` minutes, so a person can check the date and the HSM, and sends the
-    batches. The ones that went out are recorded in `table`, even if a later one fails, and then the run raises. After
-    `waits.before_results` minutes, a notice has the status of the messages. A run with `campaign.test_mode` sends
-    only to the `DESTINATIONS` of the settings, asks for no approval and records nothing.
+    The run ends if the control sheet has the campaign off or past its limit date, if
+    the table of approvals has no approved dispatch for today, or if the query gives
+    nobody. A phone and a CPF that come twice get one message each, unless the audience
+    says otherwise. A share of the phones, `audience.whitelist_percentage`, goes to the
+    whitelist of the day. The flow waits `waits.before_dispatch` minutes, so a person
+    can check the date and the HSM, and sends the batches. The ones that went out are
+    recorded in `table`, even if a later one fails, and then the run raises. After
+    `waits.before_results` minutes, a notice has the status of the messages. A run with
+    `campaign.test_mode` sends only to the `DESTINATIONS` of the settings, asks for no
+    approval and records nothing.
     """
     switch = await read_switch(campaign.name, campaign.environment)
 

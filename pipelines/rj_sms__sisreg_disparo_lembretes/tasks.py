@@ -23,7 +23,8 @@ TEXTS = TypeAdapter(list[str])
 async def read_recipients_task(dispatch: Dispatch, given: list[Recipient] | None) -> list[Recipient]:
     """Return the phones to message, once each.
 
-    With `given`, those are the recipients. Without it, the query of the appointments for tomorrow gives them.
+    With `given`, those are the recipients. Without it, the query of the appointments
+    for tomorrow gives them.
     """
     if given is not None:
         return drop_duplicate_phones(given)
@@ -39,8 +40,8 @@ async def read_recipients_task(dispatch: Dispatch, given: list[Recipient] | None
 async def send_batches_task(dispatch: Dispatch, recipients: list[Recipient]) -> Outcome:
     """Send the recipients to the Wetalkie API, one batch at a time, and keep the rows of the batches that went out.
 
-    Raise `RuntimeError` if the API does not answer. A batch that fails stops the run, and the outcome keeps
-    the rows of the batches before it and the reason.
+    Raise `RuntimeError` if the API does not answer. A batch that fails stops the run,
+    and the outcome keeps the rows of the batches before it and the reason.
     """
     sent_at = datetime.now(ZoneInfo(TIMEZONE))
     hsm = dispatch.as_hsm()

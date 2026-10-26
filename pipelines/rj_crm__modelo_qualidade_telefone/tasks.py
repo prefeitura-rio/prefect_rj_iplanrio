@@ -62,8 +62,8 @@ from utils.utils import load_credentials, render_query
 async def load_champion_task(models_root: str, *, required: bool) -> Champion | None:
     """Load the champion from GCS.
 
-    With `required`, raise `RuntimeError` if there is none. The daily scoring cannot run with no model, and the
-    first retrain runs with none.
+    With `required`, raise `RuntimeError` if there is none. The daily scoring cannot run
+    with no model, and the first retrain runs with none.
     """
     client = StorageClient(credentials=load_credentials(), project=PROJECT_ID)
     champion = await to_thread(load_champion, models_root, client)
@@ -112,7 +112,8 @@ async def publish_scores_task(path: Path, stats: ScoreStats, tables: Tables) -> 
 async def extract_training_task() -> pl.DataFrame:
     """Run the query of the training and check the result.
 
-    Return one row for each phone: `telefone`, `data_corte`, `high_delivery` and the FEATURES.
+    Return one row for each phone: `telefone`, `data_corte`, `high_delivery` and the
+    FEATURES.
     """
     frame = await read_bq.fn(features_sql("training"), project=PROJECT_ID)
     validate_training(frame)
@@ -195,7 +196,8 @@ async def publish_report_task(
 ) -> None:
     """Upload the report of the retrain to the subfolder `version` of the root folder of the Drive.
 
-    Raise `RuntimeError` if the root folder does not exist or is not shared with the service account.
+    Raise `RuntimeError` if the root folder does not exist or is not shared with the
+    service account.
     """
     version = release.version
     simulation = judgement.simulation

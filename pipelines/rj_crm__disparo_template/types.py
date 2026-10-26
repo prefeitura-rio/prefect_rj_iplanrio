@@ -10,8 +10,8 @@ from pydantic import JsonValue
 class Campaign:
     """The campaign that a run sends, and where it runs.
 
-    `name` is the campaign in the control sheet and in Salesforce. With `test_mode`, nothing goes to the
-    log table and the waits are short.
+    `name` is the campaign in the control sheet and in Salesforce. With `test_mode`,
+    nothing goes to the log table and the waits are short.
     """
 
     name: str = "template"
@@ -23,10 +23,12 @@ class Campaign:
 class Audience:
     """Who gets the message: the query, the filters and the retries.
 
-    The query is `query` or the file `query_file` of the pipeline. With `replacements` its placeholders are filled,
-    through `processor` if there is one. `dispatched` is `cpf` or `telefone`: who got a message today from any
-    campaign is dropped. With `interval_days`, who got this campaign in that many days is dropped too. A
-    run with `max_retries` tries again, with the next phone of `others`, for the CPFs that failed.
+    The query is `query` or the file `query_file` of the pipeline. With `replacements`
+    its placeholders are filled, through `processor` if there is one. `dispatched` is
+    `cpf` or `telefone`: who got a message today from any campaign is dropped. With
+    `interval_days`, who got this campaign in that many days is dropped too. A run with
+    `max_retries` tries again, with the next phone of `others`, for the CPFs that
+    failed.
     """
 
     query: str | None = None
@@ -47,13 +49,15 @@ class Audience:
 class Delivery:
     """How the file goes out and what is watched after it.
 
-    The file is `data_extension` plus the time, with `columns` of the query and `separator`, in `remote_path` of the
-    SFTP. `batch_size` cuts the frame in files and `batch_sleep_minutes` is the pause between them.
-    `sleep_minutes` is the pause before each file, to let a person stop a wrong run.
-    A share of the phones, `whitelist_percentage`, goes to the whitelist. After the file, the flow
-    waits `materialization_minutes` and then, with `monitor`, it builds the status model and checks for
-    the status each `check_interval_minutes`, up to `max_wait_minutes`, and alerts if there is none. With
-    `materialize` and no `monitor`, it builds the model once.
+    The file is `data_extension` plus the time, with `columns` of the query and
+    `separator`, in `remote_path` of the SFTP. `batch_size` cuts the frame in files and
+    `batch_sleep_minutes` is the pause between them. `sleep_minutes` is the pause before
+    each file, to let a person stop a wrong run. A share of the phones,
+    `whitelist_percentage`, goes to the whitelist. After the file, the flow waits
+    `materialization_minutes` and then, with `monitor`, it builds the status model and
+    checks for the status each `check_interval_minutes`, up to `max_wait_minutes`, and
+    alerts if there is none. With `materialize` and no `monitor`, it builds the model
+    once.
     """
 
     data_extension: str | None = None

@@ -1,7 +1,8 @@
 """The native BigQuery tables of the pipeline: their creation, the reads and the load with a MERGE.
 
-The client carries the credentials of the environment. Without them the client falls back to the default
-credentials, which in the pod are not the service account that has access to `brutos_salesforce`.
+The client carries the credentials of the environment. Without them the client falls
+back to the default credentials, which in the pod are not the service account that has
+access to `brutos_salesforce`.
 """
 
 from collections.abc import Mapping, Sequence
@@ -32,9 +33,10 @@ def read_rows(
 def ensure_table(client: bigquery.Client, full_id: str, description: str, *, partitioned: bool) -> None:
     """Create a table only if it does not exist.
 
-    Reading a table needs a permission that is common, and creating one does not. Asking first spares a 403 on
-    every run for a table that is already there. Raise `PermissionError` if the table is missing and the
-    service account cannot create it, so someone creates it by hand.
+    Reading a table needs a permission that is common, and creating one does not. Asking
+    first spares a 403 on every run for a table that is already there. Raise
+    `PermissionError` if the table is missing and the service account cannot create it,
+    so someone creates it by hand.
     """
     try:
         client.get_table(full_id)

@@ -33,8 +33,8 @@ class BifrostError(RuntimeError):
 def scale_output_tokens(batch_size: int) -> int:
     """Return the limit of output tokens for a batch: it grows with the batch, and never goes under 8192.
 
-    Without it, a batch bigger than the one that was measured risks an answer cut in the middle,
-    which is a JSON that does not parse and a batch that fails.
+    Without it, a batch bigger than the one that was measured risks an answer cut in the
+    middle, which is a JSON that does not parse and a batch that fails.
     """
     return max(BIFROST_CALIBRATED_TOKENS, ceil(BIFROST_CALIBRATED_TOKENS * batch_size / BIFROST_CALIBRATED_BATCH))
 
@@ -53,7 +53,8 @@ def strip_code_fence(text: str) -> str:
 def parse_json_list(text: str) -> list[dict[str, JsonValue]]:
     """Return the objects of a JSON list in an answer of the model, without its code fence.
 
-    Anything in the list that is not an object is dropped. Raise `ValueError` if the answer is not a JSON list.
+    Anything in the list that is not an object is dropped. Raise `ValueError` if the
+    answer is not a JSON list.
     """
     try:
         parsed = JSON.validate_python(loads(strip_code_fence(text), strict=False))
@@ -127,7 +128,10 @@ def read_answer(body: JsonValue) -> Answer:
 
 
 def read_text(body: JsonValue) -> str:
-    """Return the text of an answer of the gateway. Raise `BifrostError` if the body is an error or has no part."""
+    """Return the text of an answer of the gateway.
+
+    Raise `BifrostError` if the body is an error or has no part.
+    """
     return read_answer(body).text
 
 
@@ -168,7 +172,8 @@ class Bifrost:
     async def send(self, payload: dict[str, JsonValue]) -> Answer:
         """Send one question and return the answer.
 
-        Raise `BifrostError` for a network error, an error status, an error in the body, or no text.
+        Raise `BifrostError` for a network error, an error status, an error in the body,
+        or no text.
         """
         try:
             response = await self.client.post(f"/genai/v1beta/models/{self.model}:generateContent", json=payload)
@@ -200,7 +205,8 @@ class Bifrost:
 
         The wait doubles between the tries.
 
-        The temperature is 0, so the same question gets the same answer as far as the model allows.
+        The temperature is 0, so the same question gets the same answer as far as the
+        model allows.
 
         Raise `BifrostError` after the last try.
         """
@@ -223,5 +229,8 @@ class Bifrost:
         return await self.send(payload)
 
     async def ask(self, prompt: str, *, system: str = "Responda em PT-BR.", max_output_tokens: int = 512) -> str:
-        """Ask the model and return the text of its answer. See `answer` for the retries."""
+        """Ask the model and return the text of its answer.
+
+        See `answer` for the retries.
+        """
         return (await self.answer(prompt, system=system, max_output_tokens=max_output_tokens)).text

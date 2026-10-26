@@ -34,7 +34,8 @@ def read_partition_date(text: str | None) -> date | None:
 def add_partition_columns(rows: Sequence[Row], column: str) -> list[Row]:
     """Return the rows with `ano_particao`, `mes_particao` and `data_particao`, taken from a date column.
 
-    A row whose column is not a date gets empty partition columns. Raise `ValueError` if a row has one of them.
+    A row whose column is not a date gets empty partition columns. Raise `ValueError` if
+    a row has one of them.
     """
     result: list[Row] = []
 
@@ -67,7 +68,8 @@ def stringify(value: JsonValue) -> str | None:
 def build_frame(rows: Sequence[Row], updated_at: datetime, column: str) -> pl.DataFrame:
     """Return the rows as a frame of text columns, with `id_hash`, `updated_at` and the partition columns.
 
-    `column` is the date column of the partition: `updated_at`, or the one the API gives.
+    `column` is the date column of the partition: `updated_at`, or the one the API
+    gives.
     """
     stamped = [{**row, "updated_at": updated_at.isoformat(sep=" ")} for row in add_id_hash(rows)]
     partitioned = add_partition_columns(stamped, column)

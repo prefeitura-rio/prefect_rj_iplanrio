@@ -61,9 +61,9 @@ def build_rows(
 ) -> list[dict[str, JsonValue]]:
     """Return the measurements, one for each station and time, in the time of São Paulo.
 
-    A repeated station and time keeps the first. Without a backfill only the measurements
-    of `today` stay. The sky text starts with a capital. `ano`, `mes` and `dia` are the day of the
-    measurement as text, like the legacy table.
+    A repeated station and time keeps the first. Without a backfill only the
+    measurements of `today` stay. The sky text starts with a capital. `ano`, `mes` and
+    `dia` are the day of the measurement as text, like the legacy table.
     """
     rows: dict[tuple[str, str], dict[str, JsonValue]] = {}
 

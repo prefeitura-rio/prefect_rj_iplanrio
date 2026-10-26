@@ -11,12 +11,14 @@ from pipelines.rj_smas__cadunico.constants import COMMIT_AUTHOR, MODELS_FOLDER
 
 
 def push_models(repository: str, branch: str, files: Mapping[str, str], message: str) -> bool:
-    """Write the files in the models folder of a clone, commit them and push them. Return `False` if nothing changed.
+    """Write the files in the models folder of a clone, commit them and push them.
+
+    Return `False` if nothing changed.
 
     `files` has the text of each file, by name. The clone is temporary, and it has the
-    branch. A `GITHUB_TOKEN` in the URL of the repository becomes the token of the setting.
-    Raise `RuntimeError` if the clone or the push fails. The error has no cause, because
-    the message of git can hold the token of the URL.
+    branch. A `GITHUB_TOKEN` in the URL of the repository becomes the token of the
+    setting. Raise `RuntimeError` if the clone or the push fails. The error has no
+    cause, because the message of git can hold the token of the URL.
     """
     with TemporaryDirectory(prefix="cadunico_models_") as directory:
         clone = clone_repository(fill_token(repository), Path(directory) / "repository", branch)

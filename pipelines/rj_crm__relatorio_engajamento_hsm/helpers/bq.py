@@ -1,4 +1,7 @@
-"""The BigQuery reads of the pipeline. They use query parameters, the safe way to pass the name of an HSM."""
+"""The BigQuery reads of the pipeline.
+
+They use query parameters, the safe way to pass the name of an HSM.
+"""
 
 from datetime import date
 
@@ -15,7 +18,8 @@ MESSAGES: TypeAdapter[list[Message]] = TypeAdapter(list[Message])
 def connect() -> bigquery.Client:
     """Return a client with the credentials of the environment, which carry the Drive scope too.
 
-    The table of dispatches is a Google Sheet imported into BigQuery, so reading it needs that scope.
+    The table of dispatches is a Google Sheet imported into BigQuery, so reading it
+    needs that scope.
     """
     return bigquery.Client(credentials=load_credentials(), project=PROJECT_ID)
 

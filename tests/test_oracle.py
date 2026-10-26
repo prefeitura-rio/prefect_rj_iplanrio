@@ -61,7 +61,7 @@ def oracle(fake_oracle) -> FakeOracle:
     return fake_oracle(FakeOracle(COLUMNS, answer))
 
 
-async def test_a_table_is_dumped_in_chunks_as_of_one_scn(oracle, tmp_path, dump_oracle):
+async def test_a_table_is_dumped_in_chunks_as_of_one_scn(oracle, tmp_path, dump_oracle) -> None:
     """Read each day, and the rows with no day, all as of the same system change number."""
     await dump_oracle(tmp_path / "t", {"table": "APP.ORDERS"}, chunks=DAYS)
 
@@ -75,7 +75,7 @@ async def test_a_table_is_dumped_in_chunks_as_of_one_scn(oracle, tmp_path, dump_
 
 
 @pytest.mark.usefixtures("oracle")
-async def test_the_types_arrive_in_delta(tmp_path, dump_oracle):
+async def test_the_types_arrive_in_delta(tmp_path, dump_oracle) -> None:
     """Keep a decimal exact, and give an instant its UTC time zone."""
     await dump_oracle(tmp_path / "t", {"table": "APP.ORDERS"})
 
@@ -86,7 +86,7 @@ async def test_the_types_arrive_in_delta(tmp_path, dump_oracle):
 
 
 @pytest.mark.usefixtures("oracle")
-async def test_the_same_dump_again_writes_nothing(tmp_path, commits, dump_oracle):
+async def test_the_same_dump_again_writes_nothing(tmp_path, commits, dump_oracle) -> None:
     """Skip every chunk whose fingerprint is in the ledger."""
     await dump_oracle(tmp_path / "t", {"table": "APP.ORDERS"}, chunks=DAYS)
     first = commits(tmp_path / "t")
@@ -96,7 +96,7 @@ async def test_the_same_dump_again_writes_nothing(tmp_path, commits, dump_oracle
     assert commits(tmp_path / "t") == first
 
 
-async def test_a_query_is_cut_into_chunks_too(oracle, tmp_path, dump_oracle):
+async def test_a_query_is_cut_into_chunks_too(oracle, tmp_path, dump_oracle) -> None:
     """Filter the query inside parentheses, and never read it as of a system change number."""
     await dump_oracle(tmp_path / "t", {"query": "SELECT * FROM orders;"}, chunks=DAYS)
 
@@ -104,7 +104,7 @@ async def test_a_query_is_cut_into_chunks_too(oracle, tmp_path, dump_oracle):
     assert len(DeltaTable(str(tmp_path / "t")).to_pyarrow_table()) == 4
 
 
-async def test_filters_go_to_oracle_as_text_and_the_chunk_as_binds(oracle, tmp_path, dump_oracle):
+async def test_filters_go_to_oracle_as_text_and_the_chunk_as_binds(oracle, tmp_path, dump_oracle) -> None:
     """Send the filters to the database as written, and keep every value a bind."""
     await dump_oracle(
         tmp_path / "t",
@@ -118,7 +118,7 @@ async def test_filters_go_to_oracle_as_text_and_the_chunk_as_binds(oracle, tmp_p
     assert params == [4242, date(2024, 3, 1), date(2024, 3, 2)]
 
 
-async def test_a_filter_with_a_second_statement_is_refused_before_a_read(oracle, tmp_path, dump_oracle):
+async def test_a_filter_with_a_second_statement_is_refused_before_a_read(oracle, tmp_path, dump_oracle) -> None:
     """Raise for a filter that holds more than one predicate, so nothing reaches Oracle."""
     with pytest.raises(ValueError, match="one predicate"):
         await dump_oracle(tmp_path / "t", {"table": "APP.ORDERS"}, filters=["ID = 1; DROP TABLE T"])
@@ -133,14 +133,14 @@ async def test_a_filter_with_a_second_statement_is_refused_before_a_read(oracle,
         pytest.param({"batch_size": 20_000}, 20_000, id="the_batch_size_of_the_options"),
     ],
 )
-async def test_the_batch_size_is_the_rows_of_one_fetch(oracle, tmp_path, options, size, dump_oracle):
+async def test_the_batch_size_is_the_rows_of_one_fetch(oracle, tmp_path, options, size, dump_oracle) -> None:
     """Fetch that many rows at a time, for the columns probe and for every chunk."""
     await dump_oracle(tmp_path / "t", {"table": "APP.ORDERS"}, **options)
 
     assert set(oracle.sizes) == {size}
 
 
-async def test_the_scn_and_the_columns_live_in_the_session_and_not_in_the_source(oracle, tmp_path):
+async def test_the_scn_and_the_columns_live_in_the_session_and_not_in_the_source(oracle, tmp_path) -> None:
     """Read the system change number once for each dump, and leave the source as it was."""
     conn = DBConn("h", 1521, "SVC", "u", "p")
     source = OracleSource(conn)
@@ -153,7 +153,7 @@ async def test_the_scn_and_the_columns_live_in_the_session_and_not_in_the_source
     assert source == OracleSource(conn)
 
 
-async def test_a_user_without_the_scn_grant_still_dumps(oracle, tmp_path, dump_oracle):
+async def test_a_user_without_the_scn_grant_still_dumps(oracle, tmp_path, dump_oracle) -> None:
     """Read without `AS OF SCN` when the user may not read the system change number."""
     oracle.snapshot_error = 942
 
@@ -168,7 +168,9 @@ async def test_a_user_without_the_scn_grant_still_dumps(oracle, tmp_path, dump_o
     [942, 1031, 41900, 1466],
     ids=["no_privilege_942", "no_privilege_1031", "no_flashback_privilege_41900", "table_just_changed_1466"],
 )
-async def test_a_table_that_cannot_be_read_as_of_the_scn_is_read_without_it_once(oracle, tmp_path, code, dump_oracle):
+async def test_a_table_that_cannot_be_read_as_of_the_scn_is_read_without_it_once(
+    oracle, tmp_path, code, dump_oracle
+) -> None:
     """Retry a chunk without `AS OF SCN` after an error about it, and keep reading without it."""
     oracle.read_errors = [code]
 
@@ -180,7 +182,7 @@ async def test_a_table_that_cannot_be_read_as_of_the_scn_is_read_without_it_once
     assert len(DeltaTable(str(tmp_path / "t")).to_pyarrow_table()) == 4
 
 
-async def test_another_oracle_error_is_not_swallowed(oracle, tmp_path, dump_oracle):
+async def test_another_oracle_error_is_not_swallowed(oracle, tmp_path, dump_oracle) -> None:
     """Raise an error that is not about the grant, such as an undo that is too old."""
     oracle.read_errors = [1555]
 
@@ -188,7 +190,7 @@ async def test_another_oracle_error_is_not_swallowed(oracle, tmp_path, dump_orac
         await dump_oracle(tmp_path / "t", {"table": "APP.ORDERS"})
 
 
-async def test_a_column_that_goes_away_between_two_chunks_is_a_schema_error(fake_oracle, tmp_path, dump_oracle):
+async def test_a_column_that_goes_away_between_two_chunks_is_a_schema_error(fake_oracle, tmp_path, dump_oracle) -> None:
     """Check every chunk against the columns of the first read, and name the column that changed."""
 
     def drifting(sql: str, params: Sequence[object]) -> Table:
@@ -205,7 +207,7 @@ async def test_a_column_that_goes_away_between_two_chunks_is_a_schema_error(fake
         await dump_oracle(tmp_path / "t", {"table": "APP.ORDERS"}, chunks=DAYS)
 
 
-async def test_regression_a_select_reads_only_the_chosen_columns_from_oracle(oracle, tmp_path, dump_oracle):
+async def test_regression_a_select_reads_only_the_chosen_columns_from_oracle(oracle, tmp_path, dump_oracle) -> None:
     """Regression: a `select` that drops a column once still read it from Oracle."""
     await dump_oracle(tmp_path / "t", {"table": "APP.ORDERS"}, select=["ID", "VALOR"])
 

@@ -58,7 +58,8 @@ def read_watermark(text: str | None) -> datetime | None:
 def keep_new_files(names: Sequence[str], watermark: datetime | None) -> list[str]:
     """Return the XML files that the table has not seen: those after the watermark, all without one.
 
-    Without a watermark every XML file stays. With one, a file whose name has no time is dropped.
+    Without a watermark every XML file stays. With one, a file whose name has no time is
+    dropped.
     """
     xml_files = [name for name in names if name.endswith(".xml")]
 
@@ -71,9 +72,9 @@ def keep_new_files(names: Sequence[str], watermark: datetime | None) -> list[str
 def parse_xml(xml: str | bytes) -> tuple[list[Record], list[Record]]:
     """Return the pluviometric and the meteorological readings of an AlertaRio XML.
 
-    Each `<estacao>` has `<chuvas>`, and a `met` station also has `<met>`. Both are read at the
-    time of `<chuvas>`, and a station without that time has no reading.
-    Raise `ParseError` if the XML is malformed.
+    Each `<estacao>` has `<chuvas>`, and a `met` station also has `<met>`. Both are read
+    at the time of `<chuvas>`, and a station without that time has no reading. Raise
+    `ParseError` if the XML is malformed.
     """
     root: Element = fromstring(xml)
     pluviometric: list[Record] = []

@@ -4,7 +4,8 @@ Fronteira entre o Prefect e o Python puro (§4.2 do styleguide): cada task lê o
 ambiente de execução sabe — variáveis de ambiente e contexto do flow run — e delega o
 trabalho para ``utils``. Nenhuma regra de negócio mora aqui.
 
-A configuração vem de ``Settings``, que lê o que o Kubernetes Secret injeta no container.
+A configuração vem de ``Settings``, que lê o que o Kubernetes Secret injeta no
+container.
 """
 
 from datetime import datetime
@@ -155,10 +156,10 @@ def enviar_email_task(janela: Janela, ocorrencias: list[Ocorrencia]) -> list[str
 
     Em dia sem ocorrência não há e-mail: só o Discord sai, conforme a decisão D16.
 
-    :param janela: Recorte do relatório.
-    :param ocorrencias: Ocorrências do período.
+    :param janela: Recorte do relatório. :param ocorrencias: Ocorrências do período.
     :returns: Destinatários que receberam o relatório; vazio quando não houve envio.
-    :raises pydantic.ValidationError: Se alguma das variáveis do Data Relay não estiver definida.
+    :raises pydantic.ValidationError: Se alguma das variáveis do Data Relay não estiver
+    definida.
     """
     if not ocorrencias:
         logger.info("Sem ocorrências no período: e-mail não será enviado")
@@ -192,12 +193,11 @@ def enviar_discord_task(
     Roda depois do e-mail e recebe os destinatários de fato notificados, para a mensagem
     relatar o que aconteceu em vez de prometer (decisão D29).
 
-    :param janela: Recorte do relatório.
-    :param ocorrencias: Ocorrências do período.
-    :param destinatarios: Quem recebeu o e-mail detalhado.
-    :param ambiente: Ambiente de execução, ``staging`` ou ``prod``.
-    :param ultima_ocorrencia: Última ocorrência conhecida na fonte, mostrada em dia vazio.
-    :raises pydantic.ValidationError: Se a variável do webhook não estiver definida.
+    :param janela: Recorte do relatório. :param ocorrencias: Ocorrências do período.
+    :param destinatarios: Quem recebeu o e-mail detalhado. :param ambiente: Ambiente de
+    execução, ``staging`` ou ``prod``. :param ultima_ocorrencia: Última ocorrência
+    conhecida na fonte, mostrada em dia vazio. :raises pydantic.ValidationError: Se a
+    variável do webhook não estiver definida.
     """
     mensagem = discord.montar_mensagem(
         janela=janela,

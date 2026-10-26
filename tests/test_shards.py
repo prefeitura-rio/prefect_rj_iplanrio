@@ -70,7 +70,7 @@ async def read_children(deployment: UUID, count: int) -> list[FlowRun]:
         ),
     ],
 )
-def test_the_parameters_of_a_child_run_are_those_of_its_parent_with_its_shard(parameters, expected):
+def test_the_parameters_of_a_child_run_are_those_of_its_parent_with_its_shard(parameters, expected) -> None:
     """Replace `shards` with `shard`, and leave the rest and the parent as they are."""
     before = repr(parameters)
 
@@ -78,7 +78,7 @@ def test_the_parameters_of_a_child_run_are_those_of_its_parent_with_its_shard(pa
     assert repr(parameters) == before
 
 
-async def test_the_parent_waits_for_every_child_run_and_ends_when_all_complete(deployment):
+async def test_the_parent_waits_for_every_child_run_and_ends_when_all_complete(deployment) -> None:
     """Create one run for each shard, in the queue and with the tag, and wait for all of them."""
     parent = create_task(run_shards(deployment, PARAMETERS, 3, "tbl", POLL))
     children = await read_children(deployment, 3)
@@ -100,7 +100,7 @@ async def test_the_parent_waits_for_every_child_run_and_ends_when_all_complete(d
     await parent
 
 
-async def test_a_failed_child_run_fails_the_parent_after_the_others_have_ended(deployment):
+async def test_a_failed_child_run_fails_the_parent_after_the_others_have_ended(deployment) -> None:
     """Wait for every child run, and then raise with the name of the one that failed."""
     parent = create_task(run_shards(deployment, PARAMETERS, 3, "tbl", POLL))
     children = await read_children(deployment, 3)
@@ -117,7 +117,7 @@ async def test_a_failed_child_run_fails_the_parent_after_the_others_have_ended(d
         await parent
 
 
-async def test_a_parent_that_stops_cancels_the_child_runs_that_have_not_ended(deployment):
+async def test_a_parent_that_stops_cancels_the_child_runs_that_have_not_ended(deployment) -> None:
     """Cancel a waiting run at once and a running one in two steps, and keep a completed run."""
     parent = create_task(run_shards(deployment, PARAMETERS, 3, "tbl", POLL))
     children = await read_children(deployment, 3)

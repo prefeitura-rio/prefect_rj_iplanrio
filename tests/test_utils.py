@@ -31,7 +31,7 @@ def status_error(status: int) -> HTTPStatusError:
         pytest.param(None, False, id="no_error"),
     ],
 )
-def test_only_a_transient_error_is_sent_again(error, expected):
+def test_only_a_transient_error_is_sent_again(error, expected) -> None:
     """Send a request again after a timeout, a network error, a 429 or a 5xx."""
     assert is_transient(error) is expected
 
@@ -43,7 +43,7 @@ def test_only_a_transient_error_is_sent_again(error, expected):
         pytest.param(None, "boom", id="without_a_link"),
     ],
 )
-def test_the_failure_message_names_the_flow_the_run_and_the_reason(url, tail):
+def test_the_failure_message_names_the_flow_the_run_and_the_reason(url, tail) -> None:
     """Name the flow and the run, give the reason, and add the link if there is one."""
     message = failure_message("dump", "orders", "boom", url)
 
@@ -51,14 +51,14 @@ def test_the_failure_message_names_the_flow_the_run_and_the_reason(url, tail):
     assert message.endswith(tail)
 
 
-def test_regression_a_long_reason_never_goes_over_the_limit_of_discord():
+def test_regression_a_long_reason_never_goes_over_the_limit_of_discord() -> None:
     """Regression: Discord refuses a message of more than 2000 characters."""
     message = failure_message("f", "r", "x" * 5000, "https://p")
 
     assert len(message) == DISCORD_LIMIT
 
 
-def test_the_capture_time_is_the_scheduled_start_in_sao_paulo():
+def test_the_capture_time_is_the_scheduled_start_in_sao_paulo() -> None:
     """Give a time with the offset of São Paulo, which is not UTC."""
     assert capture_time().utcoffset() == timedelta(hours=-3)
 
@@ -91,7 +91,7 @@ def test_the_capture_time_is_the_scheduled_start_in_sao_paulo():
         ),
     ],
 )
-def test_the_dbt_message_names_the_repository_and_never_its_url(outcome, expected):
+def test_the_dbt_message_names_the_repository_and_never_its_url(outcome, expected) -> None:
     """Show the name of the repository and the nodes, with no URL (it can hold a token)."""
     request = DbtRun(
         repository="https://TOKEN@github.com/org/queries-x.git", command="build", target="prod", select="tag:daily"
@@ -103,7 +103,7 @@ def test_the_dbt_message_names_the_repository_and_never_its_url(outcome, expecte
     assert "TOKEN" not in message
 
 
-def test_the_dbt_message_stays_within_the_limit_of_discord():
+def test_the_dbt_message_stays_within_the_limit_of_discord() -> None:
     """Cut a long list of nodes to what Discord accepts."""
     nodes = [DbtNode(name=f"n{number}", status="error", message="x" * 100) for number in range(100)]
 
@@ -112,7 +112,7 @@ def test_the_dbt_message_stays_within_the_limit_of_discord():
     assert len(message) == DISCORD_LIMIT
 
 
-def test_only_the_nodes_that_failed_or_warned_are_read_from_a_dbt_result(dbt_node):
+def test_only_the_nodes_that_failed_or_warned_are_read_from_a_dbt_result(dbt_node) -> None:
     """Skip the nodes that passed, and take a node name or a plain unique id."""
     result = SimpleNamespace(
         result=SimpleNamespace(
@@ -132,6 +132,6 @@ def test_only_the_nodes_that_failed_or_warned_are_read_from_a_dbt_result(dbt_nod
     ]
 
 
-def test_a_dbt_result_with_no_nodes_has_none_to_read():
+def test_a_dbt_result_with_no_nodes_has_none_to_read() -> None:
     """Give an empty list for a command such as `debug`."""
     assert read_nodes(SimpleNamespace(success=True)) == []

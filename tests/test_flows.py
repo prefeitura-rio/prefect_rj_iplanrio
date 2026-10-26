@@ -29,10 +29,10 @@ def calls(monkeypatch):
         seen.append(("write_parquet_records", records, folder.exists()))
         return folder
 
-    async def upload_files_to_gcs(folder, table, **settings):
+    async def upload_files_to_gcs(folder, table, **settings) -> None:
         seen.append(("upload", isinstance(folder, Path), table, settings))
 
-    async def publish_table_in_bq(table, cloud):
+    async def publish_table_in_bq(table, cloud) -> None:
         seen.append(("publish", table, cloud))
 
     monkeypatch.setattr(flows, "write_records", write_records)
@@ -96,7 +96,7 @@ def settings(source_format, dump_mode, options):
         ),
     ],
 )
-async def test_records_are_written_loaded_and_published_in_that_order(calls, arguments, writer, uploaded):
+async def test_records_are_written_loaded_and_published_in_that_order(calls, arguments, writer, uploaded) -> None:
     """Write the records in a folder that exists, load that folder, and publish the table last."""
     await load_records(RECORDS, TABLE, CLOUD, **arguments)
 
@@ -110,7 +110,8 @@ def alerts(monkeypatch):
     logged = []
 
     class Frame:
-        def __init__(self, rows):
+        def __init__(self, rows) -> None:
+            """Store the arguments."""
             self.rows = rows
 
         def to_dicts(self):
@@ -120,7 +121,7 @@ def alerts(monkeypatch):
         assert project == "rj-iplanrio"
         return Frame([{"n": 1}, {"n": 2}, {"n": 3}] if query == "three" else [])
 
-    async def notify_discord(message, *, webhook):
+    async def notify_discord(message, *, webhook) -> None:
         sent.append((message, webhook))
 
     monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://hook")
@@ -147,11 +148,11 @@ def alerts(monkeypatch):
 )
 async def test_an_alert_goes_to_discord_for_each_row_that_builds_a_message(
     alerts, query, test_mode, sent_messages, logged_messages
-):
+) -> None:
     """Send a message for each row, skip a row with no message, and log in test mode."""
     sent, logged = alerts
 
-    def build_message(row):
+    def build_message(row) -> str | None:
         return None if row["n"] == 2 else f"row {row['n']}"
 
     await send_alerts(query, build_message, test_mode=test_mode)
@@ -164,20 +165,20 @@ def dispatch(monkeypatch):
     """Return what a run of `dispatch_hsm` did, with fakes for the sender, the notices and the load."""
     done = []
 
-    async def post_notice(text):
+    async def post_notice(text) -> None:
         done.append(("notice", text.splitlines()[0]))
 
     async def run_hsm(hsm, recipients, selection, wait, *, test_mode):
         done.append(("run_hsm", hsm.campaign_name, len(recipients), selection.percentage, wait, test_mode))
         return HsmRun(rows=[{"id": "1"}], dispatch_date="2026-10-22 10:00", error=state["error"])
 
-    async def post_hsm_results(_hsm, dispatch_date, count, *, test_mode):
+    async def post_hsm_results(_hsm, dispatch_date, count, *, test_mode) -> None:
         done.append(("results", dispatch_date, count, test_mode))
 
-    async def load_records(rows, table, cloud):
+    async def load_records(rows, table, cloud) -> None:
         done.append(("load", rows, table, cloud))
 
-    async def no_sleep(seconds):
+    async def no_sleep(seconds) -> None:
         done.append(("sleep", seconds))
 
     state = {"error": None}
@@ -195,12 +196,12 @@ PEOPLE = [Recipient(to="5521999999999", external_id="1")]
 WAITS = Waits(before_dispatch=5, before_results=15)
 
 
-async def run_dispatch(campaign, recipients):
+async def run_dispatch(campaign, recipients) -> None:
     """Run `dispatch_hsm` with the sample waits, table and cloud."""
     await dispatch_hsm(campaign, recipients, whitelist_percentage=30, waits=WAITS, table=TABLE, cloud=CLOUD)
 
 
-async def test_nobody_to_message_posts_a_notice_and_ends(dispatch):
+async def test_nobody_to_message_posts_a_notice_and_ends(dispatch) -> None:
     """Post the notice and send nothing, record nothing and wait for nothing."""
     done, _ = dispatch
 
@@ -209,7 +210,7 @@ async def test_nobody_to_message_posts_a_notice_and_ends(dispatch):
     assert [step[0] for step in done] == ["notice"]
 
 
-async def test_a_run_sends_records_waits_and_reports(dispatch):
+async def test_a_run_sends_records_waits_and_reports(dispatch) -> None:
     """Send to the people, record what went out, then wait and post the results."""
     done, _ = dispatch
 
@@ -223,7 +224,7 @@ async def test_a_run_sends_records_waits_and_reports(dispatch):
     ]
 
 
-async def test_a_test_run_records_nothing(dispatch):
+async def test_a_test_run_records_nothing(dispatch) -> None:
     """Send and report, but never load the rows of a test."""
     done, _ = dispatch
 
@@ -233,7 +234,7 @@ async def test_a_test_run_records_nothing(dispatch):
     assert done[0][1] == "teste-demo"
 
 
-async def test_a_failed_batch_is_recorded_and_then_the_run_raises(dispatch):
+async def test_a_failed_batch_is_recorded_and_then_the_run_raises(dispatch) -> None:
     """Record the batches that went out before the error, and skip the wait and the results."""
     done, state = dispatch
     state["error"] = "batch 2 failed"

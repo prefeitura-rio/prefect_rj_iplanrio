@@ -7,7 +7,10 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import RawText
 
 @dataclass(frozen=True)
 class Source:
-    """The BigQuery dataset that was loaded into Oracle. With no `table_ids`, every table of the dataset counts."""
+    """The BigQuery dataset that was loaded into Oracle.
+
+    With no `table_ids`, every table of the dataset counts.
+    """
 
     project: str = "rj-iplanrio-dia"
     dataset_id: str = "nota_carioca_staging"
@@ -18,9 +21,9 @@ class Source:
 class Options:
     """How the validation runs.
 
-    With `compute_column_metrics`, it reads each whole table in both databases, which is slow. With
-    `fail_on_divergence`, the run fails if a table differs. `template_schema` and `excluded_columns` are the same as
-    in the load, and so is `raw_text_encoding`.
+    With `compute_column_metrics`, it reads each whole table in both databases, which is
+    slow. With `fail_on_divergence`, the run fails if a table differs. `template_schema`
+    and `excluded_columns` are the same as in the load, and so is `raw_text_encoding`.
     """
 
     compute_column_metrics: bool = True

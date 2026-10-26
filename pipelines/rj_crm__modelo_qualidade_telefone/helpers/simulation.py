@@ -1,10 +1,11 @@
 """Simulate four ways to choose a phone on the same pool of candidates: the new model, the model in production,
 a heuristic and a random choice.
 
-The number that matters is the gap: the share of the sends that failed that the algorithm would change,
-minus the share of the good sends that it would change. A high gap means that the algorithm swaps the
-phone when it should and keeps it when it should not. The random ranking shares the pool, so its gap is
-the floor of noise. An algorithm that does not beat it with significance does not tell anything.
+The number that matters is the gap: the share of the sends that failed that the
+algorithm would change, minus the share of the good sends that it would change. A high
+gap means that the algorithm swaps the phone when it should and keeps it when it should
+not. The random ranking shares the pool, so its gap is the floor of noise. An algorithm
+that does not beat it with significance does not tell anything.
 """
 
 from collections.abc import Mapping, Sequence
@@ -34,9 +35,10 @@ PICK = ["id_interacao", "telefone_sugerido"]
 def drop_contaminated(events: pl.DataFrame, phones: frozenset[str]) -> tuple[pl.DataFrame, float]:
     """Drop the sends (every row of an `id_interacao`) where the phone used or any candidate is in the training set.
 
-    The new model trains on all the data, and the label of a training phone sums a window of days that can
-    hold the send that is judged here, so the outcome would leak to the model. A whole send goes, not
-    only the row of the candidate, so the pool stays the same for every algorithm.
+    The new model trains on all the data, and the label of a training phone sums a
+    window of days that can hold the send that is judged here, so the outcome would leak
+    to the model. A whole send goes, not only the row of the candidate, so the pool
+    stays the same for every algorithm.
 
     Return the clean events and the fraction of the sends that were dropped.
     """
@@ -65,7 +67,8 @@ def sends_of(events: pl.DataFrame) -> pl.DataFrame:
 def evaluated_flags(events: pl.DataFrame, sends: pl.DataFrame) -> Flags:
     """Tell, for each send, whether the phone really used was among the candidates that were scored.
 
-    Every algorithm shares the pool, so they share the flags. Only the rule that picks the suggestion changes.
+    Every algorithm shares the pool, so they share the flags. Only the rule that picks
+    the suggestion changes.
     """
     pool = set(zip(events["id_interacao"].to_list(), events["telefone"].to_list(), strict=True))
     used = zip(sends["id_interacao"].to_list(), sends["telefone_usado"].to_list(), strict=True)
@@ -129,7 +132,8 @@ def rank_by_model(events: pl.DataFrame, booster: Booster) -> pl.DataFrame:
 def rank_at_random(events: pl.DataFrame, seed: int = RANDOM_STATE) -> pl.DataFrame:
     """Return one candidate of each send, at random, from the same pool.
 
-    It isolates what is real merit in a learned or heuristic ranking from only trying another number.
+    It isolates what is real merit in a learned or heuristic ranking from only trying
+    another number.
     """
     draws = np.random.default_rng(seed).random(events.height)
     drawn = events.select("id_interacao", pl.col("telefone").alias("telefone_sugerido")).with_columns(
@@ -142,10 +146,11 @@ def rank_at_random(events: pl.DataFrame, seed: int = RANDOM_STATE) -> pl.DataFra
 def rank_by_heuristic(events: pl.DataFrame, reliability: Mapping[str, float] = RELIABILITY_RANKING) -> pl.DataFrame:
     """Return the candidate of each send by a rule with no model.
 
-    A candidate whose `taxa_sucesso_anterior` is over the threshold wins, and the rate breaks a tie. The others
-    fall back to the system with the best reliability among the systems where the candidate is registered.
-    The two layers differ on purpose: an individual rate and a reliability of a system are not
-    the same unit, so they are never compared. A candidate over the threshold always comes first.
+    A candidate whose `taxa_sucesso_anterior` is over the threshold wins, and the rate
+    breaks a tie. The others fall back to the system with the best reliability among the
+    systems where the candidate is registered. The two layers differ on purpose: an
+    individual rate and a reliability of a system are not the same unit, so they are
+    never compared. A candidate over the threshold always comes first.
     """
     fallback = pl.max_horizontal(
         pl.when(pl.col(f"qtd_aparicoes_{system}") > 0).then(pl.lit(reliability.get(system), pl.Float64)).otherwise(None)
@@ -166,7 +171,8 @@ def rank_by_heuristic(events: pl.DataFrame, reliability: Mapping[str, float] = R
 def build_rankings(events: pl.DataFrame, new: Booster, production: Booster | None) -> dict[str, pl.DataFrame]:
     """Return one ranking for each algorithm, on the same pool.
 
-    `production` is the champion, and it is `None` in the first run, so that ranking is left out.
+    `production` is the champion, and it is `None` in the first run, so that ranking is
+    left out.
     """
     rankings = {NEW_MODEL: rank_by_model(events, new)}
 
@@ -191,10 +197,10 @@ def gap_test(changes: Flags, failed: Flags) -> SignificanceTest:
 def pair_test(changes: Mapping[str, Flags], failed: Flags, first: str, second: str) -> SignificanceTest | None:
     """Test whether the gaps of two algorithms differ, or the difference is noise.
 
-    The test is paired, because the rankings share the pool and the sends: each send is one pair
-    of observations (`d = change_a - change_b`), tested apart for the failed and for the good sends (Welch,
-    unequal variances). Return `None` if one of the names is missing, such as `modelo_producao` before
-    any champion.
+    The test is paired, because the rankings share the pool and the sends: each send is
+    one pair of observations (`d = change_a - change_b`), tested apart for the failed
+    and for the good sends (Welch, unequal variances). Return `None` if one of the names
+    is missing, such as `modelo_producao` before any champion.
     """
     if first not in changes or second not in changes:
         return None

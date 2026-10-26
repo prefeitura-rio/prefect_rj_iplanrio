@@ -1,4 +1,3 @@
-# ruff: noqa: PLR2004
 import json
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -8,14 +7,20 @@ import httpx2
 import pytest
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle import tasks as tasks_module
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import sqlldr_progress
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import discord as discord_module
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import oracle, sqlldr
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import oracle, sqlldr, sqlldr_progress
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import ExportedFile
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import LoadPlan
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import DiscordStatusMessage
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import format_validation_line
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import COLOR_CANCELLED, COLOR_FAILURE, COLOR_RUNNING, COLOR_SUCCESS, ItemStatus, RunStatus
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import (
+    COLOR_CANCELLED,
+    COLOR_FAILURE,
+    COLOR_RUNNING,
+    COLOR_SUCCESS,
+    ItemStatus,
+    RunStatus,
+)
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify import LoadNotifier, NotifierConfig, current
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify_view import (
     RunState,
@@ -37,6 +42,7 @@ class Discord:
     """Webhook falso que registra o que o notificador envia."""
 
     def __init__(self) -> None:
+        """Store the arguments."""
         self.calls: list[tuple[str, dict[str, object]]] = []
         self.transport = httpx2.MockTransport(self.handle)
 
@@ -97,14 +103,17 @@ def state(**overrides: object) -> RunState:
     return replace(base, **overrides)
 
 
-# --- weights -----------------------------------------------------------------------------------------------------
+# --- weights
+# -----------------------------------------------------------------------------------------------------
 
 
 def test_table_fraction_follows_stage_weights_and_load_bytes() -> None:
     # Given a table loading half of its bytes, and tables at later stages
+    """Check that table fraction follows stage weights and load bytes."""
     loading = TableState("A", step=TableStep.LOAD, load=snapshot(50 * GIB))
     indexing = TableState("A", step=TableStep.INDEXES, indexes_done=1, indexes_total=2)
-    # Then the fraction is the finished stages plus the weighted inner progress, out of 100
+    # Then the fraction is the finished stages plus the weighted inner progress, out of
+    # 100
     assert table_fraction(TableState("A")) == 0.0
     assert table_fraction(loading) == pytest.approx((5 + 60 * 0.5) / 100)
     assert table_fraction(indexing) == pytest.approx((5 + 60 + 3 + 20 * 0.5) / 100)
@@ -113,21 +122,25 @@ def test_table_fraction_follows_stage_weights_and_load_bytes() -> None:
 
 def test_overall_fraction_normalizes_active_steps_and_weights_tables_by_volume() -> None:
     # Given two tables, A (3x the bytes of B) done and B untouched
+    """Check that overall fraction normalizes active steps and weights tables by volume."""
     tables = {"A": TableState("A", weight=3, step=TableStep.DONE), "B": TableState("B", weight=1)}
     without_dbt = state(tables=tables)
     with_dbt = state(tables=tables, run_dbt=True, step=Step.TABLES)
-    # Then the tables phase is 75% done, and steps are normalized (export 5 + tables 70 + wait 4 + swap 1 = 80)
+    # Then the tables phase is 75% done, and steps are normalized (export 5 + tables 70
+    # + wait 4 + swap 1 = 80)
     assert overall_fraction(without_dbt) == pytest.approx((5 + 70 * 0.75) / 80)
     assert overall_fraction(with_dbt) == pytest.approx((20 + 5 + 70 * 0.75) / 100)
     assert overall_fraction(state(status=RunStatus.SUCCESS)) == 1.0
     assert overall_fraction(state(mode="synonyms_only", step=Step.SWAP)) == 0.0
 
 
-# --- notifier ----------------------------------------------------------------------------------------------------
+# --- notifier
+# ----------------------------------------------------------------------------------------------------
 
 
 def test_full_run_walks_the_steps_and_ends_green_with_per_table_summary() -> None:
     # Given a live notifier for two tables, dbt included
+    """Check that full run walks the steps and ends green with per table summary."""
     discord = Discord()
     notifier = make(discord, run_dbt=True)
     # When the flow walks through its steps
@@ -144,7 +157,8 @@ def test_full_run_walks_the_steps_and_ends_green_with_per_table_summary() -> Non
         notifier.table_done("B", 50)
         notifier.enter(Step.INMEMORY_WAIT)
         notifier.enter(Step.SWAP)
-    # Then it is one POST and edits, the last embed is green with summaries, and a standalone line follows
+    # Then it is one POST and edits, the last embed is green with summaries, and a
+    # standalone line follows
     assert discord.calls[0][0] == "POST"
     assert {method for method, body in discord.calls if "embeds" in body} == {"POST", "PATCH"}
     last = discord.embeds[-1]
@@ -160,13 +174,15 @@ def test_full_run_walks_the_steps_and_ends_green_with_per_table_summary() -> Non
 
 def test_running_view_shows_slot_sessions_load_detail_and_forecast() -> None:
     # Given A loading 5 GB of 10 GB in 50 s and B waiting
+    """Check that running view shows slot sessions load detail and forecast."""
     notifier = make(None)
     notifier.set_tables({"A": 10 * GIB, "B": 10 * GIB})
     notifier.enter(Step.TABLES)
     notifier.table_step("A", TableStep.LOAD, slot="B")
     notifier.loading(snapshot(5 * GIB, total=10 * GIB, elapsed=50))
     view = build_view(notifier.state)
-    # Then the current table shows bytes, files, rate and ETA, the slot and sessions are facts, and B waits
+    # Then the current table shows bytes, files, rate and ETA, the slot and sessions are
+    # facts, and B waits
     a, b = view.tables
     assert a.stage == "Carga SQL*Loader (slot B)"
     assert a.detail == "5,0 GB de 10,0 GB · 3/10 arquivos · 102,4 MB/s"
@@ -182,6 +198,7 @@ def test_running_view_shows_slot_sessions_load_detail_and_forecast() -> None:
 
 def test_index_progress_is_shown_for_the_current_table() -> None:
     # Given a table creating its indexes
+    """Check that index progress is shown for the current table."""
     notifier = make(None, tables=("A",))
     notifier.enter(Step.TABLES)
     notifier.table_step("A", TableStep.INDEXES)
@@ -194,6 +211,7 @@ def test_index_progress_is_shown_for_the_current_table() -> None:
 
 def test_failure_in_a_table_marks_it_and_the_step_and_reraises() -> None:
     # Given a run that dies while loading table B
+    """Check that failure in a table marks it and the step and reraises."""
     discord = Discord()
     notifier = make(discord)
     with pytest.raises(RuntimeError, match="sqlldr"), notifier.guard():
@@ -201,7 +219,8 @@ def test_failure_in_a_table_marks_it_and_the_step_and_reraises() -> None:
         notifier.enter(Step.TABLES)
         notifier.table_step("B", TableStep.LOAD)
         raise RuntimeError("sqlldr exited 1")
-    # Then the final message is red, names the table and stage, and the standalone line has the short error
+    # Then the final message is red, names the table and stage, and the standalone line
+    # has the short error
     last = discord.embeds[-1]
     assert last["color"] == COLOR_FAILURE
     assert "Falhou em Carga SQL*Loader" in str(last["description"])
@@ -212,6 +231,7 @@ def test_failure_in_a_table_marks_it_and_the_step_and_reraises() -> None:
 
 def test_interruption_finalizes_as_cancelled() -> None:
     # Given a run interrupted during the export
+    """Check that interruption finalizes as cancelled."""
     discord = Discord()
     notifier = make(discord)
     with pytest.raises(KeyboardInterrupt), notifier.guard():
@@ -225,6 +245,7 @@ def test_interruption_finalizes_as_cancelled() -> None:
 
 def test_synonyms_only_gets_a_minimal_message() -> None:
     # Given a synonyms-only run
+    """Synonym only gets a minimal message."""
     discord = Discord()
     notifier = make(discord, tables=(), mode="synonyms_only")
     with notifier.guard():
@@ -241,6 +262,7 @@ def test_synonyms_only_gets_a_minimal_message() -> None:
 
 def test_disabled_notifier_sends_nothing_and_keeps_tracking() -> None:
     # Given no webhook
+    """Check that disabled notifier sends nothing and keeps tracking."""
     notifier = make(None)
     notifier.begin()
     notifier.enter(Step.TABLES)
@@ -252,6 +274,8 @@ def test_disabled_notifier_sends_nothing_and_keeps_tracking() -> None:
 
 def test_a_bug_in_the_notifier_never_reaches_the_flow(monkeypatch: pytest.MonkeyPatch) -> None:
     # Given a view builder that crashes
+    """Check that a bug in the notifier never reaches the flow."""
+
     def broken(_: object) -> None:
         raise ZeroDivisionError
 
@@ -265,7 +289,8 @@ def test_a_bug_in_the_notifier_never_reaches_the_flow(monkeypatch: pytest.Monkey
     assert notifier.state.status is RunStatus.SUCCESS
 
 
-# --- validation comparison ---------------------------------------------------------------------------------------
+# --- validation comparison
+# ---------------------------------------------------------------------------------------
 
 
 def fields_by_name(embed: dict[str, object]) -> dict[str, str]:
@@ -275,7 +300,7 @@ def fields_by_name(embed: dict[str, object]) -> dict[str, str]:
 
 
 def count_tables(notifier: LoadNotifier, names: tuple[str, ...], validated: tuple[str, ...]) -> None:
-    notifier.set_bigquery_rows({name: 73_891_343 for name in names})
+    notifier.set_bigquery_rows(dict.fromkeys(names, 73891343))
     for name in validated:
         notifier.set_physical_table(name, f"BQLOAD_{name}_B")
         notifier.table_loaded(name, 73_891_343)
@@ -284,6 +309,7 @@ def count_tables(notifier: LoadNotifier, names: tuple[str, ...], validated: tupl
 
 def test_success_message_compares_bigquery_sqlloader_and_oracle_with_the_physical_table() -> None:
     # Given two tables loaded and validated
+    """Check that success message compares bigquery sqlloader and oracle with the physical table."""
     discord = Discord()
     notifier = make(discord)
     with notifier.guard():
@@ -292,11 +318,10 @@ def test_success_message_compares_bigquery_sqlloader_and_oracle_with_the_physica
         count_tables(notifier, ("A", "B"), ("A", "B"))
         notifier.table_done("A", 73_891_343)
         notifier.table_done("B", 73_891_343)
-    # Then the final embed has a line per table naming the slot, and the standalone line sums them up
+    # Then the final embed has a line per table naming the slot, and the standalone line
+    # sums them up
     section = fields_by_name(discord.embeds[-1])["🔎 Validação"].splitlines()
-    assert section[0] == (
-        "✅ A · BigQuery 73.891.343 = SQL*Loader 73.891.343 = Oracle (BQLOAD_A_B) 73.891.343"
-    )
+    assert section[0] == ("✅ A · BigQuery 73.891.343 = SQL*Loader 73.891.343 = Oracle (BQLOAD_A_B) 73.891.343")
     assert len(section) == 2
     assert discord.standalone[0].endswith("· 2/2 tabelas validadas (linhas iguais na origem e no destino)")
     assert all("🔎 Validação" not in fields_by_name(embed) for embed in discord.embeds[:-1])
@@ -304,6 +329,7 @@ def test_success_message_compares_bigquery_sqlloader_and_oracle_with_the_physica
 
 def test_failure_keeps_validated_tables_and_shows_what_is_known_of_the_failing_one() -> None:
     # Given A validated and B failing in the SQL*Loader, after its slot is known
+    """Check that failure keeps validated tables and shows what is known of the failing one."""
     discord = Discord()
     notifier = make(discord)
     with pytest.raises(RuntimeError, match="sqlldr"), notifier.guard():
@@ -313,7 +339,8 @@ def test_failure_keeps_validated_tables_and_shows_what_is_known_of_the_failing_o
         notifier.set_physical_table("B", "BQLOAD_B_A")
         notifier.table_step("B", TableStep.LOAD)
         raise RuntimeError("sqlldr exited 1")
-    # Then A shows its full comparison, B has dashes for what never happened, and the summary says 1/2
+    # Then A shows its full comparison, B has dashes for what never happened, and the
+    # summary says 1/2
     section = fields_by_name(discord.embeds[-1])["🔎 Validação"].splitlines()
     assert section[0].startswith("✅ A · BigQuery 73.891.343 = SQL*Loader")
     assert section[1] == "❌ B · BigQuery 73.891.343 · SQL*Loader — · Oracle (BQLOAD_B_A) —"
@@ -322,6 +349,7 @@ def test_failure_keeps_validated_tables_and_shows_what_is_known_of_the_failing_o
 
 def test_a_count_mismatch_renders_red_with_the_difference() -> None:
     # Given a table whose Oracle count differs from BigQuery
+    """Check that a count mismatch renders red with the difference."""
     notifier = make(None, tables=("A",))
     notifier.set_bigquery_rows({"A": 10})
     notifier.set_physical_table("A", "BQLOAD_A_A")
@@ -335,6 +363,7 @@ def test_a_count_mismatch_renders_red_with_the_difference() -> None:
 
 def test_running_and_synonyms_only_views_have_no_validation_section() -> None:
     # Given a running view with counts, and a finished synonyms-only run
+    """Check that running and synonyms only views have no validation section."""
     running = make(None, tables=("A",))
     running.set_bigquery_rows({"A": 10})
     synonyms = make(None, tables=(), mode="synonyms_only")
@@ -345,7 +374,8 @@ def test_running_and_synonyms_only_views_have_no_validation_section() -> None:
     assert build_view(synonyms.state).validation == ()
 
 
-# --- reachability from tasks -------------------------------------------------------------------------------------
+# --- reachability from tasks
+# -------------------------------------------------------------------------------------
 
 
 def fake_artifact(**kwargs: object) -> str:
@@ -363,7 +393,9 @@ def fake_config() -> None:
 
 
 def test_load_task_feeds_the_active_notifier_without_receiving_it(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given a load task whose SQL*Loader reports one progress tick, run inside the notifier guard
+    # Given a load task whose SQL*Loader reports one progress tick, run inside the
+    # notifier guard
+    """Check that load task feeds the active notifier without receiving it."""
     notifier = make(None)
     snap = snapshot(25 * GIB)
     monkeypatch.setattr(tasks_module, "create_progress_artifact", fake_artifact)

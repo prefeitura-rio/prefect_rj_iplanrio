@@ -4,7 +4,7 @@ from polars import Expr, lit, select
 from toolkit.functions.decorators import arrow, native
 
 
-def test_a_declared_function_keeps_its_name_unless_another_is_given():
+def test_a_declared_function_keeps_its_name_unless_another_is_given() -> None:
     """Declare under the function name, unless `name` says another."""
 
     @native([VARCHAR], VARCHAR)
@@ -25,7 +25,7 @@ def test_a_declared_function_keeps_its_name_unless_another_is_given():
     assert (shout.name, other.name, whisper.name) == ("shout", "yell", "whisper")
 
 
-def test_a_declared_function_still_runs_as_the_function_it_wraps():
+def test_a_declared_function_still_runs_as_the_function_it_wraps() -> None:
     """Call a native function as Python, and an Arrow function on an expression."""
 
     @native([VARCHAR], VARCHAR)

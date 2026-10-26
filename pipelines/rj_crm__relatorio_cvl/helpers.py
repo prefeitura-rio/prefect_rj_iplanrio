@@ -27,8 +27,8 @@ def build_query(start_date: date, end_date: date) -> str:
 def flag_new_sessions(times: list[datetime]) -> list[bool]:
     """Flag the messages that start a session, for the times of one contact in order.
 
-    The first message starts a session, and so does the first one that comes more than 24
-    hours after the start of the current one.
+    The first message starts a session, and so does the first one that comes more than
+    24 hours after the start of the current one.
 
     ```python
     flag_new_sessions([t0, t0 + 1h, t0 + 25h, t0 + 26h])  # [True, False, True, False]
@@ -55,8 +55,8 @@ def fix_phone(phone: str | None) -> str | None:
 def build_sessions(messages: pl.DataFrame, report_month: str) -> pl.DataFrame:
     """Return the messages of a month with the 24 hour session of each one.
 
-    The new columns are `inicio_datetime`, `nova_sessao` (1 for the message that starts a
-    session), `id_sessao_24h` (the phone and the number of the session) and `mes_ano`.
+    The new columns are `inicio_datetime`, `nova_sessao` (1 for the message that starts
+    a session), `id_sessao_24h` (the phone and the number of the session) and `mes_ano`.
     A message without a phone starts no session. Only the messages of `report_month`
     (`YYYY-MM`) stay.
     """

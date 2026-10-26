@@ -105,7 +105,8 @@ def descrever_ultima_ocorrencia(ultima: datetime | None, referencia: datetime) -
 
     A frase entra na mensagem do Discord em dia sem ocorrências, e é o que distingue um
     dia tranquilo de uma fonte que parou de gerar dados: a distância cresce sozinha e
-    fica visível para quem acompanha o canal, sem limiar configurado nem estado guardado.
+    fica visível para quem acompanha o canal, sem limiar configurado nem estado
+    guardado.
 
     :param ultima: Instante da última ocorrência, ou ``None``.
     :param referencia: Data contra a qual medir a distância — o fim da janela.

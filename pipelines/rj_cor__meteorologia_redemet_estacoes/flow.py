@@ -15,7 +15,8 @@ async def rj_cor__meteorologia_redemet_estacoes(
 ) -> None:
     """Load the REDEMET stations of Rio de Janeiro to a BigQuery table, with the update date.
 
-    In `overwrite` the stations replace the table, so a station that left the API leaves it too.
+    In `overwrite` the stations replace the table, so a station that left the API leaves
+    it too.
     """
     stations = await fetch_stations_task()
 

@@ -73,7 +73,8 @@ class Pacer:
 async def post_mail(client: AsyncClient, relay: Relay, mail: Mail) -> bool:
     """Send a mail once and return whether the Data Relay accepted it.
 
-    Raise `HTTPStatusError` for a status of error, and `HTTPError` for a failure of the network.
+    Raise `HTTPStatusError` for a status of error, and `HTTPError` for a failure of the
+    network.
     """
     response = await client.post(
         relay.url,
@@ -87,10 +88,13 @@ async def post_mail(client: AsyncClient, relay: Relay, mail: Mail) -> bool:
 
 
 async def send_mail(client: AsyncClient, relay: Relay, mail: Mail, pacer: Pacer, pause: Pause = sleep) -> bool:
-    """Send a mail and try again after a failure that may pass. Return whether it went out.
+    """Send a mail and try again after a failure that may pass.
 
-    A status of 400, 401 or 403 is not tried again, because the Data Relay would refuse it again.
-    Any other failure is tried again up to `max_retries` times, `retry_delay` seconds apart.
+    Return whether it went out.
+
+    A status of 400, 401 or 403 is not tried again, because the Data Relay would refuse
+    it again. Any other failure is tried again up to `max_retries` times, `retry_delay`
+    seconds apart.
     """
     for attempt in range(1, relay.max_retries + 1):
         await pacer.wait()

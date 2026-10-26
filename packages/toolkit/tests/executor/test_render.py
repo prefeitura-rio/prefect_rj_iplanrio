@@ -22,12 +22,12 @@ ATTACH = {"alias": '"a"', "project": "'project=p'"}
         pytest.param(True, True, id="a_bool_is_kept"),
     ],
 )
-def test_composables_become_sql_at_any_depth(value, expected):
+def test_composables_become_sql_at_any_depth(value, expected) -> None:
     """Convert composables to SQL at any depth."""
     assert to_sql(value) == expected
 
 
-def test_a_value_that_the_template_needs_is_required():
+def test_a_value_that_the_template_needs_is_required() -> None:
     """Require every value that the template uses."""
     with pytest.raises(UndefinedError):
         render_template("duckdb/attach_bigquery", {})
@@ -42,7 +42,7 @@ def test_a_value_that_the_template_needs_is_required():
 )
 def test_the_pipeline_templates_are_searched_before_the_toolkit_ones(
     tmp_path, pipeline_has_it, expected
-):
+) -> None:
     """Search the pipeline templates before the toolkit templates."""
     if pipeline_has_it:
         (tmp_path / "duckdb").mkdir()
@@ -55,7 +55,7 @@ def test_the_pipeline_templates_are_searched_before_the_toolkit_ones(
     assert expected in sql
 
 
-def test_a_pipeline_template_can_import_a_toolkit_macro(tmp_path):
+def test_a_pipeline_template_can_import_a_toolkit_macro(tmp_path) -> None:
     """Let a pipeline template import a toolkit macro."""
     (tmp_path / "layer.sql").write_text(
         '{% from "duckdb/macros.sql" import arcgis_layer %}'
@@ -84,7 +84,7 @@ def test_a_pipeline_template_can_import_a_toolkit_macro(tmp_path):
 )
 def test_the_columns_are_renamed_to_slugs_that_bigquery_accepts(
     columns, expected, dump_values
-):
+) -> None:
     """Rename each column to a slug, and quote the original name."""
     values = dump_values(columns=build_column_aliases(columns))
 
@@ -93,7 +93,7 @@ def test_the_columns_are_renamed_to_slugs_that_bigquery_accepts(
     assert f"SELECT {expected}\n" in sql
 
 
-def test_a_cast_column_is_cast_in_the_select_list(dump_values):
+def test_a_cast_column_is_cast_in_the_select_list(dump_values) -> None:
     """Cast the column that the select list marks with a type."""
     values = dump_values(
         columns=[{"source": SQL('"h"'), "target": SQL('"h"'), "cast": SQL("VARCHAR")}]
@@ -116,14 +116,14 @@ def test_a_cast_column_is_cast_in_the_select_list(dump_values):
 )
 def test_only_a_sql_server_query_goes_through_the_text_decoder(
     db_type, expected, dump_values
-):
+) -> None:
     """Decode the text of a SQL Server query, which sends it in its code page."""
     sql = render_template("duckdb/extract_chunk", dump_values(type=db_type))
 
     assert f"SELECT {expected}\n" in sql
 
 
-def test_a_table_of_sql_server_is_not_decoded(dump_values):
+def test_a_table_of_sql_server_is_not_decoded(dump_values) -> None:
     """Leave the columns of an attached table alone: the extension decodes them."""
     values = dump_values(type="table", table=Identifier("src", "dbo", "t"))
 
@@ -142,7 +142,7 @@ def test_a_table_of_sql_server_is_not_decoded(dump_values):
         ),
     ],
 )
-def test_the_text_decoder_passes_what_is_not_windows_1252_text(value, expected):
+def test_the_text_decoder_passes_what_is_not_windows_1252_text(value, expected) -> None:
     """Define utf8_text in DuckDB, and keep every value that needs no decoding."""
     connection = duckdb.connect()
     connection.execute(render_template("duckdb/create_utf8_text", {}))
@@ -173,7 +173,7 @@ def test_the_text_decoder_passes_what_is_not_windows_1252_text(value, expected):
 )
 def test_each_source_runs_a_native_query_through_its_own_function(
     db_type, expected, dump_values
-):
+) -> None:
     """Wrap the native query in the function of the source extension."""
     sql = render_template("duckdb/extract_chunk", dump_values(type=db_type))
 
@@ -202,14 +202,14 @@ def test_each_source_runs_a_native_query_through_its_own_function(
 )
 def test_the_options_of_a_source_reach_its_table_expression(
     changes, expected, dump_values
-):
+) -> None:
     """Pass the sheet name and the ArcGIS where clause to the table expression."""
     sql = render_template("duckdb/extract_chunk", dump_values(**changes))
 
     assert expected in sql
 
 
-def test_a_sheet_is_written_from_local_files(dump_values):
+def test_a_sheet_is_written_from_local_files(dump_values) -> None:
     """Read the files, and copy them to the spreadsheet with the `gsheet` format."""
     values = dump_values(type="csv", spreadsheet=Literal("id1"), sheet=Literal("Aba 1"))
 
@@ -219,7 +219,7 @@ def test_a_sheet_is_written_from_local_files(dump_values):
     assert "TO 'id1' (FORMAT gsheet, SHEET 'Aba 1')" in sql
 
 
-def test_an_attached_table_wins_over_the_native_query(dump_values):
+def test_an_attached_table_wins_over_the_native_query(dump_values) -> None:
     """Read `src.public.orders`, so DuckDB can push the filters down to the source."""
     values = dump_values(table=Identifier("src", "public", "orders"))
 
@@ -263,7 +263,7 @@ def test_an_attached_table_wins_over_the_native_query(dump_values):
 )
 def test_the_filters_and_the_chunk_become_a_where_clause(
     filters, predicates, expected, dump_values
-):
+) -> None:
     """Add `WHERE` with every condition, and nothing when there are none."""
     values = dump_values(filters=filters, predicates=predicates)
 
@@ -271,7 +271,7 @@ def test_the_filters_and_the_chunk_become_a_where_clause(
     assert "WHERE" not in render_template("duckdb/extract_chunk", dump_values())
 
 
-def test_a_source_is_read_whole_with_a_plain_select(dump_values):
+def test_a_source_is_read_whole_with_a_plain_select(dump_values) -> None:
     """Select every row of a native query or of an attached table."""
     native = render_template("duckdb/select_source", dump_values(type="bigquery"))
     attached = render_template(

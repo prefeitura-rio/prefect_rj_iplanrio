@@ -60,7 +60,7 @@ def evaluate(expression: Expr) -> object:
         pytest.param("NULL::VARCHAR", None, id="null_stays_null"),
     ],
 )
-async def test_is_cpf_checks_the_digits(scalar, value, expected):
+async def test_is_cpf_checks_the_digits(scalar, value, expected) -> None:
     """Accept a CPF with the right check digits, and refuse the rest."""
     assert await scalar(f"is_cpf({value})") == expected
 
@@ -81,7 +81,7 @@ async def test_is_cpf_checks_the_digits(scalar, value, expected):
         pytest.param("NULL::VARCHAR", None, id="null_stays_null"),
     ],
 )
-async def test_is_cnpj_checks_the_characters(scalar, value, expected):
+async def test_is_cnpj_checks_the_characters(scalar, value, expected) -> None:
     """Accept a CNPJ with letters and right check digits, and refuse the rest."""
     assert await scalar(f"is_cnpj({value})") == expected
 
@@ -100,7 +100,7 @@ async def test_is_cnpj_checks_the_characters(scalar, value, expected):
 )
 async def test_normalize_gives_the_characters_of_a_valid_document(
     scalar, function, value, expected
-):
+) -> None:
     """Return the characters of a valid CPF or CNPJ, and NULL for an invalid one."""
     assert await scalar(f"normalize_{function}('{value}')") == expected
 
@@ -122,13 +122,15 @@ async def test_normalize_gives_the_characters_of_a_valid_document(
         pytest.param("NULL::VARCHAR", None, id="null_stays_null"),
     ],
 )
-async def test_is_phone_accepts_a_phone_of_brazil(scalar, value, expected):
+async def test_is_phone_accepts_a_phone_of_brazil(scalar, value, expected) -> None:
     """Accept a landline or mobile number, with the country code or not."""
     assert await scalar(f"is_phone({value})") == expected
 
 
 @given(st.lists(st.integers(0, 9), min_size=9, max_size=9))
-def test_a_cpf_with_the_right_check_digits_is_valid_and_a_changed_digit_is_not(base):
+def test_a_cpf_with_the_right_check_digits_is_valid_and_a_changed_digit_is_not(
+    base,
+) -> None:
     """Accept every CPF that the textbook loop builds, and refuse a changed digit."""
     cpf = cpf_with_digits(base)
     changed = cpf[:10] + str((int(cpf[10]) + 1) % 10)
@@ -138,7 +140,9 @@ def test_a_cpf_with_the_right_check_digits_is_valid_and_a_changed_digit_is_not(b
 
 
 @given(st.lists(st.integers(0, 9), min_size=12, max_size=12))
-def test_a_cnpj_with_the_right_check_digits_is_valid_and_a_changed_digit_is_not(base):
+def test_a_cnpj_with_the_right_check_digits_is_valid_and_a_changed_digit_is_not(
+    base,
+) -> None:
     """Accept every CNPJ that the textbook loop builds, and refuse a changed digit."""
     cnpj = cnpj_with_digits(base)
     changed = cnpj[:13] + str((int(cnpj[13]) + 1) % 10)
@@ -151,6 +155,6 @@ def test_a_cnpj_with_the_right_check_digits_is_valid_and_a_changed_digit_is_not(
     st.sampled_from(sorted(AREA_CODES)),
     st.from_regex(r"[2-5][0-9]{7}|9[0-9]{8}", fullmatch=True),
 )
-def test_every_area_code_with_a_valid_number_is_a_phone(area_code, number):
+def test_every_area_code_with_a_valid_number_is_a_phone(area_code, number) -> None:
     """Accept any assigned area code with a landline or a mobile number."""
     assert evaluate(documents.is_phone(lit(area_code + number))) is True

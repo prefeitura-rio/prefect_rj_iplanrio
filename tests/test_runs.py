@@ -18,6 +18,7 @@ class FakeClient:
     """A Prefect client that gives one flow run and records the state that it is set to."""
 
     def __init__(self, state: object | None) -> None:
+        """Store the arguments."""
         self.state = state
         self.set_to: list[tuple[UUID, str, bool]] = []
 

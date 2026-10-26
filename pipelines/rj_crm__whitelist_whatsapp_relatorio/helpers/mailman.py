@@ -106,8 +106,8 @@ def enviar_relatorio(
 def enviar(conexao: ConexaoDataRelay, destinatarios: list[str], assunto: str, corpo: str) -> None:
     """Envia o relatório pelo Data Relay.
 
-    ``is_html_body`` precisa ser ``True``: o padrão do endpoint é ``False``, e sem isso o
-    HTML chegaria como texto cru.
+    ``is_html_body`` precisa ser ``True``: o padrão do endpoint é ``False``, e sem isso
+    o HTML chegaria como texto cru.
 
     :param conexao: Endereço, chave e tempo limite do Data Relay.
     :param destinatarios: Lista de e-mails, que vira ``to_addresses``.

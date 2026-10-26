@@ -30,11 +30,12 @@ async def rj_sms__sisreg_disparo_lembretes(
 ) -> None:
     """Send an SMS reminder to each patient with an appointment tomorrow, through the Wetalkie API.
 
-    The query of `queries/appointments.sql` gives one recipient for each appointment, with the phone and
-    the `vars` of the template. A phone that comes twice gets one message. With `destinations`, the query is
-    skipped and these are the recipients. They go out in batches of `dispatch.chunk_size`, and every batch
-    that goes out is recorded in `table`, even if a later batch fails. Raise `RuntimeError` if the API does
-    not answer or a batch fails.
+    The query of `queries/appointments.sql` gives one recipient for each appointment,
+    with the phone and the `vars` of the template. A phone that comes twice gets one
+    message. With `destinations`, the query is skipped and these are the recipients.
+    They go out in batches of `dispatch.chunk_size`, and every batch that goes out is
+    recorded in `table`, even if a later batch fails. Raise `RuntimeError` if the API
+    does not answer or a batch fails.
     """
     to_send = await read_recipients_task(dispatch, destinations)
 

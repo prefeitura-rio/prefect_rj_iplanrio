@@ -1,9 +1,10 @@
 """The rules of theme and cause, applied to the summary of each session.
 
-The rules are Python functions of the catalog `taxonomia_regras`. They were made by a model over a sample,
-and measured for precision, and a person put them in the catalog. Here they only run, so no model is called.
-The same table has the themes (`etapa = tema`, with no parent) and the causes (`etapa = motivo`, each with
-the theme that it belongs to).
+The rules are Python functions of the catalog `taxonomia_regras`. They were made by a
+model over a sample, and measured for precision, and a person put them in the catalog.
+Here they only run, so no model is called. The same table has the themes (`etapa =
+tema`, with no parent) and the causes (`etapa = motivo`, each with the theme that it
+belongs to).
 """
 
 from collections.abc import Callable, Mapping, Sequence
@@ -51,8 +52,9 @@ def compile_catalog(rules: Sequence[Rule]) -> dict[str, list[CompiledRule]]:
 def match_row(row: Mapping[str, JsonValue], rules: Sequence[CompiledRule]) -> list[str]:
     """Return the categories whose rule matches the summary of a session.
 
-    A rule with a parent runs only for a session that already has that theme in `tema_nome`: a cause belongs
-    inside a theme, and not to the whole secretariat. A rule that fails on a session is skipped and logged.
+    A rule with a parent runs only for a session that already has that theme in
+    `tema_nome`: a cause belongs inside a theme, and not to the whole secretariat. A
+    rule that fails on a session is skipped and logged.
     """
     summary = row.get("resumo")
     raw_themes = row.get("tema_nome")
@@ -82,9 +84,9 @@ def match_row(row: Mapping[str, JsonValue], rules: Sequence[CompiledRule]) -> li
 def apply_rules(rows: Sequence[Row], index: Mapping[str, Sequence[CompiledRule]], column: str) -> list[Row]:
     """Return the rows with `column` filled with the categories that the rules found, none if nothing matches.
 
-    Only a session with relevant content and a summary gets rules, those of its secretariat or, with none,
-    of `Sem secretaria identificada`. For the others the column is empty. With no rule at all, the rows come back
-    as they are.
+    Only a session with relevant content and a summary gets rules, those of its
+    secretariat or, with none, of `Sem secretaria identificada`. For the others the
+    column is empty. With no rule at all, the rows come back as they are.
     """
     if not index:
         return list(rows)

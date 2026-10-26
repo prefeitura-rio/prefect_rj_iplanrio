@@ -28,7 +28,10 @@ class Forecast(TypedDict):
 
 
 class Alerts(TypedDict, total=False):
-    """The rules of the alert of heavy rain on Discord. The alert is off unless `send` is set."""
+    """The rules of the alert of heavy rain on Discord.
+
+    The alert is off unless `send` is set.
+    """
 
     send: bool
     max_daily: int

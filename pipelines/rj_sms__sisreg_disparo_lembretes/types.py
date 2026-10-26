@@ -20,9 +20,10 @@ type Row = dict[str, JsonValue]
 class Dispatch:
     """How the reminders go out.
 
-    The recipients come from BigQuery, with `billing_project_id` as the project of the query. The flow
-    sends them to the HSM `id_hsm` in batches of `chunk_size`, and each batch is a campaign named
-    `<campaign_name>-<date>-lote<number>` of the cost center `cost_center_id`.
+    The recipients come from BigQuery, with `billing_project_id` as the project of the
+    query. The flow sends them to the HSM `id_hsm` in batches of `chunk_size`, and each
+    batch is a campaign named `<campaign_name>-<date>-lote<number>` of the cost center
+    `cost_center_id`.
     """
 
     billing_project_id: str = BILLING_PROJECT

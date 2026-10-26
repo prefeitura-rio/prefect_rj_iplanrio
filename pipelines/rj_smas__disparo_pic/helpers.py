@@ -25,8 +25,9 @@ def build_query(folder: Path, campaign: Campaign, event_date: str) -> str:
 def read_event_date(approval: pl.DataFrame) -> str | None:
     """Return the date of the event if the dispatch of today is approved, else nothing.
 
-    The status is the first of the values of `APROVACAO_DISPARO_AVISO`, in lower case and sorted, and it must be
-    `aprovado`. The date is the first value of `DATA_ENTREGA`.
+    The status is the first of the values of `APROVACAO_DISPARO_AVISO`, in lower case
+    and sorted, and it must be `aprovado`. The date is the first value of
+    `DATA_ENTREGA`.
     """
     if approval.is_empty() or APPROVAL_COLUMN not in approval.columns:
         logger.info("The approval table has no row for today")
@@ -56,8 +57,8 @@ def read_texts(frame: pl.DataFrame) -> list[str]:
 def read_test_texts(setting: str | None) -> list[str]:
     """Return the destinations of the setting `DESTINATIONS`, a JSON list of objects, as one JSON text each.
 
-    Raise `ValueError` if the setting is empty: a test with no destination must not fall back to the people
-    of the query.
+    Raise `ValueError` if the setting is empty: a test with no destination must not fall
+    back to the people of the query.
     """
     if not setting or not setting.strip():
         raise ValueError("A test needs the setting DESTINATIONS")

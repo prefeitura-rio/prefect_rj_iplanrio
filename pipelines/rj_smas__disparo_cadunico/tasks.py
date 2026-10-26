@@ -14,8 +14,9 @@ from utils.tasks import read_bq
 async def read_recipients_task(query: str, *, test_mode: bool) -> list[Recipient]:
     """Read the people to message, each with a phone and a CPF.
 
-    A test reads the setting `DESTINATIONS`. Any other run reads the query. A destination with no phone or no CPF is
-    left out. Raise `ValueError` if the destinations are not empty and none is valid.
+    A test reads the setting `DESTINATIONS`. Any other run reads the query. A
+    destination with no phone or no CPF is left out. Raise `ValueError` if the
+    destinations are not empty and none is valid.
     """
     if test_mode:
         texts = read_test_texts(Settings().DESTINATIONS)

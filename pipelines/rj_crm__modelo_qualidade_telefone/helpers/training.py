@@ -1,11 +1,12 @@
 """Train the LightGBM of the monthly retrain: a search of hyperparameters, held-out metrics and the final fit.
 
-Only LightGBM goes to production. The search starts from the hyperparameters of the champion
-(`study.enqueue_trial`), so a month of trials builds on what worked before.
+Only LightGBM goes to production. The search starts from the hyperparameters of the
+champion (`study.enqueue_trial`), so a month of trials builds on what worked before.
 
-The AUC-ROC drives the search, not an F-beta. The model ranks the candidates of each CPF (the top
-score), and it sets no fixed cut, so a measure that needs no threshold says whether the order is
-right. F-beta, precision and recall are still computed on the held-out set, for the report.
+The AUC-ROC drives the search, not an F-beta. The model ranks the candidates of each CPF
+(the top score), and it sets no fixed cut, so a measure that needs no threshold says
+whether the order is right. F-beta, precision and recall are still computed on the
+held-out set, for the report.
 """
 
 from typing import cast
@@ -78,8 +79,8 @@ def optimize(
 ) -> dict[str, object]:
     """Search the hyperparameters that give the best mean AUC-ROC in a stratified cross-validation.
 
-    Return the fixed arguments and the best ones, ready to be keyword arguments. `seed` is the
-    first trial: the hyperparameters of the champion.
+    Return the fixed arguments and the best ones, ready to be keyword arguments. `seed`
+    is the first trial: the hyperparameters of the champion.
     """
     folds = StratifiedKFold(n_splits=TRAINING_FOLDS, shuffle=True, random_state=RANDOM_STATE)
 
@@ -123,8 +124,8 @@ def measure_holdout(
 def sample_shap(booster: Booster, features: Matrix, size: int = SHAP_SAMPLE_SIZE) -> ShapSample:
     """Return the raw SHAP values of a sample of the training rows.
 
-    It uses the same calculation as the daily scoring. The whole run is not needed to estimate the
-    importance and the spread, and a sample is faster.
+    It uses the same calculation as the daily scoring. The whole run is not needed to
+    estimate the importance and the spread, and a sample is faster.
     """
     rng = np.random.default_rng(RANDOM_STATE)
     chosen = rng.choice(len(features), size=min(size, len(features)), replace=False)
@@ -151,8 +152,8 @@ def split_rows(labels: Labels) -> tuple[Rows, Rows]:
 def train(frame: pl.DataFrame, n_trials: int, champion: dict[str, object] | None = None) -> Training:
     """Run the whole retrain: the search, the held-out metrics, the final fit and the SHAP importance.
 
-    `champion` holds the hyperparameters of the model in production, to seed the search. It is
-    `None` in the first run.
+    `champion` holds the hyperparameters of the model in production, to seed the search.
+    It is `None` in the first run.
     """
     features = to_matrix(frame)
     labels: Labels = frame["high_delivery"].cast(pl.Int64).to_numpy()

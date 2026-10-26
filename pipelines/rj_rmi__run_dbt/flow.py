@@ -12,8 +12,8 @@ from utils.tasks import run_dbt
 async def rj_rmi__run_dbt(*, request: DbtRun, report: bool = False) -> None:
     """Run one dbt command of the RMI queries repository as the service account of the RMI.
 
-    Set `request` in the `prefect.yaml`, as the `dbt_run` flow takes it. In a pod, only the
-    target `prod` works: the service account has no role in `rj-rmi-dev`.
+    Set `request` in the `prefect.yaml`, as the `dbt_run` flow takes it. In a pod, only
+    the target `prod` works: the service account has no role in `rj-rmi-dev`.
     """
     setup_credentials_task()
     await run_dbt(request, report=report)

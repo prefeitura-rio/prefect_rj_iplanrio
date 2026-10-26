@@ -13,7 +13,10 @@ def order_key(row: Record) -> tuple[str, str]:
 
 
 def sort_rows(rows: Sequence[Record], *, descending: bool = False) -> list[Record]:
-    """Return the rows by type of record and layout version. Rows that tie keep their order."""
+    """Return the rows by type of record and layout version.
+
+    Rows that tie keep their order.
+    """
     return sorted(rows, key=order_key, reverse=descending)
 
 
@@ -22,8 +25,8 @@ def compare_versions(rows: Sequence[Record]) -> tuple[list[Record], list[str]]:
 
     The rows of a version get `versao_layout_anterior`, the version before it, and
     `coluna_esta_versao_anterior`, `True` if the column is in that version. The first
-    version is its own previous one. The second value lists a warning for each version that
-    has columns that the one before it lacks.
+    version is its own previous one. The second value lists a warning for each version
+    that has columns that the one before it lacks.
     """
     compared: list[Record] = []
     warnings: list[str] = []
@@ -56,7 +59,8 @@ def spread_missing(compared: Sequence[Record], *, ascending: bool) -> list[Recor
     """Return the rows of the columns that a version lacks, once for it and once for each version on the far side.
 
     These rows tell a version to select the column as `NULL`, so the versions can join
-    in one query. The far side is the older versions when `ascending`, else the newer ones.
+    in one query. The far side is the older versions when `ascending`, else the newer
+    ones.
     """
     versions = sorted({row["versao_layout_particao"] or "" for row in compared})
     spread: list[Record] = []
@@ -80,8 +84,8 @@ def control_versions(rows: Sequence[Record]) -> tuple[list[Record], list[str]]:
     """Return the layout rows with the control of their columns between versions, and the warnings.
 
     A first pass goes from the oldest version to the newest, and a second one the other
-    way. The result has every row once as it is, and the rows of the columns that a version
-    lacks, from both passes.
+    way. The result has every row once as it is, and the rows of the columns that a
+    version lacks, from both passes.
     """
     up, warnings = compare_versions(sort_rows(rows))
     down, _ = compare_versions(sort_rows(rows, descending=True))

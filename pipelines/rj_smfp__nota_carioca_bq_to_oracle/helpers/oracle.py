@@ -15,7 +15,8 @@ TABLE_PREFIX = "BQLOAD_"
 MANAGED_TABLE_MARKER = "rj_smfp__nota_carioca_bq_to_oracle"
 
 
-# Os sinônimos ficam também nos schemas dos consumidores, o que exige CREATE ANY SYNONYM até do dono.
+# Os sinônimos ficam também nos schemas dos consumidores, o que exige CREATE ANY SYNONYM
+# até do dono.
 OWNER_PRIVILEGES = ("CREATE ANY SYNONYM",)
 
 
@@ -35,7 +36,8 @@ CROSS_SCHEMA_PRIVILEGES = (
 )
 
 
-# Um CREATE INDEX grande passa minutos sem tráfego na rede; a sonda evita que um firewall derrube a conexão ociosa.
+# Um CREATE INDEX grande passa minutos sem tráfego na rede; a sonda evita que um
+# firewall derrube a conexão ociosa.
 KEEPALIVE_MINUTES = 2
 
 

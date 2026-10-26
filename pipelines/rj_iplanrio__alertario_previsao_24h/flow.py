@@ -27,11 +27,12 @@ async def rj_iplanrio__alertario_previsao_24h(
 ) -> None:
     """Load the 24-hour forecast of the AlertaRio to BigQuery, and warn Discord of heavy rain.
 
-    The XML gives four tables that share one execution id: `dim_quadro_sinotico` (one row for
-    the run), `dim_previsao_periodo` (a forecast for each period), `dim_temperatura_zona` (a zone)
-    and `dim_mares` (a tide). With `alerts["send"]`, a message goes to Discord when a period has
-    heavy rain, unless the same message went out today or the daily and interval limits stop it.
-    Each sent message adds rows to `alertario_precipitacao_alerts_log`.
+    The XML gives four tables that share one execution id: `dim_quadro_sinotico` (one
+    row for the run), `dim_previsao_periodo` (a forecast for each period),
+    `dim_temperatura_zona` (a zone) and `dim_mares` (a tide). With `alerts["send"]`, a
+    message goes to Discord when a period has heavy rain, unless the same message went
+    out today or the daily and interval limits stop it. Each sent message adds rows to
+    `alertario_precipitacao_alerts_log`.
     """
     rules = alerts or {}
     forecast = build_tables_task(await fetch_forecast_task())

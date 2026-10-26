@@ -1,17 +1,21 @@
 """Mensagem da carga BigQuery → Oracle no Discord: estado agregado, publicação e finalização.
 
-Uma execução, um pod, tabelas em sequência: o próprio flow muda os passos (``enter``, ``table_step``...) e as tasks de
-carga e de índices informam o andamento pelo notificador ativo (``current``), um ponteiro de módulo definido por
-``LoadNotifier.guard``. As tasks usam ``NO_CACHE``; passar o notificador (com trava e cliente HTTP) como parâmetro
-faria o Prefect percorrê-lo ao registrar as entradas, e há um flow run por processo, então o ponteiro é seguro.
-Nada aqui levanta exceção para a carga.
+Uma execução, um pod, tabelas em sequência: o próprio flow muda os passos (``enter``,
+``table_step``...) e as tasks de carga e de índices informam o andamento pelo
+notificador ativo (``current``), um ponteiro de módulo definido por
+``LoadNotifier.guard``. As tasks usam ``NO_CACHE``; passar o notificador (com trava e
+cliente HTTP) como parâmetro faria o Prefect percorrê-lo ao registrar as entradas, e há
+um flow run por processo, então o ponteiro é seguro. Nada aqui levanta exceção para a
+carga.
 
-Batimento (``heartbeat``): com o Discord ligado, ``begin`` inicia uma thread daemon que, a cada ``heartbeat_seconds``,
-republica a visão atual (sem forçar; o intervalo mínimo do cliente continua valendo). Sem ele a mensagem parece
-congelada nos passos que não informam andamento (``DROP`` de índices, ``TRUNCATE``, contagem, estatísticas, espera do
-In-Memory): o "Decorrido" e o "há X" da etapa só avançam quando algo publica. A thread para quando a execução é
-finalizada (``succeed``/``fail``) e quando o ``guard`` termina, e o batimento publica sob a mesma trava das demais
-mudanças, então nunca sobrescreve a mensagem final.
+Batimento (``heartbeat``): com o Discord ligado, ``begin`` inicia uma thread daemon que,
+a cada ``heartbeat_seconds``, republica a visão atual (sem forçar; o intervalo mínimo do
+cliente continua valendo). Sem ele a mensagem parece congelada nos passos que não
+informam andamento (``DROP`` de índices, ``TRUNCATE``, contagem, estatísticas, espera do
+In-Memory): o "Decorrido" e o "há X" da etapa só avançam quando algo publica. A thread
+para quando a execução é finalizada (``succeed``/``fail``) e quando o ``guard`` termina,
+e o batimento publica sob a mesma trava das demais mudanças, então nunca sobrescreve a
+mensagem final.
 """
 
 import asyncio
@@ -49,15 +53,13 @@ HEARTBEAT_JOIN_TIMEOUT_SECONDS = 2.0
 class NotifierConfig:
     """Como criar o notificador.
 
-    :param dataset_id: Dataset de origem.
-    :param url: Link do flow run, ou ``None`` sem URL do Prefect.
-    :param run_name: Nome do flow run, no rodapé.
-    :param table_ids: Tabelas da execução (vazio até a listagem, em ``synonyms_only`` também).
-    :param sessions: Sessões do SQL*Loader pedidas.
-    :param run_dbt: Se o dbt roda antes.
-    :param mode: ``full`` ou ``synonyms_only``.
-    :param enabled: ``False`` (``discord_notifications=false``) desliga o Discord.
-    :param heartbeat_seconds: Intervalo do batimento que republica a mensagem; ``0`` ou menos desliga o batimento.
+    :param dataset_id: Dataset de origem. :param url: Link do flow run, ou ``None`` sem
+    URL do Prefect. :param run_name: Nome do flow run, no rodapé. :param table_ids:
+    Tabelas da execução (vazio até a listagem, em ``synonyms_only`` também). :param
+    sessions: Sessões do SQL*Loader pedidas. :param run_dbt: Se o dbt roda antes. :param
+    mode: ``full`` ou ``synonyms_only``. :param enabled: ``False``
+    (``discord_notifications=false``) desliga o Discord. :param heartbeat_seconds:
+    Intervalo do batimento que republica a mensagem; ``0`` ou menos desliga o batimento.
     """
 
     dataset_id: str
@@ -208,7 +210,8 @@ class LoadNotifier:
     def set_tables(self, sizes: Mapping[str, int]) -> None:
         """Registra as tabelas da execução e o peso de cada uma na barra geral.
 
-        :param sizes: Bytes exportados por tabela, na ordem de carga; use 1 enquanto o volume for desconhecido.
+        :param sizes: Bytes exportados por tabela, na ordem de carga; use 1 enquanto o
+        volume for desconhecido.
         """
         with self.lock:
             known = self.run_state.tables
@@ -235,8 +238,10 @@ class LoadNotifier:
     def set_bigquery_rows(self, rows: Mapping[str, object]) -> None:
         """Guarda as linhas de cada tabela na foto do BigQuery, o lado de origem da comparação.
 
-        :param rows: Linhas por tabela, como vêm do schema da foto exportada (``num_rows``); a conversão acontece
-            aqui, dentro do ``never_raises``, para um valor inesperado não chegar ao flow.
+        :param rows: Linhas por tabela, como vêm do schema da foto exportada
+        (``num_rows``); a conversão acontece
+            aqui, dentro do ``never_raises``, para um valor inesperado não chegar ao
+            flow.
         """
         counts = {name: int(str(count)) for name, count in rows.items() if count is not None}
         with self.lock:

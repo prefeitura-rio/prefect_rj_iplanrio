@@ -20,9 +20,10 @@ def unzip_texts(archive: Path, folder: Path) -> list[Path]:
 def write_text_parquet(source: Path, folder: Path, constants: dict[str, str], first_part: int = 0) -> int:
     """Write a text file as Parquet files in the folder and return the next part number.
 
-    A file has the column `text`, which is one line, and the constant columns. The file is
-    read in blocks, and `BATCHES_PER_FILE` blocks make one Parquet file, so a file of many
-    gigabytes fits in memory and no output is too big. The names are `0000.parquet` and so on.
+    A file has the column `text`, which is one line, and the constant columns. The file
+    is read in blocks, and `BATCHES_PER_FILE` blocks make one Parquet file, so a file of
+    many gigabytes fits in memory and no output is too big. The names are `0000.parquet`
+    and so on.
     """
     reader = csv.open_csv(
         source,

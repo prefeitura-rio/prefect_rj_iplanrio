@@ -66,9 +66,9 @@ async def list_new_archives_task(raw: RawFolders, tables: Tables, cloud: Cloud) 
 async def ingest_archives_task(names: list[str], raw: RawFolders, tables: Tables, cloud: Cloud) -> None:
     """Load each ZIP of records as one day of the staging table, `MAX_CONCURRENT` at a time.
 
-    The load is an `append` whose capture is the date of the ZIP, so a rerun adds nothing
-    twice. A ZIP that fails does not stop the others, and the task raises `RuntimeError`
-    for them at the end.
+    The load is an `append` whose capture is the date of the ZIP, so a rerun adds
+    nothing twice. A ZIP that fails does not stop the others, and the task raises
+    `RuntimeError` for them at the end.
     """
     semaphore = Semaphore(MAX_CONCURRENT)
     destination = Table(dataset_id=tables["dataset_id"], table_id=tables["records"])
@@ -141,8 +141,8 @@ async def sync_layouts_task(raw: RawFolders, tables: Tables, cloud: Cloud) -> bo
 async def read_layout_task(tables: Tables, cloud: Cloud) -> list[Record]:
     """Return the layout of the versions of the records, with the dictionary of its columns.
 
-    Raise `ValueError` if a column of the layout has no row in the sheet of the dictionary,
-    or if a version of the records has no layout.
+    Raise `ValueError` if a column of the layout has no row in the sheet of the
+    dictionary, or if a version of the records has no layout.
     """
     project = cloud["project"]
     names = {"project": project, "dataset": tables["dataset_id"], "layout": tables["layout"]}

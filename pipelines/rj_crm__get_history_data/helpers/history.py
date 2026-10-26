@@ -25,8 +25,8 @@ def keep_history(extensions: Sequence[Extension]) -> list[Extension]:
 def find_columns(fields: Sequence[Field]) -> tuple[str | None, str | None, str | None]:
     """Return the names of the phone column, the primary key column and the entry date column of a Data Extension.
 
-    The entry date column is the one whose name has `data de entrada`. Failing that, it is the only column of type
-    `date`, if there is just one.
+    The entry date column is the one whose name has `data de entrada`. Failing that, it
+    is the only column of type `date`, if there is just one.
     """
     phone = next((item.name for item in fields if item.type.lower() == "phone"), None)
     primary = next((item.name for item in fields if item.is_pk), None)
@@ -42,7 +42,8 @@ def find_columns(fields: Sequence[Field]) -> tuple[str | None, str | None, str |
 def merge_record(record: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
     """Return a record of the REST API as one object.
 
-    The API gives `{"keys": {...}, "values": {...}}`, and only the primary key is in `keys`, so both are joined.
+    The API gives `{"keys": {...}, "values": {...}}`, and only the primary key is in
+    `keys`, so both are joined.
     """
     if "keys" in record or "values" in record:
         keys, values = record.get("keys"), record.get("values")
@@ -55,9 +56,9 @@ def merge_record(record: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
 def build_rows(results: Sequence[Extraction]) -> list[Row]:
     """Return a row for each record of the Data Extensions that worked.
 
-    A row has the name of the extension, the phone, the primary key, the entry date and the whole record as JSON. The
-    keys of the records come in lower case from the REST API and the schema has the official capitals, so the lookup
-    ignores case.
+    A row has the name of the extension, the phone, the primary key, the entry date and
+    the whole record as JSON. The keys of the records come in lower case from the REST
+    API and the schema has the official capitals, so the lookup ignores case.
     """
     rows: list[Row] = []
 
@@ -86,8 +87,9 @@ def build_rows(results: Sequence[Extraction]) -> list[Row]:
 def parse_entry_date(value: JsonValue) -> datetime | None:
     """Return an entry date as a time in UTC without a zone, or nothing if it is not a date.
 
-    The ISO format comes first. Then the formats of SFMC, month first before day first, so `9/15/2026 3:04:05 PM` and
-    `15/09/2026` both read. A time with no zone counts as UTC.
+    The ISO format comes first. Then the formats of SFMC, month first before day first,
+    so `9/15/2026 3:04:05 PM` and `15/09/2026` both read. A time with no zone counts as
+    UTC.
     """
     if not isinstance(value, str) or not value.strip():
         return None
@@ -114,8 +116,8 @@ def parse_entry_date(value: JsonValue) -> datetime | None:
 def filter_recent(rows: Sequence[Row], window_days: int, now: datetime) -> list[Row]:
     """Return the rows of the last `window_days` days, with `data_particao`, and without repeats of the merge key.
 
-    A row with no entry date that can be read is always kept, since its age is unknown, and takes the day of the run
-    as `data_particao`. The first row of each key stays.
+    A row with no entry date that can be read is always kept, since its age is unknown,
+    and takes the day of the run as `data_particao`. The first row of each key stays.
     """
     cutoff = now.astimezone(UTC).replace(tzinfo=None) - timedelta(days=window_days)
     kept: dict[tuple[str, ...], Row] = {}

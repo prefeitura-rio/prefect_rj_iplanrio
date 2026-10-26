@@ -12,7 +12,7 @@ from duckdb import BinderException
 )
 async def test_the_normalize_function_takes_its_options_as_parameters(
     duckdb_memory, arguments, expected
-):
+) -> None:
     """Register one `normalize` whose separator and case are parameters."""
     sql = f"SELECT normalize('Código do Órgão', {arguments})"
 
@@ -28,7 +28,7 @@ async def test_the_normalize_function_takes_its_options_as_parameters(
         pytest.param("normalize('a b', NULL, true)", id="a_null_separator"),
     ],
 )
-async def test_a_null_argument_gives_null(duckdb_memory, call):
+async def test_a_null_argument_gives_null(duckdb_memory, call) -> None:
     """Leave a NULL as NULL, whichever argument it is."""
     [dataframe] = [
         dataframe async for dataframe in duckdb_memory.query(f"SELECT {call}")
@@ -49,20 +49,20 @@ async def test_a_null_argument_gives_null(duckdb_memory, call):
 )
 async def test_a_call_with_the_wrong_types_is_rejected_before_it_runs(
     duckdb_memory, call
-):
+) -> None:
     """Reject the wrong types and the wrong count when DuckDB binds the call."""
     with pytest.raises(BinderException, match="No function matches"):
         _ = [dataframe async for dataframe in duckdb_memory.query(f"SELECT {call}")]
 
 
-async def test_to_sao_paulo_converts_a_timestamp_with_a_time_zone(scalar):
+async def test_to_sao_paulo_converts_a_timestamp_with_a_time_zone(scalar) -> None:
     """Show the instant as the clock of Sao Paulo, without a time zone."""
     value = await scalar("to_sao_paulo(TIMESTAMPTZ '2024-01-01 12:00:00+00')::VARCHAR")
 
     assert value == "2024-01-01 09:00:00"
 
 
-async def test_now_sao_paulo_is_three_hours_behind_utc(scalar):
+async def test_now_sao_paulo_is_three_hours_behind_utc(scalar) -> None:
     """Give the local time of Sao Paulo, which has no daylight saving time."""
     seconds = await scalar("epoch(timezone('UTC', now()) - now_sao_paulo())")
 
@@ -70,7 +70,7 @@ async def test_now_sao_paulo_is_three_hours_behind_utc(scalar):
     assert abs(seconds - 3 * 3600) < 5
 
 
-async def test_now_sao_paulo_is_one_value_for_every_row_of_a_query(scalar):
+async def test_now_sao_paulo_is_one_value_for_every_row_of_a_query(scalar) -> None:
     """Call the function once for each query, as DuckDB does with `now()`."""
     distinct = await scalar(
         "(SELECT count(DISTINCT now_sao_paulo()) FROM range(100000))"

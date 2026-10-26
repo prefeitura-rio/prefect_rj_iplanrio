@@ -2,14 +2,15 @@
 
 The layout under the root (`gs://bucket/prefix` or a path)::
 
-    champion.json             the pointer: {"versao": "2026-10-01", "promovido_em": "..."}
-    champion_anterior.json    the pointer before it, for a rollback
-    <version>/modelo.txt      LightGBM in its native format, which survives a library upgrade
-    <version>/metadata.json   the features in the order of the model, the hyperparameters and so on
+    champion.json             the pointer: {"versao": "2026-10-01", "promovido_em":
+    "..."} champion_anterior.json    the pointer before it, for a rollback
+    <version>/modelo.txt      LightGBM in its native format, which survives a library
+    upgrade <version>/metadata.json   the features in the order of the model, the
+    hyperparameters and so on
 
-A published version is never overwritten. To promote one is to change the pointer, and the
-pointer is always the last thing written, so a failure never points to a half version. A rollback is
-`promote_version` with the version before.
+A published version is never overwritten. To promote one is to change the pointer, and
+the pointer is always the last thing written, so a failure never points to a half
+version. A rollback is `promote_version` with the version before.
 """
 
 from datetime import datetime
@@ -52,7 +53,10 @@ def object_path(root: str, *parts: str) -> str:
 
 
 def blob_of(root: str, parts: tuple[str, ...], client: Client | None) -> Blob:
-    """Return the blob of a file under a root in GCS. Raise `ValueError` without a client."""
+    """Return the blob of a file under a root in GCS.
+
+    Raise `ValueError` without a client.
+    """
     if client is None:
         raise ValueError("A root in GCS needs a client")
 
@@ -91,8 +95,8 @@ def publish_version(
     """Write the model and the metadata of a new version, and do not promote it.
 
     The `metadata` must have `features`, in the order that the model expects. Raise
-    `FileExistsError` if the version is published, and `ValueError` for a bad version or for features
-    that do not match the model.
+    `FileExistsError` if the version is published, and `ValueError` for a bad version or
+    for features that do not match the model.
     """
     if not version or "/" in version:
         raise ValueError(f"Bad version: {version!r}")
@@ -120,8 +124,8 @@ def publish_version(
 def load_version(root: str, version: str, client: Client | None = None) -> Champion:
     """Load one version of the model.
 
-    Raise `FileNotFoundError` if it is missing or half written, and `ValueError` if the features
-    of the model do not match the metadata.
+    Raise `FileNotFoundError` if it is missing or half written, and `ValueError` if the
+    features of the model do not match the metadata.
     """
     model = read_text(root, version, MODEL_FILE, client=client)
     metadata_text = read_text(root, version, METADATA_FILE, client=client)

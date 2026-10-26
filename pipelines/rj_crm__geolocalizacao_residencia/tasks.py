@@ -65,9 +65,9 @@ async def geocode_nominatim_task(addresses: list[Address], max_concurrent: int) 
 async def geocode_fallback_task(addresses: list[Address]) -> list[Row]:
     """Geocode the addresses with a chain of services, each taking what the one before could not find.
 
-    The order is Waze, MapTiler, Geocode.xyz, LocationIQ and OpenCage. A service whose answers are all empty
-    counts as out of quota and is skipped, and so is one whose key is not set. Only an address with a point
-    and a street comes out.
+    The order is Waze, MapTiler, Geocode.xyz, LocationIQ and OpenCage. A service whose
+    answers are all empty counts as out of quota and is skipped, and so is one whose key
+    is not set. Only an address with a point and a street comes out.
     """
     settings = Settings()
     keys = {

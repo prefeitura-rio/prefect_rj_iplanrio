@@ -31,7 +31,7 @@ from utils.records import (
         pytest.param({"items": []}, "items", [], id="an_empty_list"),
     ],
 )
-def test_the_records_are_the_list_at_the_key(data, key, expected):
+def test_the_records_are_the_list_at_the_key(data, key, expected) -> None:
     """Pick the list out of the response."""
     assert extract_records(data, key) == expected
 
@@ -46,13 +46,13 @@ def test_the_records_are_the_list_at_the_key(data, key, expected):
         pytest.param({"a": 1}, "a.b", id="a_key_below_a_number"),
     ],
 )
-def test_a_response_with_no_list_of_objects_is_refused(data, key):
+def test_a_response_with_no_list_of_objects_is_refused(data, key) -> None:
     """Raise, so a change in the API fails the run instead of loading nothing."""
     with pytest.raises(ValueError, match="No list of objects"):
         extract_records(data, key)
 
 
-def test_parquet_keeps_a_text_that_looks_like_a_date_as_text(tmp_path):
+def test_parquet_keeps_a_text_that_looks_like_a_date_as_text(tmp_path) -> None:
     """Keep the text, the numbers and the nulls of the records in their own types."""
     folder = write_parquet(
         [
@@ -68,7 +68,7 @@ def test_parquet_keeps_a_text_that_looks_like_a_date_as_text(tmp_path):
     assert frame["day"].to_list() == ["2026-10-22 20:00:00", "2026-10-22 21:00:00"]
 
 
-async def test_json_lines_load_as_rows_and_nested_values_stay_nested(tmp_path):
+async def test_json_lines_load_as_rows_and_nested_values_stay_nested(tmp_path) -> None:
     """Write the records, and read them back with DuckDB as typed columns."""
     folder = write_json_lines(
         [{"id": 1, "nome": "Ana", "tags": ["a", "b"]}, {"id": 2, "nome": "Bia", "tags": []}], tmp_path
@@ -87,13 +87,13 @@ async def test_json_lines_load_as_rows_and_nested_values_stay_nested(tmp_path):
 
 
 @pytest.mark.parametrize("schema", [ItemModel, ItemData, ItemDict], ids=["model", "dataclass", "typeddict"])
-def test_records_that_fit_a_schema_pass(schema):
+def test_records_that_fit_a_schema_pass(schema) -> None:
     """Accept a Pydantic model, a dataclass and a `TypedDict`."""
     validate_records([{"id": 1, "nome": "Ana"}, {"id": 2, "nome": "Bia"}], schema)
 
 
 @pytest.mark.parametrize("schema", [ItemModel, ItemData, ItemDict], ids=["model", "dataclass", "typeddict"])
-def test_a_record_that_does_not_fit_names_its_index_and_its_field(schema):
+def test_a_record_that_does_not_fit_names_its_index_and_its_field(schema) -> None:
     """Raise at the first bad record, and name where it is."""
     records = [{"id": 1, "nome": "Ana"}, {"id": "dois", "nome": "Bia"}]
 
@@ -101,7 +101,7 @@ def test_a_record_that_does_not_fit_names_its_index_and_its_field(schema):
         validate_records(records, schema)
 
 
-def test_the_error_of_a_bad_record_never_holds_its_value():
+def test_the_error_of_a_bad_record_never_holds_its_value() -> None:
     """Keep the data out of the message, so a log or a Discord alert never leaks it."""
     secret = "valor-secreto-123"
 
@@ -111,13 +111,13 @@ def test_the_error_of_a_bad_record_never_holds_its_value():
     assert secret not in str(error.value)
 
 
-def test_a_missing_field_is_named():
+def test_a_missing_field_is_named() -> None:
     """Name a field that the record lacks."""
     with pytest.raises(ValueError, match=r"record 0: nome: Field required"):
         validate_records([{"id": 1}], ItemModel)
 
 
-def test_records_are_not_changed_by_the_check():
+def test_records_are_not_changed_by_the_check() -> None:
     """Leave the records as the API sent them, with no coercion."""
     records = [{"id": "1", "nome": "Ana"}]
 
@@ -135,7 +135,7 @@ def test_records_are_not_changed_by_the_check():
     ],
 )
 @pytest.mark.usefixtures("schemas")
-def test_a_records_schema_is_found_by_its_path(name, expected):
+def test_a_records_schema_is_found_by_its_path(name, expected) -> None:
     """Return the type that `module:name` names."""
     assert load_records_schema(f"schemas_of_the_test:{name}") is expected
 
@@ -150,13 +150,13 @@ def test_a_records_schema_is_found_by_its_path(name, expected):
     ],
 )
 @pytest.mark.usefixtures("schemas")
-def test_a_records_schema_that_cannot_be_found_is_refused(path, message):
+def test_a_records_schema_that_cannot_be_found_is_refused(path, message) -> None:
     """Raise `ValueError` that says what is wrong with the path."""
     with pytest.raises(ValueError, match=message):
         load_records_schema(path)
 
 
-def test_the_json_of_a_response_is_read_with_a_type_and_text_that_is_not_json_is_refused():
+def test_the_json_of_a_response_is_read_with_a_type_and_text_that_is_not_json_is_refused() -> None:
     """Read the body as JSON, and raise for a body that is not."""
     assert read_json(Response(200, json={"data": [1, "a", None]})) == {"data": [1, "a", None]}
 

@@ -57,8 +57,9 @@ async def ensure_tables_task(names: Names) -> None:
 async def extract_task(names: Names, window: Window) -> list[Session]:
     """Read the sessions of the last days that have no classification, with the HSM that came before each.
 
-    There are two filters of "already classified": a cheap one on the source, that may be 15 minutes late,
-    and an anti-join with the destination table, that is the guarantee.
+    There are two filters of "already classified": a cheap one on the source, that may
+    be 15 minutes late, and an anti-join with the destination table, that is the
+    guarantee.
     """
     sql = render_query(
         __file__,
@@ -78,8 +79,9 @@ async def extract_task(names: Names, window: Window) -> list[Session]:
 async def enrich_task(names: Names, sessions: list[Session]) -> list[Session]:
     """Render the HSM text of the sessions, and mark the ones whose only message is the text of a button.
 
-    The buttons are the only thing that comes from the catalog of HSMs by journey, because the text and the
-    variables already come with each session from the dispatch itself.
+    The buttons are the only thing that comes from the catalog of HSMs by journey,
+    because the text and the variables already come with each session from the dispatch
+    itself.
     """
     journeys = sorted(
         {session.jornada_nome for session in sessions if session.jornada_nome and session.jornada_nome.strip()}
@@ -100,7 +102,8 @@ async def enrich_task(names: Names, sessions: list[Session]) -> list[Session]:
 async def read_rules_task(names: Names, stage: str) -> list[Rule]:
     """Read the active rules of a stage (`tema` or `motivo`) from the catalog, or none if it does not exist yet.
 
-    The catalog is managed outside the pipeline, so a missing table means that there are no rules today.
+    The catalog is managed outside the pipeline, so a missing table means that there are
+    no rules today.
     """
     sql = render_query(__file__, "rules", table=names.rules)
     parameters = [bigquery.ScalarQueryParameter("etapa", "STRING", stage)]
@@ -129,7 +132,8 @@ async def read_rules_task(names: Names, stage: str) -> list[Rule]:
 async def classify_one(bifrost: Bifrost, slots: Semaphore, prompted: Prompted, model: str) -> Row | None:
     """Ask the model about one session and return its row, or nothing and log it if the session fails.
 
-    A session that fails stays out of the result and is tried again at the next run, inside the window.
+    A session that fails stays out of the result and is tried again at the next run,
+    inside the window.
     """
     async with slots:
         try:
@@ -163,8 +167,8 @@ async def classify_task(batch: list[Prompted], llm: Llm) -> list[Row]:
 async def load_task(names: Names, rows: list[Row]) -> int:
     """Add the rows to the tmp table and MERGE them into the table of the classifications by `id_sessao`.
 
-    The MERGE writes every column, so a later step that updates only some columns must not reuse it.
-    Return the rows that the MERGE touched, or 0 for no row.
+    The MERGE writes every column, so a later step that updates only some columns must
+    not reuse it. Return the rows that the MERGE touched, or 0 for no row.
     """
     if not rows:
         return 0
@@ -218,7 +222,8 @@ async def read_relevant_task(names: Names) -> list[Row]:
 async def update_themes_task(names: Names, rows: list[Row]) -> int:
     """Update only `tema_nome` and `causa_nome` of the sessions in the table, and no other column.
 
-    The tmp table needs `classificado_em` and `data_particao`, so they go as placeholders that the MERGE never reads.
+    The tmp table needs `classificado_em` and `data_particao`, so they go as
+    placeholders that the MERGE never reads.
     """
     if not rows:
         return 0
@@ -244,8 +249,9 @@ async def update_themes_task(names: Names, rows: list[Row]) -> int:
 async def propagate_task(names: Names) -> int:
     """Copy `tema_nome` and `causa_nome` from the table to the two marts of dbt, which do not recompute on their own.
 
-    The marts are incremental, so without it they keep the old theme until a full refresh. The two columns are
-    fields of the struct `llm`, which BigQuery updates in place. Return the rows touched in both marts.
+    The marts are incremental, so without it they keep the old theme until a full
+    refresh. The two columns are fields of the struct `llm`, which BigQuery updates in
+    place. Return the rows touched in both marts.
     """
     total = 0
 

@@ -23,7 +23,8 @@ CONSUMER_GRANTS = (
 )
 
 
-# Tabela particionada aparece em all_objects também como TABLE PARTITION/SUBPARTITION, com o nome da tabela.
+# Tabela particionada aparece em all_objects também como TABLE PARTITION/SUBPARTITION,
+# com o nome da tabela.
 REPLACEABLE_OBJECT_TYPES = {"TABLE", "TABLE PARTITION", "TABLE SUBPARTITION", "SYNONYM"}
 
 

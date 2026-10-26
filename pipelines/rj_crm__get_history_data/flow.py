@@ -19,12 +19,14 @@ async def rj_crm__get_history_data(
 ) -> None:
     """Load the history Data Extensions of SFMC to BigQuery.
 
-    The flow logs in to SFMC, lists the Data Extensions whose name ends in `historico`, and reads the records of
-    each. One row goes out for each record, with the phone, the primary key, the entry date and the whole record as
-    JSON. The rows whose entry date is in the last `window_days` days (30 by default) replace the tmp table
-    `historico_sfmc_tmp` and are MERGEd into `historico_sfmc` by name, phone and entry date. A row with no entry
-    date is always kept. The addresses come from the settings unless `rest_uri` and `soap_uri` are given.
-    A Data Extension that fails is logged and the others still load.
+    The flow logs in to SFMC, lists the Data Extensions whose name ends in `historico`,
+    and reads the records of each. One row goes out for each record, with the phone, the
+    primary key, the entry date and the whole record as JSON. The rows whose entry date
+    is in the last `window_days` days (30 by default) replace the tmp table
+    `historico_sfmc_tmp` and are MERGEd into `historico_sfmc` by name, phone and entry
+    date. A row with no entry date is always kept. The addresses come from the settings
+    unless `rest_uri` and `soap_uri` are given. A Data Extension that fails is logged
+    and the others still load.
     """
     settings = Settings()
     rest = rest_uri or settings.SFMC_REST_BASE_URL

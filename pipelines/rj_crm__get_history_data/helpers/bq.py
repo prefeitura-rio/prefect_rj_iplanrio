@@ -1,7 +1,8 @@
 """The native BigQuery tables of the history, and the load of the tmp table.
 
-The tables are native, not BigLake, because the final one takes a MERGE and BigQuery does not allow DML on external
-tables. Both are partitioned by month (`data_particao`) and clustered by `de_nome`.
+The tables are native, not BigLake, because the final one takes a MERGE and BigQuery
+does not allow DML on external tables. Both are partitioned by month (`data_particao`)
+and clustered by `de_nome`.
 """
 
 from collections.abc import Sequence

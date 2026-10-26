@@ -11,7 +11,7 @@ import pytest
         pytest.param("NULL::VARCHAR", None, id="null_stays_null"),
     ],
 )
-async def test_clean_text_cleans_a_text_value(scalar, value, expected):
+async def test_clean_text_cleans_a_text_value(scalar, value, expected) -> None:
     """Remove NUL, turn line breaks into spaces, trim, and turn empty into NULL."""
     assert await scalar(f"clean_text({value})") == expected
 
@@ -28,7 +28,9 @@ async def test_clean_text_cleans_a_text_value(scalar, value, expected):
         pytest.param("lixo", None, id="garbage_is_null"),
     ],
 )
-async def test_parse_date_reads_the_formats_of_the_pipelines(scalar, text, expected):
+async def test_parse_date_reads_the_formats_of_the_pipelines(
+    scalar, text, expected
+) -> None:
     """Read a date in any format that the pipelines use, and give NULL for garbage."""
     value = await scalar(f"parse_date('{text}')::VARCHAR")
 
@@ -63,7 +65,7 @@ async def test_parse_date_reads_the_formats_of_the_pipelines(scalar, text, expec
 )
 async def test_parse_timestamp_reads_the_formats_of_the_pipelines(
     scalar, text, expected
-):
+) -> None:
     """Read a timestamp in any format that the pipelines use."""
     value = await scalar(f"parse_timestamp('{text}')::VARCHAR")
 
@@ -80,7 +82,7 @@ async def test_parse_timestamp_reads_the_formats_of_the_pipelines(
 )
 async def test_the_partition_macros_derive_the_columns_of_the_folders(
     scalar, macro, expected
-):
+) -> None:
     """Derive the year, month and date of a partition from a date text."""
     value = await scalar(f"{macro}('05/03/2024')")
 

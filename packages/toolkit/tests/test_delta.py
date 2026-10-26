@@ -43,7 +43,9 @@ def chunk_files(directory: Path, key: str, ids: list[int]) -> Path:
     return directory
 
 
-def test_the_first_chunk_creates_the_table_and_the_ledger(uri, tmp_path, read_rows):
+def test_the_first_chunk_creates_the_table_and_the_ledger(
+    uri, tmp_path, read_rows
+) -> None:
     """Create the table on the first write, and record the fingerprint of the chunk."""
     write_chunk(
         uri, chunk_files(tmp_path / "w1", "w1", [1, 2]), "w1", LedgerEntry("cfg:w1", 11)
@@ -53,12 +55,12 @@ def test_the_first_chunk_creates_the_table_and_the_ledger(uri, tmp_path, read_ro
     assert read_known_fingerprints(uri, ["cfg:w1", "cfg:w2"]) == {"cfg:w1": 11}
 
 
-def test_a_table_that_does_not_exist_knows_nothing(uri):
+def test_a_table_that_does_not_exist_knows_nothing(uri) -> None:
     """Give an empty ledger instead of failing, so the first run loads every chunk."""
     assert read_known_fingerprints(uri, ["cfg:w1"]) == {}
 
 
-def test_a_chunk_replaces_only_its_own_rows(uri, tmp_path, read_rows):
+def test_a_chunk_replaces_only_its_own_rows(uri, tmp_path, read_rows) -> None:
     """Swap the rows of one chunk and leave the others as they are."""
     write_chunk(
         uri, chunk_files(tmp_path / "a", "w1", [1, 2]), "w1", LedgerEntry("c:w1", 1)
@@ -75,7 +77,7 @@ def test_a_chunk_replaces_only_its_own_rows(uri, tmp_path, read_rows):
     assert read_known_fingerprints(uri, ["c:w1", "c:w2"]) == {"c:w1": 3, "c:w2": 2}
 
 
-def test_a_chunk_with_no_rows_removes_its_old_rows(uri, tmp_path, read_rows):
+def test_a_chunk_with_no_rows_removes_its_old_rows(uri, tmp_path, read_rows) -> None:
     """Expire the rows of a chunk that is empty in the source now."""
     write_chunk(
         uri, chunk_files(tmp_path / "a", "w1", [1, 2]), "w1", LedgerEntry("c:w1", 1)
@@ -93,7 +95,7 @@ def test_a_chunk_with_no_rows_removes_its_old_rows(uri, tmp_path, read_rows):
 
 def test_a_chunk_with_other_columns_is_refused_unless_the_schema_is_overwritten(
     uri, tmp_path
-):
+) -> None:
     """Keep the schema of the table, unless the caller asks to replace it."""
     write_chunk(
         uri, chunk_files(tmp_path / "a", "w1", [1]), "w1", LedgerEntry("c:w1", 1)
@@ -113,7 +115,7 @@ def test_a_chunk_with_other_columns_is_refused_unless_the_schema_is_overwritten(
 
 def test_sweep_removes_the_chunks_that_the_config_no_longer_has(
     uri, tmp_path, read_rows
-):
+) -> None:
     """Delete every chunk outside the ones to keep."""
     for key, ids in (("w1", [1]), ("w2", [2]), ("w3", [3])):
         write_chunk(
@@ -125,14 +127,16 @@ def test_sweep_removes_the_chunks_that_the_config_no_longer_has(
     assert read_rows(uri) == {"w2": [2], "w3": [3]}
 
 
-def test_sweep_on_a_missing_table_does_nothing(uri):
+def test_sweep_on_a_missing_table_does_nothing(uri) -> None:
     """Do not fail when the first run has nothing to sweep."""
     sweep(uri, ["w1"])
 
     assert not DeltaTable.is_deltatable(uri)
 
 
-def test_regression_chunks_written_at_the_same_time_all_land(uri, tmp_path, read_rows):
+def test_regression_chunks_written_at_the_same_time_all_land(
+    uri, tmp_path, read_rows
+) -> None:
     """Regression: racing creators failed with a changed protocol, and lost chunks."""
     errors: list[BaseException] = []
 
@@ -155,7 +159,7 @@ def test_regression_chunks_written_at_the_same_time_all_land(uri, tmp_path, read
     assert sorted(read_rows(uri)) == [f"w{i}" for i in range(8)]
 
 
-def test_maintain_writes_a_checkpoint_for_the_readers_of_the_log(uri, tmp_path):
+def test_maintain_writes_a_checkpoint_for_the_readers_of_the_log(uri, tmp_path) -> None:
     """Create a checkpoint, so BigQuery does not replay a long JSON log."""
     write_chunk(
         uri, chunk_files(tmp_path / "a", "w1", [1]), "w1", LedgerEntry("c:w1", 1)
@@ -178,7 +182,7 @@ def test_maintain_writes_a_checkpoint_for_the_readers_of_the_log(uri, tmp_path):
 )
 def test_a_dump_of_many_chunks_checkpoints_the_log_on_its_own(
     uri, tmp_path, commits, checkpoint
-):
+) -> None:
     """Write a checkpoint every 100 commits, so a write never replays a long log."""
     for number in range(commits):
         key = f"w{number}"
@@ -217,12 +221,14 @@ def test_a_dump_of_many_chunks_checkpoints_the_log_on_its_own(
         ),
     ],
 )
-def test_the_layout_problems_follow_the_chunk_keys(keys, expected):
+def test_the_layout_problems_follow_the_chunk_keys(keys, expected) -> None:
     """Flag the keys that show two cuts of the same table, which leave rows twice."""
     assert find_layout_problems(keys) == expected
 
 
-def test_inspect_reports_the_version_the_files_and_the_chunk_keys(uri, tmp_path):
+def test_inspect_reports_the_version_the_files_and_the_chunk_keys(
+    uri, tmp_path
+) -> None:
     """Read the state of the table from its log."""
     write_chunk(
         uri, chunk_files(tmp_path / "a", "w1", [1, 2]), "w1", LedgerEntry("c:w1", 1)
@@ -240,7 +246,7 @@ def test_inspect_reports_the_version_the_files_and_the_chunk_keys(uri, tmp_path)
 
 def test_compact_lowers_the_files_that_inspect_counts_and_keeps_the_rows(
     uri, tmp_path, read_rows
-):
+) -> None:
     """Merge the small files of a chunk into one, with the same rows."""
     for number in range(3):
         directory = chunk_files(tmp_path / f"a{number}", "w1", [number])
@@ -255,7 +261,7 @@ def test_compact_lowers_the_files_that_inspect_counts_and_keeps_the_rows(
     assert read_rows(uri) == {"w1": [0, 1, 2]}
 
 
-def test_the_fingerprint_as_a_number_is_stable():
+def test_the_fingerprint_as_a_number_is_stable() -> None:
     """Keep the fingerprint of a known input, so a refactor cannot change it."""
     assert hash_summary(2, "10", "20") == hash_summary(2, "10", "20")
     assert hash_summary(2, "10", "20") == 0x24133D5443DA121
@@ -273,7 +279,7 @@ def test_the_fingerprint_as_a_number_is_stable():
 )
 async def test_the_fingerprint_follows_the_content_not_the_order(
     duckdb_memory, tmp_path, other, same
-):
+) -> None:
     """Give one number for the same rows in any order, and another for other rows."""
     executor = Executor(duckdb_memory)
     first = await compute_fingerprint(
@@ -287,7 +293,7 @@ async def test_the_fingerprint_follows_the_content_not_the_order(
     assert (first == second) is same
 
 
-async def test_a_changed_value_changes_the_fingerprint(duckdb_memory, tmp_path):
+async def test_a_changed_value_changes_the_fingerprint(duckdb_memory, tmp_path) -> None:
     """Notice a row that keeps its id but changes another column."""
     executor = Executor(duckdb_memory)
     one = chunk_files(tmp_path / "a", "w1", [1])
@@ -305,7 +311,7 @@ async def test_a_changed_value_changes_the_fingerprint(duckdb_memory, tmp_path):
 
 def test_regression_a_chunk_is_written_with_no_storage_options(
     uri, tmp_path, monkeypatch
-):
+) -> None:
     """Regression: writers over the S3 API of GCS lost commits.
 
     `deltalake` must reach `gs://` with its own GCS client and ADC, so a write passes
@@ -328,7 +334,9 @@ def test_regression_a_chunk_is_written_with_no_storage_options(
     assert all("storage_options" not in call for call in seen)
 
 
-def test_append_adds_the_rows_and_keeps_the_ones_of_the_chunk(uri, tmp_path, read_rows):
+def test_append_adds_the_rows_and_keeps_the_ones_of_the_chunk(
+    uri, tmp_path, read_rows
+) -> None:
     """Add a second capture in the same chunk, with no row lost."""
     write_chunk(
         uri, chunk_files(tmp_path / "a", "w", [1, 2]), "w", LedgerEntry("c:1", 1)
@@ -345,7 +353,9 @@ def test_append_adds_the_rows_and_keeps_the_ones_of_the_chunk(uri, tmp_path, rea
     assert read_known_fingerprints(uri, ["c:1", "c:2"]) == {"c:1": 1, "c:2": 2}
 
 
-def test_compact_merges_the_files_of_a_chunk_and_loses_no_row(uri, tmp_path, read_rows):
+def test_compact_merges_the_files_of_a_chunk_and_loses_no_row(
+    uri, tmp_path, read_rows
+) -> None:
     """Leave one file where there were three, with the same rows."""
     for number in range(3):
         write_chunk(
@@ -363,7 +373,7 @@ def test_compact_merges_the_files_of_a_chunk_and_loses_no_row(uri, tmp_path, rea
     assert read_rows(uri) == {"w": [0, 1, 2]}
 
 
-def test_a_chunk_written_with_a_time_has_it_on_every_row(uri, tmp_path):
+def test_a_chunk_written_with_a_time_has_it_on_every_row(uri, tmp_path) -> None:
     """Add `_prefect_extracted_at` as a time stamp in UTC, the same on every row."""
     moment = datetime(2024, 3, 10, 12, 0, tzinfo=UTC)
 
@@ -380,7 +390,7 @@ def test_a_chunk_written_with_a_time_has_it_on_every_row(uri, tmp_path):
     assert set(table.column(EXTRACTED_AT_COLUMN).to_pylist()) == {moment}
 
 
-def test_a_chunk_written_without_a_time_has_no_column(uri, tmp_path):
+def test_a_chunk_written_without_a_time_has_no_column(uri, tmp_path) -> None:
     """Leave the table as the files are, unless a time is asked for."""
     write_chunk(uri, chunk_files(tmp_path / "w", "w", [1]), "w", LedgerEntry("c:1", 1))
 
@@ -402,7 +412,7 @@ def read_names(uri: str) -> dict[int, str]:
     }
 
 
-def test_the_first_merge_creates_the_table_and_records_the_run(uri, tmp_path):
+def test_the_first_merge_creates_the_table_and_records_the_run(uri, tmp_path) -> None:
     """Create the table with the rows, and the ledger entry in the same commit."""
     merge_chunk(
         uri,
@@ -432,7 +442,7 @@ def test_the_first_merge_creates_the_table_and_records_the_run(uri, tmp_path):
 )
 def test_a_merge_adds_new_keys_and_updates_only_when_asked(
     uri, tmp_path, update, expected
-):
+) -> None:
     """Add key 3, and change key 2 only with `update`."""
     spec = MergeSpec(key=["id"], update=update)
     merge_chunk(
@@ -452,7 +462,9 @@ def test_a_merge_adds_new_keys_and_updates_only_when_asked(
     assert read_names(uri) == expected
 
 
-def test_the_same_data_merged_again_adds_no_row_and_rewrites_no_file(uri, tmp_path):
+def test_the_same_data_merged_again_adds_no_row_and_rewrites_no_file(
+    uri, tmp_path
+) -> None:
     """Make a rerun, or an overlapping window, change nothing."""
     spec = MergeSpec(key=["id"])
     merge_chunk(
@@ -474,7 +486,7 @@ def test_the_same_data_merged_again_adds_no_row_and_rewrites_no_file(uri, tmp_pa
     assert set(DeltaTable(uri).file_uris()) == files
 
 
-def test_a_merge_with_a_repeated_key_in_the_new_data_is_refused(uri, tmp_path):
+def test_a_merge_with_a_repeated_key_in_the_new_data_is_refused(uri, tmp_path) -> None:
     """Refuse two rows with one key: Delta would insert both, or fail an update."""
     folder = tmp_path / "dup"
     folder.mkdir()
@@ -490,7 +502,7 @@ def test_a_merge_with_a_repeated_key_in_the_new_data_is_refused(uri, tmp_path):
     assert not DeltaTable.is_deltatable(uri)
 
 
-def test_a_merge_with_no_rows_changes_nothing(uri, tmp_path):
+def test_a_merge_with_no_rows_changes_nothing(uri, tmp_path) -> None:
     """Leave the table and its ledger alone when the run found nothing."""
     merge_chunk(
         uri,
@@ -511,7 +523,7 @@ def test_a_merge_with_no_rows_changes_nothing(uri, tmp_path):
     assert read_known_fingerprints(uri, ["run:2"]) == {}
 
 
-def test_a_merge_with_a_time_stamps_new_and_changed_rows_only(uri, tmp_path):
+def test_a_merge_with_a_time_stamps_new_and_changed_rows_only(uri, tmp_path) -> None:
     """Keep the old time on a row that did not change."""
     first = datetime(2024, 3, 10, 12, 0, tzinfo=UTC)
     second = datetime(2024, 3, 10, 13, 0, tzinfo=UTC)
@@ -538,7 +550,7 @@ def test_a_merge_with_a_time_stamps_new_and_changed_rows_only(uri, tmp_path):
     assert stamps == {1: first, 2: second, 3: second}
 
 
-def test_a_merge_with_other_columns_is_refused(uri, tmp_path):
+def test_a_merge_with_other_columns_is_refused(uri, tmp_path) -> None:
     """Keep the schema rule of an append: other columns are an error."""
     merge_chunk(
         uri,
@@ -571,7 +583,7 @@ def test_a_merge_with_other_columns_is_refused(uri, tmp_path):
 )
 def test_a_prune_column_lowers_the_files_that_a_merge_reads(
     uri, tmp_path, prune, scanned
-):
+) -> None:
     """Read one file instead of three, when the key sits in the last one."""
     for number, nome in enumerate("abc", start=1):
         merge_chunk(
@@ -589,7 +601,7 @@ def test_a_prune_column_lowers_the_files_that_a_merge_reads(
     assert report == {"rows": 1, "inserted": 0, "updated": 0, "scanned": scanned}
 
 
-def test_a_merge_reports_the_rows_that_it_added_and_changed(uri, tmp_path):
+def test_a_merge_reports_the_rows_that_it_added_and_changed(uri, tmp_path) -> None:
     """Count the rows of each outcome, for the log and for the caller."""
     spec = MergeSpec(key=["id"])
     first = merge_chunk(
@@ -610,7 +622,7 @@ def test_a_merge_reports_the_rows_that_it_added_and_changed(uri, tmp_path):
     assert (second["rows"], second["inserted"], second["updated"]) == (2, 1, 1)
 
 
-def test_a_merge_prunes_by_a_column_with_a_time_zone(uri, tmp_path):
+def test_a_merge_prunes_by_a_column_with_a_time_zone(uri, tmp_path) -> None:
     """Compare the lowest time of the new data with a UTC column, with no duplicate."""
     zoned = arrow_schema(
         [
@@ -677,14 +689,16 @@ def test_a_merge_prunes_by_a_column_with_a_time_zone(uri, tmp_path):
         ),
     ],
 )
-def test_the_merge_predicate_matches_the_key_and_prunes_old_files(spec, low, expected):
+def test_the_merge_predicate_matches_the_key_and_prunes_old_files(
+    spec, low, expected
+) -> None:
     """Join the key columns, and bound the scan by the lowest prune value."""
     assert build_merge_predicate(spec, low) == expected
 
 
 def test_regression_a_merge_updates_a_row_that_differs_in_the_last_of_several_columns(
     uri, tmp_path
-):
+) -> None:
     """Regression: two columns besides the key must not mix the terms of the test."""
     wide = arrow_schema(
         [
@@ -732,7 +746,7 @@ def test_regression_a_merge_updates_a_row_that_differs_in_the_last_of_several_co
         pytest.param(["id", "nome"], [(1, None)], id="a_null_in_the_second_key_column"),
     ],
 )
-def test_a_merge_with_a_null_in_the_key_is_refused(uri, tmp_path, key, rows):
+def test_a_merge_with_a_null_in_the_key_is_refused(uri, tmp_path, key, rows) -> None:
     """Refuse a row that no key can match: it would be added again on every run."""
     folder = tmp_path / "nulls"
     folder.mkdir()

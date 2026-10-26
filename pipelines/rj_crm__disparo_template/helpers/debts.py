@@ -75,7 +75,9 @@ def format_debts(debts: JsonValue) -> str | None:
 async def fetch_debts(
     client: AsyncClient, cpf: str, url: str, pause: Pause = sleep, tries: int = DEBTS_TRIES
 ) -> Mapping[str, JsonValue] | None:
-    """Ask the API for the debts of a CPF. Try again after a failure, with a wait of 1, 2, 4 seconds.
+    """Ask the API for the debts of a CPF.
+
+    Try again after a failure, with a wait of 1, 2, 4 seconds.
 
     Return nothing if every try fails.
     """
@@ -124,8 +126,9 @@ async def enrich_with_debts(
 ) -> pl.DataFrame:
     """Add the debts to the frame, one request for each CPF, and drop the CPFs with no confirmed debt.
 
-    A CPF whose request failed, or whose answer does not confirm a debt (`api_resposta_sucesso` not true),
-    leaves the frame. The columns of `DEBTS_OUTPUT` are always there.
+    A CPF whose request failed, or whose answer does not confirm a debt
+    (`api_resposta_sucesso` not true), leaves the frame. The columns of `DEBTS_OUTPUT`
+    are always there.
     """
     cpfs = cast(
         "list[str]", frame.get_column(cpf_column).drop_nulls().cast(pl.String).unique(maintain_order=True).to_list()

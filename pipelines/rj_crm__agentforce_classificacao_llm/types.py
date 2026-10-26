@@ -13,9 +13,10 @@ type Row = dict[str, JsonValue]
 class Session:
     """A session of the citizen with the agent that waits to be classified, with the HSM that came before it.
 
-    `hsm_variables` are the values that fill the placeholders of `hsm_text`. `hsm_buttons` and
-    `late_button` come from the catalog of HSMs: the buttons of the HSM, and whether the only message of
-    the citizen is the text of one of them, which means a late answer to a button.
+    `hsm_variables` are the values that fill the placeholders of `hsm_text`.
+    `hsm_buttons` and `late_button` come from the catalog of HSMs: the buttons of the
+    HSM, and whether the only message of the citizen is the text of one of them, which
+    means a late answer to a button.
     """
 
     id_sessao: str

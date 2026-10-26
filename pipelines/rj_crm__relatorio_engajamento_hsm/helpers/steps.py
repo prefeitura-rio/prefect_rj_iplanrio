@@ -28,7 +28,8 @@ def sample_conversations(conversations: Sequence[Conversation], cap: int, seed: 
 def register_discoveries(answer: Sequence[Mapping[str, JsonValue]], catalog: Catalog) -> tuple[int, int]:
     """Add the new categories of an answer to the catalog, and return how many were new and how many items failed.
 
-    An item with no `categoria_nova` fails, and one that the catalog already has is not new.
+    An item with no `categoria_nova` fails, and one that the catalog already has is not
+    new.
     """
     new = failed = 0
 
@@ -51,8 +52,9 @@ def read_classifications(
 ) -> tuple[list[Classification], Counter[str]]:
     """Return the classifications of an answer, matched by the number of each conversation, and why the others failed.
 
-    A conversation fails when the answer has no category for it, says `NENHUMA_DO_CATALOGO`, or
-    names a category that the catalog does not have. The classification never adds a category.
+    A conversation fails when the answer has no category for it, says
+    `NENHUMA_DO_CATALOGO`, or names a category that the catalog does not have. The
+    classification never adds a category.
     """
     by_number = {item.get("id"): item for item in answer}
     results: list[Classification] = []
@@ -84,8 +86,9 @@ def read_classifications(
 def judge_target(size: int, judge_all_below: int, large_category_pct: float) -> int:
     """Return how many conversations of a category of this size the judge looks at.
 
-    A small category is judged in full, because a sample of a few would leave a huge margin of error.
-    A large one is judged in a share, since the margin is small well before the whole of it.
+    A small category is judged in full, because a sample of a few would leave a huge
+    margin of error. A large one is judged in a share, since the margin is small well
+    before the whole of it.
     """
     return size if size < judge_all_below else ceil(large_category_pct / 100 * size)
 

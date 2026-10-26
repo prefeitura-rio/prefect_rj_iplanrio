@@ -23,8 +23,8 @@ def iter_placemarks(node: KML | Document | Folder, folder: str | None = None) ->
 def parse_placemarks(text: str, qmd_id: str) -> list[Row]:
     """Return a row for each placemark of the KML of a QMD, or no row if the KML has no document or is bad.
 
-    A row has the id of the QMD, the folder, the name, the description, the geometry as WKT with its
-    type, and the extended data as JSON.
+    A row has the id of the QMD, the folder, the name, the description, the geometry as
+    WKT with its type, and the extended data as JSON.
     """
     try:
         with catch_warnings():

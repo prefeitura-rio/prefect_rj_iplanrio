@@ -25,7 +25,7 @@ async def describe(engine_name: str) -> dict[str, str]:
         return await engine.describe()
 
 
-async def test_the_engine_describes_the_columns_of_orders(engine):
+async def test_the_engine_describes_the_columns_of_orders(engine) -> None:
     """Name the four columns of `orders`, in the case of the engine, and nothing odd."""
     described = await describe(engine)
 
@@ -33,14 +33,14 @@ async def test_the_engine_describes_the_columns_of_orders(engine):
     assert names == {"id", "nome", "dia", "valor"}
 
 
-async def test_every_row_arrives_with_the_same_values(engine):
+async def test_every_row_arrives_with_the_same_values(engine) -> None:
     """Return the 304 rows of the dataset, equal after the types are put in one form."""
     table = await stage(engine, Rows())
 
     assert canonical(table) == expected()
 
 
-async def test_a_chunk_of_ids_keeps_exactly_its_rows(engine):
+async def test_a_chunk_of_ids_keeps_exactly_its_rows(engine) -> None:
     """Keep the ids from 100 up to, and not including, 200."""
     rows = Rows(column=column(engine), chunk=Chunk("w", 100, 200))
 
@@ -50,7 +50,7 @@ async def test_a_chunk_of_ids_keeps_exactly_its_rows(engine):
 
 
 @pytest.mark.parametrize("kind", ["lt10", "ge5", "or12"])
-async def test_a_filter_keeps_exactly_its_rows(engine, kind):
+async def test_a_filter_keeps_exactly_its_rows(engine, kind) -> None:
     """Apply one filter in the dialect of the engine, with an OR inside it."""
     keep = {
         "lt10": lambda row: row["id"] < 10,
@@ -63,7 +63,7 @@ async def test_a_filter_keeps_exactly_its_rows(engine, kind):
     assert canonical(table) == expected(keep)
 
 
-async def test_two_filters_are_joined_by_and(engine):
+async def test_two_filters_are_joined_by_and(engine) -> None:
     """Keep the rows that pass both filters, which are the ids from 5 to 9."""
     filters = [*filters_for(engine, "lt10"), *filters_for(engine, "ge5")]
 
@@ -72,7 +72,7 @@ async def test_two_filters_are_joined_by_and(engine):
     assert [row[0] for row in canonical(table)] == [5, 6, 7, 8, 9]
 
 
-async def test_a_chunk_of_dates_keeps_exactly_its_rows(engine):
+async def test_a_chunk_of_dates_keeps_exactly_its_rows(engine) -> None:
     """Keep February of 2024, with the chunk half open at the end."""
     if engine == "couchdb":
         pytest.skip("CouchDB chunks cut only the id")
@@ -87,7 +87,7 @@ async def test_a_chunk_of_dates_keeps_exactly_its_rows(engine):
     assert canonical(table) == expected(in_february)
 
 
-async def test_the_null_chunk_keeps_the_rows_without_a_date(engine):
+async def test_the_null_chunk_keeps_the_rows_without_a_date(engine) -> None:
     """Keep the three rows whose date is NULL."""
     if engine == "couchdb":
         pytest.skip("CouchDB chunks cut only the id")
@@ -96,13 +96,13 @@ async def test_the_null_chunk_keeps_the_rows_without_a_date(engine):
     assert [row[0] for row in canonical(table)] == [301, 302, 303]
 
 
-async def test_couchdb_cuts_only_its_ids():
+async def test_couchdb_cuts_only_its_ids() -> None:
     """Refuse a chunk over another column, because CouchDB chunks cut the id."""
     with pytest.raises(ValueError, match="cuts the id"):
         await stage("couchdb", Rows(column="dia", chunk=NULL_CHUNK))
 
 
-async def test_an_empty_read_keeps_the_columns(engine):
+async def test_an_empty_read_keeps_the_columns(engine) -> None:
     """Write a file with no row and the same columns as a full read."""
     full = await stage(engine, Rows())
     empty = await stage(engine, Rows(empty=True))
@@ -111,7 +111,7 @@ async def test_an_empty_read_keeps_the_columns(engine):
     assert empty.column_names == full.column_names
 
 
-async def test_a_filter_that_is_not_one_predicate_is_refused(engine):
+async def test_a_filter_that_is_not_one_predicate_is_refused(engine) -> None:
     """Raise `ValueError` for a filter that cannot be one predicate, before any read."""
     bad = "id = 1; DROP TABLE orders" if engine not in DOCUMENTS else "not a selector"
 
@@ -123,7 +123,7 @@ async def test_a_filter_that_is_not_one_predicate_is_refused(engine):
     ("width", "fits"),
     [pytest.param(100, True, id="a_number_of_ids"), pytest.param("month", False, id="a_date_width")],
 )
-async def test_the_chunk_column_check_follows_the_type_of_the_id(engine, width, fits):
+async def test_the_chunk_column_check_follows_the_type_of_the_id(engine, width, fits) -> None:
     """Accept the integer id for a number of ids and refuse it for a date width."""
     described = await describe(engine)
     chunks = Chunks(column=column(engine), width=width, begin=0)
@@ -136,7 +136,7 @@ async def test_the_chunk_column_check_follows_the_type_of_the_id(engine, width, 
                 opened.check_chunks(chunks, described)
 
 
-async def test_sql_runs_where_the_system_has_sql(engine):
+async def test_sql_runs_where_the_system_has_sql(engine) -> None:
     """Run a statement on the SQL engines, and refuse it on the document stores."""
     sql = "SELECT 1 FROM DUAL" if engine == "oracle" else "SELECT 1"
 
@@ -150,14 +150,14 @@ async def test_sql_runs_where_the_system_has_sql(engine):
             assert datadataframes[0].height == 1
 
 
-async def test_the_decimal_keeps_every_digit(engine):
+async def test_the_decimal_keeps_every_digit(engine) -> None:
     """Return 99999999.99 exactly, for the row with the big value."""
     table = await stage(engine, Rows(column=column(engine), chunk=Chunk("big", 3_000_000_000, 3_000_000_001)))
 
     assert [row[3] for row in canonical(table)] == [Decimal("99999999.99")]
 
 
-async def test_read_returns_every_row_in_datadataframes_where_the_engine_reads_whole(engine):
+async def test_read_returns_every_row_in_datadataframes_where_the_engine_reads_whole(engine) -> None:
     """Read the 304 rows as datadataframes of at most `batch_size`, and refuse on Oracle, which only writes chunks."""
     async with Engine.from_source(build_source(engine)) as opened:
         if engine == "oracle":
@@ -172,7 +172,7 @@ async def test_read_returns_every_row_in_datadataframes_where_the_engine_reads_w
         assert max(dataframe.height for dataframe in datadataframes) <= 100
 
 
-async def test_a_clone_is_a_new_engine_that_works(engine):
+async def test_a_clone_is_a_new_engine_that_works(engine) -> None:
     """Open a clone of an engine, and get the same columns from it."""
     async with Engine.from_source(build_source(engine)) as opened:
         first = await opened.describe()
@@ -181,7 +181,7 @@ async def test_a_clone_is_a_new_engine_that_works(engine):
             assert await other.describe() == first
 
 
-async def test_a_mongodb_pipeline_returns_the_rows_of_a_plain_read():
+async def test_a_mongodb_pipeline_returns_the_rows_of_a_plain_read() -> None:
     """Project two fields with a pipeline, and get the same rows as a plain read gives."""
     if "mongodb" not in available():
         pytest.skip("MongoDB is not up")

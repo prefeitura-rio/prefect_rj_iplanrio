@@ -1,9 +1,10 @@
 """The sandbox that runs the rules of the catalog.
 
-A rule is Python code that comes from a table, written by a model and checked by a person. The sandbox
-reads its syntax tree before it runs it: it blocks imports other than `re` and `unicodedata`, the
-dangerous names (`eval`, `exec`, `open`, `os`, `subprocess` and others) and the dunder attributes, and
-it refuses a function that uses a name that is not its own, a builtin of the safe list, `re` or `unicodedata`.
+A rule is Python code that comes from a table, written by a model and checked by a
+person. The sandbox reads its syntax tree before it runs it: it blocks imports other
+than `re` and `unicodedata`, the dangerous names (`eval`, `exec`, `open`, `os`,
+`subprocess` and others) and the dunder attributes, and it refuses a function that uses
+a name that is not its own, a builtin of the safe list, `re` or `unicodedata`.
 """
 
 import re
@@ -153,7 +154,8 @@ def outside_references(function: FunctionDef) -> set[str]:
 def compile_rules(code: str) -> dict[str, Callable[[str], bool]]:
     """Compile the functions of a block of rules, and return them by name.
 
-    A function that uses a name from outside is skipped and logged. Raise `ValueError` if the block is not safe.
+    A function that uses a name from outside is skipped and logged. Raise `ValueError`
+    if the block is not safe.
     """
     reason = check_safe(code)
 

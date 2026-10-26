@@ -36,7 +36,7 @@ async def run(executor: Executor, handled: list[str]) -> None:
 )
 async def test_the_engine_says_how_many_chunks_are_read_together(
     fake_chunk_engine, workers, peak
-):
+) -> None:
     """Read as many chunks together as the engine says, and never more."""
     engine = fake_chunk_engine(workers=workers)
     handled: list[str] = []
@@ -47,7 +47,7 @@ async def test_the_engine_says_how_many_chunks_are_read_together(
     assert engine.activity.peak == peak
 
 
-async def test_the_chunks_are_handed_over_together(fake_chunk_engine):
+async def test_the_chunks_are_handed_over_together(fake_chunk_engine) -> None:
     """Run the handler for two chunks at once: each waits for the other and both end."""
     engine = fake_chunk_engine(workers=2)
     arrived = [Event(), Event()]
@@ -65,7 +65,9 @@ async def test_the_chunks_are_handed_over_together(fake_chunk_engine):
     assert sorted(handled) == KEYS[:2]
 
 
-async def test_each_extra_worker_reads_on_an_engine_of_its_own(fake_chunk_engine):
+async def test_each_extra_worker_reads_on_an_engine_of_its_own(
+    fake_chunk_engine,
+) -> None:
     """Open one clone for each worker, and close them all when the chunks are done."""
     engine = fake_chunk_engine(workers=3)
 
@@ -74,7 +76,7 @@ async def test_each_extra_worker_reads_on_an_engine_of_its_own(fake_chunk_engine
     assert (engine.activity.opened, engine.activity.closed) == (3, 3)
 
 
-async def test_one_worker_reads_on_the_engine_that_it_has(fake_chunk_engine):
+async def test_one_worker_reads_on_the_engine_that_it_has(fake_chunk_engine) -> None:
     """Open no clone when one chunk is read at a time."""
     engine = fake_chunk_engine(workers=1)
 
@@ -85,7 +87,7 @@ async def test_one_worker_reads_on_the_engine_that_it_has(fake_chunk_engine):
 
 async def test_the_first_error_is_raised_as_it_is_and_stops_the_other_workers(
     fake_chunk_engine,
-):
+) -> None:
     """Raise the `ValueError`, not a group, and leave the other chunks unread."""
     engine = fake_chunk_engine(workers=2, fail_on="w1")
     handled: list[str] = []
@@ -97,7 +99,7 @@ async def test_the_first_error_is_raised_as_it_is_and_stops_the_other_workers(
     assert engine.activity.running == 0
 
 
-async def test_the_executor_opens_the_engine_and_closes_it(fake_chunk_engine):
+async def test_the_executor_opens_the_engine_and_closes_it(fake_chunk_engine) -> None:
     """Open the engine on enter and close it on exit."""
     engine = fake_chunk_engine()
 

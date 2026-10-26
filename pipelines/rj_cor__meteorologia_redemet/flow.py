@@ -22,9 +22,9 @@ async def rj_cor__meteorologia_redemet(
 ) -> None:
     """Add the hourly measurements of the REDEMET stations of Rio to a BigQuery table.
 
-    Without dates the run reads yesterday and today in UTC, and keeps the measurements of
-    today in São Paulo. With a first date it is a backfill and keeps every measurement.
-    In `merge` a measurement that the table has is not added again.
+    Without dates the run reads yesterday and today in UTC, and keeps the measurements
+    of today in São Paulo. With a first date it is a backfill and keeps every
+    measurement. In `merge` a measurement that the table has is not added again.
     """
     first, last, backfill = read_dates(first_date, last_date)
     observations = await fetch_observations_task(first, last)

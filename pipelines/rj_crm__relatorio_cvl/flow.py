@@ -27,8 +27,8 @@ async def rj_crm__relatorio_cvl(
 ) -> None:
     """Build the 24 hour sessions of the receptive service of a month and load them to a BigQuery table.
 
-    Without dates the report is the previous month. A message that comes more than 24 hours after
-    the start of a session of the same phone starts the next one.
+    Without dates the report is the previous month. A message that comes more than 24
+    hours after the start of a session of the same phone starts the next one.
     """
     start, end = read_report_dates(start_date, end_date)
     messages = await read_bq(build_query(start, end), project=BILLING_PROJECT)

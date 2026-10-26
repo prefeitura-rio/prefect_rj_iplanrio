@@ -74,8 +74,9 @@ class Destination:
     def uri(self) -> str:
         """Return the `gcs://` URI of the table files.
 
-        `deltalake` reads `gcs://` with OpenDAL, which accepts a WIF ADC (`external_account`),
-        and `gs://` with `object_store`, which does not. `BigQuery` turns it into `gs://`.
+        `deltalake` reads `gcs://` with OpenDAL, which accepts a WIF ADC
+        (`external_account`), and `gs://` with `object_store`, which does not.
+        `BigQuery` turns it into `gs://`.
         """
         return f"gcs://{self.bucket}/{self.prefix}"
 
@@ -355,9 +356,9 @@ async def dump_in_batches(
 ) -> None:
     """Copy the rows of a source to Parquet files in the bucket, `batch_size` rows at a time.
 
-    It reads the origin of the source and uploads each batch, so memory holds one
-    batch. This is plain batching: a rerun in `append` adds the rows again. `overwrite`
-    deletes the old files first. Raise `ValueError` for `merge`, which needs a Delta table.
+    It reads the origin of the source and uploads each batch, so memory holds one batch.
+    This is plain batching: a rerun in `append` adds the rows again. `overwrite` deletes
+    the old files first. Raise `ValueError` for `merge`, which needs a Delta table.
     """
     if dump_mode == "merge":
         raise ValueError("A copy in batches cannot merge: use a Delta dump")

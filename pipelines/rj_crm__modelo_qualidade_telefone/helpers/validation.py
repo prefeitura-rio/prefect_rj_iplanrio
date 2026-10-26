@@ -19,7 +19,8 @@ EVENT_COLUMNS = (*FEATURES, "id_interacao", "telefone", "data_corte", "telefone_
 def validate_training(frame: pl.DataFrame) -> None:
     """Raise `ValueError` if the training frame lacks a column, is small, or has too few examples of a class.
 
-    A class with few examples makes the stratified split and the cross-validation unstable.
+    A class with few examples makes the stratified split and the cross-validation
+    unstable.
     """
     missing = [column for column in TRAINING_COLUMNS if column not in frame.columns]
 
@@ -51,8 +52,9 @@ def validate_events(frame: pl.DataFrame) -> None:
 def validate_scores(stats: ScoreStats, previous_rows: int | None) -> None:
     """Raise `ValueError` for a scoring that is clearly broken.
 
-    A scoring with no row, with an invalid probability, or with a volume that differs from the last run by
-    more than `MAX_ROW_CHANGE` is broken. `previous_rows` is `None` in the first run.
+    A scoring with no row, with an invalid probability, or with a volume that differs
+    from the last run by more than `MAX_ROW_CHANGE` is broken. `previous_rows` is `None`
+    in the first run.
     """
     if stats.n_rows == 0:
         raise ValueError("The scoring has no row: not published")

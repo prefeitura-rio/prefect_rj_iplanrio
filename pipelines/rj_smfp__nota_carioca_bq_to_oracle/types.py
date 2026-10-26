@@ -23,9 +23,10 @@ class Source:
 class Load:
     """How the tables load into Oracle.
 
-    `template_schema` is the schema of the original tables, which defaults to the schema of the login.
-    `excluded_columns` are columns of the original that the new table does not get. `sessions` is the number of
-    SQL*Loader sessions. The waits are in minutes: `0` turns the In-Memory wait off.
+    `template_schema` is the schema of the original tables, which defaults to the schema
+    of the login. `excluded_columns` are columns of the original that the new table does
+    not get. `sessions` is the number of SQL*Loader sessions. The waits are in minutes:
+    `0` turns the In-Memory wait off.
     """
 
     template_schema: str | None = None
@@ -42,8 +43,9 @@ class Load:
 class Dbt:
     """The optional dbt run before the load.
 
-    With `enabled`, the flow starts the deployment, waits for it, and exports only after it finishes.
-    With no `parameters`, the defaults of the pipeline apply, and a given `parameters` replaces them whole.
+    With `enabled`, the flow starts the deployment, waits for it, and exports only after
+    it finishes. With no `parameters`, the defaults of the pipeline apply, and a given
+    `parameters` replaces them whole.
     """
 
     enabled: bool = False

@@ -73,11 +73,11 @@ async def run_shards(
 ) -> None:
     """Run a dump in `count` child runs of the deployment, and wait until every one has ended.
 
-    Child `index` of `count` gets the parameters of the parent with `options.shard` set (see
-    `build_shard_parameters`). They go to the work queue `SHARD_QUEUE`, whose concurrency
-    limit caps how many run at once. If the parent stops, the child runs that did not end are
-    cancelled, because Prefect does not do it. Raise `RuntimeError` that names the child runs
-    that did not complete, after all of them have ended.
+    Child `index` of `count` gets the parameters of the parent with `options.shard` set
+    (see `build_shard_parameters`). They go to the work queue `SHARD_QUEUE`, whose
+    concurrency limit caps how many run at once. If the parent stops, the child runs
+    that did not end are cancelled, because Prefect does not do it. Raise `RuntimeError`
+    that names the child runs that did not complete, after all of them have ended.
     """
     ids: list[UUID] = []
 

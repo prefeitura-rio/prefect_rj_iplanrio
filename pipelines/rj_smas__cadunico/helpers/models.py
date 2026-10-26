@@ -27,7 +27,8 @@ INDENT_OFFSET = 2
 def parse_attributes(row: Record) -> dict[str, str] | None:
     """Return the dictionary of values of a column, which the sheet writes as a JSON object, or nothing.
 
-    Raise `ValueError` for a text that is not JSON, and `TypeError` for JSON that is not an object.
+    Raise `ValueError` for a text that is not JSON, and `TypeError` for JSON that is not
+    an object.
     """
     text = row["dicionario_atributos"]
 
@@ -50,8 +51,8 @@ def parse_attributes(row: Record) -> dict[str, str] | None:
 def prepare_rows(rows: Sequence[Record]) -> list[Record]:
     """Return the rows with a two-digit `reg` and a four-digit `version`, and without the columns that are empty.
 
-    A column that a version lacks takes the version that comes before it, so the model of
-    that version selects it as `NULL`.
+    A column that a version lacks takes the version that comes before it, so the model
+    of that version selects it as `NULL`.
     """
     prepared: list[Record] = []
 
@@ -97,7 +98,8 @@ def make_field(row: Record) -> Field:
     """Return how the model reads a column of the text line.
 
     A column with a dictionary of values has a second column, named like the first one
-    without `id_`, that holds the meaning of the value. Raise `ValueError` if the name has no `id_`.
+    without `id_`, that holds the meaning of the value. Raise `ValueError` if the name
+    has no `id_`.
     """
     source = f"SUBSTRING(text,{row['posicao']},{row['tamanho']})"
     bigquery_type = row["bigquery_type"] or "STRING"
@@ -140,8 +142,8 @@ def column_key(row: Record) -> str:
 def build_model(rows: Sequence[Record], number: str, dataset_id: str, last_version: str) -> Model:
     """Return the model of one type of record, from its rows.
 
-    There is one select for each layout version, in the order of the rows, and the schema
-    describes the columns of the last version.
+    There is one select for each layout version, in the order of the rows, and the
+    schema describes the columns of the last version.
     """
     name = TABLE_NAMES[number]
     name = f"{name}_test" if "test" in dataset_id else name

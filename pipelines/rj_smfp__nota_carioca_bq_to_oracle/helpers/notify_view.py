@@ -2,9 +2,10 @@
 
 Só funções puras.
 
-Porcentagem geral (fixa, simples): dbt vale 20% (só com ``run_dbt``), exportação 5%, tabelas 70%, espera do In-Memory
-4% e troca dos sinônimos 1%; os pesos dos passos ativos são normalizados para somar 100%. Entre as tabelas o peso é o
-volume exportado; dentro de uma tabela os pesos são fixos (``TABLE_WEIGHTS``: a carga SQL*Loader, medida pelos
+Porcentagem geral (fixa, simples): dbt vale 20% (só com ``run_dbt``), exportação 5%,
+tabelas 70%, espera do In-Memory 4% e troca dos sinônimos 1%; os pesos dos passos ativos
+são normalizados para somar 100%. Entre as tabelas o peso é o volume exportado; dentro
+de uma tabela os pesos são fixos (``TABLE_WEIGHTS``: a carga SQL*Loader, medida pelos
 bytes, pesa 60%, e os índices, 20%).
 """
 
@@ -47,20 +48,16 @@ MIN_STEP_ELAPSED_SECONDS = 60.0
 class TableState:
     """Estado de uma tabela.
 
-    :param name: Nome da tabela no BigQuery.
-    :param weight: Peso entre as tabelas (bytes exportados); 1 se desconhecido.
-    :param step: Etapa atual; ``None`` se a tabela ainda não começou.
-    :param slot: Slot A/B que recebe a carga.
-    :param load: Último andamento do SQL*Loader.
-    :param indexes_done: Índices já criados.
-    :param indexes_total: Índices a criar.
-    :param rows: Linhas validadas, na tabela concluída.
-    :param physical_table: Tabela física do Oracle que recebe a carga (``BQLOAD_<tabela>_A`` ou ``_B``).
-    :param bq_rows: Linhas da tabela no BigQuery, na foto exportada.
-    :param loaded_rows: Linhas carregadas pelo SQL*Loader.
-    :param oracle_rows: Linhas contadas no Oracle depois da carga, na validação.
-    :param seconds: Duração da tabela, na concluída.
-    :param failed: Se a tabela falhou.
+    :param name: Nome da tabela no BigQuery. :param weight: Peso entre as tabelas (bytes
+    exportados); 1 se desconhecido. :param step: Etapa atual; ``None`` se a tabela ainda
+    não começou. :param slot: Slot A/B que recebe a carga. :param load: Último andamento
+    do SQL*Loader. :param indexes_done: Índices já criados. :param indexes_total:
+    Índices a criar. :param rows: Linhas validadas, na tabela concluída. :param
+    physical_table: Tabela física do Oracle que recebe a carga (``BQLOAD_<tabela>_A`` ou
+    ``_B``). :param bq_rows: Linhas da tabela no BigQuery, na foto exportada. :param
+    loaded_rows: Linhas carregadas pelo SQL*Loader. :param oracle_rows: Linhas contadas
+    no Oracle depois da carga, na validação. :param seconds: Duração da tabela, na
+    concluída. :param failed: Se a tabela falhou.
     """
 
     name: str
@@ -83,22 +80,16 @@ class TableState:
 class RunState:
     """O que a execução sabe num instante.
 
-    :param dataset_id: Dataset de origem.
-    :param run_name: Nome do flow run.
-    :param url: Link do flow run.
-    :param status: Estado da execução.
-    :param mode: ``full`` ou ``synonyms_only``.
-    :param run_dbt: Se o dbt faz parte da execução.
-    :param step: Passo atual.
-    :param tables: Estado de cada tabela, na ordem.
-    :param sessions: Sessões do SQL*Loader pedidas.
-    :param elapsed_seconds: Tempo desde o início.
-    :param updated_at: Hora da atualização.
-    :param current_table: Tabela em processamento.
-    :param dbt_seconds: Duração do dbt, quando concluído.
-    :param error: Mensagem do erro, na falha.
-    :param failed_step: Passo em que a execução parou (falha ou cancelamento).
-    :param step_elapsed_seconds: Há quanto tempo a etapa atual (passo e, nas tabelas, etapa da tabela) está em curso.
+    :param dataset_id: Dataset de origem. :param run_name: Nome do flow run. :param url:
+    Link do flow run. :param status: Estado da execução. :param mode: ``full`` ou
+    ``synonyms_only``. :param run_dbt: Se o dbt faz parte da execução. :param step:
+    Passo atual. :param tables: Estado de cada tabela, na ordem. :param sessions:
+    Sessões do SQL*Loader pedidas. :param elapsed_seconds: Tempo desde o início. :param
+    updated_at: Hora da atualização. :param current_table: Tabela em processamento.
+    :param dbt_seconds: Duração do dbt, quando concluído. :param error: Mensagem do
+    erro, na falha. :param failed_step: Passo em que a execução parou (falha ou
+    cancelamento). :param step_elapsed_seconds: Há quanto tempo a etapa atual (passo e,
+    nas tabelas, etapa da tabela) está em curso.
     """
 
     dataset_id: str
@@ -122,7 +113,8 @@ class RunState:
 def stage_key(state: RunState) -> tuple[Step, str | None, TableStep | None]:
     """Identifica a etapa exibida em "Etapa atual": o passo, a tabela em processamento e a etapa dela.
 
-    Enquanto a chave não muda, a etapa é a mesma e o relógio de ``step_elapsed_seconds`` segue correndo.
+    Enquanto a chave não muda, a etapa é a mesma e o relógio de ``step_elapsed_seconds``
+    segue correndo.
     """
     table = state.tables.get(state.current_table or "")
     return state.step, state.current_table, table.step if table is not None else None
@@ -209,8 +201,8 @@ def table_view(table: TableState) -> TableView:
 def validation_line(table: TableState) -> ValidationLine:
     """Compara as linhas do BigQuery (foto), do SQL*Loader e do Oracle (tabela física) com o que já se sabe.
 
-    :param table: Estado da tabela.
-    :returns: A linha de validação; o lado Oracle leva o nome da tabela física quando conhecido.
+    :param table: Estado da tabela. :returns: A linha de validação; o lado Oracle leva o
+    nome da tabela física quando conhecido.
     """
     oracle_label = f"Oracle ({table.physical_table})" if table.physical_table else "Oracle"
     sides = (

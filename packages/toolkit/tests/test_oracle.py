@@ -67,7 +67,7 @@ from toolkit.oracle import (
         ),
     ],
 )
-def test_a_number_never_loses_digits(precision, scale, expression, arrow):
+def test_a_number_never_loses_digits(precision, scale, expression, arrow) -> None:
     """Read a number as an integer, a decimal or exact text, never a rounded double."""
     assert build_number_column(precision, scale) == (expression, arrow)
 
@@ -132,7 +132,9 @@ def test_a_number_never_loses_digits(precision, scale, expression, arrow):
         ),
     ],
 )
-def test_each_type_has_an_expression_and_an_arrow_type(kind, expression, fetch, target):
+def test_each_type_has_an_expression_and_an_arrow_type(
+    kind, expression, fetch, target
+) -> None:
     """Pick the expression and the Arrow types of a column from its Oracle type."""
     assert plan_column("C", kind, None, None) == OracleColumn(
         "C", expression, fetch, target
@@ -140,7 +142,7 @@ def test_each_type_has_an_expression_and_an_arrow_type(kind, expression, fetch, 
 
 
 @pytest.mark.parametrize("kind", ["DB_TYPE_OBJECT", "DB_TYPE_BOOLEAN", "DB_TYPE_BFILE"])
-def test_a_type_with_no_conversion_names_the_column(kind):
+def test_a_type_with_no_conversion_names_the_column(kind) -> None:
     """Refuse the type, and tell the user to cast the column in a query."""
     with pytest.raises(
         NotImplementedError,
@@ -177,13 +179,13 @@ def test_a_type_with_no_conversion_names_the_column(kind):
         ),
     ],
 )
-def test_the_source_of_a_read_is_a_table_or_a_query(origin, expected):
+def test_the_source_of_a_read_is_a_table_or_a_query(origin, expected) -> None:
     """Quote a table by part, and let a chunk filter a query."""
     assert build_source_sql(origin) == expected
 
 
 @pytest.mark.parametrize("origin", [Files("f.parquet", "parquet"), Changes("0")])
-def test_a_read_that_is_neither_a_table_nor_a_query_is_refused(origin):
+def test_a_read_that_is_neither_a_table_nor_a_query_is_refused(origin) -> None:
     """Refuse an origin that Oracle cannot read."""
     with pytest.raises(UnsupportedRequestError, match="OracleEngine"):
         build_source_sql(origin)
@@ -216,7 +218,9 @@ def test_a_read_that_is_neither_a_table_nor_a_query_is_refused(origin):
         ),
     ],
 )
-def test_a_chunk_becomes_predicates_with_binds(column, chunk, clauses, binds, rendered):
+def test_a_chunk_becomes_predicates_with_binds(
+    column, chunk, clauses, binds, rendered
+) -> None:
     """Send every value as a bind, so it never reaches the SQL text."""
     found, got = build_predicates(column, chunk, ["STATUS", "ID", "NOME", "DIA"])
 
@@ -224,7 +228,7 @@ def test_a_chunk_becomes_predicates_with_binds(column, chunk, clauses, binds, re
     assert got == binds
 
 
-def test_a_chunk_column_that_the_source_lacks_is_refused():
+def test_a_chunk_column_that_the_source_lacks_is_refused() -> None:
     """Refuse a chunk over a column that the table does not have."""
     with pytest.raises(ValueError, match="Unknown columns"):
         build_predicates("MISSING", Chunk("k", 0, 1), ["ID"])
@@ -232,7 +236,7 @@ def test_a_chunk_column_that_the_source_lacks_is_refused():
 
 async def test_a_table_is_read_as_of_the_scn_with_its_filters_and_chunk(
     fake_engine, select
-):
+) -> None:
     """Read the table as of the bind, with filters as text and the chunk as binds."""
     found, _ = build_predicates("ID", Chunk("k", 0, 1), ["ID"])
 
@@ -252,7 +256,7 @@ async def test_a_table_is_read_as_of_the_scn_with_its_filters_and_chunk(
 async def test_a_query_is_not_read_as_of_a_scn_and_has_no_where_without_filters(
     fake_engine,
     select,
-):
+) -> None:
     """Leave `AS OF SCN` out of a query, which has no table to flash back."""
     sql = await select(
         fake_engine,
@@ -266,7 +270,9 @@ async def test_a_query_is_not_read_as_of_a_scn_and_has_no_where_without_filters(
     assert "WHERE" not in sql
 
 
-async def test_an_empty_read_returns_no_row_whatever_the_filters(fake_engine, select):
+async def test_an_empty_read_returns_no_row_whatever_the_filters(
+    fake_engine, select
+) -> None:
     """Ask for the columns only, so the schema comes without a row."""
     sql = await select(
         fake_engine,
@@ -281,7 +287,7 @@ async def test_an_empty_read_returns_no_row_whatever_the_filters(fake_engine, se
     assert "ID > 1" not in sql
 
 
-def test_a_batch_gets_the_target_types(batch):
+def test_a_batch_gets_the_target_types(batch) -> None:
     """Mark a naive instant as UTC, and give a text its plain type."""
     columns = [
         OracleColumn(
@@ -306,7 +312,7 @@ def test_a_batch_gets_the_target_types(batch):
     assert got.schema.field("NOME").type == arrow_string()
 
 
-def test_rows_default_to_no_filter_and_no_chunk():
+def test_rows_default_to_no_filter_and_no_chunk() -> None:
     """Read everything unless a step says otherwise."""
     assert Rows() == Rows(filters=(), column=None, chunk=None, empty=False)
 
@@ -319,7 +325,9 @@ COLUMNS = [
 ]
 
 
-async def test_a_query_yields_dataframes_in_the_types_of_delta(fake_oracle, batch):
+async def test_a_query_yields_dataframes_in_the_types_of_delta(
+    fake_oracle, batch
+) -> None:
     """Give an instant its UTC zone, keep a decimal exact, and keep batches apart."""
     connection = fake_oracle(COLUMNS, [batch(2), batch(1)])
 
@@ -334,7 +342,9 @@ async def test_a_query_yields_dataframes_in_the_types_of_delta(fake_oracle, batc
     assert dataframes[0]["QUANDO"][0] == datetime(2024, 3, 1, 12, tzinfo=UTC)
 
 
-async def test_a_query_is_wrapped_in_the_select_list_of_its_columns(fake_oracle, batch):
+async def test_a_query_is_wrapped_in_the_select_list_of_its_columns(
+    fake_oracle, batch
+) -> None:
     """Read an instant as UTC and a bare number as exact text in the Oracle SQL."""
     connection = fake_oracle(COLUMNS, [batch(1)])
 
@@ -369,7 +379,7 @@ async def test_a_query_is_wrapped_in_the_select_list_of_its_columns(fake_oracle,
 
 async def test_a_query_with_no_rows_still_yields_one_dataframe_with_its_columns(
     fake_oracle,
-):
+) -> None:
     """Keep the columns, so a dump can write a file that has the schema."""
     connection = fake_oracle(COLUMNS, [])
 
@@ -382,7 +392,7 @@ async def test_a_query_with_no_rows_still_yields_one_dataframe_with_its_columns(
     assert dataframe.schema["QUANDO"] == Datetime("us", "UTC")
 
 
-async def test_a_statement_binds_its_params_by_position(fake_oracle):
+async def test_a_statement_binds_its_params_by_position(fake_oracle) -> None:
     """Run a statement with the params as a list."""
     connection = fake_oracle([], [])
 
@@ -391,7 +401,9 @@ async def test_a_statement_binds_its_params_by_position(fake_oracle):
     assert connection.queries == [("ALTER SESSION SET X = :1", [3])]
 
 
-async def test_the_connection_closes_when_the_engine_closes(fake_oracle, monkeypatch):
+async def test_the_connection_closes_when_the_engine_closes(
+    fake_oracle, monkeypatch
+) -> None:
     """Close the connection off the event loop, when the `async with` ends."""
     connection = fake_oracle([], [])
     monkeypatch.setattr(oracle, "oracle_connect", lambda **_: connection)

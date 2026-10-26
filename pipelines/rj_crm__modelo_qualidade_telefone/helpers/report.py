@@ -1,6 +1,7 @@
 """Build the files of the report of one retrain: CSV files, two plots and a text with the decision.
 
-The official numbers are in BigQuery. These files are for a person who wants to compare two retrains with no query.
+The official numbers are in BigQuery. These files are for a person who wants to compare
+two retrains with no query.
 """
 
 from collections.abc import Sequence
@@ -72,8 +73,9 @@ def simulation_csv(simulation: Simulation) -> bytes:
 def coverage_csv(frame: pl.DataFrame) -> bytes:
     """Return a CSV of the share of filled rows of each feature, over the raw training frame.
 
-    The frame is the one before the model sees it, so a broken source shows: a feature that turns to a
-    sentinel or to 0 for almost everyone does not show in the trained model.
+    The frame is the one before the model sees it, so a broken source shows: a feature
+    that turns to a sentinel or to 0 for almost everyone does not show in the trained
+    model.
     """
     return measure_coverage(frame).write_csv().encode("utf-8")
 
@@ -122,8 +124,8 @@ def ranking_plot(training: Training, version: str) -> bytes:
 def beeswarm_plot(training: Training, version: str) -> bytes:
     """Return a PNG with a point for each feature and sample row, at its SHAP value, coloured by the feature value.
 
-    It shows the spread of the impact, which the bars do not. The `shap` package only draws:
-    the values come from LightGBM.
+    It shows the spread of the impact, which the bars do not. The `shap` package only
+    draws: the values come from LightGBM.
     """
     sample = training.shap_sample
     explanation = Explanation(values=sample.values, data=sample.features, feature_names=list(FEATURES))

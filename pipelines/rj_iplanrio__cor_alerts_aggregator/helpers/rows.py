@@ -76,9 +76,10 @@ def read_sheet_time(text: str) -> datetime | None:
 def plan_sheet_update(existing: Sequence[Sequence[str]], rows: Sequence[Row], cutoff: datetime) -> SheetPlan:
     """Return the writes that bring the sheet up to date with the rows of the clusters.
 
-    An empty sheet gets the header. A sheet with another header is cleared first. Otherwise the
-    rows made before `cutoff` leave, a row whose group is in the sheet gets updated, and the rest
-    go to the end. Each update has the number of its row after the stale rows leave.
+    An empty sheet gets the header. A sheet with another header is cleared first.
+    Otherwise the rows made before `cutoff` leave, a row whose group is in the sheet
+    gets updated, and the rest go to the end. Each update has the number of its row
+    after the stale rows leave.
     """
     header = list(SHEET_COLUMNS.values())
     cells = [[str(row.get(column, "")) for column in SHEET_COLUMNS] for row in rows]

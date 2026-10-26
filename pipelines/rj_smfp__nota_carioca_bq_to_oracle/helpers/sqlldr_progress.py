@@ -77,7 +77,10 @@ class CountingReader:
         return data
 
     def seek(self, offset: int, /) -> int:
-        """Refuse to seek: the stream goes forward only. `GzipFile` only asks for it to rewind."""
+        """Refuse to seek: the stream goes forward only.
+
+        `GzipFile` only asks for it to rewind.
+        """
         raise UnsupportedOperation(f"The GCS stream cannot seek to {offset}")
 
 

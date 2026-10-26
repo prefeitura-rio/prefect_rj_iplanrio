@@ -1,8 +1,9 @@
 """The SQL of the features, and the coverage of each feature.
 
-The training and the daily scoring share one query, `queries/features_telefone.sql`. They differ in
-three parts: the CTE `amostra`, the CTEs of the label and the final `SELECT`. Each part has a
-fragment next to the template, so the two never compute a feature in two ways.
+The training and the daily scoring share one query, `queries/features_telefone.sql`.
+They differ in three parts: the CTE `amostra`, the CTEs of the label and the final
+`SELECT`. Each part has a fragment next to the template, so the two never compute a
+feature in two ways.
 """
 
 from dataclasses import dataclass, field
@@ -25,10 +26,10 @@ from utils.utils import render_query
 def features_sql(mode: Literal["training", "now"]) -> str:
     """Return the query of the features.
 
-    `training` draws a `data_corte` for each phone and returns `telefone`, `data_corte` and
-    `high_delivery` with the features, only for the phones that have a label. `now` cuts at the
-    current time and returns one row for each phone: `cpfs` (a list), `telefone`, `data_corte` and the
-    features, with no label.
+    `training` draws a `data_corte` for each phone and returns `telefone`, `data_corte`
+    and `high_delivery` with the features, only for the phones that have a label. `now`
+    cuts at the current time and returns one row for each phone: `cpfs` (a list),
+    `telefone`, `data_corte` and the features, with no label.
     """
     if mode == "training":
         label = {
@@ -63,9 +64,10 @@ def filled(feature: str) -> pl.Expr:
     """Return the expression that tells whether a feature has a value.
 
     - A sentinel feature has a value if it is not `-1`.
-    - Another numeric feature is a count where `0` is a real cold start, so it has a value if it is not `0`.
-    - A group of dummies has a value if the sum of its dummies is over `0`. All `0` means that no
-      join found the information for the phone.
+    - Another numeric feature is a count where `0` is a real cold start, so it has a
+      value if it is not `0`.
+    - A group of dummies has a value if the sum of its dummies is over `0`. All `0`
+      means that no join found the information for the phone.
     """
     if feature in DUMMY_GROUPS:
         return pl.sum_horizontal(DUMMY_GROUPS[feature]) > 0
@@ -75,7 +77,10 @@ def filled(feature: str) -> pl.Expr:
 
 @dataclass
 class Coverage:
-    """The count of filled rows of each feature, over many batches. It holds counters, not rows."""
+    """The count of filled rows of each feature, over many batches.
+
+    It holds counters, not rows.
+    """
 
     filled: dict[str, int] = field(default_factory=lambda: dict.fromkeys(COVERAGE_FEATURES, 0))
     total: int = 0

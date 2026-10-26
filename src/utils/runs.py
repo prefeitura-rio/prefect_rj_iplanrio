@@ -42,7 +42,8 @@ class StartedRun:
 
 def start_deployment_run(deployment: str, parameters: dict[str, object]) -> StartedRun:
     """Create a run of the deployment `<flow>/<deployment>` as a subflow of the current run, and do not wait for it."""
-    # run_deployment is sync compatible: it gives the FlowRun at once when it is called from sync code.
+    # run_deployment is sync compatible: it gives the FlowRun at once when it is called
+    # from sync code.
     flow_run = cast("FlowRun", run_deployment(name=deployment, parameters=parameters, timeout=0, as_subflow=True))
     ui_url = cast("str | None", PREFECT_UI_URL.value())
     url = f"{ui_url.rstrip('/')}/runs/flow-run/{flow_run.id}" if ui_url else None

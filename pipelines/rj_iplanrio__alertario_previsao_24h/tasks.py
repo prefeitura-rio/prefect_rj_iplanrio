@@ -55,8 +55,9 @@ async def alert_task(
 ) -> list[Row]:
     """Send the alert of heavy rain to Discord, and return the rows for the alert log.
 
-    Nothing is sent, and no row returns, if the same alert went out today, the day has the
-    most alerts, or the last alert is too recent. The log table is in `dataset_id` of `project`.
+    Nothing is sent, and no row returns, if the same alert went out today, the day has
+    the most alerts, or the last alert is too recent. The log table is in `dataset_id`
+    of `project`.
     """
     message = format_alert_message(alerts, forecast["synoptic"], forecast["created"].date())
     alert_hash = hash_message(message)

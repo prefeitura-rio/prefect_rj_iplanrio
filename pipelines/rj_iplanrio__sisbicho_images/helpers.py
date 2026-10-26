@@ -104,7 +104,8 @@ def starts_like_file(data: bytes) -> bool:
 def decode_image(text: str) -> bytes:
     """Decode the Base64 of an image, once or twice, as the source stores either.
 
-    Raise `PdfError` for a PDF, and `ValueError` if the text is not Base64 or is not a known file.
+    Raise `PdfError` for a PDF, and `ValueError` if the text is not Base64 or is not a
+    known file.
     """
     padded = text.strip()
     padded += "=" * (-len(padded) % BASE64_BLOCK)
@@ -210,7 +211,8 @@ def sanitize_identifier(identifier: str) -> str:
 def name_photo(image: bytes, identifier: str, prefix: str) -> tuple[str, str, str]:
     """Return the blob name, the content type and the SHA-1 of a photo.
 
-    The name has the id of the animal and the SHA-1, so the same photo has the same name.
+    The name has the id of the animal and the SHA-1, so the same photo has the same
+    name.
     """
     extension = next((kind for magic, kind in MAGIC_NUMBERS.items() if image.startswith(magic)), UNKNOWN_EXTENSION)
     digest = sha1(image).hexdigest()
@@ -225,8 +227,8 @@ def name_photo(image: bytes, identifier: str, prefix: str) -> tuple[str, str, st
 def upload_photo(bucket: PhotoBucket, storage: Storage, animal: Animal) -> str | None:
     """Upload the photo of an animal to the bucket, unless it is there, and return its public URL.
 
-    An animal with no photo or a PDF gives nothing. Raise `ValueError` if the photo is not
-    Base64 or not a known file, so a batch never takes a broken photo.
+    An animal with no photo or a PDF gives nothing. Raise `ValueError` if the photo is
+    not Base64 or not a known file, so a batch never takes a broken photo.
     """
     text = to_text(animal["foto_dados"])
 

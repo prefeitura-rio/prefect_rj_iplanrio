@@ -41,8 +41,8 @@ def has_point(geocode: Mapping[str, str | float | None]) -> bool:
 def join_rows(addresses: Sequence[Address], geocodes: Sequence[Geocode], *, need_street: bool) -> list[Row]:
     """Return a row of text for each address that got a point, with the geocode and the plus code after it.
 
-    With `need_street`, as in the fallback, an address whose geocode has no street is dropped, and so is an
-    address whose treated street is the text `nan`.
+    With `need_street`, as in the fallback, an address whose geocode has no street is
+    dropped, and so is an address whose treated street is the text `nan`.
     """
     rows: list[Row] = []
 

@@ -56,7 +56,7 @@ async def dump(engine: str, uri: Path, **options: object) -> None:
     await dump_to_delta(build_source(engine, **options), str(uri), "append", {"chunks": build_chunks(engine)})
 
 
-async def test_every_engine_loads_the_same_rows_in_the_same_chunks(engine, tmp_path):
+async def test_every_engine_loads_the_same_rows_in_the_same_chunks(engine, tmp_path) -> None:
     """Load the 303 rows that the chunks cover, each in the chunk that holds its id."""
     await dump(engine, tmp_path / "t")
 
@@ -68,7 +68,7 @@ async def test_every_engine_loads_the_same_rows_in_the_same_chunks(engine, tmp_p
     assert chunks_of_ids == {number: owner[number] for number in chunks_of_ids}
 
 
-async def test_a_second_run_writes_nothing(engine, tmp_path):
+async def test_a_second_run_writes_nothing(engine, tmp_path) -> None:
     """Skip every chunk whose fingerprint is already in the ledger."""
     await dump(engine, tmp_path / "t")
     first = DeltaTable(str(tmp_path / "t")).version()
@@ -79,7 +79,7 @@ async def test_a_second_run_writes_nothing(engine, tmp_path):
 
 
 @pytest.mark.parametrize("workers", [2, 4])
-async def test_concurrent_chunks_load_the_same_table(tmp_path, workers):
+async def test_concurrent_chunks_load_the_same_table(tmp_path, workers) -> None:
     """Write the same rows whether CouchDB and MongoDB read one chunk or several."""
     for name in DOCUMENTS:
         await dump(name, tmp_path / f"{name}-1", concurrency=1)
@@ -135,7 +135,7 @@ UPDATES = {"postgres": postgres_update, "couchdb": couchdb_update, "mongodb": mo
 
 
 @pytest.mark.parametrize("name", sorted(UPDATES))
-async def test_a_changed_row_replaces_its_chunk_and_only_that_one(name, tmp_path):
+async def test_a_changed_row_replaces_its_chunk_and_only_that_one(name, tmp_path) -> None:
     """Replace the chunk of id 150 with one commit, and keep every other row as it was."""
     if name not in available():
         pytest.skip(f"{name} is not up")
@@ -160,7 +160,7 @@ async def test_a_changed_row_replaces_its_chunk_and_only_that_one(name, tmp_path
     assert DeltaTable(str(tmp_path / "t")).version() > before
 
 
-async def test_date_chunks_load_every_row_in_the_chunk_of_its_month(engine, tmp_path):
+async def test_date_chunks_load_every_row_in_the_chunk_of_its_month(engine, tmp_path) -> None:
     """Cut by month over the date column, and load the null chunk last, on every engine with a date."""
     if engine == "couchdb":
         pytest.skip("CouchDB chunks cut only the id")
@@ -177,7 +177,7 @@ async def test_date_chunks_load_every_row_in_the_chunk_of_its_month(engine, tmp_
     assert month[150] == f"2024-0{1 + 150 % 3}-01"
 
 
-async def test_chunks_really_overlap_on_the_real_server(monkeypatch, tmp_path):
+async def test_chunks_really_overlap_on_the_real_server(monkeypatch, tmp_path) -> None:
     """Hold more than one request in flight on CouchDB, and more than one fetch on MongoDB, with 4 workers."""
     flying = {"now": 0, "peak": 0}
 
@@ -215,7 +215,7 @@ async def test_chunks_really_overlap_on_the_real_server(monkeypatch, tmp_path):
     assert flying["peak"] > 1
 
 
-async def test_mongodb_keeps_its_business_id_when_select_leaves_the_object_id_out(tmp_path):
+async def test_mongodb_keeps_its_business_id_when_select_leaves_the_object_id_out(tmp_path) -> None:
     """README: `select` without `_id` leaves the field `id` with the name `id`."""
     await dump_to_delta(
         build_source("mongodb"),
@@ -230,7 +230,7 @@ async def test_mongodb_keeps_its_business_id_when_select_leaves_the_object_id_ou
     assert sorted(table["id"].to_pylist())[:3] == [1, 2, 3]
 
 
-async def test_select_loads_only_the_columns_that_it_names(engine, tmp_path):
+async def test_select_loads_only_the_columns_that_it_names(engine, tmp_path) -> None:
     """Keep the chosen columns and the chunk key, in the order of `select`, on every engine."""
     names = [column(engine), "NOME" if engine == "oracle" else "nome"]
 

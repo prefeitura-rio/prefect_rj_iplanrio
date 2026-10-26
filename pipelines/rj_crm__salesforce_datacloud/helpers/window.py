@@ -1,9 +1,9 @@
 """The windows of a run, in the wall time of São Paulo that the source uses.
 
-An hour window rolls over the last 60 minutes and never crosses midnight. It runs every 15 minutes,
-so a tick that fails is covered by the three after it. A day window runs once a day and covers what
-the overlap did not, such as a pause of over an hour. Each window is at most one day, so one
-`data_particao` stamps all its rows.
+An hour window rolls over the last 60 minutes and never crosses midnight. It runs every
+15 minutes, so a tick that fails is covered by the three after it. A day window runs
+once a day and covers what the overlap did not, such as a pause of over an hour. Each
+window is at most one day, so one `data_particao` stamps all its rows.
 """
 
 from datetime import UTC, date, datetime, timedelta
@@ -32,8 +32,8 @@ def day_window(day: date, now: datetime) -> Span:
 def to_utc_window(span: Span) -> tuple[Span, dict[str, str]]:
     """Return the window as real UTC, and the bounds of `cdp_sys_PartitionDate__c`.
 
-    For sources that write real UTC. The end of the window is exclusive, and a day of São Paulo
-    falls into two partitions of UTC, which start at midnight UTC.
+    For sources that write real UTC. The end of the window is exclusive, and a day of
+    São Paulo falls into two partitions of UTC, which start at midnight UTC.
     """
     start = datetime.strptime(span.start, WINDOW_FORMAT).replace(tzinfo=SP_TZ).astimezone(UTC)
     end = datetime.strptime(span.end, WINDOW_FORMAT).replace(tzinfo=SP_TZ).astimezone(UTC)
@@ -57,8 +57,8 @@ def format_span(span: Span) -> str:
 def plan_spans(window: Window, now: datetime) -> list[Span]:
     """Return the windows that a run extracts.
 
-    One window, the last hour or a day, or one for each day to reprocess. Raise `ValueError`
-    for a reprocess that ends before it starts or in the future.
+    One window, the last hour or a day, or one for each day to reprocess. Raise
+    `ValueError` for a reprocess that ends before it starts or in the future.
     """
     today = now.astimezone(SP_TZ).date()
     first = window.get("reprocess_from")

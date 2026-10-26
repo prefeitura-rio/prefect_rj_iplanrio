@@ -67,7 +67,7 @@ async def run(folders, paths, login=200, seen=None):
         pytest.param({"/a": {}, "/gke": {"H": "h"}}, ["/a", "/gke"], {"H": "h"}, id="an_empty_folder_adds_nothing"),
     ],
 )
-async def test_the_folders_are_read_in_order_and_the_first_value_of_a_key_wins(folders, paths, expected):
+async def test_the_folders_are_read_in_order_and_the_first_value_of_a_key_wins(folders, paths, expected) -> None:
     """Read each folder in order, and keep the first value of a key."""
     seen: list[str] = []
 
@@ -82,7 +82,7 @@ async def test_the_folders_are_read_in_order_and_the_first_value_of_a_key_wins(f
         pytest.param({}, 200, id="a_folder_is_missing"),
     ],
 )
-async def test_a_failed_login_or_a_missing_folder_stops_the_job(folders, login):
+async def test_a_failed_login_or_a_missing_folder_stops_the_job(folders, login) -> None:
     """Fail, instead of starting the pipeline without its secrets."""
     with pytest.raises(SecretsError):
         await run(folders, ["/a"], login)
@@ -96,6 +96,6 @@ async def test_a_failed_login_or_a_missing_folder_stops_the_job(folders, login):
         pytest.param({}, {}, {}, id="nothing_to_add"),
     ],
 )
-def test_a_secret_never_replaces_a_variable_that_the_job_has(current, secrets, expected):
+def test_a_secret_never_replaces_a_variable_that_the_job_has(current, secrets, expected) -> None:
     """Merge the secrets under the environment of the job."""
     assert build_environment(current, secrets) == expected

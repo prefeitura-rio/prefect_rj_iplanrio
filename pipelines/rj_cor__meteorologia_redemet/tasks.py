@@ -19,8 +19,8 @@ async def fetch_observation(
 ) -> dict[str, JsonValue] | None:
     """Fetch the observation of one station and hour, or nothing if the API has none.
 
-    An error status means that the API has none for the hour. A network error fails the task,
-    so a run that cannot reach the API does not finish as an empty success.
+    An error status means that the API has none for the hour. A network error fails the
+    task, so a run that cannot reach the API does not finish as an empty success.
     """
     async with limit:
         try:

@@ -33,7 +33,7 @@ def extra(tmp_path: Path, monkeypatch) -> None:
 
 
 @pytest.mark.usefixtures("extra")
-def test_a_new_module_in_the_package_is_found_and_registered():
+def test_a_new_module_in_the_package_is_found_and_registered() -> None:
     """Import every module of the package, so a new one needs no other change."""
     with duckdb_connect() as connection:
         registry.register_functions(connection)
@@ -43,7 +43,7 @@ def test_a_new_module_in_the_package_is_found_and_registered():
 
 
 @pytest.mark.usefixtures("extra")
-def test_get_functions_puts_each_function_in_the_list_of_its_kind():
+def test_get_functions_puts_each_function_in_the_list_of_its_kind() -> None:
     """Keep an Arrow function out of the native list, and the other way round."""
     arrow, native = registry.get_functions()
 
@@ -53,7 +53,7 @@ def test_get_functions_puts_each_function_in_the_list_of_its_kind():
     assert "whisper" not in {function.name for function in native}
 
 
-def test_get_functions_returns_the_functions_that_the_package_declares():
+def test_get_functions_returns_the_functions_that_the_package_declares() -> None:
     """Return `(arrow, native)`, with the functions of `arrow.py` and `native.py`."""
     arrow, native = registry.get_functions()
 

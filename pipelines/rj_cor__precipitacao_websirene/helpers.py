@@ -15,7 +15,10 @@ def read_number(text: str | None) -> float | None:
 
 
 def read_time(text: str) -> str:
-    """Return a time of the XML in São Paulo as `YYYY-MM-DD HH:MM:SS`. A time without a zone is UTC."""
+    """Return a time of the XML in São Paulo as `YYYY-MM-DD HH:MM:SS`.
+
+    A time without a zone is UTC.
+    """
     parsed = datetime.fromisoformat(text)
     parsed = parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 

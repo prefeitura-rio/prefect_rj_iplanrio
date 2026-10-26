@@ -31,7 +31,8 @@ def as_rows(value: JsonValue) -> list[Sequence[JsonValue]]:
 async def log_in(instance_url: str, client_id: str, client_secret: str, dataspace: str) -> Session:
     """Log in to Salesforce with the client credentials of the Connected App `DataCloud_Integration`.
 
-    The login serves Data Cloud and the CRM REST API. Raise `HTTPStatusError` if Salesforce refuses it.
+    The login serves Data Cloud and the CRM REST API. Raise `HTTPStatusError` if
+    Salesforce refuses it.
     """
     async with AsyncClient(timeout=LOGIN_TIMEOUT) as client:
         response = await client.post(
@@ -60,9 +61,10 @@ async def query_data_cloud(
 ) -> tuple[list[str], list[Sequence[JsonValue]]]:
     """Run a query in Data Cloud and return the names of its columns and all its rows.
 
-    The API has no continuation, so each page is the query again with `ORDER BY`, `LIMIT` and `OFFSET`.
-    `sql` must have none of them. The pages end when one comes with fewer rows than asked.
-    Raise `HTTPStatusError` for an error, after logging the answer of Salesforce.
+    The API has no continuation, so each page is the query again with `ORDER BY`,
+    `LIMIT` and `OFFSET`. `sql` must have none of them. The pages end when one comes
+    with fewer rows than asked. Raise `HTTPStatusError` for an error, after logging the
+    answer of Salesforce.
     """
     url = f"{session['instance_url']}{QUERY_PATH}?dataspace={session['dataspace']}&workloadName={WORKLOAD}"
     headers = {"Authorization": f"Bearer {session['access_token']}", "Content-Type": "application/json"}

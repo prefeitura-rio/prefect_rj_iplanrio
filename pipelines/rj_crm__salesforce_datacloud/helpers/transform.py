@@ -80,8 +80,8 @@ def transform_rows(rows: Sequence[Row], feed: Feed, partition_date: date, loaded
     """Return the rows of a feed with its date columns in UTC, `_loaded_at` and `data_particao`.
 
     A text with nothing in it becomes nothing, as the bulk API sends `""` for null. With
-    `step_output_only`, `output_value_text` is nothing unless the step is an `ACTION_STEP`, and an
-    object there is written as JSON.
+    `step_output_only`, `output_value_text` is nothing unless the step is an
+    `ACTION_STEP`, and an object there is written as JSON.
     """
     result: list[Row] = []
 

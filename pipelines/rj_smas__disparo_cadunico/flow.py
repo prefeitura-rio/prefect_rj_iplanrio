@@ -35,12 +35,14 @@ async def rj_smas__disparo_cadunico(
 ) -> None:
     """Remind the families with an appointment of the CadÚnico, by an HSM message of the Wetalkie API.
 
-    The run ends if the control sheet has the campaign off or past its limit date, if the processor of the query
-    says that today is a weekend, or if the query gives nobody. A phone that comes twice gets one message. A share
-    of the phones, `audience.whitelist_percentage`, goes to the whitelist of the day. The flow waits
-    `waits.before_dispatch` minutes, so a person can stop a wrong run, and sends the batches. The ones that went out
-    are recorded in `table`, even if a later one fails, and then the run raises. After `waits.before_results`
-    minutes, a notice has the status of the messages. A run with `campaign.test_mode` sends only to the
+    The run ends if the control sheet has the campaign off or past its limit date, if
+    the processor of the query says that today is a weekend, or if the query gives
+    nobody. A phone that comes twice gets one message. A share of the phones,
+    `audience.whitelist_percentage`, goes to the whitelist of the day. The flow waits
+    `waits.before_dispatch` minutes, so a person can stop a wrong run, and sends the
+    batches. The ones that went out are recorded in `table`, even if a later one fails,
+    and then the run raises. After `waits.before_results` minutes, a notice has the
+    status of the messages. A run with `campaign.test_mode` sends only to the
     `DESTINATIONS` of the settings, and records nothing.
     """
     switch = await read_switch(campaign.name, campaign.environment)

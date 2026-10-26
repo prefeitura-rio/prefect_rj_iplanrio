@@ -1,7 +1,7 @@
 """The catalog of categories of one dispatch.
 
-It lives in memory for the processing of one dispatch. The discovery is the only step that adds a
-category, and the classification only looks one up.
+It lives in memory for the processing of one dispatch. The discovery is the only step
+that adds a category, and the classification only looks one up.
 """
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.text import normalize_label
@@ -24,7 +24,10 @@ class Catalog:
         return self.entries.setdefault(key, (name.strip(), description.strip()))[0]
 
     def find(self, name: str) -> str | None:
-        """Return the canonical name of a category that exists, or nothing. It never adds one."""
+        """Return the canonical name of a category that exists, or nothing.
+
+        It never adds one.
+        """
         entry = self.entries.get(normalize_label(name))
 
         return entry[0] if entry else None

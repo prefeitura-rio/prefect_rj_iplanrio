@@ -22,8 +22,9 @@ async def rj_iplanrio__betterstack_api(
 ) -> None:
     """Load the Better Stack incidents of a monitor to a BigQuery table.
 
-    The run fetches yesterday, or the dates given for a backfill, and adds the incidents. In
-    `merge` an incident that the table has is not added again, and its changes are kept.
+    The run fetches yesterday, or the dates given for a backfill, and adds the
+    incidents. In `merge` an incident that the table has is not added again, and its
+    changes are kept.
     """
     first, last = read_date_range(from_date, to_date)
     incidents = await fetch_incidents_task(first, last)

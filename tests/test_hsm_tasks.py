@@ -23,6 +23,7 @@ class Spies:
     """The doubles of what `run_hsm` calls: the API, the whitelist, the pause and the channel of Discord."""
 
     def __init__(self, sent: Sent) -> None:
+        """Store the arguments."""
         self.sent = sent
         self.sends: list[Sequence[Recipient]] = []
         self.whitelisted: list[tuple[list[str], Selection]] = []

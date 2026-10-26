@@ -49,7 +49,7 @@ COLUMN = {"range_column": "updated_at"}
         pytest.param("merge", {"merge": MERGE}, Merge(MERGE), id="a_merge"),
     ],
 )
-def test_the_mode_follows_the_dump_mode_and_the_options(dump_mode: DumpMode, options: DumpOptions, expected):
+def test_the_mode_follows_the_dump_mode_and_the_options(dump_mode: DumpMode, options: DumpOptions, expected) -> None:
     """Pick the way to load, from the mode that the flow asks and the options that it gives."""
     assert pick_mode(dump_mode, options) == expected
 
@@ -81,7 +81,9 @@ def test_the_mode_follows_the_dump_mode_and_the_options(dump_mode: DumpMode, opt
         ),
     ],
 )
-def test_a_mode_that_does_not_fit_is_refused_before_any_write(dump_mode: DumpMode, options: DumpOptions, message):
+def test_a_mode_that_does_not_fit_is_refused_before_any_write(
+    dump_mode: DumpMode, options: DumpOptions, message
+) -> None:
     """Raise with the reason, so a flow never starts a load that it could not finish."""
     with pytest.raises(ValueError, match=message):
         pick_mode(dump_mode, options)
@@ -97,7 +99,7 @@ def test_a_mode_that_does_not_fit_is_refused_before_any_write(dump_mode: DumpMod
         pytest.param(Merge(MERGE), ["all"], id="a_merge_is_one_chunk"),
     ],
 )
-def test_each_mode_cuts_its_chunks(mode, expected):
+def test_each_mode_cuts_its_chunks(mode, expected) -> None:
     """Name the chunks that a mode reads."""
     assert [chunk.key for chunk in cut_mode(mode)] == expected
 
@@ -110,7 +112,7 @@ def test_each_mode_cuts_its_chunks(mode, expected):
         pytest.param(Capture(RUN), Chunk("2024-03-10", 0, 0), RUN.isoformat(), id="a_capture_is_its_own_time"),
     ],
 )
-def test_the_ledger_key_tells_one_load_from_another(mode, chunk, expected):
+def test_the_ledger_key_tells_one_load_from_another(mode, chunk, expected) -> None:
     """Give a capture the key of its time, so two captures of a day are two loads."""
     assert build_ledger_key(mode, chunk) == expected
 
@@ -130,7 +132,7 @@ def test_the_ledger_key_tells_one_load_from_another(mode, chunk, expected):
         ),
     ],
 )
-def test_each_mode_picks_the_chunks_to_read(mode, seen, expected):
+def test_each_mode_picks_the_chunks_to_read(mode, seen, expected) -> None:
     """Skip only what the mode may skip: a capture that the ledger knows."""
     assert [chunk.key for chunk in pick_pending(mode, cut_mode(mode), seen)] == expected
 
@@ -144,7 +146,7 @@ def test_each_mode_picks_the_chunks_to_read(mode, seen, expected):
         pytest.param(Overwrite(None), False, True, id="an_overwrite_writes_all_and_sweeps"),
     ],
 )
-def test_only_an_overwrite_writes_an_unchanged_chunk_and_sweeps_the_old_ones(mode, skips, cleans):
+def test_only_an_overwrite_writes_an_unchanged_chunk_and_sweeps_the_old_ones(mode, skips, cleans) -> None:
     """State what each mode does with a chunk that did not change, and with the old chunks."""
     assert (skips_unchanged(mode), sweeps(mode)) == (skips, cleans)
 
@@ -162,13 +164,13 @@ CUT = [Chunk(key, 0, 1) for key in KEYS]
         pytest.param({"index": 7, "count": 8}, [], id="a_shard_beyond_the_chunks_takes_none"),
     ],
 )
-def test_a_shard_takes_every_nth_chunk_from_its_index(shard: Shard, expected):
+def test_a_shard_takes_every_nth_chunk_from_its_index(shard: Shard, expected) -> None:
     """Slice the whole cut round-robin, so a dense area of the range spreads over the shards."""
     assert [chunk.key for chunk in pick_shard(CUT, shard)] == expected
 
 
 @pytest.mark.parametrize("count", [1, 2, 3, 5, 8])
-def test_the_shards_together_hold_every_chunk_once(count):
+def test_the_shards_together_hold_every_chunk_once(count) -> None:
     """Cover the cut with no gap and no repeat, for any number of shards."""
     keys = [chunk.key for index in range(count) for chunk in pick_shard(CUT, {"index": index, "count": count})]
 
@@ -185,7 +187,7 @@ def test_the_shards_together_hold_every_chunk_once(count):
 )
 def test_a_dump_takes_the_shards_that_it_asked_and_no_more_than_its_chunks(
     dump_mode: DumpMode, options: DatabaseDumpOptions, expected
-):
+) -> None:
     """Give as many child runs as asked, and never an empty one."""
     assert plan_shards(dump_mode, options) == expected
 
@@ -207,7 +209,7 @@ def test_a_dump_takes_the_shards_that_it_asked_and_no_more_than_its_chunks(
 )
 def test_a_dump_that_cannot_run_in_shards_is_refused_before_any_run_starts(
     dump_mode: DumpMode, options: DatabaseDumpOptions, message
-):
+) -> None:
     """Raise with the reason, so the parent never starts child runs that cannot work."""
     with pytest.raises(ValueError, match=message):
         plan_shards(dump_mode, options)
@@ -222,7 +224,7 @@ def test_a_dump_that_cannot_run_in_shards_is_refused_before_any_run_starts(
         pytest.param(Merge(MERGE), False, id="a_merge_loads_one_new_folder"),
     ],
 )
-def test_only_a_replace_can_skip_a_chunk_before_its_download(mode, expected):
+def test_only_a_replace_can_skip_a_chunk_before_its_download(mode, expected) -> None:
     """Probe only the mode that skips an unchanged chunk."""
     assert probes(mode) is expected
 
@@ -248,7 +250,7 @@ def test_only_a_replace_can_skip_a_chunk_before_its_download(mode, expected):
         pytest.param(POSTGRES, Overwrite(DAYS), COLUMN, None, id="an_overwrite_never_probes"),
     ],
 )
-def test_the_probe_follows_the_options_the_source_and_the_mode(source, mode, options, expected):
+def test_the_probe_follows_the_options_the_source_and_the_mode(source, mode, options, expected) -> None:
     """Probe a database by its column, Oracle and CouchDB by default, and never an overwrite."""
     assert pick_probe(source, mode, options) == expected
 
@@ -261,7 +263,7 @@ def test_the_probe_follows_the_options_the_source_and_the_mode(source, mode, opt
         pytest.param(FILES, {"probe": True}, "no probe", id="files_cannot_probe"),
     ],
 )
-def test_a_probe_that_cannot_run_is_refused(source, options, message):
+def test_a_probe_that_cannot_run_is_refused(source, options, message) -> None:
     """Raise with the reason, so a misspelled deployment never falls back to a download."""
     with pytest.raises(ValueError, match=message):
         pick_probe(source, Replace(DAYS), options)

@@ -124,8 +124,8 @@ async def dump_db_to_gcs(
 
     DuckDB reads the source one chunk at a time, applies the filters, the columns and
     the normalization, and writes Parquet to a temp folder. A chunk whose content did
-    not change is never written again, and a changed one is replaced in one commit.
-    The user and the password come from `DB_USERNAME` and `DB_PASSWORD`. The host and the
+    not change is never written again, and a changed one is replaced in one commit. The
+    user and the password come from `DB_USERNAME` and `DB_PASSWORD`. The host and the
     name of the database may be `${NAME}`, the environment variable `NAME`. `read` is a
     `table` (`schema.name`) or a native `query`. `options`:
 
@@ -134,10 +134,12 @@ async def dump_db_to_gcs(
     - `filters` narrow the rows and `select` the columns, on the names of the source. A
       filter is one SQL predicate in the dialect of the source, or a JSON selector for
       CouchDB and MongoDB, and the filters join with AND.
-    - `batch_size` is the rows of one read from Oracle, or the documents of one page from
-      CouchDB or MongoDB. The other databases stream through DuckDB, so it raises for them.
-    - `concurrency` is the chunks that CouchDB or MongoDB read at the same time, 2 unless
-      it is set. The other databases read one chunk at a time, so it raises for them.
+    - `batch_size` is the rows of one read from Oracle, or the documents of one page
+      from CouchDB or MongoDB. The other databases stream through DuckDB, so it raises
+      for them.
+    - `concurrency` is the chunks that CouchDB or MongoDB read at the same time, 2
+      unless it is set. The other databases read one chunk at a time, so it raises for
+      them.
     - `columns` sets `normalize_columns` (a slug, the default), `normalize_values` and
       `transforms`, such as `{"cpf": "normalize_cpf"}`.
     - `probe` is `false` to turn the probe of the source off, and `true` to demand one.
@@ -198,8 +200,8 @@ async def finish_delta_table(
 ) -> None:
     """Sweep and maintain a Delta table after every shard of its dump has ended.
 
-    `options` are those of the dump. An `overwrite` deletes the chunks outside its range, and
-    the table gets a checkpoint and loses the files that no version reads.
+    `options` are those of the dump. An `overwrite` deletes the chunks outside its
+    range, and the table gets a checkpoint and loses the files that no version reads.
     """
     destination = Destination(bucket, table["dataset_id"], table["table_id"])
     await finish_dump(destination.uri, pick_mode(dump_mode, options or {}))
@@ -219,9 +221,9 @@ async def dump_bq_to_gcs(
 
     `project` is the project that runs the read. `read` is a `table` (`dataset.name`) or
     a `query` in the BigQuery dialect. This is plain batching: DuckDB streams
-    `batch_size` rows at a time, and each batch is one file. A rerun in `append` adds the
-    rows again, and `overwrite` deletes the old files first. `merge` raises: a copy of
-    files cannot match rows.
+    `batch_size` rows at a time, and each batch is one file. A rerun in `append` adds
+    the rows again, and `overwrite` deletes the old files first. `merge` raises: a copy
+    of files cannot match rows.
     """
     await dump_in_batches(
         bigquery_source(project, read_request("bigquery", read, batched=False)),
@@ -412,8 +414,8 @@ async def run_dbt(request: DbtRun, *, report: bool = False) -> None:
 
     The clone is temporary, and dbt runs `deps` before the command. A `profiles.yml` in
     the project wins over the one in `~/.dbt`. With `report` and a Discord webhook, the
-    result goes to Discord, failed or not. Raise `RuntimeError` if the clone, `deps` or a
-    node fails, and `ValueError` for a repository that needs a missing token.
+    result goes to Discord, failed or not. Raise `RuntimeError` if the clone, `deps` or
+    a node fails, and `ValueError` for a repository that needs a missing token.
     """
 
     def run() -> DbtOutcome:
@@ -448,8 +450,8 @@ async def run_dbt(request: DbtRun, *, report: bool = False) -> None:
 async def send_hsm(hsm: Hsm, recipients: Sequence[Recipient]) -> tuple[Sent, datetime]:
     """Send the recipients to the Wetalkie API as a campaign of an HSM, in batches, and return what went out.
 
-    The result has the batches that the API took and the reason that one failed, if one did, and the time of
-    the dispatch. Raise `RuntimeError` if the API does not answer.
+    The result has the batches that the API took and the reason that one failed, if one
+    did, and the time of the dispatch. Raise `RuntimeError` if the API does not answer.
     """
     sent_at = datetime.now(ZoneInfo(TIMEZONE))
 
@@ -480,8 +482,9 @@ async def run_hsm(
 ) -> HsmRun:
     """Put a share of the phones on the whitelist, wait, send the HSM in batches and post the notice of the dispatch.
 
-    The wait is for a person to stop a wrong dispatch. The result has the rows of the batches that went out, even
-    when one fails later, so the caller can record them before it raises the reason.
+    The wait is for a person to stop a wrong dispatch. The result has the rows of the
+    batches that went out, even when one fails later, so the caller can record them
+    before it raises the reason.
     """
     if selection is not None and selection.percentage > 0:
         await whitelist_phones.fn([recipient.to for recipient in recipients], selection)

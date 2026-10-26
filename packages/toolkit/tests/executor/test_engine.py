@@ -36,7 +36,7 @@ from toolkit.executor.engines.duckdb import DuckDBEngine
 )
 async def test_a_query_yields_dataframes_of_the_requested_size(
     duckdb_memory, sql, batch_size, sizes, schema, collect
-):
+) -> None:
     """Yield dataframes of the requested size."""
     dataframes = await collect(duckdb_memory, sql, batch_size=batch_size)
 
@@ -44,7 +44,9 @@ async def test_a_query_yields_dataframes_of_the_requested_size(
     assert dataframes[0].schema == schema
 
 
-async def test_stopping_early_leaves_the_connection_usable(duckdb_memory, collect):
+async def test_stopping_early_leaves_the_connection_usable(
+    duckdb_memory, collect
+) -> None:
     """Keep the connection usable after a query stops early."""
     batches = duckdb_memory.query("SELECT i FROM range(100000) r(i)", batch_size=100)
     await anext(batches)
@@ -57,7 +59,7 @@ async def test_stopping_early_leaves_the_connection_usable(duckdb_memory, collec
 
 async def test_the_memory_limit_and_the_temp_directory_come_from_the_settings(
     tmp_path, monkeypatch, collect
-):
+) -> None:
     """Take the memory limit and the temp directory from the settings."""
     monkeypatch.setenv("DUCKDB_MEMORY_LIMIT", "1GiB")
     monkeypatch.setenv("DUCKDB_TEMP_DIRECTORY", str(tmp_path))
@@ -72,7 +74,7 @@ async def test_the_memory_limit_and_the_temp_directory_come_from_the_settings(
 
 
 @pytest.mark.parametrize("machine", ["UTC", "Asia/Tokyo"])
-def test_regression_the_time_zone_does_not_follow_the_machine(machine):
+def test_regression_the_time_zone_does_not_follow_the_machine(machine) -> None:
     """Regression: DuckDB followed the time zone of the machine."""
     code = (
         "import asyncio\n"

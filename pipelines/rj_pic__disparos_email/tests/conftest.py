@@ -13,6 +13,7 @@ class Timeline:
     """A clock and a pause that move together, with no real wait. It records the pauses."""
 
     def __init__(self) -> None:
+        """Store the arguments."""
         self.now = 100.0
         self.pauses: list[float] = []
 
@@ -31,6 +32,7 @@ class FakeDataRelay:
     """The Data Relay: it answers with the replies in order, and keeps the requests that it saw."""
 
     def __init__(self, *replies: Response | Exception) -> None:
+        """Store the arguments."""
         self.replies = list(replies)
         self.requests: list[Request] = []
         self.client = AsyncClient(transport=MockTransport(self.handle))

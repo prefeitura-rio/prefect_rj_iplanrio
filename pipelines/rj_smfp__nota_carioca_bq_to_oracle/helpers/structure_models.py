@@ -6,7 +6,8 @@ from dataclasses import dataclass, field
 INDEX_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_$#]{0,127}$")
 
 
-# O Oracle cria I_SNAP$_<mview> sozinho para o fast refresh de views materializadas; numa tabela comum não tem uso.
+# O Oracle cria I_SNAP$_<mview> sozinho para o fast refresh de views materializadas;
+# numa tabela comum não tem uso.
 SNAPSHOT_INDEX_PREFIX = "I_SNAP$"
 
 
@@ -19,7 +20,8 @@ SUPPORTED_INDEX_TYPES = ("NORMAL", "BITMAP", "FUNCTION-BASED NORMAL")
 FUNCTION_BASED_INDEX_TYPE = "FUNCTION-BASED NORMAL"
 
 
-# Identificadores entre aspas duplas, como o dicionário do Oracle grava as colunas dentro de uma expressão de índice.
+# Identificadores entre aspas duplas, como o dicionário do Oracle grava as colunas
+# dentro de uma expressão de índice.
 QUOTED_IDENTIFIER_PATTERN = re.compile(r'"([^"]+)"')
 
 
@@ -29,7 +31,8 @@ STRING_LITERAL_PATTERN = re.compile(r"'(?:[^']|'')*'")
 USABLE_INDEX_STATUSES = ("VALID", "N/A")
 
 
-# Valores de all_tables e all_part_tables aceitos no INMEMORY; o texto entra no DDL como está.
+# Valores de all_tables e all_part_tables aceitos no INMEMORY; o texto entra no DDL como
+# está.
 INMEMORY_PRIORITIES = ("NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL")
 
 
@@ -50,8 +53,9 @@ INMEMORY_DISTRIBUTES = ("AUTO", "BY ROWID RANGE", "BY PARTITION", "BY SUBPARTITI
 INMEMORY_DUPLICATES = ("NO DUPLICATE", "DUPLICATE", "DUPLICATE ALL")
 
 
-# Toda tabela carregada vai para o In-Memory, com as opções das MVT_ originais. A cláusula tem todas as opções,
-# como o dicionário as devolve; sem DISTRIBUTE e DUPLICATE, a tabela criada seria vista como divergente e recriada.
+# Toda tabela carregada vai para o In-Memory, com as opções das MVT_ originais. A
+# cláusula tem todas as opções, como o dicionário as devolve; sem DISTRIBUTE e
+# DUPLICATE, a tabela criada seria vista como divergente e recriada.
 LOADED_TABLE_INMEMORY = "INMEMORY PRIORITY HIGH MEMCOMPRESS FOR QUERY HIGH DISTRIBUTE AUTO NO DUPLICATE"
 
 

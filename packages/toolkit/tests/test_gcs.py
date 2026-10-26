@@ -55,7 +55,7 @@ async def upload_list_and_delete(store: ObjectStore, root: Path) -> None:
 )
 async def test_an_upload_puts_the_files_under_the_prefix(
     tmp_path, target, prefix, expected
-):
+) -> None:
     """Put the files under the prefix."""
     store = MemoryStore()
     write_tree(tmp_path, TREE)
@@ -77,19 +77,21 @@ async def test_an_upload_puts_the_files_under_the_prefix(
 )
 async def test_a_path_with_nothing_to_upload_is_an_error(
     tmp_path, make, error, message
-):
+) -> None:
     """Reject a path with nothing to upload."""
     with pytest.raises(error, match=message):
         await gcs.upload(MemoryStore(), "p", make(tmp_path))
 
 
-async def test_upload_list_and_delete(tmp_path):
+async def test_upload_list_and_delete(tmp_path) -> None:
     """Upload, list and delete on an in-memory store."""
     await upload_list_and_delete(MemoryStore(), tmp_path)
 
 
 @given(calls=st.integers(0, 30), limit=st.integers(1, 8))
-def test_no_more_calls_run_at_once_than_the_limit_and_all_of_them_finish(calls, limit):
+def test_no_more_calls_run_at_once_than_the_limit_and_all_of_them_finish(
+    calls, limit
+) -> None:
     """Never run more calls at once than the limit, and finish all of them."""
     running = peak = finished = 0
 
@@ -110,7 +112,7 @@ def test_no_more_calls_run_at_once_than_the_limit_and_all_of_them_finish(calls, 
 @pytest.mark.s3
 async def test_the_store_built_from_the_settings_works_over_the_s3_protocol(
     s3_endpoint, tmp_path, monkeypatch
-):
+) -> None:
     """Work over the S3 protocol with the store built from the settings."""
     monkeypatch.setenv("GCS_ENDPOINT", s3_endpoint)
     monkeypatch.setenv("GCS_USE_SSL", "false")
@@ -122,7 +124,7 @@ async def test_the_store_built_from_the_settings_works_over_the_s3_protocol(
     await upload_list_and_delete(gcs.create_store("bucket"), tmp_path)
 
 
-async def test_prefixes_list_the_folders_of_one_level_only():
+async def test_prefixes_list_the_folders_of_one_level_only() -> None:
     """Give the child folders of a prefix, and not the objects below them."""
     store = MemoryStore()
     for key in (

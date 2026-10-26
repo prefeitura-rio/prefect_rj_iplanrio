@@ -73,7 +73,9 @@ def layer() -> Iterator[tuple[str, list[dict[str, list[str]]]]]:
 
 
 @pytest.mark.extensions
-async def test_a_layer_is_read_through_every_page(layer, tmp_path: Path, read_layer):
+async def test_a_layer_is_read_through_every_page(
+    layer, tmp_path: Path, read_layer
+) -> None:
     """Read every page of a layer."""
     url, queries = layer
 
@@ -84,7 +86,7 @@ async def test_a_layer_is_read_through_every_page(layer, tmp_path: Path, read_la
 @pytest.mark.extensions
 async def test_the_where_clause_reaches_the_server_intact(
     layer, tmp_path: Path, read_layer
-):
+) -> None:
     """Send the where clause to the server unchanged."""
     url, queries = layer
     where = "id > 1 AND name <> 'x'"
@@ -104,7 +106,7 @@ async def test_the_where_clause_reaches_the_server_intact(
 )
 async def test_the_coordinate_system_is_asked_of_the_server(
     layer, tmp_path: Path, srid, expected, read_layer
-):
+) -> None:
     """Send `outSR` only when a system is set, so the server reprojects the layer."""
     url, queries = layer
 

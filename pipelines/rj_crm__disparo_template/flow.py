@@ -40,14 +40,17 @@ async def rj_crm__disparo_template(
 ) -> None:
     """Send a templated WhatsApp message, through the Data Extension of Salesforce, to the people of a query.
 
-    The run stops, with a notice, if the control sheet has the campaign off or past its limit date. The query of
-    `audience` gives the frame: `cpf`, `telefone`, an optional list `others` of other phones, and the fields of
-    the message. The frame loses the duplicate CPFs, the phones that failed before and who already got a message
-    (see `Audience`). Each batch becomes a CSV file in the SFTP of Salesforce, and a share of the phones goes to
-    the whitelist. After the files, the flow watches for the status of the dispatch (see `Delivery`). With
-    `audience.max_retries` it then tries again, for the CPFs that failed, with their next phone. Unless
-    `campaign.test_mode` is on, each try is recorded in `table`, with the CPF as `SubscriberKey` and the other
-    columns as JSON in `data`. The SFTP login and its pinned host key come from the settings.
+    The run stops, with a notice, if the control sheet has the campaign off or past its
+    limit date. The query of `audience` gives the frame: `cpf`, `telefone`, an optional
+    list `others` of other phones, and the fields of the message. The frame loses the
+    duplicate CPFs, the phones that failed before and who already got a message (see
+    `Audience`). Each batch becomes a CSV file in the SFTP of Salesforce, and a share of
+    the phones goes to the whitelist. After the files, the flow watches for the status
+    of the dispatch (see `Delivery`). With `audience.max_retries` it then tries again,
+    for the CPFs that failed, with their next phone. Unless `campaign.test_mode` is on,
+    each try is recorded in `table`, with the CPF as `SubscriberKey` and the other
+    columns as JSON in `data`. The SFTP login and its pinned host key come from the
+    settings.
     """
     switch = await read_switch_task(campaign)
 

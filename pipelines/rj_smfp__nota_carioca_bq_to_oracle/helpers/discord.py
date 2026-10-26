@@ -1,11 +1,14 @@
 """Cliente do webhook do Discord para o progresso das cargas: uma mensagem criada uma vez e editada no lugar.
 
-Este arquivo é idêntico nas duas pipelines da Nota Carioca e não importa nada de ``pipelines.*``.
+Este arquivo é idêntico nas duas pipelines da Nota Carioca e não importa nada de
+``pipelines.*``.
 
-Regra de ouro: um problema de notificação NUNCA falha nem atrasa uma carga. Toda falha (rede, 4xx/5xx, 429, JSON) é
-registrada uma vez em log de aviso e engolida; depois de uma falha o cliente espera mais antes de tentar de novo
-(``min_interval_seconds`` dobrando a cada falha seguida, até 5 min), o que limita o tempo perdido com um Discord fora
-do ar ao timeout de uma requisição (10 s) por tentativa. A URL do webhook é um segredo e nunca vai para o log.
+Regra de ouro: um problema de notificação NUNCA falha nem atrasa uma carga. Toda falha
+(rede, 4xx/5xx, 429, JSON) é registrada uma vez em log de aviso e engolida; depois de
+uma falha o cliente espera mais antes de tentar de novo (``min_interval_seconds``
+dobrando a cada falha seguida, até 5 min), o que limita o tempo perdido com um Discord
+fora do ar ao timeout de uma requisição (10 s) por tentativa. A URL do webhook é um
+segredo e nunca vai para o log.
 """
 
 import logging
@@ -72,7 +75,8 @@ class Warner:
 def never_raises[**P](func: Callable[P, None]) -> Callable[P, None]:
     """Decora um método de notificação para engolir qualquer exceção, registrando um aviso.
 
-    Garante que um bug de notificação não derrube a carga nem esconda a exceção original de quem a finaliza.
+    Garante que um bug de notificação não derrube a carga nem esconda a exceção original
+    de quem a finaliza.
     """
 
     @wraps(func)
@@ -104,9 +108,10 @@ class DiscordStatusMessage:
 
     O POST usa ``?wait=true`` para receber o id da mensagem.
 
-    Sem URL o cliente fica desligado e nenhuma requisição é feita. Mensagem apagada (404 no PATCH) é recriada no
-    próximo ``publish``. ``force`` ignora o intervalo mínimo, o recuo depois de falhas e o prazo de um 429: a
-    atualização final tenta sempre uma vez.
+    Sem URL o cliente fica desligado e nenhuma requisição é feita. Mensagem apagada (404
+    no PATCH) é recriada no próximo ``publish``. ``force`` ignora o intervalo mínimo, o
+    recuo depois de falhas e o prazo de um 429: a atualização final tenta sempre uma
+    vez.
 
     :param webhook_url: URL do webhook; ``None`` ou vazia desliga o cliente.
     :param min_interval_seconds: Intervalo mínimo entre edições sem ``force``.
@@ -138,8 +143,8 @@ class DiscordStatusMessage:
     def publish(self, payload: Mapping[str, object], force: bool = False) -> None:
         """Cria a mensagem na primeira chamada e a edita nas seguintes; nunca levanta exceção.
 
-        :param payload: Corpo do webhook (``embeds``, ``allowed_mentions``).
-        :param force: Ignora o intervalo mínimo e o recuo (etapas novas e o estado final).
+        :param payload: Corpo do webhook (``embeds``, ``allowed_mentions``). :param
+        force: Ignora o intervalo mínimo e o recuo (etapas novas e o estado final).
         """
         if self.url is None:
             return

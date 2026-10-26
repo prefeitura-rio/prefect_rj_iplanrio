@@ -12,7 +12,7 @@ from toolkit.bigquery import BigQuery, build_source_uri
 )
 async def test_a_statement_waits_for_its_job_and_returns_the_rows_it_changed(
     fake_bigquery_client, rows, expected
-):
+) -> None:
     """Wait for the job, and return its count, or 0 when it has none."""
     client = fake_bigquery_client(rows)
 
@@ -34,7 +34,7 @@ async def test_a_statement_waits_for_its_job_and_returns_the_rows_it_changed(
         ),
     ],
 )
-def test_bigquery_reads_a_gcs_uri_as_gs(uri, expected):
+def test_bigquery_reads_a_gcs_uri_as_gs(uri, expected) -> None:
     """Give BigQuery the `gs://` form of the URI, the only one it accepts."""
     assert build_source_uri(uri) == expected
 
@@ -59,7 +59,7 @@ def test_bigquery_reads_a_gcs_uri_as_gs(uri, expected):
 )
 async def test_a_delta_table_replaces_an_external_table_of_another_format(
     fake_bigquery_tables, table_type, source_format, calls
-):
+) -> None:
     """Create a table, refresh a Delta one, and replace any other external one."""
     client = fake_bigquery_tables(table_type, source_format)
 
@@ -70,7 +70,9 @@ async def test_a_delta_table_replaces_an_external_table_of_another_format(
     assert client.calls == calls
 
 
-async def test_a_delta_table_never_replaces_a_native_table(fake_bigquery_tables):
+async def test_a_delta_table_never_replaces_a_native_table(
+    fake_bigquery_tables,
+) -> None:
     """Refuse a native table, because its rows live only in BigQuery."""
     client = fake_bigquery_tables("TABLE", None)
 

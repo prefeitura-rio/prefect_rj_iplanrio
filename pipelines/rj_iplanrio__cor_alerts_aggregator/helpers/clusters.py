@@ -69,8 +69,8 @@ def link_components(alerts: Sequence[Alert], radius_meters: float) -> list[list[
 def group_alerts(alerts: Sequence[Alert], radius_meters: float) -> list[Cluster]:
     """Cluster the alerts of each type, and return the clusters by type and then by oldest alert.
 
-    The alerts of a cluster are in order of time. Its severity is `critica` if one alert has it,
-    and its neighborhood is the first one that an alert has.
+    The alerts of a cluster are in order of time. Its severity is `critica` if one alert
+    has it, and its neighborhood is the first one that an alert has.
     """
     by_type: dict[str, list[Alert]] = defaultdict(list)
 
@@ -111,7 +111,8 @@ def should_send_cluster(
     """Tell whether a cluster goes out now, and why.
 
     It goes out when it has `immediate_threshold` alerts, or when its oldest alert is
-    `window_minutes` old. Until then it waits for more alerts. A time without a zone is in São Paulo.
+    `window_minutes` old. Until then it waits for more alerts. A time without a zone is
+    in São Paulo.
     """
     oldest = cluster.oldest_alert if cluster.oldest_alert.tzinfo else cluster.oldest_alert.replace(tzinfo=SP_TZ)
     age = (now - oldest).total_seconds() / 60
@@ -128,8 +129,9 @@ def should_send_cluster(
 def describe_event(cluster: Cluster, prefix: str = "") -> str:
     """Return the type of the event of a cluster: its code, and the reports with their addresses.
 
-    One report reads `CODE: report [address]`. Many read `CODE: (1) report [address] | (2) ...`
-    for the first five, with the count of the rest. The text has at most 500 characters.
+    One report reads `CODE: report [address]`. Many read `CODE: (1) report [address] |
+    (2) ...` for the first five, with the count of the rest. The text has at most 500
+    characters.
     """
     code = prefix + ALERT_TYPE_CODES.get(cluster.alert_type, cluster.alert_type.upper())
 

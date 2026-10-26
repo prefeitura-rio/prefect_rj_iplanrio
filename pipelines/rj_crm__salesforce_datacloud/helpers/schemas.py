@@ -466,6 +466,6 @@ PARTITIONED_TABLES: dict[str, list[str]] = {
     "telemetry_trace_span": ["id"],
     "messaging_events_whatsapp": ["event_id"],
     "sfmc_whatsapp_send_event": ["id", "message_key"],
-    # telemetry_trace_span_staging, messaging_end_user_staging, messaging_session_staging:
-    # sem particionamento (staging tables)
+    # telemetry_trace_span_staging, messaging_end_user_staging,
+    # messaging_session_staging: sem particionamento (staging tables)
 }

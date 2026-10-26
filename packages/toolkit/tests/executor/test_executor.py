@@ -41,7 +41,7 @@ class Place(TypedDict):
 )
 async def test_a_query_is_read_whole_or_batch_by_batch(
     tmp_path: Path, duckdb_memory, batch_size, sizes, write
-):
+) -> None:
     """Read a result whole with `await`, or batch by batch with `async for`."""
     templates = write(tmp_path, "numbers", "SELECT i AS n FROM range(10) r(i)\n")
     executor = Executor(duckdb_memory, templates)
@@ -61,7 +61,7 @@ async def test_a_query_is_read_whole_or_batch_by_batch(
 
 async def test_a_result_with_no_rows_keeps_the_declared_columns(
     tmp_path: Path, duckdb_memory, write
-):
+) -> None:
     """Keep the declared columns in a result with no rows."""
     templates = write(tmp_path, "none", "SELECT 1::BIGINT AS a, 'x' AS b WHERE false\n")
 
@@ -73,7 +73,7 @@ async def test_a_result_with_no_rows_keeps_the_declared_columns(
 
 async def test_rows_that_do_not_fit_the_schema_are_rejected(
     tmp_path: Path, duckdb_memory, write
-):
+) -> None:
     """Regression: the data-proxy executor skipped validation (unresolved TypeVar)."""
     templates = write(tmp_path, "pair", "SELECT 1::BIGINT AS a, 'x' AS b\n")
 
@@ -83,7 +83,7 @@ async def test_rows_that_do_not_fit_the_schema_are_rejected(
 
 async def test_an_unsupported_schema_fails_before_anything_runs(
     fake_engine, tmp_path: Path, write
-):
+) -> None:
     """Fail before the query runs if the schema has no Polars type."""
 
     class Bad(TypedDict):
@@ -99,7 +99,7 @@ async def test_an_unsupported_schema_fails_before_anything_runs(
 
 async def test_execute_renders_the_values_into_the_statement(
     tmp_path: Path, duckdb_memory, write
-):
+) -> None:
     """Render the values into the statement."""
     templates = write(tmp_path, "make", "CREATE TABLE {{ table }} AS SELECT 1 AS n\n")
 
@@ -111,7 +111,7 @@ async def test_execute_renders_the_values_into_the_statement(
 
 async def test_a_pipeline_template_overrides_a_toolkit_one_of_the_same_name(
     fake_engine, tmp_path: Path, write
-):
+) -> None:
     """Prefer a pipeline template to a toolkit template of the same name."""
     (tmp_path / "duckdb").mkdir()
     write(tmp_path / "duckdb", "load_extensions", "-- mine\n")
@@ -125,7 +125,7 @@ async def test_a_pipeline_template_overrides_a_toolkit_one_of_the_same_name(
 
 
 @pytest.mark.extensions
-async def test_a_duckdb_geometry_is_read_with_its_crs(tmp_path: Path, write):
+async def test_a_duckdb_geometry_is_read_with_its_crs(tmp_path: Path, write) -> None:
     """Read a DuckDB geometry with its CRS."""
     templates = write(
         tmp_path, "place", "SELECT ST_Point(1, 2)::GEOMETRY('EPSG:4326') AS geom\n"
@@ -141,7 +141,7 @@ async def test_a_duckdb_geometry_is_read_with_its_crs(tmp_path: Path, write):
 
 async def test_a_chunk_is_one_local_file_with_the_schema_even_when_it_is_empty(
     tmp_path: Path, duckdb_memory, stand_in_for_postgres
-):
+) -> None:
     """Keep the schema of an empty chunk, so Delta can remove its rows."""
     await stand_in_for_postgres(duckdb_memory)
     values = {
@@ -192,7 +192,7 @@ async def test_a_chunk_is_one_local_file_with_the_schema_even_when_it_is_empty(
 )
 async def test_a_chunk_reads_local_files_in_a_folder_with_a_hive_name(
     tmp_path: Path, duckdb_memory, file_type, name, content, rows
-):
+) -> None:
     """Read the files, and add no column from a Hive folder in their path."""
     folder = tmp_path / "ano=2024"
     folder.mkdir()
@@ -220,7 +220,7 @@ async def test_a_chunk_reads_local_files_in_a_folder_with_a_hive_name(
 
 async def test_a_chunk_cleans_and_transforms_the_values_with_the_functions(
     tmp_path: Path, duckdb_memory
-):
+) -> None:
     """Compute the values of the columns with the functions, inside the `COPY`."""
     await duckdb_memory.execute(
         "CREATE TABLE stub AS SELECT 'x' || chr(10) || 'y ' AS nome, "
@@ -286,7 +286,7 @@ async def test_a_chunk_cleans_and_transforms_the_values_with_the_functions(
 )
 async def test_normalize_columns_renames_the_columns_of_a_table(
     duckdb_memory, columns, separator, lowercase, changed, names
-):
+) -> None:
     """Rename all the columns or only the given ones."""
     await duckdb_memory.execute(
         'CREATE TABLE t ("Código do Órgão" INT, "Nome" INT, ok INT)'
@@ -300,7 +300,9 @@ async def test_normalize_columns_renames_the_columns_of_a_table(
     assert dataframe.columns == names
 
 
-async def test_normalize_columns_never_reaches_an_attached_source(duckdb_memory):
+async def test_normalize_columns_never_reaches_an_attached_source(
+    duckdb_memory,
+) -> None:
     """Treat the table name as one identifier, so `src.t` is not the table of `src`."""
     await duckdb_memory.execute("ATTACH ':memory:' AS src")
     await duckdb_memory.execute('CREATE TABLE src.t ("A b" INT)')
@@ -314,7 +316,7 @@ async def test_normalize_columns_never_reaches_an_attached_source(duckdb_memory)
 
 async def test_a_query_with_no_expect_yields_the_dataframes_unchecked(
     duckdb_memory, tmp_path: Path, write
-):
+) -> None:
     """Read a result whose columns the caller does not declare, batch by batch."""
     executor = Executor(
         duckdb_memory,
@@ -331,7 +333,7 @@ async def test_a_query_with_no_expect_yields_the_dataframes_unchecked(
 
 async def test_a_query_with_no_expect_counts_the_rows_like_any_other(
     duckdb_memory, tmp_path: Path, caplog, write
-):
+) -> None:
     """Log the template and the rows when the result ends."""
     executor = Executor(
         duckdb_memory,
@@ -346,7 +348,7 @@ async def test_a_query_with_no_expect_counts_the_rows_like_any_other(
 
 async def test_the_columns_of_a_first_read_check_the_next_ones(
     duckdb_memory, tmp_path: Path, write
-):
+) -> None:
     """Keep the columns of the first read, so a column that changes later raises."""
     first = write(tmp_path, "first", "SELECT 1 AS id, 'a' AS name")
     changed = write(tmp_path, "changed", "SELECT 1 AS id, 2 AS name")
@@ -365,7 +367,7 @@ async def test_the_columns_of_a_first_read_check_the_next_ones(
 
 async def test_a_polars_schema_checks_the_result_of_a_query(
     duckdb_memory, tmp_path, write
-):
+) -> None:
     """Check a query against a `polars.Schema`, whose columns have no nulls."""
     templates = write(tmp_path, "pair", "SELECT 1::BIGINT AS a, 'x' AS b\n")
     executor = Executor(duckdb_memory, templates)
@@ -377,7 +379,9 @@ async def test_a_polars_schema_checks_the_result_of_a_query(
         await executor.query("pair", expect=Schema({"a": Int64, "b": Int64}))
 
 
-async def test_a_mixed_map_lets_one_column_hold_nulls(duckdb_memory, tmp_path, write):
+async def test_a_mixed_map_lets_one_column_hold_nulls(
+    duckdb_memory, tmp_path, write
+) -> None:
     """Allow the nulls of the column that says so, and refuse them in the others."""
     templates = write(tmp_path, "nulls", "SELECT 1::BIGINT AS a, NULL::VARCHAR AS b\n")
     executor = Executor(duckdb_memory, templates)
@@ -396,7 +400,7 @@ class NumberRow(TypedDict):
     nome: str | None
 
 
-async def test_read_checks_every_batch_against_the_schema(numbers):
+async def test_read_checks_every_batch_against_the_schema(numbers) -> None:
     """Yield checked datasets, for a map of Polars types or for a schema class."""
     async with numbers as executor:
         mixed = {"id": Int64, "nome": Column(String, nullable=True)}
@@ -409,7 +413,7 @@ async def test_read_checks_every_batch_against_the_schema(numbers):
     assert [len(batch) for batch in by_class] == [2, 1]
 
 
-async def test_read_refuses_a_batch_that_does_not_fit(numbers):
+async def test_read_refuses_a_batch_that_does_not_fit(numbers) -> None:
     """Raise `SchemaError` for a null in a column with no nulls, or a wrong type."""
     async with numbers as executor:
         with pytest.raises(SchemaError, match="nome: 1 null values"):
@@ -429,7 +433,7 @@ async def test_read_refuses_a_batch_that_does_not_fit(numbers):
             ]
 
 
-async def test_read_without_expect_yields_every_row_unchecked(numbers):
+async def test_read_without_expect_yields_every_row_unchecked(numbers) -> None:
     """Check nothing when there is no `expect`."""
     async with numbers as executor:
         batches = [batch async for batch in executor.read()]

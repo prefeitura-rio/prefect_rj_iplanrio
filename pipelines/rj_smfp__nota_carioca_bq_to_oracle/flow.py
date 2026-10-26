@@ -53,11 +53,12 @@ def rj_smfp__nota_carioca_bq_to_oracle(
 ) -> None:
     """Load tables of a BigQuery dataset into Oracle, with the slots A and B and a swap of synonyms.
 
-    The flow exports every table as one consistent snapshot to GCS, loads each one into the idle slot with
-    SQL*Loader, checks the row count against BigQuery, builds the indexes of the original table, and swaps the synonyms
-    of all the tables at the end. With `dbt.enabled`, a dbt run goes first and the export waits for it.
-    In `synonyms_only` mode there is no load: the synonyms go back to the tables in use. A Discord message
-    follows the run, unless `discord_notifications` is off.
+    The flow exports every table as one consistent snapshot to GCS, loads each one into
+    the idle slot with SQL*Loader, checks the row count against BigQuery, builds the
+    indexes of the original table, and swaps the synonyms of all the tables at the end.
+    With `dbt.enabled`, a dbt run goes first and the export waits for it. In
+    `synonyms_only` mode there is no load: the synonyms go back to the tables in use. A
+    Discord message follows the run, unless `discord_notifications` is off.
     """
     dbt_enabled = should_run_dbt(dbt.enabled, mode)
     notifier = LoadNotifier.create(
@@ -120,8 +121,9 @@ def rj_smfp__nota_carioca_bq_to_oracle(
                 table=empty_table, table_schema=exported.schema, loaded_rows=loaded_rows, load=load
             )
             notifier.table_validated(table_id, validated_rows)
-            # The files go only after the validation, which raises if the count differs, and the deletion runs
-            # next to the indexes. The flow waits for it at the end, so a failure still fails the flow.
+            # The files go only after the validation, which raises if the count differs,
+            # and the deletion runs next to the indexes. The flow waits for it at the
+            # end, so a failure still fails the flow.
             cleanups.append(delete_gcs_files_task.submit(source=source, files=exported.files))
             notifier.table_step(table_id, TableStep.INDEXES)
             indexed_table = create_oracle_indexes_task(

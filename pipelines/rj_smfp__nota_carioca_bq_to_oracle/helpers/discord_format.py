@@ -1,6 +1,7 @@
 """Formatação de texto para as mensagens do Discord: barra de progresso, números, durações e hora de Brasília.
 
-Este arquivo é idêntico nas duas pipelines da Nota Carioca e não importa nada de ``pipelines.*``.
+Este arquivo é idêntico nas duas pipelines da Nota Carioca e não importa nada de
+``pipelines.*``.
 """
 
 import math
@@ -96,9 +97,8 @@ def format_stamp(moment: datetime) -> str:
 def flow_run_url(ui_url: str | None, api_url: str | None, run_id: str) -> str | None:
     """Monta o link do flow run na UI do Prefect.
 
-    :param ui_url: ``PREFECT_UI_URL``; se vazio, a base sai de ``api_url`` sem o ``/api`` final.
-    :param api_url: ``PREFECT_API_URL``.
-    :param run_id: Id do flow run.
+    :param ui_url: ``PREFECT_UI_URL``; se vazio, a base sai de ``api_url`` sem o
+    ``/api`` final. :param api_url: ``PREFECT_API_URL``. :param run_id: Id do flow run.
     :returns: O link, ou ``None`` se nenhuma das duas URLs existir.
     """
     base = (ui_url or "").rstrip("/")

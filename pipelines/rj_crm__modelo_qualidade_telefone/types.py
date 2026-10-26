@@ -90,7 +90,8 @@ class SignificanceTest:
 class Summary:
     """The numbers of one algorithm in the simulation.
 
-    `gap` is the share of failed sends that the algorithm would change, minus the share of good ones.
+    `gap` is the share of failed sends that the algorithm would change, minus the share
+    of good ones.
     """
 
     algorithm: str

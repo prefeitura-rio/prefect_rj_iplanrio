@@ -12,7 +12,7 @@ from utils.types import DatabaseDumpOptions, DumpOptions
         pytest.param("filter", id="a_misspelled_key"),
     ],
 )
-def test_regression_an_option_that_does_not_exist_is_refused(options, key):
+def test_regression_an_option_that_does_not_exist_is_refused(options, key) -> None:
     """Regression: a renamed or misspelled option once fell back to the default.
 
     The dump then loaded the whole table as one chunk, with no error.

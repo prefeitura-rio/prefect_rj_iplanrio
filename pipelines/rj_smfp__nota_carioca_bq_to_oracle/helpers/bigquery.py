@@ -115,10 +115,10 @@ def delete_blobs(project: str, bucket: str, blob_names: list[str]) -> None:
 
     Cada lote é uma única requisição HTTP (batch do GCS), em vez de uma por objeto.
 
-    :param project: Projeto usado pelo client do GCS.
-    :param bucket: Bucket dos arquivos.
-    :param blob_names: Nomes dos objetos a remover.
-    :raises google.api_core.exceptions.GoogleAPICallError: Se algum objeto não puder ser removido,
+    :param project: Projeto usado pelo client do GCS. :param bucket: Bucket dos
+    arquivos. :param blob_names: Nomes dos objetos a remover. :raises
+    google.api_core.exceptions.GoogleAPICallError: Se algum objeto não puder ser
+    removido,
         depois de tentar todos os do lote.
     """
     client = storage.Client(project=project)

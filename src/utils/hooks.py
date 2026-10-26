@@ -19,8 +19,8 @@ def retry_on_transient_error(task: Task[..., object], task_run: TaskRun, state: 
 async def notify_failure(flow: Flow[..., object], flow_run: FlowRun, state: State[object]) -> None:
     """Post the failure of a flow run to Discord, or do nothing without a webhook.
 
-    A child run of a dump in shards posts nothing, because its parent fails and posts. Set
-    it with `on_failure=[notify_failure]` on a flow.
+    A child run of a dump in shards posts nothing, because its parent fails and posts.
+    Set it with `on_failure=[notify_failure]` on a flow.
     """
     options = cast("Mapping[str, object]", flow_run.parameters.get("options") or {})
     webhook = DiscordSettings().DISCORD_WEBHOOK_URL.get_secret_value()

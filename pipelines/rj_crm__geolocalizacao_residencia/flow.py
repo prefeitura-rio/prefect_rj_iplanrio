@@ -33,13 +33,17 @@ async def rj_crm__geolocalizacao_residencia(
 ) -> None:
     """Find the coordinates of the home addresses of citizens that have none, and load them to BigQuery.
 
-    The flow reads up to 10,000 new addresses at random, and geocodes them by `strategy`:
+    The flow reads up to 10,000 new addresses at random, and geocodes them by
+    `strategy`:
 
-    - `nominatim`: the Nominatim server of the settings, fast and with less precision, `max_concurrent` at one time.
-    - `fallback`: Waze, MapTiler, Geocode.xyz, LocationIQ and OpenCage in turn, each taking what the last did not find.
+    - `nominatim`: the Nominatim server of the settings, fast and with less precision,
+      `max_concurrent` at one time.
+    - `fallback`: Waze, MapTiler, Geocode.xyz, LocationIQ and OpenCage in turn, each
+      taking what the last did not find.
     - `geoapify_batch`: the batch API of Geoapify, medium speed and good precision.
 
-    Every row that got a point is loaded with its geocode and its plus code, all as text.
+    Every row that got a point is loaded with its geocode and its plus code, all as
+    text.
     """
     addresses = await read_addresses_task()
 

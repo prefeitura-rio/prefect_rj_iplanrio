@@ -56,14 +56,17 @@ async def rj_crm__agentforce_classificacao_llm(
 ) -> None:
     """Classify the Agentforce sessions that have no classification, with a model, and load them to BigQuery.
 
-    The flow reads the sessions of the last days (7 by default) with the HSM that came before each. A late reply to
-    a button is decided by rule, and any other session goes to the model through Bifrost, `max_workers` at one
-    time. After each batch of `load_batch` sessions (500) the flow fills the theme and the cause with the rules of the
-    catalog and loads them with a MERGE by `id_sessao`, so a crash loses at most one batch. A session that fails
-    stays out and is tried again at the next run. Discord gets a summary.
+    The flow reads the sessions of the last days (7 by default) with the HSM that came
+    before each. A late reply to a button is decided by rule, and any other session goes
+    to the model through Bifrost, `max_workers` at one time. After each batch of
+    `load_batch` sessions (500) the flow fills the theme and the cause with the rules of
+    the catalog and loads them with a MERGE by `id_sessao`, so a crash loses at most one
+    batch. A session that fails stays out and is tried again at the next run. Discord
+    gets a summary.
 
-    With `recalculate_taxonomy` the flow classifies nothing: it applies the current rules to the summaries that are
-    already in the table, updates only `tema_nome` and `causa_nome`, and copies them to the marts of dbt.
+    With `recalculate_taxonomy` the flow classifies nothing: it applies the current
+    rules to the summaries that are already in the table, updates only `tema_nome` and
+    `causa_nome`, and copies them to the marts of dbt.
     """
     names = resolve_names(project_id, tables or {})
     themes = await read_rules_task(names, THEME_STAGE)

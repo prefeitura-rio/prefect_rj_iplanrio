@@ -46,7 +46,7 @@ from utils.types import Database
         ),
     ],
 )
-def test_a_read_names_the_origin_that_the_database_reads(db_type, read, batched, expected):
+def test_a_read_names_the_origin_that_the_database_reads(db_type, read, batched, expected) -> None:
     """Give a table, a query or the changes of a database, as the type of database reads."""
     assert read_request(db_type, read, batched) == expected
 
@@ -71,7 +71,7 @@ def test_a_read_names_the_origin_that_the_database_reads(db_type, read, batched,
         ),
     ],
 )
-def test_a_read_that_does_not_fit_is_refused(db_type, read, batched, message):
+def test_a_read_that_does_not_fit_is_refused(db_type, read, batched, message) -> None:
     """Raise before any connection, so a typo never reaches the database."""
     with pytest.raises(ValueError, match=message):
         read_request(db_type, read, batched)
@@ -85,7 +85,7 @@ def test_a_read_that_does_not_fit_is_refused(db_type, read, batched, message):
         pytest.param("mongodb://${DB_HOST}:${DB_PORT}", "mongodb://db.test:27017", id="two_placeholders"),
     ],
 )
-def test_a_placeholder_is_the_environment_variable_of_its_name(monkeypatch, value, expected):
+def test_a_placeholder_is_the_environment_variable_of_its_name(monkeypatch, value, expected) -> None:
     """Replace each `${NAME}` with the variable of the environment."""
     monkeypatch.setenv("DB_HOST", "db.test")
     monkeypatch.setenv("DB_PORT", "27017")
@@ -101,7 +101,7 @@ def test_a_placeholder_is_the_environment_variable_of_its_name(monkeypatch, valu
         pytest.param("${db_host}", {"DB_HOST": "x"}, "Invalid placeholder", id="a_name_in_lowercase"),
     ],
 )
-def test_a_placeholder_without_a_value_is_refused(monkeypatch, value, variables, message):
+def test_a_placeholder_without_a_value_is_refused(monkeypatch, value, variables, message) -> None:
     """Raise at once, and name the variable, so a typo never reaches the connection."""
     monkeypatch.delenv("DB_HOST", raising=False)
     for name, text in variables.items():
@@ -111,7 +111,7 @@ def test_a_placeholder_without_a_value_is_refused(monkeypatch, value, variables,
         expand_environment(value)
 
 
-def test_a_database_expands_its_host_and_its_name_only(monkeypatch):
+def test_a_database_expands_its_host_and_its_name_only(monkeypatch) -> None:
     """Leave the type and the port as they are, and expand the host and the database."""
     monkeypatch.setenv("DB_HOST", "db.test")
     monkeypatch.setenv("DB_NAME", "taxi")
@@ -131,7 +131,7 @@ def pipeline_folder(tmp_path, monkeypatch):
     return folder
 
 
-def test_a_mongodb_pipeline_is_read_by_name_from_the_folder_of_the_pipeline(pipeline_folder):
+def test_a_mongodb_pipeline_is_read_by_name_from_the_folder_of_the_pipeline(pipeline_folder) -> None:
     """Read the stages of `<name>.json`, whatever its layout, as one compact text."""
     (pipeline_folder / "ranking-races.json").write_text(
         '[\n  {"$project": {"a": 1}},\n  {"$limit": 5}\n]\n', encoding="utf-8"
@@ -150,7 +150,7 @@ def test_a_mongodb_pipeline_is_read_by_name_from_the_folder_of_the_pipeline(pipe
         pytest.param("[{", id="text_that_is_not_json"),
     ],
 )
-def test_a_pipeline_file_that_is_not_a_list_of_stages_is_refused(pipeline_folder, content):
+def test_a_pipeline_file_that_is_not_a_list_of_stages_is_refused(pipeline_folder, content) -> None:
     """Raise before any connection when the file is not a JSON list of objects."""
     (pipeline_folder / "stages.json").write_text(content, encoding="utf-8")
 
@@ -159,7 +159,7 @@ def test_a_pipeline_file_that_is_not_a_list_of_stages_is_refused(pipeline_folder
 
 
 @pytest.mark.parametrize("name", ["../secret", "Ranking", "ranking_races", "a/b", "-a", ""])
-def test_a_pipeline_name_is_words_with_dashes(name):
+def test_a_pipeline_name_is_words_with_dashes(name) -> None:
     """Refuse a name that is not lowercase words with dashes, so it never leaves the folder."""
     with pytest.raises(ValueError, match="words with dashes"):
         read_request("mongodb", {"table": "c", "pipeline": name}, False)
@@ -173,13 +173,13 @@ def test_a_pipeline_name_is_words_with_dashes(name):
         pytest.param("4326", "4326", id="the_number_only"),
     ],
 )
-def test_an_epsg_code_is_its_number(crs, expected):
+def test_an_epsg_code_is_its_number(crs, expected) -> None:
     """Give the number that ArcGIS takes as `outSR`."""
     assert epsg_code(crs) == expected
 
 
 @pytest.mark.parametrize("crs", ["WGS84", "EPSG:", "EPSG:31983; DROP", ""])
-def test_a_text_that_is_not_an_epsg_code_is_refused(crs):
+def test_a_text_that_is_not_an_epsg_code_is_refused(crs) -> None:
     """Raise before the number goes into a URL."""
     with pytest.raises(ValueError, match="EPSG"):
         epsg_code(crs)

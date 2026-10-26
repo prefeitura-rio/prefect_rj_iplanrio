@@ -38,8 +38,8 @@ from utils.utils import capture_time, render_query
 async def read_ids_task(project: str, table: str, name: str, column: str) -> list[str]:
     """Return the sorted ids of a column of a table of the pipeline.
 
-    `name` is `unit_ids` (the units of the latest partitions) or `qmd_ids` (the latest QMDs), the query
-    that reads them from `table` of `project`.
+    `name` is `unit_ids` (the units of the latest partitions) or `qmd_ids` (the latest
+    QMDs), the query that reads them from `table` of `project`.
     """
     sql = render_query(__file__, name, table=table, partitions=UNIT_IDS_LOOKBACK_PARTITIONS)
     frame = await read_bq(sql, project=project)
@@ -53,7 +53,8 @@ async def read_ids_task(project: str, table: str, name: str, column: str) -> lis
 async def upload_cycle_task(rows: list[Row], target: Target, cycle: int) -> None:
     """Load the rows of a cycle to the Delta table, as text columns with the hash, the time and the date partition.
 
-    Each cycle of a run has its own capture time, so a retry of the run does not repeat a cycle.
+    Each cycle of a run has its own capture time, so a retry of the run does not repeat
+    a cycle.
     """
     frame = build_frame(rows, target.updated_at, target.column)
 
@@ -103,10 +104,10 @@ async def run_unit_positions_task(
 ) -> None:
     """Read the GPS positions of every unit, one day after the other, and load them.
 
-    The days run in order, so a failure leaves the earlier days loaded. The units of a day
-    run `unit_id_concurrency` at one time. The units come from the latest partitions of
-    `unidades_historico` in BigQuery. A unit that fails is skipped, and the run fails if the
-    share of failed unit-days is over 5%.
+    The days run in order, so a failure leaves the earlier days loaded. The units of a
+    day run `unit_id_concurrency` at one time. The units come from the latest partitions
+    of `unidades_historico` in BigQuery. A unit that fails is skipped, and the run fails
+    if the share of failed unit-days is over 5%.
     """
     first = window.get("data_inicio") or (datetime.now(SP_TZ) - timedelta(days=1)).strftime("%Y-%m-%d")
     first, last = parse_date_range(first, window.get("data_fim") or first)
@@ -143,7 +144,8 @@ async def run_qmd_task(table: Table, cloud: Cloud, dump_mode: DumpMode, limits: 
     """Read the detail or the KML of every QMD of the latest `qmd` partition, and load it.
 
     `qmd_detalhes` reads `/api/qmd/{id}` and `qmd_kml` reads its KML. The ids run
-    `qmd_id_concurrency` at one time. The run fails if the share of failed ids is over 5%.
+    `qmd_id_concurrency` at one time. The run fails if the share of failed ids is over
+    5%.
     """
     table_id = table["table_id"]
     qmd_ids = await read_ids_task(cloud["project"], f"{cloud['project']}.{table['dataset_id']}.qmd", "qmd_ids", "Id")

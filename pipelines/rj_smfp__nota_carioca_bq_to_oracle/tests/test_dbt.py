@@ -31,6 +31,7 @@ class FakeClock:
     """Relógio e sleep que avançam juntos, sem esperar de verdade."""
 
     def __init__(self) -> None:
+        """Store the arguments."""
         self.now = 0.0
         self.sleeps: list[float] = []
 
@@ -47,6 +48,7 @@ class FakeRuns:
     """Devolve os estados em ordem (o último se repete) e registra os cancelamentos."""
 
     def __init__(self, statuses: list[RunStatus], error: BaseException | None = None) -> None:
+        """Store the arguments."""
         self.statuses = statuses
         self.error = error
         self.reads = 0
@@ -75,7 +77,8 @@ def waiter(runs: FakeRuns, clock: FakeClock, messages: list[str], timeout_second
     )
 
 
-def test_default_parameters_when_none_are_given():
+def test_default_parameters_when_none_are_given() -> None:
+    """Check that default parameters when none are given."""
     assert resolve_dbt_parameters(None) == {
         "command": "build",
         "select": "tag:nota_carioca",
@@ -87,14 +90,16 @@ def test_default_parameters_when_none_are_given():
     }
 
 
-def test_default_parameters_are_a_fresh_copy_each_time():
+def test_default_parameters_are_a_fresh_copy_each_time() -> None:
+    """Check that default parameters are a fresh copy each time."""
     buckets = default_dbt_parameters()["gcs_buckets"]
     assert isinstance(buckets, dict)
     buckets["prod"] = "outro"
     assert default_dbt_parameters()["gcs_buckets"] == {"prod": "rj-iplanrio_dbt", "dev": "rj-iplanrio-dev_dbt"}
 
 
-def test_given_parameters_replace_the_defaults_without_merging():
+def test_given_parameters_replace_the_defaults_without_merging() -> None:
+    """Check that given parameters replace the defaults without merging."""
     given: dict[str, object] = {"command": "run", "select": "tag:x"}
     assert resolve_dbt_parameters(given) == given
 
@@ -106,10 +111,12 @@ def test_given_parameters_replace_the_defaults_without_merging():
 def test_dbt_runs_only_when_requested_and_not_in_synonyms_only(
     run_dbt: bool, mode: Literal["full", "synonyms_only"], expected: bool
 ) -> None:
+    """Check that dbt runs only when requested and not in synonyms only."""
     assert should_run_dbt(run_dbt, mode) is expected
 
 
-def test_completed_run_returns_its_end_time_after_polling_until_final():
+def test_completed_run_returns_its_end_time_after_polling_until_final() -> None:
+    """Check that completed run returns its end time after polling until final."""
     clock, messages = FakeClock(), []
     runs = FakeRuns([status("RUNNING"), status("RUNNING"), status("COMPLETED", end_time=T0)])
     assert waiter(runs, clock, messages).wait(RUN_ID) == T0
@@ -121,29 +128,33 @@ def test_completed_run_returns_its_end_time_after_polling_until_final():
 
 @pytest.mark.parametrize("state_type", ["FAILED", "CRASHED", "CANCELLED"])
 def test_non_completed_final_states_raise_without_cancelling(state_type: str) -> None:
+    """Check that non completed final states raise without cancelling."""
     runs = FakeRuns([status("RUNNING"), status(state_type, message="dbt build executed with errors")])
     with pytest.raises(DbtRunError, match=f"terminou em {state_type.title()} .*executed with errors"):
         waiter(runs, FakeClock(), []).wait(RUN_ID)
     assert runs.cancelled == []
 
 
-def test_timeout_cancels_the_child_and_raises():
+def test_timeout_cancels_the_child_and_raises() -> None:
+    """Check that timeout cancels the child and raises."""
     clock, messages = FakeClock(), []
     runs = FakeRuns([status("RUNNING")])
     with pytest.raises(DbtRunError, match="não terminou em 1 min"):
         waiter(runs, clock, messages, timeout_seconds=60).wait(RUN_ID)
     assert runs.cancelled == [RUN_ID]
-    assert clock.now == 60  # noqa: PLR2004
+    assert clock.now == 60
     assert any("cancelando o run de dbt" in message for message in messages)
 
 
-def test_run_finishing_exactly_at_the_deadline_still_counts():
+def test_run_finishing_exactly_at_the_deadline_still_counts() -> None:
+    """Check that run finishing exactly at the deadline still counts."""
     runs = FakeRuns([status("RUNNING"), status("RUNNING"), status("COMPLETED", end_time=T0)])
     assert waiter(runs, FakeClock(), [], timeout_seconds=60).wait(RUN_ID) == T0
     assert runs.cancelled == []
 
 
-def test_interrupt_while_waiting_cancels_the_child_and_reraises():
+def test_interrupt_while_waiting_cancels_the_child_and_reraises() -> None:
+    """Check that interrupt while waiting cancels the child and reraises."""
     runs = FakeRuns([status("RUNNING")], error=KeyboardInterrupt())
     with pytest.raises(KeyboardInterrupt):
         waiter(runs, FakeClock(), []).wait(RUN_ID)
@@ -164,6 +175,7 @@ def test_interrupt_while_waiting_cancels_the_child_and_reraises():
 def test_skip_initial_quiet_wait_only_if_nothing_changed_after_dbt(
     offsets: list[int], dbt_end_offset: int | None, expected: bool
 ) -> None:
+    """Check that skip initial quiet wait only if nothing changed after dbt."""
     modified = [T0 + timedelta(seconds=offset) for offset in offsets]
     dbt_end = None if dbt_end_offset is None else T0 + timedelta(seconds=dbt_end_offset)
     assert skip_initial_quiet_wait(modified, dbt_end) is expected
@@ -232,6 +244,7 @@ def request(dbt_finished_at: datetime | None) -> bigquery.SnapshotRequest:
 def test_export_skips_the_initial_wait_when_tables_changed_only_before_dbt_ended(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Check that export skips the initial wait when tables changed only before dbt ended."""
     recent = T0 - timedelta(seconds=30)
     reads = [{"A": recent, "B": recent}, {"A": recent, "B": recent}]
     extracted = fake_bigquery(monkeypatch, reads)
@@ -244,6 +257,7 @@ def test_export_skips_the_initial_wait_when_tables_changed_only_before_dbt_ended
 
 
 def test_export_keeps_the_wait_when_a_table_changed_after_dbt_ended(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Check that export keeps the wait when a table changed after dbt ended."""
     recent = T0 - timedelta(seconds=30)
     quiet = T0 - timedelta(hours=1)
     reads = [{"A": recent, "B": T0 - timedelta(seconds=5)}, {"A": quiet, "B": quiet}, {"A": quiet, "B": quiet}]
@@ -254,6 +268,7 @@ def test_export_keeps_the_wait_when_a_table_changed_after_dbt_ended(monkeypatch:
 
 
 def test_export_without_dbt_keeps_the_normal_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Check that export without dbt keeps the normal wait."""
     recent = T0 - timedelta(seconds=30)
     quiet = T0 - timedelta(hours=1)
     fake_bigquery(monkeypatch, [{"A": recent, "B": recent}, {"A": quiet, "B": quiet}, {"A": quiet, "B": quiet}])
@@ -265,6 +280,7 @@ def test_export_without_dbt_keeps_the_normal_wait(monkeypatch: pytest.MonkeyPatc
 def test_export_still_discards_and_repeats_when_tables_change_during_the_extract_after_a_skip(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Check that export still discards and repeats when tables change during the extract after a skip."""
     recent = T0 - timedelta(seconds=30)
     quiet = T0 - timedelta(hours=1)
     changed = {"A": recent, "B": T0}

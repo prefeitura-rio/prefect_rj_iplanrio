@@ -27,13 +27,13 @@ from toolkit.utils import (
 )
 def test_a_column_name_becomes_one_that_bigquery_accepts(
     name, separator, lowercase, expected
-):
+) -> None:
     """Slug the name with the options, and start it with a letter or an underscore."""
     assert normalize_column(name, separator, lowercase) == expected
 
 
 @given(names=st.lists(st.text(), min_size=1))
-def test_every_target_name_starts_with_a_letter_or_an_underscore(names):
+def test_every_target_name_starts_with_a_letter_or_an_underscore(names) -> None:
     """For any names, give BigQuery a name that it accepts."""
     aliases = build_column_aliases(names)
 
@@ -110,7 +110,7 @@ def rendered(**options) -> list[str]:
         ),
     ],
 )
-def test_the_select_list_follows_the_options(options, expected):
+def test_the_select_list_follows_the_options(options, expected) -> None:
     """Rename, clean and transform each column as the options say."""
     assert rendered(**options) == expected
 
@@ -129,7 +129,7 @@ def test_the_select_list_follows_the_options(options, expected):
         pytest.param("BIGINT", None, id="a_type_that_delta_holds_is_left_alone"),
     ],
 )
-def test_a_type_that_delta_lacks_gets_a_cast(kind, cast):
+def test_a_type_that_delta_lacks_gets_a_cast(kind, cast) -> None:
     """Cast the types that a Delta table cannot hold, and no other."""
     [column] = select_columns({"c": kind})
 
@@ -147,14 +147,14 @@ def test_a_type_that_delta_lacks_gets_a_cast(kind, cast):
         pytest.param("BLOB", False, id="bytes_are_left_alone"),
     ],
 )
-def test_regression_the_text_of_every_source_is_cleaned(kind, cleaned):
+def test_regression_the_text_of_every_source_is_cleaned(kind, cleaned) -> None:
     """Regression: `normalize_values` skipped SQL Server text (`MSSQL_NVARCHAR`)."""
     [column] = select_columns({"c": kind}, normalize_values=True)
 
     assert ("function" in column) is cleaned
 
 
-def test_a_timestamp_with_a_time_zone_is_read_in_sao_paulo():
+def test_a_timestamp_with_a_time_zone_is_read_in_sao_paulo() -> None:
     """Convert to the time zone of São Paulo before the cast, so the date is local."""
     [column] = select_columns(
         {"t": "TIMESTAMP WITH TIME ZONE"}, transforms={"t": "ano_particao"}
@@ -183,7 +183,7 @@ def test_a_timestamp_with_a_time_zone_is_read_in_sao_paulo():
         ),
     ],
 )
-def test_an_option_that_does_not_fit_the_columns_is_refused(options, message):
+def test_an_option_that_does_not_fit_the_columns_is_refused(options, message) -> None:
     """Raise before any SQL runs, so a typo never reaches the database."""
     with pytest.raises(ValueError, match=message):
         select_columns(COLUMNS, **options)
@@ -207,7 +207,7 @@ def test_an_option_that_does_not_fit_the_columns_is_refused(options, message):
         pytest.param([], [], id="no_filters"),
     ],
 )
-def test_filters_become_conditions_in_parentheses(filters, expected):
+def test_filters_become_conditions_in_parentheses(filters, expected) -> None:
     """Wrap each filter, so an OR in one never reaches the next one."""
     assert filter_conditions(filters) == expected
 
@@ -224,7 +224,7 @@ def test_filters_become_conditions_in_parentheses(filters, expected):
         pytest.param(["id = 1 /* x */"], "one predicate", id="a_block_comment"),
     ],
 )
-def test_a_filter_that_is_not_one_predicate_is_refused(filters, message):
+def test_a_filter_that_is_not_one_predicate_is_refused(filters, message) -> None:
     """Raise before any read, so a second statement never reaches the source."""
     with pytest.raises(ValueError, match=message):
         filter_conditions(filters)
@@ -247,7 +247,7 @@ def test_a_filter_that_is_not_one_predicate_is_refused(filters, message):
         ),
     ],
 )
-def test_filters_become_json_selectors(filters, expected):
+def test_filters_become_json_selectors(filters, expected) -> None:
     """Parse each filter as a JSON object, with nothing forbidden inside a value."""
     assert filter_selectors(filters) == expected
 
@@ -257,18 +257,18 @@ def test_filters_become_json_selectors(filters, expected):
     [["not json"], ["[1, 2]"], ['"text"'], ['{"a": 1}', ""]],
     ids=["text", "a_list", "a_string", "an_empty_filter"],
 )
-def test_a_filter_that_is_not_a_json_object_is_refused(filters):
+def test_a_filter_that_is_not_a_json_object_is_refused(filters) -> None:
     """Raise `ValueError` for a filter that is not a selector."""
     with pytest.raises(ValueError, match="not a JSON selector"):
         filter_selectors(filters)
 
 
-def test_select_keeps_only_the_given_columns_in_the_given_order():
+def test_select_keeps_only_the_given_columns_in_the_given_order() -> None:
     """Narrow the columns of the dump, and follow the order of the list."""
     assert rendered(select=["dia", "Nome"]) == ['"dia" AS "dia"', '"Nome" AS "nome"']
 
 
-def test_select_refuses_a_column_that_the_result_does_not_have():
+def test_select_refuses_a_column_that_the_result_does_not_have() -> None:
     """Raise for a name that is not a column."""
     with pytest.raises(ValueError, match="Unknown columns"):
         select_columns(COLUMNS, select=["nada"])

@@ -167,7 +167,10 @@ async def read_details(
 
 
 async def read_kml(api: Api, endpoint: str, qmd_id: str, tally: Tally) -> list[Row]:
-    """Return the placemarks of the KML of a QMD. A KML that fails or has no placemark counts in the tally."""
+    """Return the placemarks of the KML of a QMD.
+
+    A KML that fails or has no placemark counts in the tally.
+    """
     try:
         text = (await api.get(endpoint.format(id=qmd_id))).text
     except (HTTPStatusError, OSError, RuntimeError) as error:

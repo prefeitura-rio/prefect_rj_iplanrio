@@ -53,8 +53,8 @@ def normalize_columns(frame: pl.DataFrame) -> pl.DataFrame:
 def validate_frame(frame: pl.DataFrame, campaign: str) -> None:
     """Check the columns that the log needs, and the first rows of the frame.
 
-    Raise `ValueError` if `cpf` or `telefone` is missing, if the campaign has no name, or if one of the
-    first rows has an empty value in them.
+    Raise `ValueError` if `cpf` or `telefone` is missing, if the campaign has no name,
+    or if one of the first rows has an empty value in them.
     """
     missing = [column for column in REQUIRED_COLUMNS if column not in frame.columns]
 
@@ -95,7 +95,8 @@ def drop_duplicates(frame: pl.DataFrame, column: str, *, enabled: bool) -> pl.Da
 def quarantine(frame: pl.DataFrame, failed_phones: Collection[str], *, retries: bool) -> pl.DataFrame:
     """Handle the phones that failed in the last dispatch.
 
-    With `retries`, their phone goes empty, so the retry takes the first of `others`. Without them, the row is dropped.
+    With `retries`, their phone goes empty, so the retry takes the first of `others`.
+    Without them, the row is dropped.
     """
     if not failed_phones:
         return frame
@@ -153,7 +154,9 @@ def of_day(dispatched: pl.DataFrame, day: date) -> pl.DataFrame:
 
 
 def drop_dispatched(frame: pl.DataFrame, dispatched: pl.DataFrame, column: str) -> pl.DataFrame:
-    """Drop the rows whose CPF or phone is in the dispatches. `column` is `cpf`, `telefone` or `SubscriberKey`.
+    """Drop the rows whose CPF or phone is in the dispatches.
+
+    `column` is `cpf`, `telefone` or `SubscriberKey`.
 
     A frame or a dispatch table that lacks the column is left as it is, with a warning.
     """
@@ -207,9 +210,10 @@ def dump_value(value: object) -> str | None:
 def build_csv(frame: pl.DataFrame, stem: str, columns: Sequence[str] | None, separator: str, now: datetime) -> Csv:
     """Return the file of a batch for the SFTP.
 
-    With `columns`, the file has `telefone`, `SubscriberKey` (the CPF) and those columns, and the others are dropped,
-    including `others`. Without them, only `others` goes away. `LOCALE` is `BR`, and `NOME_ARQUIVO`, if
-    asked for, is the name of the file. The name is `<stem>_<time>.csv`.
+    With `columns`, the file has `telefone`, `SubscriberKey` (the CPF) and those
+    columns, and the others are dropped, including `others`. Without them, only `others`
+    goes away. `LOCALE` is `BR`, and `NOME_ARQUIVO`, if asked for, is the name of the
+    file. The name is `<stem>_<time>.csv`.
     """
     named = frame.rename({"cpf": "SubscriberKey"}) if "cpf" in frame.columns else frame
     name = f"{stem}_{now:%Y%m%d%H%M%S}.csv"
@@ -233,8 +237,9 @@ def build_csv(frame: pl.DataFrame, stem: str, columns: Sequence[str] | None, sep
 def build_log(frame: pl.DataFrame, dispatch_date: str, campaign: str) -> list[dict[str, JsonValue]]:
     """Return the rows of the log of a batch, with the partition columns.
 
-    Each row has the dispatch time, the campaign, the CPF as `SubscriberKey`, the phone and `data`, the JSON of the
-    other columns. A row whose CPF or phone is empty is left out. Raise `ValueError` if no row is left.
+    Each row has the dispatch time, the campaign, the CPF as `SubscriberKey`, the phone
+    and `data`, the JSON of the other columns. A row whose CPF or phone is empty is left
+    out. Raise `ValueError` if no row is left.
     """
     named = frame.rename({"cpf": "SubscriberKey"}) if "cpf" in frame.columns else frame
     extra = [column for column in named.columns if column not in FIXED_COLUMNS]
@@ -280,9 +285,10 @@ def apply_filters(
 ) -> pl.DataFrame:
     """Drop who must not get the message of the try `attempt`, by what was already sent.
 
-    First, who got this campaign in the last `interval_days` days: by CPF in the first try, and by phone
-    in a retry, so the same person can try another phone. Then who got any campaign today: by the column of
-    `audience.dispatched`, except that a retry never filters by CPF, because its phone may have got another campaign.
+    First, who got this campaign in the last `interval_days` days: by CPF in the first
+    try, and by phone in a retry, so the same person can try another phone. Then who got
+    any campaign today: by the column of `audience.dispatched`, except that a retry
+    never filters by CPF, because its phone may have got another campaign.
     """
     if dispatched.is_empty():
         return frame

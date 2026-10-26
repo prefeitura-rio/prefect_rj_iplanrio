@@ -143,7 +143,7 @@ def place(dtype: DataType) -> DataFrame:
         ),
     ],
 )
-def test_schema_of_reads_the_annotations(schema, expected):
+def test_schema_of_reads_the_annotations(schema, expected) -> None:
     """Read the columns from the annotations."""
     assert build_columns(schema) == expected
 
@@ -156,7 +156,7 @@ def test_schema_of_reads_the_annotations(schema, expected):
         pytest.param(int | str, "value: only `X | None`", id="union_of_two_types"),
     ],
 )
-def test_an_annotation_without_a_polars_type_is_rejected(annotation, message):
+def test_an_annotation_without_a_polars_type_is_rejected(annotation, message) -> None:
     """Reject an annotation without a Polars type."""
     bad = make_dataclass("Bad", [("value", annotation)])
 
@@ -231,7 +231,7 @@ def test_an_annotation_without_a_polars_type_is_rejected(annotation, message):
 )
 def test_a_dataframe_that_fits_is_returned_with_the_schema_types(
     schema, dataframe, expected
-):
+) -> None:
     """Return a dataframe that fits, with the schema types."""
     assert validate_dataframe(dataframe, build_columns(schema)).schema == expected
 
@@ -280,13 +280,13 @@ def test_a_dataframe_that_fits_is_returned_with_the_schema_types(
 )
 def test_a_dataframe_that_does_not_fit_is_rejected_naming_the_column(
     schema, dataframe, message
-):
+) -> None:
     """Reject a dataframe that does not fit, naming the column."""
     with pytest.raises(SchemaError, match=message):
         validate_dataframe(dataframe, build_columns(schema))
 
 
-def test_every_problem_is_reported_at_once():
+def test_every_problem_is_reported_at_once() -> None:
     """Report every problem at once."""
     with pytest.raises(SchemaError) as error:
         validate_dataframe(DataFrame({"id": ["1"], "extra": [1]}), build_columns(Order))
@@ -313,7 +313,7 @@ class OnlyId(TypedDict):
 
 
 @given(st.data())
-def test_any_integer_type_widens_to_int64_and_keeps_its_values(data):
+def test_any_integer_type_widens_to_int64_and_keeps_its_values(data) -> None:
     """Widen any integer type to `Int64` and keep the values."""
     dtype, low, high = data.draw(st.sampled_from(INTEGERS))
     values = data.draw(st.lists(st.integers(low, high), min_size=1))
@@ -353,12 +353,12 @@ def test_any_integer_type_widens_to_int64_and_keeps_its_values(data):
         pytest.param({}, {}, id="an_empty_map_expects_nothing"),
     ],
 )
-def test_a_map_of_polars_types_is_a_map_of_columns(given, expected):
+def test_a_map_of_polars_types_is_a_map_of_columns(given, expected) -> None:
     """Make a bare type a column with no nulls, and keep a `Column` as it is."""
     assert convert_columns(given) == expected
 
 
-def test_a_polars_schema_refuses_a_null():
+def test_a_polars_schema_refuses_a_null() -> None:
     """Raise `SchemaError` for a null in a column of a Polars schema."""
     dataframe = DataFrame({"id": [1, None]})
 
@@ -366,7 +366,7 @@ def test_a_polars_schema_refuses_a_null():
         validate_dataframe(dataframe, convert_columns(Schema({"id": Int64})))
 
 
-def test_a_column_that_says_nullable_accepts_the_null():
+def test_a_column_that_says_nullable_accepts_the_null() -> None:
     """Return the dataframe when the schema says that the column holds nulls."""
     dataframe = DataFrame({"id": [1, None]})
 

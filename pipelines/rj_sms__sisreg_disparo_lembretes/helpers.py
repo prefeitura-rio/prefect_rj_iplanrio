@@ -46,7 +46,8 @@ def drop_duplicate_phones(recipients: Sequence[Recipient]) -> list[Recipient]:
 def build_rows(hsm: Hsm, batches: Sequence[SentBatch], sent_at: datetime) -> list[Row]:
     """Return one row for each recipient of the batches that went out, with the columns of the partition.
 
-    `vars` is JSON text. `data_particao` is the day of `sent_at`, with its year and month as text.
+    `vars` is JSON text. `data_particao` is the day of `sent_at`, with its year and
+    month as text.
     """
     day = f"{sent_at:%Y-%m-%d}"
 

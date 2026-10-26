@@ -12,6 +12,7 @@ class FakeRequest:
     """A request of the Drive API that gives an answer, or fails, when it runs."""
 
     def __init__(self, answer: dict[str, object], error: Exception | None = None) -> None:
+        """Store the arguments."""
         self.answer = answer
         self.error = error
 
@@ -28,6 +29,7 @@ class FakeFiles:
     """The `files()` resource of the Drive API, with the calls that it saw."""
 
     def __init__(self, found: list[dict[str, str]], error: Exception | None = None) -> None:
+        """Store the arguments."""
         self.found = found
         self.error = error
         self.calls: list[tuple[str, dict[str, object]]] = []
@@ -56,6 +58,7 @@ class FakeDrive:
     """A Drive client with one `files()` resource."""
 
     def __init__(self, files: FakeFiles) -> None:
+        """Store the arguments."""
         self.resource = files
 
     def files(self) -> FakeFiles:

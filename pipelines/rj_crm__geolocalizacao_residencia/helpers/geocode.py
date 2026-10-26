@@ -94,8 +94,8 @@ async def geocode_many(
 async def geocode_xyz_one(run: Run, address: str, key: str) -> Geocode:
     """Ask Geocode.xyz for one address, with up to three tries.
 
-    A throttled answer waits and tries again. A 402, or an error with no credits left, stops the tries. Only an
-    answer with valid coordinates counts.
+    A throttled answer waits and tries again. A 402, or an error with no credits left,
+    stops the tries. Only an answer with valid coordinates counts.
     """
     result: Geocode | None = None
 
@@ -236,8 +236,9 @@ async def geocode_geoapify(
 async def run_step(step: Step, addresses: Sequence[str], key: str, today: str) -> list[Geocode]:
     """Run a service of the fallback over the addresses and return the geocodes in order.
 
-    LocationIQ gives a daily balance of requests, and only that many addresses go to it. The rest comes back
-    empty. With no balance, or no clear answer, all of them come back empty.
+    LocationIQ gives a daily balance of requests, and only that many addresses go to it.
+    The rest comes back empty. With no balance, or no clear answer, all of them come
+    back empty.
     """
     if step.name == "geocode_xyz":
         return await geocode_xyz_many(addresses, key, today=today, concurrent=step.concurrent, wait=step.wait)

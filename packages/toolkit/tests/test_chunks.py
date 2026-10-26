@@ -76,7 +76,7 @@ def keys(spec) -> list[str]:
         ),
     ],
 )
-def test_the_chunks_cut_the_range_by_the_width(spec, expected):
+def test_the_chunks_cut_the_range_by_the_width(spec, expected) -> None:
     """Give one chunk per day, month, year or run of ids, with a stable key."""
     assert keys(spec) == expected
 
@@ -116,7 +116,7 @@ def test_the_chunks_cut_the_range_by_the_width(spec, expected):
         ),
     ],
 )
-def test_a_configuration_that_does_not_fit_is_refused(spec, message):
+def test_a_configuration_that_does_not_fit_is_refused(spec, message) -> None:
     """Raise before any read, so a typo never reaches the database."""
     with pytest.raises(ValueError, match=message):
         split_chunks(spec, TODAY)
@@ -127,7 +127,7 @@ def test_a_configuration_that_does_not_fit_is_refused(spec, message):
     days=st.integers(0, 800),
     width=st.sampled_from(["day", "month", "year"]),
 )
-def test_the_chunks_touch_and_cover_the_whole_range(begin, days, width):
+def test_the_chunks_touch_and_cover_the_whole_range(begin, days, width) -> None:
     """Leave no gap and no overlap, and hold both `begin` and `end` in a chunk."""
     end = begin + timedelta(days=days)
     spec = Chunks(
@@ -144,7 +144,7 @@ def test_the_chunks_touch_and_cover_the_whole_range(begin, days, width):
     assert cut[-1].start <= end < cut[-1].stop
 
 
-def test_a_date_chunk_is_a_half_open_filter_on_its_column():
+def test_a_date_chunk_is_a_half_open_filter_on_its_column() -> None:
     """Filter `column >= start AND column < stop`, with typed values."""
     [chunk] = split_chunks(
         {"column": "d", "width": "day", "begin": "2024-03-01", "end": "2024-03-01"},
@@ -159,7 +159,7 @@ def test_a_date_chunk_is_a_half_open_filter_on_its_column():
     ]
 
 
-def test_a_number_chunk_filters_a_run_of_ids_with_typed_values():
+def test_a_number_chunk_filters_a_run_of_ids_with_typed_values() -> None:
     """Filter `id >= start AND id < start + width` for the second chunk."""
     chunk = split_chunks({"column": "id", "width": 10, "begin": 0, "end": 25}, TODAY)[1]
 
@@ -169,7 +169,7 @@ def test_a_number_chunk_filters_a_run_of_ids_with_typed_values():
     ]
 
 
-def test_the_null_chunk_filters_the_rows_that_have_no_value():
+def test_the_null_chunk_filters_the_rows_that_have_no_value() -> None:
     """Select the rows whose chunk column is NULL, which no range holds."""
     assert build_chunk_predicates("d", NULL_CHUNK) == [
         {"column": Identifier("d"), "op": "is null"}
@@ -188,7 +188,7 @@ def test_the_null_chunk_filters_the_rows_that_have_no_value():
         ),
     ],
 )
-def test_the_null_chunk_is_read_every_time(known, lookback, expected):
+def test_the_null_chunk_is_read_every_time(known, lookback, expected) -> None:
     """Read the rows with no value on every run."""
     ranges = split_chunks({"column": "id", "width": 1, "begin": 0, "end": 2}, TODAY)
     cut = [*ranges, NULL_CHUNK]
@@ -223,7 +223,7 @@ def test_the_null_chunk_is_read_every_time(known, lookback, expected):
 )
 def test_lookback_limits_the_rechecks_but_not_the_first_loads(
     known, lookback, expected
-):
+) -> None:
     """Re-read only the last chunks, and load every chunk never loaded before."""
     cut = split_chunks({"column": "id", "width": 1, "begin": 0, "end": 3}, TODAY)
     names = dict(zip("abcd", cut, strict=True))
@@ -233,7 +233,7 @@ def test_lookback_limits_the_rechecks_but_not_the_first_loads(
     assert [next(n for n, w in names.items() if w == c) for c in chosen] == expected
 
 
-def test_the_config_hash_ignores_key_order_and_tracks_every_value():
+def test_the_config_hash_ignores_key_order_and_tracks_every_value() -> None:
     """Give the same hash for the same settings, and another one for any change."""
     base = {"table": "t", "select": ["a", "b"], "normalize_values": True}
 
@@ -242,6 +242,6 @@ def test_the_config_hash_ignores_key_order_and_tracks_every_value():
     assert hash_parts(base) != hash_parts(base | {"select": ["b", "a"]})
 
 
-def test_the_ledger_id_joins_the_config_and_the_chunk():
+def test_the_ledger_id_joins_the_config_and_the_chunk() -> None:
     """Name the ledger entry of one chunk under one config."""
     assert build_ledger_id("abc", "2024-03-01") == "abc:2024-03-01"

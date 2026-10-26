@@ -44,9 +44,9 @@ class Table(TypedDict):
 class ColumnOptions(TypedDict, total=False):
     """How a dump renames, cleans and transforms the columns.
 
-    Every key is optional. `normalize_columns` is `True` unless it is set. `add_timestamp`
-    adds the column `_prefect_extracted_at`: the time a chunk was written, so a chunk
-    that did not change keeps its old time.
+    Every key is optional. `normalize_columns` is `True` unless it is set.
+    `add_timestamp` adds the column `_prefect_extracted_at`: the time a chunk was
+    written, so a chunk that did not change keeps its old time.
     """
 
     normalize_columns: bool

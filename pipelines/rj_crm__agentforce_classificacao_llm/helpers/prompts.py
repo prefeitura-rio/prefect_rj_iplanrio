@@ -17,18 +17,23 @@ def read_prompt(name: str) -> str:
 
 
 def fill_prompt(template: str, hsm_text: str | None, conversation: str | None) -> str:
-    """Return the template with the HSM text and the conversation in place. Nothing becomes empty text."""
+    """Return the template with the HSM text and the conversation in place.
+
+    Nothing becomes empty text.
+    """
     return template.replace("<<HSM_TEXTO>>", hsm_text or "").replace("<<CONVERSA_COMPLETA>>", conversation or "")
 
 
 def split_sessions(sessions: Sequence[Session]) -> Split:
     """Split the sessions into the ones for the model, the ones that a rule decides, and the ones dropped.
 
-    - With an HSM and not a late reply to a button, the session goes to the model with the `com_hsm` prompt.
+    - With an HSM and not a late reply to a button, the session goes to the model with
+      the `com_hsm` prompt.
     - With no HSM, it goes with the `sem_hsm` prompt.
-    - With an HSM and a late reply to a button, a rule decides, and the model does not run.
-    - A session with no message of the citizen is dropped. It is extracted again at the next run, inside
-      the window, at no cost for the model.
+    - With an HSM and a late reply to a button, a rule decides, and the model does not
+      run.
+    - A session with no message of the citizen is dropped. It is extracted again at the
+      next run, inside the window, at no cost for the model.
     """
     prompted: list[Prompted] = []
     by_rule: list[Session] = []

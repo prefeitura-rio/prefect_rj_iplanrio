@@ -116,7 +116,10 @@ async def read_dispatched_task(interval_days: int) -> pl.DataFrame:
 
 @task
 async def read_failed_phones_task() -> set[str]:
-    """Read the phones whose last dispatch failed, from Wetalkie and from Salesforce. Give none if the read fails."""
+    """Read the phones whose last dispatch failed, from Wetalkie and from Salesforce.
+
+    Give none if the read fails.
+    """
     try:
         frame = await read_bq.fn(render_query(__file__, "failed_phones"), project=BILLING_PROJECT)
     except Exception:
@@ -129,7 +132,10 @@ async def read_failed_phones_task() -> set[str]:
 
 @task
 async def read_failed_cpfs_task(campaign: str) -> set[str]:
-    """Read the CPFs of the campaign that failed in the last hours. Give none if the read fails."""
+    """Read the CPFs of the campaign that failed in the last hours.
+
+    Give none if the read fails.
+    """
     try:
         query = render_query(__file__, "failed_cpfs", campaign=Literal(campaign))
         frame = await read_bq.fn(query, project=BILLING_PROJECT)
@@ -143,7 +149,10 @@ async def read_failed_cpfs_task(campaign: str) -> set[str]:
 
 @task
 async def enrich_task(frame: pl.DataFrame, name: str, params: dict[str, JsonValue] | None) -> pl.DataFrame:
-    """Add data from an API to the frame. `consulta_debitos` is the only one: it keeps the CPFs with a debt."""
+    """Add data from an API to the frame.
+
+    `consulta_debitos` is the only one: it keeps the CPFs with a debt.
+    """
     if name != "consulta_debitos":
         raise ValueError(f"Unknown enricher: {name!r}. The one that exists is 'consulta_debitos'")
 
@@ -157,7 +166,10 @@ async def enrich_task(frame: pl.DataFrame, name: str, params: dict[str, JsonValu
 
 @task
 async def whitelist_task(phones: list[str], delivery: Delivery, campaign: str) -> None:
-    """Put a share of the phones on the whitelist of the campaign. With `whitelist_replace`, take them off first."""
+    """Put a share of the phones on the whitelist of the campaign.
+
+    With `whitelist_replace`, take them off first.
+    """
     async with Whitelist.connect() as whitelist:
         if delivery.whitelist_replace:
             await remove_from_whitelist(whitelist, phones)
@@ -168,7 +180,10 @@ async def whitelist_task(phones: list[str], delivery: Delivery, campaign: str) -
 
 @task
 async def send_file_task(frame: pl.DataFrame, delivery: Delivery, campaign: str) -> Csv:
-    """Write the file of a batch and send it to the SFTP. Return the file, with the time of the dispatch."""
+    """Write the file of a batch and send it to the SFTP.
+
+    Return the file, with the time of the dispatch.
+    """
     settings = SftpSettings()
     target = SftpTarget(
         host=settings.SFTP_HOST,
@@ -206,8 +221,8 @@ async def materialize_task() -> None:
 async def monitor_task(campaign: str, dispatch_date: str, total: int, delivery: Delivery, *, test_mode: bool) -> bool:
     """Wait, build the status model and look for the status of the dispatch, until it shows or the time ends.
 
-    It counts as sent when at least a fifth of the sends have a status of that day. If none shows in
-    `max_wait_minutes`, it alerts. Return whether the status showed.
+    It counts as sent when at least a fifth of the sends have a status of that day. If
+    none shows in `max_wait_minutes`, it alerts. Return whether the status showed.
     """
     initial = TEST_INITIAL_WAIT if test_mode else delivery.materialization_minutes
     interval = TEST_CHECK_INTERVAL if test_mode else delivery.check_interval_minutes
@@ -250,7 +265,8 @@ async def prepare_task(campaign: Campaign, audience: Audience, query: str) -> pl
     """Read the frame of the destinations and clean it: the columns, the duplicate CPFs, the phones that failed
     before, and the enricher.
 
-    Return an empty frame, after a notice, if nobody is left. Raise `ValueError` if `cpf` or `telefone` is missing.
+    Return an empty frame, after a notice, if nobody is left. Raise `ValueError` if
+    `cpf` or `telefone` is missing.
     """
     frame = normalize_columns(await read_frame_task.fn(query))
     empty = no_destinations_notice(campaign.name, test_mode=campaign.test_mode, today=today())
@@ -279,10 +295,10 @@ async def prepare_task(campaign: Campaign, audience: Audience, query: str) -> pl
 async def select_task(frame: pl.DataFrame, campaign: Campaign, audience: Audience, attempt: int) -> pl.DataFrame:
     """Choose who gets the message in the try `attempt`.
 
-    The first try uses the phone of each row, or the first of `others`. A retry waits a few minutes, and then takes
-    the CPFs that failed, each with the next phone of `others`. Who already got a message is dropped
-    (see `apply_filters`).
-    Return an empty frame when no one is left.
+    The first try uses the phone of each row, or the first of `others`. A retry waits a
+    few minutes, and then takes the CPFs that failed, each with the next phone of
+    `others`. Who already got a message is dropped (see `apply_filters`). Return an
+    empty frame when no one is left.
     """
     if frame.is_empty():
         return frame
@@ -309,8 +325,9 @@ async def select_task(frame: pl.DataFrame, campaign: Campaign, audience: Audienc
 async def deliver_task(current: pl.DataFrame, campaign: Campaign, delivery: Delivery) -> Delivered:
     """Put the phones on the whitelist, and send the frame to the SFTP, one file for each batch.
 
-    The task waits `sleep_minutes` before each file and `batch_sleep_minutes` between files. Unless
-    `campaign.test_mode` is on, it returns the rows of the log of what it sent.
+    The task waits `sleep_minutes` before each file and `batch_sleep_minutes` between
+    files. Unless `campaign.test_mode` is on, it returns the rows of the log of what it
+    sent.
     """
     if delivery.whitelist_percentage > 0:
         phones = cast("list[str]", current.get_column("telefone").cast(pl.String).to_list())
@@ -341,9 +358,9 @@ async def watch_task(
 ) -> None:
     """Watch for the status of the files that went out, and post a notice when it shows.
 
-    With `delivery.monitor`, the task builds the status model and looks for the status until it shows or the time
-    ends. Without it, and with `delivery.materialize`, it waits and builds the model once.
-    `attempts` is this try and the number of tries.
+    With `delivery.monitor`, the task builds the status model and looks for the status
+    until it shows or the time ends. Without it, and with `delivery.materialize`, it
+    waits and builds the model once. `attempts` is this try and the number of tries.
     """
     confirmed = False
 

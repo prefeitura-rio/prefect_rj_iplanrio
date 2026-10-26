@@ -64,14 +64,14 @@ async def written(
 )
 async def test_a_chunk_of_a_file_is_written_with_its_filters(
     duckdb_memory, parquet, tmp_path, rows, ids
-):
+) -> None:
     """Keep the rows that pass every filter and the chunk, as a Parquet file."""
     target = tmp_path / "out.parquet"
 
     assert await written(duckdb_memory, parquet, target, rows) == ids
 
 
-async def test_no_columns_write_every_column(duckdb_memory, parquet, tmp_path):
+async def test_no_columns_write_every_column(duckdb_memory, parquet, tmp_path) -> None:
     """Select `*` when the request lists no column."""
     target = tmp_path / "out.parquet"
 
@@ -80,7 +80,7 @@ async def test_no_columns_write_every_column(duckdb_memory, parquet, tmp_path):
     assert read_table(target).column_names == ["id", "dia", "status"]
 
 
-async def test_an_empty_read_keeps_the_schema(duckdb_memory, parquet, tmp_path):
+async def test_an_empty_read_keeps_the_schema(duckdb_memory, parquet, tmp_path) -> None:
     """Write a file with the columns and no row, so a dump learns the schema."""
     target = tmp_path / "out.parquet"
 
@@ -92,7 +92,7 @@ async def test_an_empty_read_keeps_the_schema(duckdb_memory, parquet, tmp_path):
 
 async def test_a_filter_with_a_second_statement_is_refused(
     duckdb_memory, parquet, tmp_path
-):
+) -> None:
     """Raise before DuckDB runs, so a `;` never reaches the source."""
     rows = Rows(filters=["id = 1; DROP TABLE t"])
 
@@ -104,7 +104,7 @@ async def test_a_filter_with_a_second_statement_is_refused(
 
 async def test_describe_gives_the_name_and_the_type_of_each_column(
     duckdb_memory, parquet
-):
+) -> None:
     """Read the columns of an origin without its rows."""
     assert await duckdb_memory.describe_origin(parquet) == {
         "id": "BIGINT",
@@ -113,7 +113,9 @@ async def test_describe_gives_the_name_and_the_type_of_each_column(
     }
 
 
-async def test_an_origin_that_duckdb_cannot_read_is_refused(duckdb_memory, tmp_path):
+async def test_an_origin_that_duckdb_cannot_read_is_refused(
+    duckdb_memory, tmp_path
+) -> None:
     """Raise `UnsupportedRequestError` for changes, which only CouchDB answers."""
     with pytest.raises(TypeError, match="Changes"):
         await duckdb_memory.materialize_origin(
@@ -121,7 +123,7 @@ async def test_an_origin_that_duckdb_cannot_read_is_refused(duckdb_memory, tmp_p
         )
 
 
-async def test_an_engine_reads_the_origin_of_its_source(parquet, tmp_path):
+async def test_an_engine_reads_the_origin_of_its_source(parquet, tmp_path) -> None:
     """Describe, materialize and read the origin that the source names."""
     target = tmp_path / "out.parquet"
 
@@ -135,7 +137,7 @@ async def test_an_engine_reads_the_origin_of_its_source(parquet, tmp_path):
     assert dataframe.height == len(ROWS)
 
 
-async def test_files_are_written_to_a_sheet_with_the_header_in_the_first_row():
+async def test_files_are_written_to_a_sheet_with_the_header_in_the_first_row() -> None:
     """Render the write of a sheet, with the spreadsheet and the sheet as literals."""
     connection = MagicMock()
     engine = DuckDBEngine()

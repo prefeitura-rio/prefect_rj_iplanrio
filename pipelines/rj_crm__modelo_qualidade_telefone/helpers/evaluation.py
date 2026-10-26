@@ -14,7 +14,10 @@ def make_row(origin: str, metric: str, value: float, algorithm: str | None = Non
 
 
 def training_rows(training: Training) -> list[Row]:
-    """Return one row for each held-out metric. All are of the new model, the only one that the held-out set judges."""
+    """Return one row for each held-out metric.
+
+    All are of the new model, the only one that the held-out set judges.
+    """
     return [
         make_row("treino_holdout", name, value, algorithm=NEW_MODEL) for name, value in training.holdout_metrics.items()
     ]

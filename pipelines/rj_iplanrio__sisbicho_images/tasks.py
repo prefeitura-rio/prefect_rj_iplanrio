@@ -20,8 +20,8 @@ from utils.utils import render_query
 async def list_pending_task(project: str, source: Table, target: Table) -> tuple[str, list[str]]:
     """Return the id column of the source table, and the ids of the animals that the target table lacks.
 
-    Only the animals with a QR code or a photo count. Before the first run the target table
-    does not exist, and every one of them is pending.
+    Only the animals with a QR code or a photo count. Before the first run the target
+    table does not exist, and every one of them is pending.
     """
     columns = await read_bq(
         render_query(__file__, "columns", project=project, dataset=source["dataset_id"], table=source["table_id"]),

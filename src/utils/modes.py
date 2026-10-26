@@ -119,8 +119,8 @@ def pick_shard(cut: Sequence[Chunk], shard: Shard) -> list[Chunk]:
     """Return the chunks of one shard: every `count`-th chunk, from `index`.
 
     The slices of all the shards hold every chunk once, and a dense area of the range
-    spreads over the shards. It reads the whole `cut`, never the ledger, so the parent and
-    the children agree on it.
+    spreads over the shards. It reads the whole `cut`, never the ledger, so the parent
+    and the children agree on it.
     """
     return list(cut[shard["index"] :: shard["count"]])
 
@@ -172,8 +172,8 @@ def pick_pending(mode: Mode, cut: Sequence[Chunk], seen: Collection[str]) -> lis
 def probes(mode: Mode) -> bool:
     """Tell whether a chunk can be skipped before its download, with a probe.
 
-    Only the `Replace` mode can: an overwrite writes every chunk again, and a capture and
-    a merge load one chunk from a new folder on each run.
+    Only the `Replace` mode can: an overwrite writes every chunk again, and a capture
+    and a merge load one chunk from a new folder on each run.
     """
     return isinstance(mode, Replace)
 

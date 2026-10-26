@@ -31,8 +31,8 @@ def rj_crm__whitelist_whatsapp_relatorio(
     termina em falha no fim (D41). Sem isso, um mailman fora do ar suprimiria justamente
     a entrega diária que confirma que a pipeline está viva.
 
-    :param environment: Ambiente de execução — ``staging`` ou ``prod``.
-    :param start_datetime: Início explícito da janela, no formato ``YYYY-MM-DD HH:MM:SS``.
+    :param environment: Ambiente de execução — ``staging`` ou ``prod``. :param
+    start_datetime: Início explícito da janela, no formato ``YYYY-MM-DD HH:MM:SS``.
         Quando omitido, a janela vem do horário agendado.
     :param end_datetime: Fim explícito da janela, no mesmo formato.
     :param query_ocorrencias: Query da janela — ``name`` do arquivo em ``queries/`` e

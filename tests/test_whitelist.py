@@ -24,6 +24,7 @@ class FakeApi:
     def __init__(
         self, groups: list[dict[str, JsonValue]] | None = None, numbers: list[str] | None = None, login: int = 200
     ) -> None:
+        """Store the arguments."""
         self.groups = groups or []
         self.numbers = numbers or []
         self.login = login

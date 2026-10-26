@@ -67,8 +67,8 @@ async def extract_and_load_task(feed: Feed, session: Session, span: Span, projec
 async def merge_task(feed: Feed, project: str, dataset: str) -> dict[str, int]:
     """Merge the staging table of a feed into its table by key and day, and return the rows inserted and updated.
 
-    The staging keeps the latest row of each key and day first, because the source sometimes repeats an id. It
-    is cleared only after a MERGE that worked.
+    The staging keeps the latest row of each key and day first, because the source
+    sometimes repeats an id. It is cleared only after a MERGE that worked.
     """
     target = f"{project}.{dataset}.{feed.name}"
     staging = f"{project}.{dataset}.{feed.staging}"

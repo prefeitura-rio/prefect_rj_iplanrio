@@ -101,7 +101,7 @@ async def run(
 )
 async def test_the_probe_decides_which_chunks_are_downloaded(
     fake_chunk_engine, probes, known, skipped, handled
-):
+) -> None:
     """Skip what the probe says is unchanged, and give the token to the others."""
     engine = fake_chunk_engine(probes=probes)
 
@@ -109,7 +109,7 @@ async def test_the_probe_decides_which_chunks_are_downloaded(
     assert sorted(engine.activity.materialized) == sorted(key for key, _ in handled)
 
 
-async def test_a_skipped_chunk_is_never_downloaded(fake_chunk_engine):
+async def test_a_skipped_chunk_is_never_downloaded(fake_chunk_engine) -> None:
     """Leave the source alone for a chunk that the probe skips."""
     engine = fake_chunk_engine(probes={"w0": 5, "w1": 6, "w2": 7})
 
@@ -118,7 +118,7 @@ async def test_a_skipped_chunk_is_never_downloaded(fake_chunk_engine):
     assert engine.activity.materialized == ["w1"]
 
 
-async def test_no_probe_is_asked_when_the_dump_turns_it_off(fake_chunk_engine):
+async def test_no_probe_is_asked_when_the_dump_turns_it_off(fake_chunk_engine) -> None:
     """Download everything and ask the engine nothing, as an overwrite does."""
     engine = fake_chunk_engine(probes={"w0": 5, "w1": 6, "w2": 7})
 
@@ -128,7 +128,7 @@ async def test_no_probe_is_asked_when_the_dump_turns_it_off(fake_chunk_engine):
     assert engine.activity.probed == []
 
 
-async def test_each_worker_keeps_the_token_of_its_own_chunk(fake_chunk_engine):
+async def test_each_worker_keeps_the_token_of_its_own_chunk(fake_chunk_engine) -> None:
     """Give every chunk its own token, also when three workers probe together."""
     probes = {"w0": 10, "w1": 11, "w2": 12}
     engine = fake_chunk_engine(workers=3, probes=probes)
@@ -162,7 +162,7 @@ async def test_each_worker_keeps_the_token_of_its_own_chunk(fake_chunk_engine):
 )
 def test_each_source_declares_the_kind_of_its_probe_and_whether_it_needs_a_column(
     source, kind, needs_column
-):
+) -> None:
     """Name the token of every source, and say which ones need a column."""
     assert source.probe_kind == kind
     assert source.range_column_needed is needs_column
@@ -184,7 +184,7 @@ DAYS = Chunk("2024-01-01", date(2024, 1, 1), date(2024, 1, 2))
         pytest.param("mssql", "a b", "[a b]", id="a_space_is_kept"),
     ],
 )
-def test_a_name_is_quoted_in_the_dialect(dialect, name, expected):
+def test_a_name_is_quoted_in_the_dialect(dialect, name, expected) -> None:
     """Quote with the characters of the dialect, and double the closing one."""
     assert quote_native(dialect, name) == expected
 
@@ -231,7 +231,7 @@ def test_a_name_is_quoted_in_the_dialect(dialect, name, expected):
         ),
     ],
 )
-def test_the_chunk_becomes_a_native_predicate(dialect, rows, expected):
+def test_the_chunk_becomes_a_native_predicate(dialect, rows, expected) -> None:
     """Write the chunk in the dialect, wider for dates, and none for filters."""
     assert build_native_chunk(dialect, rows) == expected
 
@@ -277,7 +277,7 @@ def postgres(origin: Origin | None = None):
 )
 async def test_the_probe_runs_on_the_server_through_the_function_of_the_extension(
     monkeypatch, source_class, function, table
-):
+) -> None:
     """Send the native query to the pass-through function of the dialect."""
     engine, sent = build_duckdb_engine(
         monkeypatch, source_class(conn=DUCKDB_CONN, origin=Table("public.items"))
@@ -299,7 +299,9 @@ async def test_the_probe_runs_on_the_server_through_the_function_of_the_extensio
         pytest.param("mssql", "COUNT_BIG(*) AS n", id="mssql_counts_with_count_big"),
     ],
 )
-def test_each_dialect_ranges_with_the_count_and_the_highest_value(dialect, count):
+def test_each_dialect_ranges_with_the_count_and_the_highest_value(
+    dialect, count
+) -> None:
     """Render a native query that reads no row: the count and `MAX` of the column."""
     names = {"postgres": '"{}"', "mysql": "`{}`", "mssql": "[{}]"}[dialect]
     values = {
@@ -342,7 +344,7 @@ def test_each_dialect_ranges_with_the_count_and_the_highest_value(dialect, count
 )
 async def test_the_probe_compares_the_count_and_the_highest_value_with_the_ledger(
     monkeypatch, known, answer, download
-):
+) -> None:
     """Download unless the count and the highest value are the known ones."""
     engine, _ = build_duckdb_engine(monkeypatch, postgres(), answer)
 
@@ -380,7 +382,7 @@ async def test_the_probe_compares_the_count_and_the_highest_value_with_the_ledge
 )
 async def test_what_a_probe_cannot_cover_is_downloaded_with_no_query(
     monkeypatch, source, rows, probe
-):
+) -> None:
     """Download without a token, and send nothing to the server."""
     engine, sent = build_duckdb_engine(monkeypatch, source)
 
@@ -389,7 +391,7 @@ async def test_what_a_probe_cannot_cover_is_downloaded_with_no_query(
     assert sent == []
 
 
-async def test_a_failed_probe_downloads_the_chunk_and_never_raises(monkeypatch):
+async def test_a_failed_probe_downloads_the_chunk_and_never_raises(monkeypatch) -> None:
     """Turn a DuckDB error, such as a timeout, into a download with no token."""
     engine, sent = build_duckdb_engine(monkeypatch, postgres(), fails=True)
 
@@ -415,7 +417,7 @@ async def take_couchdb_token(conn, rows=COUCHDB_WHOLE, **options) -> int | None:
         return engine.token
 
 
-async def test_the_probe_skips_a_chunk_that_did_not_change(small_couchdb):
+async def test_the_probe_skips_a_chunk_that_did_not_change(small_couchdb) -> None:
     """Give the same token twice, and skip the chunk that the ledger holds."""
     _, conn = small_couchdb
     token = await take_couchdb_token(conn)
@@ -443,7 +445,7 @@ async def test_the_probe_skips_a_chunk_that_did_not_change(small_couchdb):
 )
 async def test_a_changed_document_changes_the_token_and_downloads_the_chunk(
     small_couchdb, change
-):
+) -> None:
     """Download after a write, a delete or an insert in the chunk."""
     store, conn = small_couchdb
     before = await take_couchdb_token(conn)
@@ -456,7 +458,7 @@ async def test_a_changed_document_changes_the_token_and_downloads_the_chunk(
         assert engine.token != before
 
 
-async def test_a_change_outside_the_chunk_leaves_its_token_alone(small_couchdb):
+async def test_a_change_outside_the_chunk_leaves_its_token_alone(small_couchdb) -> None:
     """Look only at the documents between the keys of the chunk."""
     store, conn = small_couchdb
     store.docs["00000000500"] = {"_id": "00000000500", "_rev": "1-a"}
@@ -467,7 +469,7 @@ async def test_a_change_outside_the_chunk_leaves_its_token_alone(small_couchdb):
     assert await take_couchdb_token(conn) == before
 
 
-async def test_a_design_document_is_never_part_of_the_token(small_couchdb):
+async def test_a_design_document_is_never_part_of_the_token(small_couchdb) -> None:
     """Leave out the design documents, as a read does."""
     store, conn = small_couchdb
     before = await take_couchdb_token(conn, Rows())
@@ -477,7 +479,7 @@ async def test_a_design_document_is_never_part_of_the_token(small_couchdb):
     assert await take_couchdb_token(conn, Rows()) == before
 
 
-async def test_the_token_does_not_depend_on_the_size_of_a_page(small_couchdb):
+async def test_the_token_does_not_depend_on_the_size_of_a_page(small_couchdb) -> None:
     """Give the same token for a page of 2 documents and for a page of 1000."""
     _, conn = small_couchdb
 
@@ -486,7 +488,7 @@ async def test_the_token_does_not_depend_on_the_size_of_a_page(small_couchdb):
     )
 
 
-async def test_the_null_chunk_joins_its_two_ranges(small_couchdb):
+async def test_the_null_chunk_joins_its_two_ranges(small_couchdb) -> None:
     """Read the keys below `0` and from `:`, and move when one of them changes."""
     store, conn = small_couchdb
     rows = Rows(column="id", chunk=NULL_CHUNK)
@@ -519,7 +521,7 @@ async def test_the_null_chunk_joins_its_two_ranges(small_couchdb):
 )
 async def test_what_a_probe_cannot_cover_is_downloaded_with_no_request(
     small_couchdb, rows, origin
-):
+) -> None:
     """Download without a token, and ask the server for no listing."""
     store, conn = small_couchdb
     source = CouchDBSource(conn, secure=False, origin=origin)
@@ -534,7 +536,7 @@ async def test_what_a_probe_cannot_cover_is_downloaded_with_no_request(
 
 async def test_a_server_error_downloads_the_chunk_and_never_raises(
     small_couchdb, monkeypatch
-):
+) -> None:
     """Turn an HTTP error into a download with no token."""
     _, conn = small_couchdb
 
@@ -614,7 +616,7 @@ def build_oracle_engine(
 )
 async def test_the_probe_reads_the_table_at_the_point_of_the_dump(
     monkeypatch, scn, rows, as_of, params
-):
+) -> None:
     """Count the chunk and take its highest SCN, with the binds of the extract."""
     engine, sent = build_oracle_engine(monkeypatch, scn=scn)
 
@@ -628,7 +630,9 @@ async def test_the_probe_reads_the_table_at_the_point_of_the_dump(
     assert "MAX(ORA_ROWSCN)" in sql
 
 
-async def test_the_filters_are_the_oracle_conditions_of_the_extract(monkeypatch):
+async def test_the_filters_are_the_oracle_conditions_of_the_extract(
+    monkeypatch,
+) -> None:
     """Put the filters in the probe, because they are Oracle SQL already."""
     engine, sent = build_oracle_engine(monkeypatch)
 
@@ -653,7 +657,7 @@ async def test_the_filters_are_the_oracle_conditions_of_the_extract(monkeypatch)
 )
 async def test_oracle_the_probe_compares_its_token_with_the_one_of_the_ledger(
     monkeypatch, known, download
-):
+) -> None:
     """Download unless the token of the server is the one that the ledger holds."""
     engine, _ = build_oracle_engine(monkeypatch)
 
@@ -661,7 +665,7 @@ async def test_oracle_the_probe_compares_its_token_with_the_one_of_the_ledger(
     assert engine.token == ORACLE_TOKEN
 
 
-async def test_a_query_origin_is_downloaded_with_no_query(monkeypatch):
+async def test_a_query_origin_is_downloaded_with_no_query(monkeypatch) -> None:
     """Skip the probe for a query, because ORA_ROWSCN does not cross it."""
     engine, sent = build_oracle_engine(monkeypatch, Query("SELECT * FROM T"))
 
@@ -670,7 +674,9 @@ async def test_a_query_origin_is_downloaded_with_no_query(monkeypatch):
     assert sent == []
 
 
-async def test_oracle_a_failed_probe_downloads_the_chunk_and_never_raises(monkeypatch):
+async def test_oracle_a_failed_probe_downloads_the_chunk_and_never_raises(
+    monkeypatch,
+) -> None:
     """Turn a database error into a download with no token."""
     engine, sent = build_oracle_engine(monkeypatch, fails=True)
 
@@ -680,7 +686,9 @@ async def test_oracle_a_failed_probe_downloads_the_chunk_and_never_raises(monkey
     assert len(sent) == 2
 
 
-async def test_a_filter_that_is_not_one_condition_downloads_the_chunk(monkeypatch):
+async def test_a_filter_that_is_not_one_condition_downloads_the_chunk(
+    monkeypatch,
+) -> None:
     """Leave the error of a bad filter to the extract, and download."""
     engine, sent = build_oracle_engine(monkeypatch)
 
@@ -724,7 +732,7 @@ def build_mongodb_engine(monkeypatch, origin=None, answer=None, *, fails=False):
     return engine, sent
 
 
-def test_the_range_pipeline_counts_and_takes_the_highest_value_of_the_field():
+def test_the_range_pipeline_counts_and_takes_the_highest_value_of_the_field() -> None:
     """Group the chunk into its count and the `$max` of one field."""
     assert build_range_pipeline("updatedAt", {"a": 1}) == [
         {"$match": {"a": 1}},
@@ -738,12 +746,12 @@ def test_the_range_pipeline_counts_and_takes_the_highest_value_of_the_field():
     ]
 
 
-def test_an_empty_query_has_no_match_stage():
+def test_an_empty_query_has_no_match_stage() -> None:
     """Leave the `$match` out when there is nothing to match."""
     assert len(build_range_pipeline("updatedAt", {})) == 1
 
 
-async def test_the_probe_aggregates_the_chunk_on_the_server(monkeypatch):
+async def test_the_probe_aggregates_the_chunk_on_the_server(monkeypatch) -> None:
     """Send the chunk, the filters and the `$max` of the column to the collection."""
     engine, sent = build_mongodb_engine(monkeypatch)
 
@@ -771,7 +779,7 @@ async def test_the_probe_aggregates_the_chunk_on_the_server(monkeypatch):
 )
 async def test_mongodb_the_probe_compares_its_token_with_the_one_of_the_ledger(
     monkeypatch, known, download
-):
+) -> None:
     """Download unless the count and the highest value are the known ones."""
     engine, _ = build_mongodb_engine(monkeypatch)
 
@@ -781,7 +789,7 @@ async def test_mongodb_the_probe_compares_its_token_with_the_one_of_the_ledger(
 
 async def test_a_nested_schema_is_probed_because_no_text_of_the_fields_is_read(
     monkeypatch,
-):
+) -> None:
     """Probe a collection whose schema has a list: the probe reads one column only."""
     engine, sent = build_mongodb_engine(monkeypatch)
 
@@ -789,7 +797,7 @@ async def test_a_nested_schema_is_probed_because_no_text_of_the_fields_is_read(
     assert len(sent) == 1
 
 
-async def test_a_chunk_with_no_document_has_the_token_of_zero_rows(monkeypatch):
+async def test_a_chunk_with_no_document_has_the_token_of_zero_rows(monkeypatch) -> None:
     """Take a token from an empty answer, so an emptied chunk is noticed."""
     engine, _ = build_mongodb_engine(monkeypatch, answer=[])
 
@@ -797,7 +805,7 @@ async def test_a_chunk_with_no_document_has_the_token_of_zero_rows(monkeypatch):
     assert engine.token == hash_summary(0, "None", "")
 
 
-async def test_the_null_chunk_matches_the_documents_with_no_value(monkeypatch):
+async def test_the_null_chunk_matches_the_documents_with_no_value(monkeypatch) -> None:
     """Probe the null chunk as the read does."""
     engine, sent = build_mongodb_engine(monkeypatch)
 
@@ -815,7 +823,7 @@ async def test_the_null_chunk_matches_the_documents_with_no_value(monkeypatch):
 )
 async def test_what_a_probe_cannot_cover_is_downloaded_with_no_aggregation(
     monkeypatch, origin, probe
-):
+) -> None:
     """Download without a token, and send nothing to the server."""
     engine, sent = build_mongodb_engine(monkeypatch, origin)
 
@@ -824,7 +832,7 @@ async def test_what_a_probe_cannot_cover_is_downloaded_with_no_aggregation(
     assert sent == []
 
 
-async def test_a_query_origin_is_probed_in_its_collection(monkeypatch):
+async def test_a_query_origin_is_probed_in_its_collection(monkeypatch) -> None:
     """Join the selector of the query with the chunk."""
     engine, sent = build_mongodb_engine(
         monkeypatch, Query('{"ativo": true}', table="people")
@@ -837,7 +845,9 @@ async def test_a_query_origin_is_probed_in_its_collection(monkeypatch):
     }
 
 
-async def test_mongodb_a_server_error_downloads_the_chunk_and_never_raises(monkeypatch):
+async def test_mongodb_a_server_error_downloads_the_chunk_and_never_raises(
+    monkeypatch,
+) -> None:
     """Turn a PyMongo error into a download with no token."""
     engine, sent = build_mongodb_engine(monkeypatch, fails=True)
 
@@ -847,7 +857,7 @@ async def test_mongodb_a_server_error_downloads_the_chunk_and_never_raises(monke
     assert len(sent) == 2
 
 
-async def test_a_filter_that_is_not_json_downloads_the_chunk(monkeypatch):
+async def test_a_filter_that_is_not_json_downloads_the_chunk(monkeypatch) -> None:
     """Leave the error of a bad filter to the extract, and download."""
     engine, sent = build_mongodb_engine(monkeypatch)
 

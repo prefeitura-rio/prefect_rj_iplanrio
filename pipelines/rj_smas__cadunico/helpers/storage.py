@@ -29,7 +29,8 @@ def download_blob(bucket: str, name: str, folder: Path) -> Path:
 def list_record_archives(bucket: str, prefix: str) -> dict[str, str]:
     """Return the ZIP files of records, as the date of each one and its name.
 
-    A ZIP whose name has no date is left out. If two have the same date, the last one counts.
+    A ZIP whose name has no date is left out. If two have the same date, the last one
+    counts.
     """
     archives: dict[str, str] = {}
 
@@ -57,8 +58,8 @@ def list_layout_files(bucket: str, prefix: str) -> dict[str, str]:
 def read_staging_dates(bucket: str, dataset_id: str, table_id: str) -> list[str]:
     """Return the dates `YYYY-MM-DD` that the Delta table of the records already holds.
 
-    Each ZIP is one capture, so its chunk key is its date. A table that does not exist yet
-    holds none.
+    Each ZIP is one capture, so its chunk key is its date. A table that does not exist
+    yet holds none.
     """
     uri = f"gcs://{bucket}/staging/{dataset_id}/{table_id}"
 

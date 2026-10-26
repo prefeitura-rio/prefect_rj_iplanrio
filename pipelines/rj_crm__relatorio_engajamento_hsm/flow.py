@@ -29,12 +29,14 @@ async def rj_crm__relatorio_engajamento_hsm(
 ) -> None:
     """Publish the engagement report of the HSMs that asked for one on a day.
 
-    The flow reads `disparos_ativos` for the rows whose `relatorio_engajamento_data_geracao` is the
-    reference date (today in São Paulo by default) and that have a campaign and a dispatch date. For each
-    HSM it extracts the conversations since the dispatch date, discovers the categories and classifies the
-    conversations with the model, has a second call judge a sample, and publishes a Word report with two
-    CSV files (`;` separated) in the folder of the HSM. A report that exists for the HSM and the day is
-    skipped, so a repeat on the same day adds nothing. `limits` sets the sizes of the batches and samples.
+    The flow reads `disparos_ativos` for the rows whose
+    `relatorio_engajamento_data_geracao` is the reference date (today in São Paulo by
+    default) and that have a campaign and a dispatch date. For each HSM it extracts the
+    conversations since the dispatch date, discovers the categories and classifies the
+    conversations with the model, has a second call judge a sample, and publishes a Word
+    report with two CSV files (`;` separated) in the folder of the HSM. A report that
+    exists for the HSM and the day is skipped, so a repeat on the same day adds nothing.
+    `limits` sets the sizes of the batches and samples.
     """
     reference = date.fromisoformat(reference_date) if reference_date else datetime.now(SP_TZ).date()
     dispatches = await read_dispatches_task(reference)

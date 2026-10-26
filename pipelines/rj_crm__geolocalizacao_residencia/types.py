@@ -26,7 +26,8 @@ class Address(TypedDict):
 class Step:
     """A service of the fallback: its name, the setting of its key (none if it needs no key), and its pace.
 
-    `concurrent` is how many requests run at one time, and `wait` the seconds that each one rests after it.
+    `concurrent` is how many requests run at one time, and `wait` the seconds that each
+    one rests after it.
     """
 
     name: str
@@ -39,7 +40,8 @@ class Step:
 class Run:
     """What the requests of one run share: the client, the limit of requests at one time, the day, and the pace.
 
-    `wait` is how many seconds each request rests after it, and `pause` is the function that waits.
+    `wait` is how many seconds each request rests after it, and `pause` is the function
+    that waits.
     """
 
     client: AsyncClient

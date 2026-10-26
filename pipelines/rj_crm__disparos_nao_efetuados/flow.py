@@ -33,8 +33,9 @@ async def rj_crm__disparos_nao_efetuados(
 ) -> None:
     """Check the active campaigns that sent nothing today, save the result and tell Discord.
 
-    The result is always saved, for the history. A list of campaigns with no dispatch goes to
-    the channel of the errors, and a day with all of them sent goes to the channel of the dispatches.
+    The result is always saved, for the history. A list of campaigns with no dispatch
+    goes to the channel of the errors, and a day with all of them sent goes to the
+    channel of the dispatches.
     """
     campaigns = await read_bq(build_query(), project=BILLING_PROJECT)
     today = format_today()

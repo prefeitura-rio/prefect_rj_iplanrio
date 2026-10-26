@@ -21,8 +21,8 @@ def reformat_date(text: str, pattern: str) -> str:
 def parse_partition(blob_name: str) -> str:
     """Return the date `YYYY-MM-DD` that the name of a raw file holds.
 
-    The date is `A` and `YYMMDD`, or `YYYYMMDD`, or `YYYYMM` for the first day of a month.
-    Raise `ValueError` if the name has no date.
+    The date is `A` and `YYMMDD`, or `YYYYMMDD`, or `YYYYMM` for the first day of a
+    month. Raise `ValueError` if the name has no date.
     """
     stem = blob_name.rsplit("_", maxsplit=1)[-1] if "_" in blob_name else blob_name
 

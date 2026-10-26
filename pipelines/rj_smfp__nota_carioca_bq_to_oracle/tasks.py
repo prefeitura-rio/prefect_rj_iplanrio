@@ -243,8 +243,9 @@ def grant_access_task(table: str) -> str:
 def delete_gcs_files_task(source: Source, files: list[bigquery.ExportedFile]) -> None:
     """Remove do GCS os arquivos exportados, em lotes.
 
-    O flow submete esta task em segundo plano, depois da validação da contagem, e espera o resultado antes de
-    terminar: uma falha na remoção continua falhando o flow, sem atrasar a criação dos índices.
+    O flow submete esta task em segundo plano, depois da validação da contagem, e espera
+    o resultado antes de terminar: uma falha na remoção continua falhando o flow, sem
+    atrasar a criação dos índices.
     """
     names = [exported.name for exported in files]
     bigquery.delete_blobs(project=source.project, bucket=source.bucket, blob_names=names)

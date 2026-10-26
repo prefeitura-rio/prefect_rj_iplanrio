@@ -61,12 +61,12 @@ async def load_records(
 ) -> None:
     """Load the records of a pipeline into a Delta table, and publish the BigQuery table.
 
-    The records go through a temporary folder, as JSON lines or, with `parquet`, as a Parquet
-    file that keeps a text such as `2026-10-22 20:00:00` as text. Without `options` an
-    `append` run adds its rows under its capture time, so a retry of it adds nothing. In
-    `merge` mode the `merge` key of the table decides which rows are new, and it is ignored
-    in the other modes. A merge reads the records into memory, so it suits records and not
-    large tables.
+    The records go through a temporary folder, as JSON lines or, with `parquet`, as a
+    Parquet file that keeps a text such as `2026-10-22 20:00:00` as text. Without
+    `options` an `append` run adds its rows under its capture time, so a retry of it
+    adds nothing. In `merge` mode the `merge` key of the table decides which rows are
+    new, and it is ignored in the other modes. A merge reads the records into memory, so
+    it suits records and not large tables.
     """
     write = write_parquet_records if parquet else write_records
 
@@ -133,9 +133,9 @@ async def dispatch_hsm(
 
     With no recipient the run posts a notice and ends. A share of the phones, the
     `whitelist_percentage`, goes to the whitelist of the day. The run waits
-    `waits.before_dispatch` minutes before it sends, and `waits.before_results` minutes before the
-    notice with the status. The batches that went out are recorded in `table`, even if a later
-    one fails, and then the run raises. A test records nothing.
+    `waits.before_dispatch` minutes before it sends, and `waits.before_results` minutes
+    before the notice with the status. The batches that went out are recorded in
+    `table`, even if a later one fails, and then the run raises. A test records nothing.
     """
     today = now_sao_paulo().date()
 
@@ -181,12 +181,13 @@ async def dump_database(
     A chunk that did not change is never written again, so a rerun, or a retry after a
     failure, repeats nothing. BigQuery reads the Delta table through a BigLake
     connection. With `options.shards` the run only plans: it starts that many child runs
-    of its deployment, each one dumps its slice of the chunks (with its own `concurrency`),
-    and the parent sweeps, maintains and publishes once all of them completed. A child run
-    publishes nothing. Set `database` and `cloud` in the `prefect.yaml` of the pipeline, and
-    `table`, `read` and `options` in each schedule. A pipeline imports this flow in its
-    `flow.py` and names it with `with_options(name=...)`. A failed run posts to Discord
-    if `DISCORD_WEBHOOK_URL` is set. With `dbt` a dbt command runs after the publish.
+    of its deployment, each one dumps its slice of the chunks (with its own
+    `concurrency`), and the parent sweeps, maintains and publishes once all of them
+    completed. A child run publishes nothing. Set `database` and `cloud` in the
+    `prefect.yaml` of the pipeline, and `table`, `read` and `options` in each schedule.
+    A pipeline imports this flow in its `flow.py` and names it with
+    `with_options(name=...)`. A failed run posts to Discord if `DISCORD_WEBHOOK_URL` is
+    set. With `dbt` a dbt command runs after the publish.
     """
     chosen = options or {}
     bucket = cloud["bucket"]
@@ -231,9 +232,9 @@ async def dump_arcgis(
 ) -> None:
     """Dump an ArcGIS layer to a BigQuery table.
 
-    `url` is the layer URL without `/query`, and `where` is the ArcGIS filter. `crs`, such
-    as `EPSG:31983`, is the system of the geometry. The layer is one chunk, so a run that
-    finds the same layer writes nothing.
+    `url` is the layer URL without `/query`, and `where` is the ArcGIS filter. `crs`,
+    such as `EPSG:31983`, is the system of the geometry. The layer is one chunk, so a
+    run that finds the same layer writes nothing.
     """
     await dump_arcgis_to_gcs(
         table, url, bucket=cloud["bucket"], where=where, crs=crs, dump_mode=dump_mode, options=options
@@ -339,11 +340,11 @@ async def maintain_delta(*, cloud: Cloud = DEFAULT_CLOUD, exclude: list[str] | N
 
     It finds every Delta table under `staging/`, merges its small files, writes a
     checkpoint, removes the files that nothing reads, and refreshes its BigQuery table.
-    It never changes the rows. A table that fails does not stop the others, and the
-    run fails at the end. The message to Discord lists the failed tables, the tables
-    whose chunk keys mix two layouts, and the files that the run merged. It posts only if
-    `DISCORD_WEBHOOK_URL` is set. `exclude`
-    holds the tables to skip, as `dataset_id.table_id`.
+    It never changes the rows. A table that fails does not stop the others, and the run
+    fails at the end. The message to Discord lists the failed tables, the tables whose
+    chunk keys mix two layouts, and the files that the run merged. It posts only if
+    `DISCORD_WEBHOOK_URL` is set. `exclude` holds the tables to skip, as
+    `dataset_id.table_id`.
     """
     skipped = set(exclude or [])
     done: list[Maintenance] = []

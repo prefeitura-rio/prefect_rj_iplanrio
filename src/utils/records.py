@@ -79,8 +79,9 @@ def write_json_lines(records: Sequence[Mapping[str, JsonValue]], folder: Path) -
 def write_parquet(records: Sequence[Mapping[str, JsonValue]], folder: Path) -> Path:
     """Write the records as a Parquet file in a folder, and return the folder.
 
-    DuckDB guesses the type of a JSON text, and reads `2026-10-22 20:00:00` as a timestamp.
-    A Parquet file keeps a text as text, a number as a number, and a column of only nulls as text.
+    DuckDB guesses the type of a JSON text, and reads `2026-10-22 20:00:00` as a
+    timestamp. A Parquet file keeps a text as text, a number as a number, and a column
+    of only nulls as text.
     """
     frame = DataFrame(list(records), infer_schema_length=None)
     nulls = [name for name, dtype in frame.schema.items() if dtype == Null]

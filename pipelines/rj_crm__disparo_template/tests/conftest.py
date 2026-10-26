@@ -20,6 +20,7 @@ class FakeSession:
     """A session of the SFTP that records what it is asked to put: the remote path and the text of the file."""
 
     def __init__(self, sent: list[tuple[str, str]], error: Exception | None = None) -> None:
+        """Store the arguments."""
         self.sent = sent
         self.error = error
 
@@ -36,6 +37,7 @@ class FakeSftp:
     """An SFTP server: its opener gives sessions, and it keeps the targets that it was opened for."""
 
     def __init__(self, open_error: Exception | None = None, put_error: Exception | None = None) -> None:
+        """Store the arguments."""
         self.sent: list[tuple[str, str]] = []
         self.targets: list[SftpTarget] = []
         self.open_error = open_error

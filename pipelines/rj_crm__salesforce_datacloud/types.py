@@ -15,12 +15,13 @@ type Mode = Literal["hour", "day"]
 class Feed:
     """A table to extract from Salesforce, with how to read and load it.
 
-    `name` is the BigQuery table, and its staging is `<name>_staging`. `query` is a file of `queries/`.
-    `date_columns` (in snake case) become UTC timestamps. `primary_key` is the key of the MERGE,
-    and `order_by` orders the pages of a Data Cloud read. A `critical` feed that fails stops the run,
-    and any other one warns Discord and lets the run go on. With `utc_window` the source writes
-    real UTC and not the wall time of São Paulo with a `Z`, so the window is converted.
-    `step_output_only` keeps `output_value_text` only for the `ACTION_STEP` rows.
+    `name` is the BigQuery table, and its staging is `<name>_staging`. `query` is a file
+    of `queries/`. `date_columns` (in snake case) become UTC timestamps. `primary_key`
+    is the key of the MERGE, and `order_by` orders the pages of a Data Cloud read. A
+    `critical` feed that fails stops the run, and any other one warns Discord and lets
+    the run go on. With `utc_window` the source writes real UTC and not the wall time of
+    São Paulo with a `Z`, so the window is converted. `step_output_only` keeps
+    `output_value_text` only for the `ACTION_STEP` rows.
     """
 
     name: str
@@ -60,9 +61,9 @@ class Session(TypedDict):
 class Window(TypedDict, total=False):
     """What a run extracts.
 
-    `mode` is `hour` (the last hour, every 15 minutes) or `day` (a whole day, once a day, for
-    `partition_date` or yesterday). With `reprocess_from` the run redoes each day from it to
-    `reprocess_to` (the same day without it) and `mode` does not count.
+    `mode` is `hour` (the last hour, every 15 minutes) or `day` (a whole day, once a
+    day, for `partition_date` or yesterday). With `reprocess_from` the run redoes each
+    day from it to `reprocess_to` (the same day without it) and `mode` does not count.
     """
 
     mode: Mode

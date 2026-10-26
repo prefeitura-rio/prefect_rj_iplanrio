@@ -40,9 +40,9 @@ NOT_JUDGED = "não avaliada"
 def wilson_margin(proportion: float, judged: int, size: int | None = None, z: float = Z_95) -> float:
     """Return the half width of the Wilson interval (95%) of a proportion that `judged` observations gave.
 
-    With `size`, the size of the category, the interval has the correction of a finite population.
-    Without it a small category judged in full, a census with no sampling error, would show a margin
-    over zero, which is wrong. Return NaN for no observation.
+    With `size`, the size of the category, the interval has the correction of a finite
+    population. Without it a small category judged in full, a census with no sampling
+    error, would show a margin over zero, which is wrong. Return NaN for no observation.
     """
     if judged <= 0:
         return nan
@@ -254,7 +254,8 @@ def build_docx(
 ) -> bytes:
     """Return the Word document of a report: summary, notes, the query used, the categories and their examples.
 
-    `sql` is the query that read the conversations, with its values in place, for anyone to reproduce.
+    `sql` is the query that read the conversations, with its values in place, for anyone
+    to reproduce.
     """
     document = Document()
     first = report.items[0].conversation if report.items else None
@@ -327,6 +328,7 @@ def detail_csv(items: Sequence[Classification]) -> bytes:
 def report_slug(hsm_name: str, reference: date) -> str:
     """Return the prefix of the files of the report of an HSM for a day, that never has a time.
 
-    It names the files, and it tells whether the report exists, so a run repeats with no duplicate.
+    It names the files, and it tells whether the report exists, so a run repeats with no
+    duplicate.
     """
     return f"relatorio_engajamento_{slugify_hsm(hsm_name)}__geracao_{reference.isoformat()}"

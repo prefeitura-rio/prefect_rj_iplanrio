@@ -19,7 +19,7 @@ SFMC = {
         pytest.param(SfmcSettings, SFMC, id="sfmc"),
     ],
 )
-def test_a_group_reads_its_variables_and_hides_the_secret(monkeypatch, group, variables):
+def test_a_group_reads_its_variables_and_hides_the_secret(monkeypatch, group, variables) -> None:
     """Read every variable of the group and keep the secret out of the repr."""
     for name, value in variables.items():
         monkeypatch.setenv(name, value)
@@ -37,7 +37,7 @@ def test_a_group_reads_its_variables_and_hides_the_secret(monkeypatch, group, va
         pytest.param(SfmcSettings, SFMC, "SFMC_AUTH_URL", id="sfmc-without-an-auth-url"),
     ],
 )
-def test_a_missing_variable_names_itself(monkeypatch, group, variables, missing):
+def test_a_missing_variable_names_itself(monkeypatch, group, variables, missing) -> None:
     """Fail with the name of the variable that the environment lacks."""
     for name, value in variables.items():
         monkeypatch.setenv(name, value)

@@ -37,11 +37,12 @@ async def rj_crm__salesforce_datacloud(
 
     Each table loads into its staging table first.
 
-    - `window` says what to extract: the last hour (every 15 minutes), a whole day (once a day), or
-      each day of a reprocess. The MERGE does not duplicate, so a run can repeat.
+    - `window` says what to extract: the last hour (every 15 minutes), a whole day (once
+      a day), or each day of a reprocess. The MERGE does not duplicate, so a run can
+      repeat.
     - `tables` picks some of `FEEDS`, and all of them if empty.
-    - A critical table (the Agentforce ones) that fails stops the run. Any other one warns Discord and
-      lets the run go on.
+    - A critical table (the Agentforce ones) that fails stops the run. Any other one
+      warns Discord and lets the run go on.
     - A day run and a reprocess post a summary.
 
     Return the rows inserted and updated, by group and table, summed over the days.

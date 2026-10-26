@@ -1,7 +1,8 @@
 """The dump against the cloud, simulated in the process.
 
-A fake GCS with the XML API and its generation preconditions, BigQuery over a Delta table with the
-rules that the real services showed, and a database in memory. Nothing here needs the network.
+A fake GCS with the XML API and its generation preconditions, BigQuery over a Delta
+table with the rules that the real services showed, and a database in memory. Nothing
+here needs the network.
 """
 
 from asyncio import gather
@@ -57,7 +58,7 @@ def name(prefix: str) -> str:
     return f"{prefix}_{token_hex(2)}"
 
 
-async def test_a_dump_is_read_by_bigquery_with_the_rows_of_the_source(cloud, database, dump_to_cloud):
+async def test_a_dump_is_read_by_bigquery_with_the_rows_of_the_source(cloud, database, dump_to_cloud) -> None:
     """Load monthly chunks, publish them, and find every row once in BigQuery."""
     destination = cloud.destination(name("load"))
 
@@ -69,7 +70,7 @@ async def test_a_dump_is_read_by_bigquery_with_the_rows_of_the_source(cloud, dat
     assert sorted(dataframe[BATCH_COLUMN].unique().to_list()) == ["2024-01-01", "2024-02-01", "2024-03-01"]
 
 
-async def test_the_extraction_time_is_a_timestamp_in_bigquery(cloud, database, dump_to_cloud):
+async def test_the_extraction_time_is_a_timestamp_in_bigquery(cloud, database, dump_to_cloud) -> None:
     """Publish the column that says when each chunk was written, as a `TIMESTAMP`."""
     destination = cloud.destination(name("stamped"))
 
@@ -80,7 +81,7 @@ async def test_the_extraction_time_is_a_timestamp_in_bigquery(cloud, database, d
     assert cloud.read(destination)["_prefect_extracted_at"].null_count() == 0
 
 
-async def test_the_same_dump_again_writes_no_commit_and_no_object(cloud, database, dump_to_cloud):
+async def test_the_same_dump_again_writes_no_commit_and_no_object(cloud, database, dump_to_cloud) -> None:
     """Skip every chunk that did not change, so the bucket and the log stay as they are."""
     destination = cloud.destination(name("rerun"))
     await dump_to_cloud(database, destination, chunks=MONTHS)
@@ -94,7 +95,7 @@ async def test_the_same_dump_again_writes_no_commit_and_no_object(cloud, databas
     assert sorted(after.file_uris()) == files
 
 
-async def test_a_changed_chunk_is_replaced_in_bigquery_without_duplicates(cloud, database, dump_to_cloud):
+async def test_a_changed_chunk_is_replaced_in_bigquery_without_duplicates(cloud, database, dump_to_cloud) -> None:
     """Replace only the chunks that changed, and keep one copy of every row."""
     destination = cloud.destination(name("change"))
     await dump_to_cloud(database, destination, chunks=MONTHS)
@@ -108,7 +109,7 @@ async def test_a_changed_chunk_is_replaced_in_bigquery_without_duplicates(cloud,
     assert (dataframe.height, dataframe["id"].n_unique()) == (300, 300)
 
 
-async def test_a_chunk_that_became_empty_loses_its_rows_in_bigquery(cloud, database, dump_to_cloud):
+async def test_a_chunk_that_became_empty_loses_its_rows_in_bigquery(cloud, database, dump_to_cloud) -> None:
     """Expire the rows of a month that has none in the source now."""
     destination = cloud.destination(name("empty"))
     await dump_to_cloud(database, destination, chunks=MONTHS)
@@ -120,7 +121,7 @@ async def test_a_chunk_that_became_empty_loses_its_rows_in_bigquery(cloud, datab
     assert sorted(cloud.read(destination)[BATCH_COLUMN].unique().to_list()) == ["2024-01-01", "2024-02-01"]
 
 
-async def test_overwrite_with_other_columns_reaches_bigquery_after_publish(cloud, database, dump_to_cloud):
+async def test_overwrite_with_other_columns_reaches_bigquery_after_publish(cloud, database, dump_to_cloud) -> None:
     """Replace the schema in overwrite, refresh the table, and see only the new columns."""
     destination = cloud.destination(name("schema"))
     await dump_to_cloud(database, destination, chunks=MONTHS)
@@ -132,7 +133,7 @@ async def test_overwrite_with_other_columns_reaches_bigquery_after_publish(cloud
     assert list(cloud.read(destination).columns) == ["id", "dia", BATCH_COLUMN]
 
 
-async def test_bigquery_sees_the_new_schema_as_soon_as_the_files_change(cloud, database, dump_to_cloud):
+async def test_bigquery_sees_the_new_schema_as_soon_as_the_files_change(cloud, database, dump_to_cloud) -> None:
     """Read the schema from the Delta log on every query, so a publish is not needed to see it."""
     destination = cloud.destination(name("detect"))
     await dump_to_cloud(database, destination, chunks=MONTHS)
@@ -143,7 +144,7 @@ async def test_bigquery_sees_the_new_schema_as_soon_as_the_files_change(cloud, d
     assert list(cloud.types(destination)) == ["id", "dia", BATCH_COLUMN]
 
 
-async def test_publishing_twice_refreshes_the_table_instead_of_failing(cloud, database, dump_to_cloud):
+async def test_publishing_twice_refreshes_the_table_instead_of_failing(cloud, database, dump_to_cloud) -> None:
     """Create the table the first time and refresh its schema the next times."""
     destination = cloud.destination(name("twice"))
     await dump_to_cloud(database, destination)
@@ -154,7 +155,7 @@ async def test_publishing_twice_refreshes_the_table_instead_of_failing(cloud, da
     assert cloud.read(destination).height == 300
 
 
-async def test_the_types_of_the_pipelines_survive_delta_and_bigquery(cloud, dump_to_cloud):
+async def test_the_types_of_the_pipelines_survive_delta_and_bigquery(cloud, dump_to_cloud) -> None:
     """Read integers, decimals, dates and both kinds of timestamp with the types that dbt expects."""
     destination = cloud.destination(name("types"))
     dataframe = arrow_table(
@@ -186,7 +187,7 @@ async def test_the_types_of_the_pipelines_survive_delta_and_bigquery(cloud, dump
     }
 
 
-async def test_runs_that_write_the_same_table_at_the_same_time_lose_no_chunk(cloud, dump_to_cloud):
+async def test_runs_that_write_the_same_table_at_the_same_time_lose_no_chunk(cloud, dump_to_cloud) -> None:
     """Let four runs commit to one table over `gs://`, and find every month in it."""
     destination = cloud.destination(name("race"))
     months = [(f"2024-{month:02d}-01", f"2024-{month:02d}-28") for month in range(1, 5)]
@@ -203,7 +204,7 @@ async def test_runs_that_write_the_same_table_at_the_same_time_lose_no_chunk(clo
     assert sorted(set(chunks)) == [begin for begin, _ in months]
 
 
-async def test_a_dump_leaves_a_checkpoint_and_bigquery_still_reads(cloud, database, dump_to_cloud):
+async def test_a_dump_leaves_a_checkpoint_and_bigquery_still_reads(cloud, database, dump_to_cloud) -> None:
     """Write a checkpoint after the chunks, and query the table that has one."""
     destination = cloud.destination(name("check"))
 
@@ -215,7 +216,7 @@ async def test_a_dump_leaves_a_checkpoint_and_bigquery_still_reads(cloud, databa
     assert cloud.read(destination).height == 300
 
 
-async def test_the_files_of_an_older_layout_go_before_an_overwrite_and_a_delta_table_stays(cloud, database):
+async def test_the_files_of_an_older_layout_go_before_an_overwrite_and_a_delta_table_stays(cloud, database) -> None:
     """Delete old Hive files in the first overwrite, and never delete the Delta table in the next."""
     destination = cloud.destination(name("legacy"))
     store = cloud.store()
@@ -235,7 +236,7 @@ async def test_the_files_of_an_older_layout_go_before_an_overwrite_and_a_delta_t
     assert DeltaTable(destination.uri).to_pyarrow_table().num_rows == 300
 
 
-async def test_captures_add_up_in_bigquery_and_compacting_keeps_every_row(cloud, tmp_path, capture):
+async def test_captures_add_up_in_bigquery_and_compacting_keeps_every_row(cloud, tmp_path, capture) -> None:
     """Add what each run brings, ignore a repeated run, and still read every row after a compaction."""
     destination = cloud.destination(name("capture"))
     first = datetime(2024, 3, 10, 9, 0, tzinfo=UTC)

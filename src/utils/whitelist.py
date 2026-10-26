@@ -80,7 +80,10 @@ class Whitelist:
         await self.client.aclose()
 
     async def authenticate(self) -> bool:
-        """Get an access token. Return `False` if the issuer refuses or answers with no token."""
+        """Get an access token.
+
+        Return `False` if the issuer refuses or answers with no token.
+        """
         client_id, client_secret = self.credentials
 
         try:
@@ -105,7 +108,10 @@ class Whitelist:
         return self.token is not None
 
     async def call(self, method: str, path: str, **options: JsonValue) -> JsonValue:
-        """Send an authorized request and return its JSON body. Raise `HTTPStatusError` for an error status."""
+        """Send an authorized request and return its JSON body.
+
+        Raise `HTTPStatusError` for an error status.
+        """
         response = await self.client.request(method, path, headers={"Authorization": f"Bearer {self.token}"}, **options)  # pyright: ignore[reportArgumentType]
         response.raise_for_status()
 
@@ -177,9 +183,10 @@ class Selection:
 async def add_to_whitelist(whitelist: Whitelist, phones: Sequence[str], selection: Selection, rng: Random) -> int:
     """Add a random share of the phones to a group, and create the group if it does not exist.
 
-    A number that the whitelist already has, with or without the 9, is skipped, unless `selection.force` is
-    on. Each number goes in with and without the 9 after the area code. Return how many different numbers were
-    sent. Raise `RuntimeError` if the login fails or the group cannot be found or created.
+    A number that the whitelist already has, with or without the 9, is skipped, unless
+    `selection.force` is on. Each number goes in with and without the 9 after the area
+    code. Return how many different numbers were sent. Raise `RuntimeError` if the login
+    fails or the group cannot be found or created.
     """
     selected = sample_numbers(phones, selection.percentage, rng)
 
@@ -219,7 +226,10 @@ async def add_to_whitelist(whitelist: Whitelist, phones: Sequence[str], selectio
 
 
 async def remove_from_whitelist(whitelist: Whitelist, phones: Sequence[str]) -> int:
-    """Remove the phones, with and without the 9, from the whitelist. Return how many numbers were sent."""
+    """Remove the phones, with and without the 9, from the whitelist.
+
+    Return how many numbers were sent.
+    """
     numbers = sorted({variant for phone in phones for variant in normalize_numbers(phone)})
 
     if not numbers or not await whitelist.authenticate():

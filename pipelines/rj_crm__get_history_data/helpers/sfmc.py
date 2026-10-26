@@ -49,7 +49,10 @@ def build_fields_envelope(token: str, customer_key: str) -> bytes:
 
 
 def find_response(xml_text: str) -> Element:
-    """Return the `RetrieveResponseMsg` of an answer. Raise `ValueError` if the answer does not have one."""
+    """Return the `RetrieveResponseMsg` of an answer.
+
+    Raise `ValueError` if the answer does not have one.
+    """
     body = fromstring(xml_text).find(f"{{{SOAP_NS}}}Body")
     response = body.find(f"{{{PARTNER_NS}}}RetrieveResponseMsg") if body is not None else None
 

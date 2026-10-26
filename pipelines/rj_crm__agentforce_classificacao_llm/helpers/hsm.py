@@ -45,8 +45,8 @@ def button_titles(buttons_json: str | None) -> list[str]:
 def choose_button_row(rows: Sequence[ButtonRow]) -> ButtonRow:
     """Choose one row of the catalog for a journey and an HSM that has many, such as a republished template.
 
-    It prefers the version that does not come after a change of the template version, and breaks a tie by
-    the name of the activity.
+    It prefers the version that does not come after a change of the template version,
+    and breaks a tie by the name of the activity.
     """
     current = [row for row in rows if row["template_pos_versao_indicador"] is False]
 
@@ -89,8 +89,9 @@ def lcs_length(first: str, second: str) -> int:
 def find_fuzzy(placeholder: str, variables: Mapping[str, JsonValue]) -> JsonValue:
     """Return the value of the key of the variables that looks most like a placeholder, or nothing.
 
-    The keys often have a prefix of the system, such as `cc_wt_solicitacao` for `${solicitacao}`. The key with the
-    longest common subsequence wins (capitals do not count), and it must cover 70% of the placeholder.
+    The keys often have a prefix of the system, such as `cc_wt_solicitacao` for
+    `${solicitacao}`. The key with the longest common subsequence wins (capitals do not
+    count), and it must cover 70% of the placeholder.
     """
     target = placeholder.lower()
     best, score = None, 0
@@ -120,9 +121,10 @@ def read_variables(variables: str | Mapping[str, JsonValue] | None) -> Mapping[s
 def render_hsm(text: str | None, variables: str | Mapping[str, JsonValue] | None) -> str | None:
     """Put the values of the variables in the placeholders `${name}` of the text of an HSM.
 
-    A placeholder takes the value of its own key, or else of the key that looks most like it. One that
-    finds none stays as it is, because a visible placeholder is better than a wrong value. The text of a
-    Session, which has no placeholder, and a text with no usable variables come back as they are.
+    A placeholder takes the value of its own key, or else of the key that looks most
+    like it. One that finds none stays as it is, because a visible placeholder is better
+    than a wrong value. The text of a Session, which has no placeholder, and a text with
+    no usable variables come back as they are.
     """
     values = read_variables(variables)
 
@@ -144,8 +146,9 @@ def render_hsm(text: str | None, variables: str | Mapping[str, JsonValue] | None
 def is_late_button_reply(session: Session) -> bool:
     """Tell whether the only message of the citizen is the text of a button of the HSM.
 
-    It means that the answer to a button came after the 24 hours, and was not taken as a click. Only a
-    session of one message counts, so a long talk that has the text of a button is not taken for one.
+    It means that the answer to a button came after the 24 hours, and was not taken as a
+    click. Only a session of one message counts, so a long talk that has the text of a
+    button is not taken for one.
     """
     if session.qtd_mensagens_usuario != 1:
         return False
@@ -159,7 +162,8 @@ def is_late_button_reply(session: Session) -> bool:
 def enrich_sessions(sessions: Sequence[Session], buttons: Mapping[tuple[str, str], str | None]) -> list[Session]:
     """Return the sessions with the HSM text rendered, the buttons of the HSM, and whether they are a late reply.
 
-    `buttons` has the buttons JSON of each journey and HSM. The variables of the HSM are no longer needed.
+    `buttons` has the buttons JSON of each journey and HSM. The variables of the HSM are
+    no longer needed.
     """
     enriched: list[Session] = []
 

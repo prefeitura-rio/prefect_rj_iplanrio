@@ -27,9 +27,10 @@ type Processor = Callable[[str, Replacements, date], str | None]
 def skip_weekends(query: str, replacements: Replacements, today: date) -> str | None:
     """Fill the query, and skip the weekend. Return nothing on a Saturday or a Sunday.
 
-    `days_ahead_placeholder` is how many days ahead the query looks. If that day is a weekend, the query
-    looks two days further, so it lands on a Monday or a Tuesday. Raise `ValueError` if the placeholder is
-    missing from the query or from `replacements`.
+    `days_ahead_placeholder` is how many days ahead the query looks. If that day is a
+    weekend, the query looks two days further, so it lands on a Monday or a Tuesday.
+    Raise `ValueError` if the placeholder is missing from the query or from
+    `replacements`.
     """
     if f"{{{DAYS_AHEAD_KEY}}}" not in query:
         raise ValueError(f"The query must have the placeholder {{{DAYS_AHEAD_KEY}}}")
@@ -58,7 +59,9 @@ PROCESSORS: Final[Mapping[str, Processor]] = {"skip_weekends": skip_weekends}
 
 
 def format_query(query: str, replacements: Replacements, processor: str | None, today: date) -> str | None:
-    """Fill the placeholders of a query, with a processor if one is named. A processor can give nothing to skip the run.
+    """Fill the placeholders of a query, with a processor if one is named.
+
+    A processor can give nothing to skip the run.
 
     A processor that does not exist is ignored with a warning.
     """
@@ -102,8 +105,9 @@ def read_expiration(raw: object) -> date | None:
 def decide_switch(row: Mapping[str, object] | None, campaign: str, environment: str, today: date) -> Switch:
     """Decide from the row of the control sheet whether a campaign may run today.
 
-    There is no row, an environment that is not `staging` or `production`, no campaign name, a campaign that
-    is off, and a limit date in the past: each one stops the run. The last two come with a notice for Discord.
+    There is no row, an environment that is not `staging` or `production`, no campaign
+    name, a campaign that is off, and a limit date in the past: each one stops the run.
+    The last two come with a notice for Discord.
     """
     if environment not in ENVIRONMENTS or not campaign:
         return Switch(False)

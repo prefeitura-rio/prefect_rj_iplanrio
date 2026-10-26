@@ -1,9 +1,9 @@
 """Montagem pura do embed de progresso do Discord: estado (``RunView``) entra, ``dict`` do payload sai.
 
-Este arquivo é idêntico nas duas pipelines da Nota Carioca (cada imagem Docker copia só a sua pasta), exceto pelo
-caminho do import de ``discord_format``. Não faz HTTP nem lê relógio: quem chama entrega a hora em
-``RunView.updated_at``.
-Respeita os limites do Discord: descrição 4096, valor de campo 1024, 25 campos e 6000 caracteres no embed todo.
+Este arquivo é idêntico nas duas pipelines da Nota Carioca (cada imagem Docker copia só
+a sua pasta), exceto pelo caminho do import de ``discord_format``. Não faz HTTP nem lê
+relógio: quem chama entrega a hora em ``RunView.updated_at``. Respeita os limites do
+Discord: descrição 4096, valor de campo 1024, 25 campos e 6000 caracteres no embed todo.
 """
 
 from datetime import timedelta
@@ -90,8 +90,9 @@ def count_separator(left: CountSide, right: CountSide) -> str:
 def format_validation_line(line: ValidationLine) -> str:
     """Formata a comparação de uma tabela em uma linha.
 
-    ✅ quando todas as contagens existem e são iguais; ⬜ se nenhuma foi medida ainda; ❌ nos demais casos (diferem ou
-    falta um lado, mostrado como ``—``). Entre dois lados: ``=`` se iguais, ``≠`` se diferem, ``·`` se falta um.
+    ✅ quando todas as contagens existem e são iguais; ⬜ se nenhuma foi medida ainda; ❌
+    nos demais casos (diferem ou falta um lado, mostrado como ``—``). Entre dois lados:
+    ``=`` se iguais, ``≠`` se diferem, ``·`` se falta um.
 
     :param line: Contagens da tabela.
     :returns: Por exemplo ``✅ DPS · Oracle (SCN) 10 = BigQuery 10 · Σ VALOR iguais``.
@@ -119,8 +120,8 @@ def count_chain(sides: tuple[CountSide, ...]) -> str:
 def validation_summary(view: RunView) -> str:
     """Resumo da validação para a mensagem final avulsa; vazio se não há linhas de validação.
 
-    :param view: Estado final.
-    :returns: Por exemplo `` · 3/3 tabelas validadas (linhas iguais na origem e no destino)``.
+    :param view: Estado final. :returns: Por exemplo `` · 3/3 tabelas validadas (linhas
+    iguais na origem e no destino)``.
     """
     total = len(view.validation)
     if not total:

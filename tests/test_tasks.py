@@ -22,7 +22,7 @@ from utils.tasks import (
 )
 
 
-async def test_a_get_sends_the_params_and_the_headers_and_returns_the_json(fake_api):
+async def test_a_get_sends_the_params_and_the_headers_and_returns_the_json(fake_api) -> None:
     """Send what was asked, and give back the JSON of the response."""
     fake_api.replies.append((200, {"items": [1, 2]}))
 
@@ -40,7 +40,7 @@ async def test_a_get_sends_the_params_and_the_headers_and_returns_the_json(fake_
         pytest.param({"User-Agent": "mine"}, "mine", id="the_user_agent_of_the_caller_wins"),
     ],
 )
-async def test_a_request_sends_a_browser_user_agent_unless_the_caller_sets_one(fake_api, headers, expected):
+async def test_a_request_sends_a_browser_user_agent_unless_the_caller_sets_one(fake_api, headers, expected) -> None:
     """Send the shared User-Agent, which servers such as INMET do not reset."""
     await request_json.fn(f"{fake_api.url}/list", headers=headers)
 
@@ -48,7 +48,7 @@ async def test_a_request_sends_a_browser_user_agent_unless_the_caller_sets_one(f
     assert seen.headers["user-agent"] == expected
 
 
-async def test_a_post_sends_its_body_as_json(fake_api):
+async def test_a_post_sends_its_body_as_json(fake_api) -> None:
     """Send the body with the method that was asked."""
     await request_json.fn(f"{fake_api.url}/send", method="POST", body={"name": "ana"})
 
@@ -56,7 +56,7 @@ async def test_a_post_sends_its_body_as_json(fake_api):
     assert (seen.method, loads(seen.body)) == ("POST", {"name": "ana"})
 
 
-async def test_a_client_error_fails_after_one_request(fake_api):
+async def test_a_client_error_fails_after_one_request(fake_api) -> None:
     """Raise at once on a 4xx: the same request would fail the same way."""
     fake_api.replies.append((404, {"error": "no"}))
 
@@ -66,7 +66,7 @@ async def test_a_client_error_fails_after_one_request(fake_api):
     assert len(fake_api.requests) == 1
 
 
-async def test_records_are_written_as_one_json_object_for_each_line(tmp_path):
+async def test_records_are_written_as_one_json_object_for_each_line(tmp_path) -> None:
     """Write `records.json` with one object per line, ready for DuckDB."""
     folder = await write_records.fn([{"id": 1, "nome": "Ana"}, {"id": 2, "nome": "Bia"}], tmp_path)
 
@@ -74,7 +74,7 @@ async def test_records_are_written_as_one_json_object_for_each_line(tmp_path):
     assert [loads(line) for line in lines] == [{"id": 1, "nome": "Ana"}, {"id": 2, "nome": "Bia"}]
 
 
-async def test_a_message_goes_to_the_webhook_as_the_content(fake_api):
+async def test_a_message_goes_to_the_webhook_as_the_content(fake_api) -> None:
     """Post `content`, cut to the limit that Discord accepts."""
     fake_api.replies.append((204, {}))
 
@@ -84,7 +84,7 @@ async def test_a_message_goes_to_the_webhook_as_the_content(fake_api):
     assert (seen.method, seen.path, len(loads(seen.body)["content"])) == ("POST", "/hook", DISCORD_LIMIT)
 
 
-async def test_a_message_uses_the_webhook_of_the_settings_when_none_is_given(fake_api, monkeypatch):
+async def test_a_message_uses_the_webhook_of_the_settings_when_none_is_given(fake_api, monkeypatch) -> None:
     """Fall back to `DISCORD_WEBHOOK_URL`."""
     monkeypatch.setenv("DISCORD_WEBHOOK_URL", f"{fake_api.url}/set")
 
@@ -93,7 +93,7 @@ async def test_a_message_uses_the_webhook_of_the_settings_when_none_is_given(fak
     assert [seen.path for seen in fake_api.requests] == ["/set"]
 
 
-async def test_a_message_with_no_webhook_is_refused(monkeypatch):
+async def test_a_message_with_no_webhook_is_refused(monkeypatch) -> None:
     """Raise, so a missing setting fails the run instead of dropping the message."""
     monkeypatch.setenv("DISCORD_WEBHOOK_URL", "")
 
@@ -101,7 +101,7 @@ async def test_a_message_with_no_webhook_is_refused(monkeypatch):
         await notify_discord.fn("hello")
 
 
-async def test_a_refused_message_raises(fake_api):
+async def test_a_refused_message_raises(fake_api) -> None:
     """Raise when Discord answers with an error, so a lost alert is not silent."""
     fake_api.replies.append((400, {}))
 
@@ -109,7 +109,7 @@ async def test_a_refused_message_raises(fake_api):
         await notify_discord.fn("hello", webhook=f"{fake_api.url}/hook")
 
 
-async def test_a_statement_runs_in_the_project_and_returns_the_changed_rows(bigquery):
+async def test_a_statement_runs_in_the_project_and_returns_the_changed_rows(bigquery) -> None:
     """Open BigQuery on the project, run the statement, and return its count."""
     changed = await run_bq_sql.fn("MERGE t USING s ON FALSE", project="p")
 
@@ -124,11 +124,11 @@ async def test_a_statement_runs_in_the_project_and_returns_the_changed_rows(bigq
         pytest.param(None, None, id="no_crs_no_srid"),
     ],
 )
-async def test_the_crs_of_a_layer_reaches_the_read_as_a_srid(monkeypatch, crs, expected):
+async def test_the_crs_of_a_layer_reaches_the_read_as_a_srid(monkeypatch, crs, expected) -> None:
     """Pass the EPSG number to the read, and nothing when there is no `crs`."""
     seen = []
 
-    async def record(*args):
+    async def record(*args) -> None:
         """Keep the layer of the read."""
         seen.append(args[0].origin)
 
@@ -139,7 +139,7 @@ async def test_the_crs_of_a_layer_reaches_the_read_as_a_srid(monkeypatch, crs, e
     assert seen[0].srid == expected
 
 
-async def test_maintenance_merges_the_small_files_and_keeps_the_rows(tmp_path, monkeypatch):
+async def test_maintenance_merges_the_small_files_and_keeps_the_rows(tmp_path, monkeypatch) -> None:
     """Report fewer files after the run, with the same rows and a layout that looks right."""
     uri = str(tmp_path / "table")
     monkeypatch.setattr(Destination, "uri", property(lambda _: uri))
@@ -154,7 +154,7 @@ async def test_maintenance_merges_the_small_files_and_keeps_the_rows(tmp_path, m
     assert set(DeltaTable(uri).to_pyarrow_table().to_pydict()["id"]) == {0, 1, 2}
 
 
-async def test_dbt_runs_deps_then_the_command_in_the_cloned_project(fake_runner, tmp_path):
+async def test_dbt_runs_deps_then_the_command_in_the_cloned_project(fake_runner, tmp_path) -> None:
     """Regression: the clone was ignored, so dbt ran in the working directory."""
     await run_dbt.fn(DbtRun(repository="https://example.invalid/q.git", select="vendas"))
 
@@ -164,7 +164,9 @@ async def test_dbt_runs_deps_then_the_command_in_the_cloned_project(fake_runner,
 
 
 @pytest.mark.parametrize("has_profile", [True, False])
-async def test_regression_the_profile_of_the_repository_is_used_when_it_has_one(fake_runner, tmp_path, has_profile):
+async def test_regression_the_profile_of_the_repository_is_used_when_it_has_one(
+    fake_runner, tmp_path, has_profile
+) -> None:
     """Regression: dbt ignored the `profiles.yml` of the repository."""
     if has_profile:
         (tmp_path / "queries" / "profiles.yml").write_text("p: {}\n")
@@ -176,7 +178,7 @@ async def test_regression_the_profile_of_the_repository_is_used_when_it_has_one(
     assert "DBT_PROFILES_DIR" not in environ
 
 
-async def test_a_node_that_fails_raises_with_its_name(fake_runner, dbt_node):
+async def test_a_node_that_fails_raises_with_its_name(fake_runner, dbt_node) -> None:
     """Fail the run, and name the nodes that failed. A warning does not fail it."""
     fake_runner.result = SimpleNamespace(
         success=False,
@@ -187,7 +189,9 @@ async def test_a_node_that_fails_raises_with_its_name(fake_runner, dbt_node):
         await run_dbt.fn(DbtRun(repository="https://example.invalid/q.git"))
 
 
-async def test_the_report_goes_to_discord_with_the_nodes_that_went_wrong(fake_runner, fake_api, monkeypatch, dbt_node):
+async def test_the_report_goes_to_discord_with_the_nodes_that_went_wrong(
+    fake_runner, fake_api, monkeypatch, dbt_node
+) -> None:
     """Post the result, also of a run that failed, when `report` is on and a webhook is set."""
     monkeypatch.setenv("DISCORD_WEBHOOK_URL", f"{fake_api.url}/hook")
     fake_runner.result = SimpleNamespace(
@@ -207,7 +211,7 @@ async def test_the_report_goes_to_discord_with_the_nodes_that_went_wrong(fake_ru
     ]
 
 
-async def test_no_report_is_posted_when_it_is_off(fake_runner, fake_api, monkeypatch):
+async def test_no_report_is_posted_when_it_is_off(fake_runner, fake_api, monkeypatch) -> None:
     """Post nothing without `report`, even with a webhook."""
     monkeypatch.setenv("DISCORD_WEBHOOK_URL", f"{fake_api.url}/hook")
 

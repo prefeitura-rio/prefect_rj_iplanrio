@@ -99,7 +99,8 @@ def conversations_sql(hsm_name: str, start: str, sources: str) -> str:
 async def extract_task(dispatch: Dispatch) -> Extraction:
     """Read the messages of the sessions that got the HSM since its start date, and build the conversations.
 
-    Only the sessions where the citizen answered make a conversation, and the totals count them all.
+    Only the sessions where the citizen answered make a conversation, and the totals
+    count them all.
     """
     sql = conversations_sql("@nome_hsm", "@data_inicio", "unnest(@fontes)")
     messages = await to_thread(bq.read_messages, sql, dispatch.hsm_name, dispatch.sent_on)
@@ -128,9 +129,9 @@ async def classify_task(
 ) -> tuple[list[Classification], dict[str, str]]:
     """Discover the categories of the dispatch from a random sample, then classify every conversation.
 
-    The discovery looks at the sample in batches and stops after 5 batches in a row with nothing new.
-    It is the only step that adds a category. The classification only picks one that exists.
-    Return the classifications and the catalog.
+    The discovery looks at the sample in batches and stops after 5 batches in a row with
+    nothing new. It is the only step that adds a category. The classification only picks
+    one that exists. Return the classifications and the catalog.
     """
     catalog = Catalog()
     discovery_batch = limits.get("discovery_batch", DEFAULT_DISCOVERY_BATCH)
@@ -195,7 +196,8 @@ async def judge_task(
 ) -> list[Classification]:
     """Have a second call of the model audit a sample of the classifications, and return all of them with the verdicts.
 
-    A category under `judge_all_below` conversations is judged in full, a larger one in `large_category_pct` percent.
+    A category under `judge_all_below` conversations is judged in full, a larger one in
+    `large_category_pct` percent.
     """
     below = limits.get("judge_all_below", DEFAULT_JUDGE_ALL_BELOW)
     pct = limits.get("large_category_pct", DEFAULT_LARGE_CATEGORY_PCT)
@@ -238,7 +240,8 @@ async def judge_task(
 async def publish_task(report: Report, root_id: str, examples_per_category: int = DEFAULT_EXAMPLES) -> None:
     """Build the Word report and the two CSV files of a dispatch, and publish them in the folder of its HSM.
 
-    The files are `<slug>.docx`, `categorias_<slug>.csv` and `classificacoes_<slug>.csv`.
+    The files are `<slug>.docx`, `categorias_<slug>.csv` and
+    `classificacoes_<slug>.csv`.
     """
     categories = build_categories(report.items, report.catalog, examples_per_category)
     slug = report_slug(report.dispatch.hsm_name, report.reference)

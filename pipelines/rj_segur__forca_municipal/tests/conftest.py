@@ -19,6 +19,7 @@ class FakeApi:
         replies: dict[str, Response | Exception] | None = None,
         bad_units: set[str] | None = None,
     ) -> None:
+        """Store the arguments."""
         self.pages: dict[int, list[Row]] = pages or {}
         self.replies: dict[str, Response | Exception] = replies or {}
         self.calls: list[tuple[str, int | None, Mapping[str, str | int] | None]] = []

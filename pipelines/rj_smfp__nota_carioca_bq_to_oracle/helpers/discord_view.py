@@ -34,8 +34,8 @@ FOOTER_LIMIT = 2048
 MAX_FIELDS = 25
 
 
-# Limite do Discord é 6000 para a soma de título, descrição, campos e rodapé; sobra margem para contagem por pontos de
-# código diferente da do Discord.
+# Limite do Discord é 6000 para a soma de título, descrição, campos e rodapé; sobra
+# margem para contagem por pontos de código diferente da do Discord.
 TOTAL_BUDGET = 5800
 
 
@@ -96,8 +96,8 @@ class Fact:
 class CountSide:
     """Um lado da comparação de contagens.
 
-    :param label: Nome do lado, como ``Oracle (SCN)`` ou ``BigQuery``.
-    :param rows: Linhas contadas nesse lado; ``None`` se ainda não se sabe (aparece como ``—``).
+    :param label: Nome do lado, como ``Oracle (SCN)`` ou ``BigQuery``. :param rows:
+    Linhas contadas nesse lado; ``None`` se ainda não se sabe (aparece como ``—``).
     """
 
     label: str
@@ -108,9 +108,9 @@ class CountSide:
 class ValidationLine:
     """A comparação de contagens de uma tabela entre a origem e o destino.
 
-    :param table: Nome da tabela.
-    :param sides: Contagens a comparar, na ordem em que aparecem.
-    :param note: Complemento mostrado só quando todas as contagens são iguais (por exemplo, o checksum conferido).
+    :param table: Nome da tabela. :param sides: Contagens a comparar, na ordem em que
+    aparecem. :param note: Complemento mostrado só quando todas as contagens são iguais
+    (por exemplo, o checksum conferido).
     """
 
     table: str
@@ -133,12 +133,11 @@ class ValidationLine:
 class TableView:
     """O bloco de uma tabela na descrição.
 
-    :param name: Nome da tabela.
-    :param stage: Etapa da tabela, já em texto.
-    :param status: Estado da tabela.
-    :param fraction: Progresso da tabela de 0 a 1; ``None`` esconde a barra.
-    :param detail: Linhas, taxa e volume já formatados; no sucesso, o resumo final (linhas e duração).
-    :param eta_seconds: Segundos que faltam para a tabela; ``None`` se não há estimativa.
+    :param name: Nome da tabela. :param stage: Etapa da tabela, já em texto. :param
+    status: Estado da tabela. :param fraction: Progresso da tabela de 0 a 1; ``None``
+    esconde a barra. :param detail: Linhas, taxa e volume já formatados; no sucesso, o
+    resumo final (linhas e duração). :param eta_seconds: Segundos que faltam para a
+    tabela; ``None`` se não há estimativa.
     """
 
     name: str
@@ -153,22 +152,17 @@ class TableView:
 class RunView:
     """Tudo que o embed mostra, sem nenhum I/O.
 
-    :param flow_label: Nome curto do fluxo, como ``Oracle → BigQuery``.
-    :param dataset_id: Dataset de destino, que completa o título.
-    :param url: Link do flow run na UI do Prefect, se houver.
-    :param status: Estado da execução.
-    :param stage: Etapa atual (ou a última, no fim).
-    :param fraction: Progresso geral de 0 a 1.
-    :param elapsed_seconds: Tempo desde o início.
-    :param run_name: Nome do flow run, no rodapé.
-    :param updated_at: Hora da atualização, com fuso.
-    :param checklist: Etapas e seus estados.
-    :param tables: Blocos por tabela.
-    :param facts: Campos específicos do fluxo.
-    :param eta_seconds: Segundos que faltam para o fim; ``None`` esconde a previsão.
-    :param error: Mensagem do erro, em caso de falha.
-    :param failed_stage: Etapa em que a falha ocorreu.
-    :param validation: Comparação de contagens por tabela, mostrada na mensagem final; vazio a esconde.
+    :param flow_label: Nome curto do fluxo, como ``Oracle → BigQuery``. :param
+    dataset_id: Dataset de destino, que completa o título. :param url: Link do flow run
+    na UI do Prefect, se houver. :param status: Estado da execução. :param stage: Etapa
+    atual (ou a última, no fim). :param fraction: Progresso geral de 0 a 1. :param
+    elapsed_seconds: Tempo desde o início. :param run_name: Nome do flow run, no rodapé.
+    :param updated_at: Hora da atualização, com fuso. :param checklist: Etapas e seus
+    estados. :param tables: Blocos por tabela. :param facts: Campos específicos do
+    fluxo. :param eta_seconds: Segundos que faltam para o fim; ``None`` esconde a
+    previsão. :param error: Mensagem do erro, em caso de falha. :param failed_stage:
+    Etapa em que a falha ocorreu. :param validation: Comparação de contagens por tabela,
+    mostrada na mensagem final; vazio a esconde.
     """
 
     flow_label: str

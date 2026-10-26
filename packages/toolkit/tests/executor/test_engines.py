@@ -41,14 +41,14 @@ SCHEMA = Schema({"_id": ObjectIdType()})
         pytest.param(CouchDBSource(CONN), CouchDBEngine, id="couchdb_has_its_engine"),
     ],
 )
-def test_a_source_gets_the_engine_that_serves_it(source, engine):
+def test_a_source_gets_the_engine_that_serves_it(source, engine) -> None:
     """Return an unopened engine of the class that serves the source."""
     built = Engine.from_source(source)
 
     assert type(built) is engine
 
 
-def test_a_source_that_no_engine_serves_is_refused():
+def test_a_source_that_no_engine_serves_is_refused() -> None:
     """Raise `TypeError` that names the source."""
 
     class Stranger:
@@ -61,20 +61,20 @@ def test_a_source_that_no_engine_serves_is_refused():
 
 
 @pytest.mark.parametrize("engine", load_engines())
-def test_every_engine_implements_the_whole_base(engine):
+def test_every_engine_implements_the_whole_base(engine) -> None:
     """Leave no abstract method, and say which sources it serves."""
     assert not engine.__abstractmethods__
     assert isinstance(engine.source_type, type)
 
 
-def test_an_engine_reads_one_chunk_at_a_time_unless_it_says_otherwise():
+def test_an_engine_reads_one_chunk_at_a_time_unless_it_says_otherwise() -> None:
     """Default `concurrency` to 1, and follow the source for CouchDB."""
     assert DuckDBEngine().concurrency == 1
     assert OracleEngine(OracleSource(CONN)).concurrency == 1
     assert CouchDBEngine(CouchDBSource(CONN, concurrency=3)).concurrency == 3
 
 
-async def test_couchdb_refuses_sql():
+async def test_couchdb_refuses_sql() -> None:
     """Raise `UnsupportedRequestError`, naming the engine, for `execute` and `query`."""
     couchdb = CouchDBEngine(CouchDBSource(CONN))
 
@@ -85,13 +85,13 @@ async def test_couchdb_refuses_sql():
         couchdb.query("SELECT 1")
 
 
-def test_oracle_reads_chunks_and_no_whole_origin():
+def test_oracle_reads_chunks_and_no_whole_origin() -> None:
     """Raise `UnsupportedRequestError` for `read`, which only a chunk replaces."""
     with pytest.raises(UnsupportedRequestError, match="OracleEngine"):
         OracleEngine(OracleSource(CONN)).read()
 
 
-def test_a_plain_duckdb_engine_has_no_origin_to_read():
+def test_a_plain_duckdb_engine_has_no_origin_to_read() -> None:
     """Raise `ValueError` when a plain engine is asked for the origin of a source."""
     with pytest.raises(ValueError, match="no source"):
         DuckDBEngine().origin()
@@ -105,7 +105,7 @@ def test_a_plain_duckdb_engine_has_no_origin_to_read():
         pytest.param(MongoDBEngine(MongoDBSource(CONN, SCHEMA)), id="mongodb"),
     ],
 )
-async def test_an_engine_without_an_origin_refuses_to_describe(engine):
+async def test_an_engine_without_an_origin_refuses_to_describe(engine) -> None:
     """Raise `ValueError` for a source that names nothing to read."""
     with pytest.raises(ValueError, match="no origin"):
         await engine.describe()
@@ -113,7 +113,7 @@ async def test_an_engine_without_an_origin_refuses_to_describe(engine):
 
 def test_an_engine_whose_extra_is_missing_does_not_stop_the_others(
     monkeypatch, fail_to_import_engine
-):
+) -> None:
     """Load the other engines when the extra of MongoDB is not installed."""
     fail_to_import_engine(monkeypatch, "mongodb", "pymongoarrow")
 
@@ -122,7 +122,7 @@ def test_an_engine_whose_extra_is_missing_does_not_stop_the_others(
 
 def test_an_import_error_of_another_module_is_not_forgiven(
     monkeypatch, fail_to_import_engine
-):
+) -> None:
     """Raise a missing module that does not belong to the extra of the engine."""
     fail_to_import_engine(monkeypatch, "mongodb", "not_the_extra")
 
@@ -130,7 +130,7 @@ def test_an_import_error_of_another_module_is_not_forgiven(
         load_engines()
 
 
-def test_the_four_engines_implement_the_base_directly():
+def test_the_four_engines_implement_the_base_directly() -> None:
     """List the four engines, each one a direct subclass of `Engine`."""
     engines = load_engines()
 
@@ -138,7 +138,7 @@ def test_the_four_engines_implement_the_base_directly():
     assert all(Engine in engine.__bases__ for engine in engines)
 
 
-def test_oracle_runs_sql_where_the_other_engines_refuse_it():
+def test_oracle_runs_sql_where_the_other_engines_refuse_it() -> None:
     """Keep the `execute` and `query` of Oracle, and the refusal of the others."""
     assert OracleEngine.execute is not Engine.execute
     assert OracleEngine.query is not Engine.query
@@ -174,7 +174,7 @@ def test_oracle_runs_sql_where_the_other_engines_refuse_it():
         pytest.param("VARCHAR", "month", False, id="text_is_not_a_date"),
     ],
 )
-def test_the_chunk_column_must_fit_the_width_of_the_chunks(kind, width, fits):
+def test_the_chunk_column_must_fit_the_width_of_the_chunks(kind, width, fits) -> None:
     """Accept the types that a width can cut, and refuse the others."""
     chunks = Chunks(column="c", width=width, begin=0)
     engine = DuckDBEngine()
@@ -186,7 +186,7 @@ def test_the_chunk_column_must_fit_the_width_of_the_chunks(kind, width, fits):
             engine.check_chunks(chunks, {"c": kind})
 
 
-def test_regression_an_oracle_integer_is_accepted_for_a_number_of_ids():
+def test_regression_an_oracle_integer_is_accepted_for_a_number_of_ids() -> None:
     """Regression: an Oracle `NUMBER(19)` is `DECIMAL(19,0)`, and widths failed."""
     chunks = Chunks(column="ID", width=100, begin=0)
 

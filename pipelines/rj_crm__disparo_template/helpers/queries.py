@@ -10,9 +10,9 @@ from utils.dispatch import format_query
 def build_query(audience: Audience, folder: Path, today: date) -> str | None:
     """Return the query of the run, or nothing if its processor says that today is no day to run.
 
-    The text is `audience.query_file`, a file of `folder`, or else `audience.query`. With `replacements`,
-    the placeholders are filled, through the processor of `audience` if it has one. Raise `ValueError` if there is
-    no query.
+    The text is `audience.query_file`, a file of `folder`, or else `audience.query`.
+    With `replacements`, the placeholders are filled, through the processor of
+    `audience` if it has one. Raise `ValueError` if there is no query.
     """
     text = (folder / audience.query_file).read_text(encoding="utf-8") if audience.query_file else audience.query
 

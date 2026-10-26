@@ -1,9 +1,10 @@
 """The fake services that the tests use, each one with its fixture.
 
-They are the fakes of GCS, BigQuery (one that detects the schema of a Delta table and one that
-records calls), an HTTP API, a database, Oracle and an object store, and the pages that the
-bcadastro CouchDB sends. They run in the process, with no network and no container.
-`conftest.py` registers this module as a plugin, so a test asks for a fixture by name.
+They are the fakes of GCS, BigQuery (one that detects the schema of a Delta table and
+one that records calls), an HTTP API, a database, Oracle and an object store, and the
+pages that the bcadastro CouchDB sends. They run in the process, with no network and no
+container. `conftest.py` registers this module as a plugin, so a test asks for a fixture
+by name.
 """
 
 import sys
@@ -92,7 +93,8 @@ class FakeGcs:
     It keeps the semantics that the real runs showed: a write with
     `x-goog-if-generation-match` fails with a 412 when the generation differs, so two
     writers cannot create the same commit file. It runs in its own process, because
-    `deltalake` holds the GIL during some calls, and a server in a thread would never answer.
+    `deltalake` holds the GIL during some calls, and a server in a thread would never
+    answer.
     """
 
     def __init__(self) -> None:
@@ -128,7 +130,10 @@ def bigquery_type(delta_type: str) -> str:
 
 @dataclass(frozen=True)
 class FakeTable:
-    """A BigQuery table over a Delta folder. Like the real one, it reads the log for its schema."""
+    """A BigQuery table over a Delta folder.
+
+    Like the real one, it reads the log for its schema.
+    """
 
     uri: str
 
@@ -153,7 +158,10 @@ class FakeBigQuery:
     @classmethod
     @asynccontextmanager
     async def connect(cls, *_: str | None) -> AsyncGenerator["FakeBigQuery"]:
-        """Yield a client. It takes the project of the real one, and serves every project."""
+        """Yield a client.
+
+        It takes the project of the real one, and serves every project.
+        """
         yield cls()
 
     async def create_dataset(self, dataset: str) -> None:
@@ -275,8 +283,9 @@ class ConcurrentFilesEngine(Engine):
 class ProbedFilesSource:
     """Local files with a probe that the test controls.
 
-    `tokens` gives the token of each chunk, by its key, and `downloads` and `probes` record
-    the chunks that were read and probed. They are shared by every engine of the source.
+    `tokens` gives the token of each chunk, by its key, and `downloads` and `probes`
+    record the chunks that were read and probed. They are shared by every engine of the
+    source.
     """
 
     tokens: dict[str, int | None]
@@ -439,8 +448,8 @@ class SeenRequest:
 class FakeApi:
     """An HTTP API on a free local port that answers from a queue of replies.
 
-    A reply is a status and a JSON body. With an empty queue it answers 200 with `{"ok": true}`.
-    It records every request, so a test sees what was sent.
+    A reply is a status and a JSON body. With an empty queue it answers 200 with `{"ok":
+    true}`. It records every request, so a test sees what was sent.
     """
 
     def __init__(self) -> None:
@@ -703,7 +712,8 @@ def cnpj_document(number: int) -> dict[str, JsonValue]:
 def all_docs_page(documents: Sequence[Mapping[str, JsonValue]], total_rows: int) -> bytes:
     """Return a page of `_all_docs` with documents, as CouchDB writes it.
 
-    The head holds `total_rows`, `offset` and `update_seq`, and each row sits on its own line.
+    The head holds `total_rows`, `offset` and `update_seq`, and each row sits on its own
+    line.
     """
     rows = ",\n".join(
         dumps(
@@ -733,7 +743,8 @@ def cnpj_page() -> bytes:
 def changes_page(changes: Sequence[tuple[int, Mapping[str, JsonValue]]], pending: int) -> bytes:
     """Return a page of `_changes` with documents, as CouchDB writes it.
 
-    A document with `_deleted` is a deletion: the change has `deleted` and the document is a tombstone.
+    A document with `_deleted` is a deletion: the change has `deleted` and the document
+    is a tombstone.
     """
     results = []
 
@@ -812,8 +823,8 @@ class SimulatedCloud:
 def cloud(fake_gcs: FakeGcs, fake_bigquery: type[FakeBigQuery], read_gs_uri) -> Iterator[SimulatedCloud]:
     """Return the simulated cloud, where `deltalake`, `obstore` and BigQuery reach the fakes.
 
-    `Destination.uri` is `gcs://` (OpenDAL), which has no setting for a fake endpoint, so it
-    reads `gs://` here.
+    `Destination.uri` is `gcs://` (OpenDAL), which has no setting for a fake endpoint,
+    so it reads `gs://` here.
     """
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(Destination, "uri", property(read_gs_uri))

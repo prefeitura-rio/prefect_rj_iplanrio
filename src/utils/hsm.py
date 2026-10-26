@@ -23,8 +23,9 @@ type Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1
 class Recipient(BaseModel):
     """A person that gets a message.
 
-    `to` is the phone, `external_id` is the CPF or another id of the person, and `vars` are the variables of the
-    template. Both text fields lose the spaces around them, and a text with nothing else is refused.
+    `to` is the phone, `external_id` is the CPF or another id of the person, and `vars`
+    are the variables of the template. Both text fields lose the spaces around them, and
+    a text with nothing else is refused.
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
@@ -64,9 +65,10 @@ class Hsm:
 class Campaign:
     """The campaign of an HSM dispatch, and where it runs.
 
-    The HSM `id_hsm` goes out in batches of `chunk_size` as a campaign of the cost center
-    `cost_center_id`. With `test_mode`, the name gets the prefix `teste-`, the destinations are the
-    ones of the setting `DESTINATIONS`, and nothing is recorded. A pipeline gives the defaults.
+    The HSM `id_hsm` goes out in batches of `chunk_size` as a campaign of the cost
+    center `cost_center_id`. With `test_mode`, the name gets the prefix `teste-`, the
+    destinations are the ones of the setting `DESTINATIONS`, and nothing is recorded. A
+    pipeline gives the defaults.
     """
 
     name: str
@@ -101,7 +103,10 @@ class SentBatch:
 
 @dataclass(frozen=True)
 class Sent:
-    """What went out. `error` is the reason that a batch failed, and `batches` are the ones before it."""
+    """What went out.
+
+    `error` is the reason that a batch failed, and `batches` are the ones before it.
+    """
 
     batches: list[SentBatch] = field(default_factory=list)
     error: str | None = None
@@ -138,9 +143,9 @@ def build_payload(hsm: Hsm, campaign_name: str, batch: Sequence[Recipient]) -> d
 async def send_batches(api: WetalkieApi, hsm: Hsm, recipients: Sequence[Recipient], sent_at: datetime) -> Sent:
     """Send the recipients in batches, and return the batches that went out.
 
-    The API must answer `GET /` with 200 before anything goes out, else `RuntimeError`. A batch that
-    comes back with an error status, or a network error, stops the run: the result keeps the batches
-    before it and the reason. A 401 logs in again once.
+    The API must answer `GET /` with 200 before anything goes out, else `RuntimeError`.
+    A batch that comes back with an error status, or a network error, stops the run: the
+    result keeps the batches before it and the reason. A 401 logs in again once.
     """
     await api.log_in()
     response = await api.send("GET", "/", None, None)
@@ -183,8 +188,9 @@ ID_KEYS = ("externalid", "external_id", "cpf")
 def read_destination(text: str) -> Recipient:
     """Read a destination of the query, a JSON object, as a recipient.
 
-    The phone is `celular_disparo`, `to` or `telefone`. The id is `externalId`, `external_id` or `cpf`, in
-    any case. Raise `ValidationError` if there is no phone or if the id is empty.
+    The phone is `celular_disparo`, `to` or `telefone`. The id is `externalId`,
+    `external_id` or `cpf`, in any case. Raise `ValidationError` if there is no phone or
+    if the id is empty.
     """
     item = ITEM.validate_json(text)
     lowered = {key.lower(): value for key, value in item.items()}
@@ -204,8 +210,8 @@ def read_destination(text: str) -> Recipient:
 def parse_recipients(texts: Sequence[str], *, require_id: bool = False) -> list[Recipient]:
     """Read the destinations of a query, and leave out the invalid ones with a log.
 
-    With `require_id`, a destination with no id, or an empty one, is invalid. Raise `ValueError` if the
-    texts are not empty and none is valid.
+    With `require_id`, a destination with no id, or an empty one, is invalid. Raise
+    `ValueError` if the texts are not empty and none is valid.
     """
     recipients: list[Recipient] = []
 
@@ -254,8 +260,9 @@ def drop_repeats(recipients: Sequence[Recipient], *, by_id: bool = False) -> lis
 def build_rows(hsm: Hsm, batches: Sequence[SentBatch], sent_at: datetime) -> list[dict[str, JsonValue]]:
     """Return one row of the table of the dispatches for each recipient that went out.
 
-    The columns are `id_hsm`, `dispatch_date`, `campaignName`, `costCenterId`, `telefone`, `cpf`, `vars` (JSON text)
-    and the partition: the year, the month and the day of `sent_at`.
+    The columns are `id_hsm`, `dispatch_date`, `campaignName`, `costCenterId`,
+    `telefone`, `cpf`, `vars` (JSON text) and the partition: the year, the month and the
+    day of `sent_at`.
     """
     day = f"{sent_at:%Y-%m-%d}"
 

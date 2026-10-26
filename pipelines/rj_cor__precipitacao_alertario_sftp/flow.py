@@ -26,8 +26,9 @@ async def rj_cor__precipitacao_alertario_sftp(
 ) -> None:
     """Load the AlertaRio readings that the SFTP leaves as XML files in a bucket to BigQuery tables.
 
-    Only the files after the latest `data_medicao` of the pluviometric table are read, or after
-    `max_date_bigquery` (`YYYY-MM-DD HH:MM:SS`) when it is given. The meteorological table is optional.
+    Only the files after the latest `data_medicao` of the pluviometric table are read,
+    or after `max_date_bigquery` (`YYYY-MM-DD HH:MM:SS`) when it is given. The
+    meteorological table is optional.
     """
     settings = Settings()
     watermark = max_date_bigquery or await read_watermark_task(

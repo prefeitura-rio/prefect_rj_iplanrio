@@ -2,15 +2,16 @@
 
 There are three criteria, and all must pass when they apply:
 
-1. The probability is not degenerate. It is a fast check (the deviation of the raw score on a sample of
-   the training), made before the whole simulation. A degenerate model fails criterion 3 anyway, so this only
-   gives a clearer error sooner.
-2. The gap of the new model is at least the gap of the model in production, on the same pool. It applies only
-   when there is a champion, and it is skipped in the first run.
+1. The probability is not degenerate. It is a fast check (the deviation of the raw score
+   on a sample of the training), made before the whole simulation. A degenerate model
+   fails criterion 3 anyway, so this only gives a clearer error sooner.
+2. The gap of the new model is at least the gap of the model in production, on the same
+   pool. It applies only when there is a champion, and it is skipped in the first run.
 3. The new model beats the random choice with p < 0.05 (the paired test of the gap).
 
-The AUC of the held-out set and a schema that matches are not in the gate. The AUC is only a proxy, and the real measure
-is the gap of criterion 2. The schema is a hard check of `publish_version` already.
+The AUC of the held-out set and a schema that matches are not in the gate. The AUC is
+only a proxy, and the real measure is the gap of criterion 2. The schema is a hard check
+of `publish_version` already.
 """
 
 from collections.abc import Sequence
@@ -31,8 +32,8 @@ from pipelines.rj_crm__modelo_qualidade_telefone.types import Gate, Simulation, 
 def check_probability(training: Training) -> str | None:
     """Return the reason if the model collapsed, or nothing.
 
-    It measures the deviation of the raw score, the sum of the SHAP values, on a sample of the training.
-    The base is a constant and does not change the deviation.
+    It measures the deviation of the raw score, the sum of the SHAP values, on a sample
+    of the training. The base is a constant and does not change the deviation.
     """
     deviation = float(np.std(training.shap_sample.values.sum(axis=1)))
 
@@ -45,7 +46,8 @@ def check_probability(training: Training) -> str | None:
 def decide(training: Training, simulation: Simulation, *, require_gate: bool = True) -> Gate:
     """Apply the three criteria and decide whether the new model is promoted.
 
-    With `require_gate` off, the model is promoted whatever the criteria say. The reasons stay in the result.
+    With `require_gate` off, the model is promoted whatever the criteria say. The
+    reasons stay in the result.
     """
     reasons: list[str] = []
 

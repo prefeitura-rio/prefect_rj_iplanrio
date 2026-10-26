@@ -1,8 +1,9 @@
 """Score the phones with a model, and write the result as Parquet.
 
-Each row of the Parquet file is a pair (cpf, phone) with the probability of HighDelivery, the
-features and the SHAP value of each one (structs with the same field names). The probability
-depends only on the phone: each phone is scored once and the result repeats for each CPF of it.
+Each row of the Parquet file is a pair (cpf, phone) with the probability of
+HighDelivery, the features and the SHAP value of each one (structs with the same field
+names). The probability depends only on the phone: each phone is scored once and the
+result repeats for each CPF of it.
 """
 
 from collections.abc import Iterable
@@ -23,10 +24,10 @@ from pipelines.rj_crm__modelo_qualidade_telefone.types import Matrix, Scores, Sc
 def contribute(matrix: Matrix, booster: Booster) -> Scores:
     """Return the probability, the SHAP values and the base value of the rows of a matrix.
 
-    The SHAP comes in log-odds (`pred_contrib` of LightGBM): the base plus the sum of the SHAP is the raw
-    score, and its sigmoid is the probability. The probability is not calibrated (`is_unbalance`):
-    it ranks phones, and it is no absolute cut. Raise `ValueError` if the model expects another
-    order of features.
+    The SHAP comes in log-odds (`pred_contrib` of LightGBM): the base plus the sum of
+    the SHAP is the raw score, and its sigmoid is the probability. The probability is
+    not calibrated (`is_unbalance`): it ranks phones, and it is no absolute cut. Raise
+    `ValueError` if the model expects another order of features.
     """
     if booster.feature_name() != list(FEATURES):
         raise ValueError("The features of the model are not in the order of FEATURES")
@@ -63,7 +64,8 @@ def score_batch(frame: pl.DataFrame, booster: Booster) -> Scores:
 def build_table(frame: pl.DataFrame, scores: Scores, version: str, scored_at: datetime) -> pl.DataFrame:
     """Return the table of a batch: one row for each pair (cpf, phone), with `features` and `shap` as structs.
 
-    The batch has one row for each phone, and each row repeats for each CPF of its list `cpfs`.
+    The batch has one row for each phone, and each row repeats for each CPF of its list
+    `cpfs`.
     """
     probability, shap, base = scores
     features = frame.select(
@@ -93,8 +95,8 @@ def write_scores(
 ) -> ScoreStats:
     """Score the batches and write the Parquet file of the scoring, one batch at a time.
 
-    Each batch has one row for each phone: `cpfs` (a list), `telefone` and the FEATURES. Raise
-    `ValueError` for a bad batch (see `to_matrix`) or when there is no row.
+    Each batch has one row for each phone: `cpfs` (a list), `telefone` and the FEATURES.
+    Raise `ValueError` for a bad batch (see `to_matrix`) or when there is no row.
     """
     scored_at = scored_at or datetime.now(UTC)
     path.parent.mkdir(parents=True, exist_ok=True)

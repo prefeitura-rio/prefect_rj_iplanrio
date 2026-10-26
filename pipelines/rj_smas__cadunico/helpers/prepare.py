@@ -23,9 +23,9 @@ def to_records(frame: DataFrame) -> list[Record]:
 def prepare_partition(bucket: str, name: str, folder: Path) -> Partition:
     """Download a ZIP of records and write its text files as Parquet files in the folder.
 
-    Every row has the columns of the partition: the layout version of the first line of the
-    last text file, and the year, the month and the date of the name of the ZIP. Raise
-    `ValueError` if the ZIP has no text file.
+    Every row has the columns of the partition: the layout version of the first line of
+    the last text file, and the year, the month and the date of the name of the ZIP.
+    Raise `ValueError` if the ZIP has no text file.
     """
     date = parse_partition(name)
     archive = download_blob(bucket, name, folder)
@@ -56,8 +56,9 @@ def prepare_partition(bucket: str, name: str, folder: Path) -> Partition:
 def read_layouts(bucket: str, files: Mapping[str, str], folder: Path) -> list[Record]:
     """Download the layout spreadsheets and return the rows of all of them.
 
-    `files` has the name of each spreadsheet, by version. Each row has the version of its file in
-    `versao_layout_particao`. Raise `ValueError` if a spreadsheet has no layout.
+    `files` has the name of each spreadsheet, by version. Each row has the version of
+    its file in `versao_layout_particao`. Raise `ValueError` if a spreadsheet has no
+    layout.
     """
     rows: list[Record] = []
 

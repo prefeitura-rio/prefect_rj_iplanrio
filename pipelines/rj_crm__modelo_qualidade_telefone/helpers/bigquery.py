@@ -41,9 +41,9 @@ def connect() -> Client:
 def read_batches(sql: str, batch_size: int) -> Iterator[pl.DataFrame]:
     """Run a query and yield its result in batches of at least `batch_size` rows.
 
-    The scoring has about 9 million rows a day, so the batches keep the memory at the size of one
-    batch. The client of the Storage API is required, because the REST API sends JSON and is over 10
-    times slower.
+    The scoring has about 9 million rows a day, so the batches keep the memory at the
+    size of one batch. The client of the Storage API is required, because the REST API
+    sends JSON and is over 10 times slower.
     """
     client = connect()
     storage = BigQueryReadClient(credentials=load_credentials())
@@ -82,7 +82,8 @@ def count_rows(client: Client, dataset_id: str, table_id: str) -> int | None:
 def replace_table(client: Client, path: Path, dataset_id: str, table_id: str) -> int:
     """Replace a table with a Parquet file in one load job, which is atomic: a query during it sees the old rows.
 
-    The schema, with the structs `features` and `shap`, comes from the file. Return the rows loaded.
+    The schema, with the structs `features` and `shap`, comes from the file. Return the
+    rows loaded.
     """
     config = LoadJobConfig(source_format=SourceFormat.PARQUET, write_disposition=WriteDisposition.WRITE_TRUNCATE)
 

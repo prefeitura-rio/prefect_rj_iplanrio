@@ -54,7 +54,9 @@ CHANGES = Shape(
 )
 
 
-async def test_a_database_reads_every_document_in_pages(couchdb, tmp_path, stage):
+async def test_a_database_reads_every_document_in_pages(
+    couchdb, tmp_path, stage
+) -> None:
     """Read the whole database in pages of `page_size`, with no repeat and no gap."""
     store, conn = couchdb
     source = CouchDBSource(conn, batch_size=1000, secure=False)
@@ -74,7 +76,9 @@ async def test_a_database_reads_every_document_in_pages(couchdb, tmp_path, stage
     )
 
 
-async def test_the_generic_shape_is_the_id_and_the_document(couchdb, tmp_path, stage):
+async def test_the_generic_shape_is_the_id_and_the_document(
+    couchdb, tmp_path, stage
+) -> None:
     """Stage the two columns of the default shape."""
     _, conn = couchdb
 
@@ -85,7 +89,7 @@ async def test_the_generic_shape_is_the_id_and_the_document(couchdb, tmp_path, s
 
 async def test_a_source_with_another_shape_stages_its_columns(
     couchdb, tmp_path, shout_row, stage_rows
-):
+) -> None:
     """Take the columns and the rows of the shape that the source is given."""
     _, conn = couchdb
     shape = Shape(arrow_schema([("id", arrow_string())]), shout_row)
@@ -97,7 +101,9 @@ async def test_a_source_with_another_shape_stages_its_columns(
     assert table["id"].to_pylist()[:2] == ['"00000000001"', '"00000000002"']
 
 
-async def test_the_item_carries_the_update_sequence(couchdb, tmp_path, stage_rows):
+async def test_the_item_carries_the_update_sequence(
+    couchdb, tmp_path, stage_rows
+) -> None:
     """Hand `last_seq` to the shape, which the generic one ignores."""
     store, conn = couchdb
     seen: list[str | None] = []
@@ -116,7 +122,7 @@ async def test_the_item_carries_the_update_sequence(couchdb, tmp_path, stage_row
     assert set(seen) == {store.update_seq}
 
 
-async def test_duckdb_reads_the_document_as_json(couchdb, tmp_path, stage):
+async def test_duckdb_reads_the_document_as_json(couchdb, tmp_path, stage) -> None:
     """Tag the document as JSON, so DuckDB reads the fields without a cast."""
     _, conn = couchdb
 
@@ -134,7 +140,9 @@ async def test_duckdb_reads_the_document_as_json(couchdb, tmp_path, stage):
     assert dataframe.rows() == [("JSON", "NAME 00000000001")]
 
 
-async def test_a_chunk_sends_an_exclusive_range_of_ids(couchdb, tmp_path, stage_rows):
+async def test_a_chunk_sends_an_exclusive_range_of_ids(
+    couchdb, tmp_path, stage_rows
+) -> None:
     """Send the chunk as `startkey` and `endkey`, with the width of the ids."""
     store, conn = couchdb
     source = CouchDBSource(conn, secure=False)
@@ -151,7 +159,7 @@ async def test_a_chunk_sends_an_exclusive_range_of_ids(couchdb, tmp_path, stage_
     assert read_table(tmp_path / "out.parquet").num_rows == 2
 
 
-async def test_a_mango_selector_pages_by_bookmark(couchdb, tmp_path, stage):
+async def test_a_mango_selector_pages_by_bookmark(couchdb, tmp_path, stage) -> None:
     """Read the documents that a selector returns, page by page."""
     store, conn = couchdb
     source = CouchDBSource(conn, batch_size=1000, secure=False)
@@ -166,7 +174,9 @@ async def test_a_mango_selector_pages_by_bookmark(couchdb, tmp_path, stage):
     assert bodies[1]["bookmark"] == store.bookmark(1000)
 
 
-async def test_a_selector_with_a_chunk_is_an_error(couchdb, tmp_path, stage_rows):
+async def test_a_selector_with_a_chunk_is_an_error(
+    couchdb, tmp_path, stage_rows
+) -> None:
     """Raise for a chunk over a selector, which has no id to range over."""
     _, conn = couchdb
     source = CouchDBSource(conn, secure=False)
@@ -207,7 +217,7 @@ ID_RANGE = {"_id": {"$gte": "00000000002", "$lt": "00000000004"}}
 )
 async def test_filters_read_by_find_with_the_chunk_as_a_range_of_ids(
     couchdb, tmp_path, chunk, selector, stage_rows
-):
+) -> None:
     """Join the filters and the ids of the chunk in one selector for `_find`."""
     store, conn = couchdb
     source = CouchDBSource(conn, batch_size=3000, secure=False)
@@ -221,7 +231,7 @@ async def test_filters_read_by_find_with_the_chunk_as_a_range_of_ids(
 
 async def test_two_filters_are_two_conditions_of_one_selector(
     couchdb, tmp_path, stage_rows
-):
+) -> None:
     """Join every filter with `$and`, in the order that they come."""
     store, conn = couchdb
     source = CouchDBSource(conn, batch_size=3000, secure=False)
@@ -237,7 +247,7 @@ async def test_two_filters_are_two_conditions_of_one_selector(
 
 async def test_a_filtered_read_skips_the_design_documents(
     couchdb, tmp_path, stage_rows
-):
+) -> None:
     """Keep a design document out of the rows, as an `_all_docs` read does."""
     store, conn = couchdb
     store.docs[DESIGN] = {"_id": DESIGN, "_rev": "1-a"}
@@ -272,7 +282,7 @@ async def test_a_filtered_read_skips_the_design_documents(
 )
 async def test_a_read_that_does_not_fit_the_source_is_refused(
     couchdb, tmp_path, values, filters, column, message, stage_rows
-):
+) -> None:
     """Raise for filters that are no selectors, and for a chunk over a field."""
     _, conn = couchdb
     source = CouchDBSource(conn, secure=False)
@@ -290,7 +300,9 @@ async def test_a_read_that_does_not_fit_the_source_is_refused(
         pytest.param("id", "month", "number of ids", id="a_date_width_is_refused"),
     ],
 )
-def test_the_couchdb_engine_checks_that_the_chunks_cut_the_id(column, width, message):
+def test_the_couchdb_engine_checks_that_the_chunks_cut_the_id(
+    column, width, message
+) -> None:
     """Accept the id, and refuse another column or a date width before any read."""
     engine = CouchDBEngine(CouchDBSource(DBConn("h", 1, "d", USER, PASSWORD)))
     chunks = Chunks(column=column, width=width, begin=0)
@@ -303,7 +315,9 @@ def test_the_couchdb_engine_checks_that_the_chunks_cut_the_id(column, width, mes
             engine.check_chunks(chunks, described)
 
 
-async def test_a_selector_that_is_not_json_is_an_error(couchdb, tmp_path, stage_rows):
+async def test_a_selector_that_is_not_json_is_an_error(
+    couchdb, tmp_path, stage_rows
+) -> None:
     """Raise for a query that is not a Mango selector, and name the error."""
     _, conn = couchdb
     source = CouchDBSource(conn, secure=False)
@@ -312,7 +326,7 @@ async def test_a_selector_that_is_not_json_is_an_error(couchdb, tmp_path, stage_
         await stage_rows(source, {"type": "couchdb", "query": "name"}, Rows(), tmp_path)
 
 
-async def test_a_wrong_login_raises_the_http_error(couchdb, tmp_path, stage):
+async def test_a_wrong_login_raises_the_http_error(couchdb, tmp_path, stage) -> None:
     """Raise the error of the 401 that the proxy answers, and read no page."""
     store, conn = couchdb
     wrong = DBConn(conn.hostname, conn.port, conn.database, USER, "errada")
@@ -325,7 +339,7 @@ async def test_a_wrong_login_raises_the_http_error(couchdb, tmp_path, stage):
 
 async def test_a_wrong_path_fails_when_the_engine_opens(
     proxied_couchdb, tmp_path, stage
-):
+) -> None:
     """Ask for the database on open, so a refused path reads no document."""
     store, conn = proxied_couchdb
 
@@ -335,7 +349,7 @@ async def test_a_wrong_path_fails_when_the_engine_opens(
     assert [path for path, _, _ in store.requests] == ["/people/"]
 
 
-async def test_the_login_never_reaches_the_url():
+async def test_the_login_never_reaches_the_url() -> None:
     """Send the login in the header only, and use https for any port but 5984."""
     secure = DBConn("10.2.231.241", 6984, "people", USER, PASSWORD)
     plain = DBConn("10.2.231.241", 5984, "people", USER, PASSWORD)
@@ -346,13 +360,14 @@ async def test_the_login_never_reaches_the_url():
     assert CouchDBSource(plain).base_url == "http://10.2.231.241:5984"
 
 
-async def test_the_tls_setting_reaches_the_client(couchdb, monkeypatch):
+async def test_the_tls_setting_reaches_the_client(couchdb, monkeypatch) -> None:
     """Pass the TLS setting and the login to the client."""
     _, conn = couchdb
     seen: dict[str, object] = {}
 
     class FakeClient:
         def __init__(self, **kwargs: object) -> None:
+            """Store the arguments."""
             seen.update(kwargs)
 
     monkeypatch.setattr(couchdb_module, "AsyncClient", FakeClient)
@@ -362,13 +377,15 @@ async def test_the_tls_setting_reaches_the_client(couchdb, monkeypatch):
     assert seen["auth"] == (USER, PASSWORD)
 
 
-def test_a_source_that_needs_a_connection_names_it():
+def test_a_source_that_needs_a_connection_names_it() -> None:
     """Raise for a source with no connection, and name the missing `conn`."""
     with pytest.raises(ValueError, match="conn"):
         get_source("couchdb")()
 
 
-async def test_regression_a_design_document_is_not_a_row(couchdb, tmp_path, stage):
+async def test_regression_a_design_document_is_not_a_row(
+    couchdb, tmp_path, stage
+) -> None:
     """Regression: the design docs sort after the ids, so a read took them as rows."""
     store, conn = couchdb
     store.docs[DESIGN] = {"_id": DESIGN, "_rev": "1-design"}
@@ -381,7 +398,7 @@ async def test_regression_a_design_document_is_not_a_row(couchdb, tmp_path, stag
 
 async def test_regression_a_page_does_not_repeat_the_key_of_the_page_before(
     small_couchdb, tmp_path, stage
-):
+) -> None:
     """Regression: `startkey` includes its key, so the last row of a page came again."""
     store, conn = small_couchdb
     source = CouchDBSource(conn, batch_size=3, secure=False)
@@ -398,7 +415,7 @@ async def test_regression_a_page_does_not_repeat_the_key_of_the_page_before(
 
 async def test_regression_the_last_numeric_id_is_read_below_the_colon(
     couchdb, tmp_path, stage_rows
-):
+) -> None:
     """Regression: a design document was the last key, so a chunk could not be cut."""
     store, conn = couchdb
     store.docs[DESIGN] = {"_id": DESIGN, "_rev": "1-design"}
@@ -418,7 +435,7 @@ async def test_regression_the_last_numeric_id_is_read_below_the_colon(
 
 async def test_regression_ids_that_are_not_one_width_are_an_error(
     couchdb, tmp_path, stage_rows
-):
+) -> None:
     """Regression: mixed id widths made a chunk read the wrong range."""
     store, conn = couchdb
     store.docs = {
@@ -436,7 +453,9 @@ async def test_regression_ids_that_are_not_one_width_are_an_error(
         )
 
 
-async def test_an_empty_database_keeps_the_columns(empty_couchdb, tmp_path, stage):
+async def test_an_empty_database_keeps_the_columns(
+    empty_couchdb, tmp_path, stage
+) -> None:
     """Write a file with the columns and no row, so that DuckDB still knows them."""
     _, conn = empty_couchdb
 
@@ -447,7 +466,7 @@ async def test_an_empty_database_keeps_the_columns(empty_couchdb, tmp_path, stag
 
 async def test_regression_a_database_name_with_a_slash_is_quoted_in_the_path(
     couchdb, tmp_path, stage
-):
+) -> None:
     """Regression: the slash of a database name split the path of the read."""
     store, conn = couchdb
     archive = DBConn(conn.hostname, conn.port, "people/archive", USER, PASSWORD)
@@ -472,14 +491,18 @@ async def test_regression_a_database_name_with_a_slash_is_quoted_in_the_path(
         pytest.param("/a/b", "https://db.example:6984/a/b", id="two_levels"),
     ],
 )
-def test_the_path_prefix_joins_the_url_without_doubled_slashes(prefix, expected):
+def test_the_path_prefix_joins_the_url_without_doubled_slashes(
+    prefix, expected
+) -> None:
     """Join the path prefix to the server with one slash."""
     conn = DBConn("db.example", 6984, "people", USER, PASSWORD)
 
     assert CouchDBSource(conn, path_prefix=prefix).base_url == expected
 
 
-async def test_a_path_prefix_reaches_every_endpoint(proxied_couchdb, tmp_path, stage):
+async def test_a_path_prefix_reaches_every_endpoint(
+    proxied_couchdb, tmp_path, stage
+) -> None:
     """Send the three kinds of read under the prefix that the proxy publishes."""
     store, conn = proxied_couchdb
     source = CouchDBSource(conn, path_prefix="/couchdb", secure=False)
@@ -499,7 +522,7 @@ async def test_a_path_prefix_reaches_every_endpoint(proxied_couchdb, tmp_path, s
         await stage(CouchDBSource(conn, secure=False), tmp_path)
 
 
-def test_the_registry_path_takes_its_options_from_the_settings(monkeypatch):
+def test_the_registry_path_takes_its_options_from_the_settings(monkeypatch) -> None:
     """Build the options of a source from the settings, so no code has to pass them."""
     monkeypatch.setenv("COUCHDB_PAGE_SIZE", "5")
     monkeypatch.setenv("COUCHDB_VERIFY_TLS", "false")
@@ -525,7 +548,7 @@ def test_the_registry_path_takes_its_options_from_the_settings(monkeypatch):
 
 async def test_a_changes_read_stages_every_change_in_pages(
     small_couchdb, tmp_path, stage
-):
+) -> None:
     """Read the changes from the start, page by page, with the sequence of each one."""
     store, conn = small_couchdb
     source = CouchDBSource(conn, shape=CHANGES, batch_size=3, secure=False)
@@ -552,7 +575,7 @@ async def test_a_changes_read_stages_every_change_in_pages(
 
 async def test_a_changes_read_after_a_sequence_gives_only_what_changed(
     small_couchdb, tmp_path, stage
-):
+) -> None:
     """Give the updated document and the tombstone of the deleted one only."""
     store, conn = small_couchdb
     store.touch("00000000002")
@@ -576,7 +599,7 @@ async def test_a_changes_read_after_a_sequence_gives_only_what_changed(
 
 async def test_a_changes_read_with_nothing_new_keeps_the_columns(
     small_couchdb, tmp_path, stage
-):
+) -> None:
     """Write a file with the columns and no row after the last sequence."""
     _, conn = small_couchdb
 
@@ -591,7 +614,7 @@ async def test_a_changes_read_with_nothing_new_keeps_the_columns(
 
 async def test_a_changes_read_skips_the_design_documents(
     small_couchdb, tmp_path, stage
-):
+) -> None:
     """Leave the design documents out of the changes, as out of a database read."""
     store, conn = small_couchdb
     store.docs[DESIGN] = {"_id": DESIGN, "_rev": "1-design"}
@@ -615,7 +638,7 @@ async def test_a_changes_read_skips_the_design_documents(
 )
 async def test_a_changes_read_refuses_what_it_cannot_combine(
     couchdb, tmp_path, values, chunk, message, stage_rows
-):
+) -> None:
     """Raise for a changes read that also asks for a chunk."""
     _, conn = couchdb
     source = CouchDBSource(conn, secure=False)
@@ -628,7 +651,7 @@ async def test_a_changes_read_refuses_what_it_cannot_combine(
 
 async def test_regression_the_last_chunk_reaches_the_top_of_the_ids(
     couchdb, tmp_path, stage_rows
-):
+) -> None:
     """Regression: a chunk that ended at 10^width had an end key before its start."""
     store, conn = couchdb
     store.docs["50000000000"] = {"_id": "50000000000", "_rev": "1-a"}
@@ -645,7 +668,7 @@ async def test_regression_the_last_chunk_reaches_the_top_of_the_ids(
 
 async def test_the_chunks_and_the_null_chunk_read_every_document_once(
     couchdb, tmp_path, stage_rows
-):
+) -> None:
     """Read the numeric ranges and the null chunk, and get each document one time."""
     store, conn = couchdb
     extra = [
@@ -674,7 +697,7 @@ async def test_the_chunks_and_the_null_chunk_read_every_document_once(
 
 async def test_a_key_width_cuts_ids_of_mixed_length_by_their_first_digits(
     couchdb, tmp_path, stage_rows
-):
+) -> None:
     """Cut ids of 8 and 14 digits by their first three digits, with no width probe."""
     store, conn = couchdb
     keys = [
@@ -700,7 +723,7 @@ async def test_a_key_width_cuts_ids_of_mixed_length_by_their_first_digits(
     assert "1" not in [seen.get("limit") for _, seen, _ in store.requests]
 
 
-async def test_a_chunk_of_dates_is_an_error(couchdb, tmp_path, stage_rows):
+async def test_a_chunk_of_dates_is_an_error(couchdb, tmp_path, stage_rows) -> None:
     """Raise for a chunk of dates, because a CouchDB read cuts ids."""
     _, conn = couchdb
     chunk = Chunk("2024-01-01", date(2024, 1, 1), date(2024, 1, 2))
@@ -714,7 +737,7 @@ async def test_a_chunk_of_dates_is_an_error(couchdb, tmp_path, stage_rows):
         )
 
 
-async def test_the_table_value_names_the_database(couchdb, tmp_path, stage):
+async def test_the_table_value_names_the_database(couchdb, tmp_path, stage) -> None:
     """Read the database that `table` names, or the one of the connection."""
     store, conn = couchdb
     source = CouchDBSource(conn, batch_size=3000, secure=False)
@@ -730,7 +753,7 @@ async def test_the_table_value_names_the_database(couchdb, tmp_path, stage):
     ]
 
 
-def test_the_options_of_a_context_choose_the_shape_and_the_key_width(shapes):
+def test_the_options_of_a_context_choose_the_shape_and_the_key_width(shapes) -> None:
     """Take the shape from its `module:name` path, and the key width as it comes."""
     conn = DBConn("db.example", 6984, "people", USER, PASSWORD)
     source = get_source("couchdb")(
@@ -741,7 +764,7 @@ def test_the_options_of_a_context_choose_the_shape_and_the_key_width(shapes):
     assert (source.shape, source.key_width) == (shapes, 3)
 
 
-def test_the_batch_size_of_the_options_is_the_page_size():
+def test_the_batch_size_of_the_options_is_the_page_size() -> None:
     """Take the documents of a page from the options, and keep the setting without."""
     conn = DBConn("db.example", 6984, "people", USER, PASSWORD)
 
@@ -751,7 +774,7 @@ def test_the_batch_size_of_the_options_is_the_page_size():
     assert (sized.batch_size, plain.batch_size) == (5000, 10_000)
 
 
-def test_a_source_without_options_is_the_default_source():
+def test_a_source_without_options_is_the_default_source() -> None:
     """Keep the default shape and detect the width of the ids."""
     source = CouchDBSource(DBConn("db.example", 6984, "people", USER, PASSWORD))
 
@@ -784,7 +807,7 @@ def test_a_source_without_options_is_the_default_source():
         pytest.param({"batch_size": 0}, "batch_size", id="batch_size_of_zero"),
     ],
 )
-def test_options_that_do_not_fit_are_an_error(shapes, options, message):
+def test_options_that_do_not_fit_are_an_error(shapes, options, message) -> None:
     """Raise for a shape path that leads to no shape, and for an unknown option."""
     conn = DBConn("db.example", 6984, "people", USER, PASSWORD)
 
@@ -794,7 +817,7 @@ def test_options_that_do_not_fit_are_an_error(shapes, options, message):
 
 async def test_the_id_width_is_read_once_per_engine_and_not_kept_by_the_source(
     couchdb, tmp_path
-):
+) -> None:
     """Probe the ids once for the chunks of an engine, and again for a new one."""
     store, conn = couchdb
     source = CouchDBSource(conn, secure=False)

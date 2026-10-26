@@ -28,9 +28,10 @@ async def rj_smas__api_datametrica_agendamentos(
 ) -> None:
     """Load the Cadastro Único appointments of the Datametrica API to a BigQuery table, then start the reminders.
 
-    The date is `date`, or two days ahead, or four on Thursday and Friday, and nothing on a
-    weekend. With `dbt` a dbt command runs after the publish. The run ends by starting the
-    dispatch flow of the reminders for that date, which sends real messages.
+    The date is `date`, or two days ahead, or four on Thursday and Friday, and nothing
+    on a weekend. With `dbt` a dbt command runs after the publish. The run ends by
+    starting the dispatch flow of the reminders for that date, which sends real
+    messages.
     """
     today = today_in_sao_paulo()
     target = read_target_date(today, date)

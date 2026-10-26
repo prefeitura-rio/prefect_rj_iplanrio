@@ -30,7 +30,8 @@ def create_tables(project: str, dataset: str) -> None:
 def load_staging(project: str, dataset: str, staging: str, rows: Sequence[Row]) -> int:
     """Add rows to a staging table with its schema, and return how many.
 
-    Raise `KeyError` for a table with no schema, and `RuntimeError` if the job has errors.
+    Raise `KeyError` for a table with no schema, and `RuntimeError` if the job has
+    errors.
     """
     if not rows:
         return 0

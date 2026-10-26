@@ -34,9 +34,9 @@ def build_rows(
 ) -> list[dict[str, JsonValue]]:
     """Return the measurements as rows, with the date and the time in São Paulo.
 
-    The API sends the time in UTC as `HHMM`. `ano`, `mes` and `dia` are the day in São Paulo
-    as text, which the dbt model filters on. A row with no measure is dropped. Without a
-    backfill only the rows of `today` stay.
+    The API sends the time in UTC as `HHMM`. `ano`, `mes` and `dia` are the day in São
+    Paulo as text, which the dbt model filters on. A row with no measure is dropped.
+    Without a backfill only the rows of `today` stay.
     """
     rows: list[dict[str, JsonValue]] = []
 

@@ -29,8 +29,8 @@ class SecretsError(RuntimeError):
 async def read_secrets(client: AsyncClient, settings: InfisicalSettings, jwt: str) -> dict[str, str]:
     """Log in with the token of the pod, and return the keys of the folders in order.
 
-    A key that an earlier folder holds keeps its value. Raise `SecretsError` for a refused
-    login or for a folder that cannot be read.
+    A key that an earlier folder holds keeps its value. Raise `SecretsError` for a
+    refused login or for a folder that cannot be read.
     """
     try:
         login = await client.post(INFISICAL_LOGIN_PATH, json={"identityId": settings.INFISICAL_IDENTITY_ID, "jwt": jwt})

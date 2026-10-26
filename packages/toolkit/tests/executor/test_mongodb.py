@@ -163,7 +163,7 @@ def mongo_engine(
 )
 async def test_the_first_page_is_asked_with_the_filters_and_the_chunk(
     duckdb_memory, rows, query, collect_pages
-):
+) -> None:
     """Join the filters and the chunk in one query, in the collection of the table."""
     fetcher = Fetcher([[1]])
 
@@ -176,7 +176,7 @@ async def test_the_first_page_is_asked_with_the_filters_and_the_chunk(
 
 async def test_the_pages_follow_the_ids_until_a_short_page(
     duckdb_memory, collect_pages
-):
+) -> None:
     """Ask for the ids after the last one of the page before, until a short page."""
     fetcher = Fetcher([[1, 2], [3, 4], [5]])
 
@@ -192,7 +192,9 @@ async def test_the_pages_follow_the_ids_until_a_short_page(
     ]
 
 
-async def test_the_pages_follow_the_ids_inside_the_query(duckdb_memory, collect_pages):
+async def test_the_pages_follow_the_ids_inside_the_query(
+    duckdb_memory, collect_pages
+) -> None:
     """Join the id bound with the filters, so a page never leaves the chunk."""
     fetcher = Fetcher([[1, 2], [3]])
     rows = Rows(filters=['{"a": 1}'])
@@ -206,7 +208,7 @@ async def test_the_pages_follow_the_ids_inside_the_query(duckdb_memory, collect_
 
 async def test_a_selector_of_a_query_is_a_filter_of_its_collection(
     duckdb_memory, collect_pages
-):
+) -> None:
     """Read the collection that the query names, with its selector as a condition."""
     fetcher = Fetcher([[1]])
     origin = Query('{"situacao": "ativo"}', "mongodb", "pessoas")
@@ -216,7 +218,9 @@ async def test_a_selector_of_a_query_is_a_filter_of_its_collection(
     assert fetcher.calls == [("pessoas", {"$and": [{"situacao": "ativo"}]}, 2)]
 
 
-async def test_a_query_without_a_collection_is_refused(duckdb_memory, collect_pages):
+async def test_a_query_without_a_collection_is_refused(
+    duckdb_memory, collect_pages
+) -> None:
     """Raise before a read, because a selector needs a collection to run on."""
     engine = mongo_engine(duckdb_memory, Fetcher([]))
 
@@ -224,7 +228,9 @@ async def test_a_query_without_a_collection_is_refused(duckdb_memory, collect_pa
         await collect_pages(engine, Query("{}", "mongodb"), Rows())
 
 
-async def test_a_filter_that_is_not_a_selector_is_refused(duckdb_memory, collect_pages):
+async def test_a_filter_that_is_not_a_selector_is_refused(
+    duckdb_memory, collect_pages
+) -> None:
     """Raise for a filter that is not a JSON object."""
     engine = mongo_engine(duckdb_memory, Fetcher([[1]]))
 
@@ -232,7 +238,7 @@ async def test_a_filter_that_is_not_a_selector_is_refused(duckdb_memory, collect
         await collect_pages(engine, TableOrigin("c"), Rows(filters=["not json"]))
 
 
-async def test_an_empty_read_asks_for_nothing(duckdb_memory, collect_pages):
+async def test_an_empty_read_asks_for_nothing(duckdb_memory, collect_pages) -> None:
     """Read no page, so a dump learns the schema without a query."""
     fetcher = Fetcher([[1]])
 
@@ -243,7 +249,7 @@ async def test_an_empty_read_asks_for_nothing(duckdb_memory, collect_pages):
     assert (tables, fetcher.calls) == ([], [])
 
 
-async def test_the_bson_types_reach_the_file_as_text(duckdb_memory, tmp_path):
+async def test_the_bson_types_reach_the_file_as_text(duckdb_memory, tmp_path) -> None:
     """Write an `ObjectId` as its hex text and a `Decimal128` as its exact text."""
     engine = mongo_engine(duckdb_memory, Fetcher([[1, 2]]), batch_size=5)
     target = tmp_path / "out.parquet"
@@ -256,7 +262,7 @@ async def test_the_bson_types_reach_the_file_as_text(duckdb_memory, tmp_path):
     assert table["nome"].to_pylist() == ["nome 1", "nome 2"]
 
 
-async def test_an_empty_collection_keeps_the_schema(duckdb_memory, tmp_path):
+async def test_an_empty_collection_keeps_the_schema(duckdb_memory, tmp_path) -> None:
     """Write a file with the columns and no row when there is no document."""
     engine = mongo_engine(duckdb_memory, Fetcher([]))
     target = tmp_path / "out.parquet"
@@ -268,7 +274,7 @@ async def test_an_empty_collection_keeps_the_schema(duckdb_memory, tmp_path):
     assert str(table.schema.field("_id").type) == "string"
 
 
-async def test_a_dump_describes_the_columns_of_the_schema(duckdb_memory):
+async def test_a_dump_describes_the_columns_of_the_schema(duckdb_memory) -> None:
     """Describe the schema through an empty file, with the types that DuckDB reads."""
     engine = mongo_engine(duckdb_memory, Fetcher([]))
 
@@ -291,7 +297,7 @@ def shapes(monkeypatch):
     return module
 
 
-def test_the_options_choose_the_schema_the_page_size_and_the_login(shapes):
+def test_the_options_choose_the_schema_the_page_size_and_the_login(shapes) -> None:
     """Take the schema by its path, and keep the other options as they come."""
     options = {
         "shape": "mongo_shapes_of_the_test:GOOD",
@@ -334,13 +340,13 @@ def test_the_options_choose_the_schema_the_page_size_and_the_login(shapes):
         ),
     ],
 )
-def test_options_that_do_not_fit_are_an_error(shapes, options, message):
+def test_options_that_do_not_fit_are_an_error(shapes, options, message) -> None:
     """Raise for a missing or bad schema, and for an option that does not fit."""
     with pytest.raises(ValueError, match=message):
         get_source("mongodb")(conn=CONN, **options)
 
 
-def test_the_connection_string_quotes_the_login_and_sets_the_options(shapes):
+def test_the_connection_string_quotes_the_login_and_sets_the_options(shapes) -> None:
     """Quote the password, and send the authentication database and the TLS flag."""
     source = MongoDBSource(CONN, SCHEMA, auth_source="admin", tls=False)
 
@@ -349,19 +355,19 @@ def test_the_connection_string_quotes_the_login_and_sets_the_options(shapes):
     )
 
 
-def test_a_source_that_needs_a_connection_names_it():
+def test_a_source_that_needs_a_connection_names_it() -> None:
     """Name the missing `conn` in the error when it has no connection."""
     with pytest.raises(ValueError, match="conn"):
         get_source("mongodb")()
 
 
-def test_mongodb_reads_two_chunks_at_a_time_unless_the_options_say_otherwise():
+def test_mongodb_reads_two_chunks_at_a_time_unless_the_options_say_otherwise() -> None:
     """Default `concurrency` to 2, and take the number that the options give."""
     assert MongoDBEngine(MongoDBSource(CONN, SCHEMA)).concurrency == 2
     assert MongoDBEngine(MongoDBSource(CONN, SCHEMA, concurrency=5)).concurrency == 5
 
 
-async def test_the_mongodb_engine_refuses_sql(duckdb_memory: DuckDBEngine):
+async def test_the_mongodb_engine_refuses_sql(duckdb_memory: DuckDBEngine) -> None:
     """Raise `UnsupportedRequestError`, naming the engine, for `execute` and `query`."""
     engine = mongo_engine(duckdb_memory, Fetcher([]))
 
@@ -372,7 +378,9 @@ async def test_the_mongodb_engine_refuses_sql(duckdb_memory: DuckDBEngine):
         engine.query("SELECT 1")
 
 
-async def test_a_server_that_refuses_the_ping_fails_when_the_engine_opens(monkeypatch):
+async def test_a_server_that_refuses_the_ping_fails_when_the_engine_opens(
+    monkeypatch,
+) -> None:
     """Ping on open, so a wrong host or login fails before the first chunk."""
     commands: list[str] = []
 
@@ -422,7 +430,7 @@ def projected(count: int) -> Table:
 
 async def test_an_aggregation_runs_its_stages_after_a_match_of_the_filters_and_the_chunk(
     duckdb_memory, collect_pages
-):
+) -> None:
     """Put the filters and the chunk in a leading `$match`, then the stages."""
     aggregator = Aggregator(projected(3))
     origin = Aggregate(STAGES, "corridas")
@@ -462,7 +470,7 @@ async def test_an_aggregation_runs_its_stages_after_a_match_of_the_filters_and_t
 
 async def test_an_aggregation_without_filters_has_no_match(
     duckdb_memory, collect_pages
-):
+) -> None:
     """Send only the stages when nothing narrows the read."""
     aggregator = Aggregator(projected(1))
     origin = Aggregate(STAGES, "corridas")
@@ -481,7 +489,7 @@ async def test_an_aggregation_without_filters_has_no_match(
 
 async def test_an_aggregation_does_not_need_the_id_in_the_shape(
     duckdb_memory, tmp_path
-):
+) -> None:
     """Write the projected columns, though the shape has no `_id`."""
     origin = Aggregate(STAGES, "corridas")
     engine = mongo_engine(
@@ -498,7 +506,9 @@ async def test_an_aggregation_does_not_need_the_id_in_the_shape(
     assert read_table(target)["id"].to_pylist() == ["id0", "id1"]
 
 
-async def test_an_empty_aggregation_describes_the_shape_without_running(duckdb_memory):
+async def test_an_empty_aggregation_describes_the_shape_without_running(
+    duckdb_memory,
+) -> None:
     """Describe the columns of the shape and run nothing."""
     aggregator = Aggregator(projected(1))
     engine = mongo_engine(
@@ -515,7 +525,7 @@ async def test_an_empty_aggregation_describes_the_shape_without_running(duckdb_m
 
 def test_an_aggregation_may_cut_chunks_by_a_field_that_the_result_holds_as_text(
     duckdb_memory,
-):
+) -> None:
     """Accept a text column for a date chunk: the stored field is a date."""
     engine = mongo_engine(
         duckdb_memory,
@@ -530,7 +540,7 @@ def test_an_aggregation_may_cut_chunks_by_a_field_that_the_result_holds_as_text(
 
 def test_a_read_of_a_collection_still_checks_the_type_of_the_chunk_column(
     duckdb_memory,
-):
+) -> None:
     """Refuse a text column for a date chunk when the read is not an aggregation."""
     engine = mongo_engine(duckdb_memory, Fetcher([]))
     chunks = Chunks(column="nome", width="day", begin="2024-01-01")
@@ -539,7 +549,9 @@ def test_a_read_of_a_collection_still_checks_the_type_of_the_chunk_column(
         engine.check_chunks(chunks, {"_id": "VARCHAR", "nome": "VARCHAR"})
 
 
-async def test_a_paged_read_needs_the_id_in_the_shape(duckdb_memory, collect_pages):
+async def test_a_paged_read_needs_the_id_in_the_shape(
+    duckdb_memory, collect_pages
+) -> None:
     """Raise before a query if the shape has no `_id` to page by."""
     engine = mongo_engine(duckdb_memory, Fetcher([[1]]), shape=Schema({"nome": str}))
 

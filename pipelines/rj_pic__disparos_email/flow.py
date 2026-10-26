@@ -12,10 +12,11 @@ from utils.hooks import notify_failure
 async def rj_pic__disparos_email(*, email_subject: str = DEFAULT_SUBJECT) -> None:
     """Send an HTML mail to each recipient of a BigQuery table, through the Data Relay API.
 
-    The table and the filter come from the settings. Each row becomes a personal mail from
-    `email_template.html`, with the students of the field `dados`. The mails go one at a time with a pause
-    between them, and a failure that may pass is tried again. A refused mail is not tried again.
-    Raise `RuntimeError` after the last mail if any of them did not go out.
+    The table and the filter come from the settings. Each row becomes a personal mail
+    from `email_template.html`, with the students of the field `dados`. The mails go one
+    at a time with a pause between them, and a failure that may pass is tried again. A
+    refused mail is not tried again. Raise `RuntimeError` after the last mail if any of
+    them did not go out.
     """
     rows = await read_recipients_task()
     delivery = await send_mails_task(rows, email_subject)

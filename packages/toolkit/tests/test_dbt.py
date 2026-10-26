@@ -46,7 +46,7 @@ REPOSITORY = "https://example.invalid/queries.git"
         ),
     ],
 )
-def test_the_command_line_of_a_request(values, expected):
+def test_the_command_line_of_a_request(values, expected) -> None:
     """Regression: each call mutated the shared word list of a two-word command."""
     request = DbtRun(repository=REPOSITORY, **values)
 
@@ -64,7 +64,7 @@ def test_the_command_line_of_a_request(values, expected):
         pytest.param({"unknown": "x"}, "unknown", id="unknown_field"),
     ],
 )
-def test_a_request_with_a_bad_field_is_rejected_when_built(values, field):
+def test_a_request_with_a_bad_field_is_rejected_when_built(values, field) -> None:
     """Reject a request with a bad field when it is built."""
     with pytest.raises(ValidationError, match=field):
         DbtRun.model_validate({"repository": REPOSITORY, **values})
@@ -79,7 +79,7 @@ def test_a_request_with_a_bad_field_is_rejected_when_built(values, field):
 )
 def test_the_dbt_project_is_the_queries_folder_when_there_is_one(
     queries, expected, tmp_path, make_repository
-):
+) -> None:
     """Use the `queries` folder as the dbt project if there is one."""
     origin = make_repository(tmp_path / "origin", queries=queries)
 
@@ -88,7 +88,7 @@ def test_the_dbt_project_is_the_queries_folder_when_there_is_one(
     assert dbt.find_project_dir(clone) == tmp_path / expected
 
 
-def test_the_clone_has_the_branch_of_the_request(tmp_path, make_repository):
+def test_the_clone_has_the_branch_of_the_request(tmp_path, make_repository) -> None:
     """Check out the branch that the request names."""
     origin = make_repository(tmp_path / "origin", queries=False)
     Repo(origin).git.branch("models")
@@ -98,7 +98,7 @@ def test_the_clone_has_the_branch_of_the_request(tmp_path, make_repository):
     assert Repo(clone).active_branch.name == "models"
 
 
-def test_a_failed_clone_is_reported(tmp_path):
+def test_a_failed_clone_is_reported(tmp_path) -> None:
     """Report a failed clone."""
     with pytest.raises(RuntimeError, match="clone failed"):
         dbt.clone_repository(str(tmp_path / "missing"), tmp_path / "clone")
@@ -123,14 +123,14 @@ def test_a_failed_clone_is_reported(tmp_path):
 )
 def test_the_token_replaces_the_placeholder_of_the_url(
     monkeypatch, repository, token, expected
-):
+) -> None:
     """Put the token in a private URL, and leave a public URL as it is."""
     monkeypatch.setenv("GITHUB_TOKEN", token)
 
     assert fill_token(repository) == expected
 
 
-def test_a_private_url_without_a_token_is_refused(monkeypatch):
+def test_a_private_url_without_a_token_is_refused(monkeypatch) -> None:
     """Raise before the clone if the URL needs a token that is not set."""
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
 
@@ -138,7 +138,7 @@ def test_a_private_url_without_a_token_is_refused(monkeypatch):
         fill_token("https://GITHUB_TOKEN@github.com/org/repo.git")
 
 
-def test_regression_the_error_of_a_failed_clone_leaves_out_the_token(tmp_path):
+def test_regression_the_error_of_a_failed_clone_leaves_out_the_token(tmp_path) -> None:
     """Regression: the git message, with the URL and its token, reached the logs."""
     with pytest.raises(RuntimeError, match="clone failed") as error:
         dbt.clone_repository(

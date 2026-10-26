@@ -58,9 +58,9 @@ def read_tide_time(text: str | None) -> str | None:
 def build_tables(xml: str, execution_id: str, now: datetime) -> Forecast:
     """Read the forecast XML and return its rows by table, the synoptic text and the date of the XML.
 
-    All the rows carry `execution_id`, so the tables join. `now` is the time of the run, and
-    the date of the XML is `now` if the XML has none or a bad one. A number that is not a
-    number raises `ValueError`, and a bad XML raises `ParseError`.
+    All the rows carry `execution_id`, so the tables join. `now` is the time of the run,
+    and the date of the XML is `now` if the XML has none or a bad one. A number that is
+    not a number raises `ValueError`, and a bad XML raises `ParseError`.
     """
     root = fromstring(xml)
     created = now
@@ -191,8 +191,8 @@ def decide_alert(
 ) -> tuple[bool, str]:
     """Tell whether to send an alert, from the log of today, and why.
 
-    The alert goes out unless today has the same alert, has `max_daily` alerts, or has an
-    alert from less than `min_interval_hours` ago. `stats` is nothing without a log.
+    The alert goes out unless today has the same alert, has `max_daily` alerts, or has
+    an alert from less than `min_interval_hours` ago. `stats` is nothing without a log.
     """
     total = (stats or {}).get("total_alerts_today") or 0
 

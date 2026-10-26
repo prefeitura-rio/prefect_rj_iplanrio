@@ -57,7 +57,8 @@ async def authenticate_task() -> str:
 async def list_extensions_task(token: str, soap_uri: str) -> list[Extension]:
     """List the Data Extensions whose name ends in `historico`, with the pages of the SOAP API.
 
-    Raise `RuntimeError` if the API answers with a status that is neither `OK` nor `MoreDataAvailable`.
+    Raise `RuntimeError` if the API answers with a status that is neither `OK` nor
+    `MoreDataAvailable`.
     """
     endpoint = f"{soap_uri.rstrip('/')}/Service.asmx"
     found: list[Extension] = []
@@ -89,8 +90,9 @@ async def list_extensions_task(token: str, soap_uri: str) -> list[Extension]:
 async def extract_task(token: str, soap_uri: str, rest_uri: str, extension: Extension) -> Extraction:
     """Read all the records and the columns of a Data Extension, or return the error if it fails.
 
-    The records come from the REST API in pages of 2500, and the columns from the SOAP API. A failure of one
-    extension does not stop the others, so it comes back as the `error` of the extraction.
+    The records come from the REST API in pages of 2500, and the columns from the SOAP
+    API. A failure of one extension does not stop the others, so it comes back as the
+    `error` of the extraction.
     """
     url = f"{rest_uri.rstrip('/')}/data/v1/customobjectdata/key/{extension.external_key}/rowset"
     records = []
@@ -137,8 +139,8 @@ async def extract_task(token: str, soap_uri: str, rest_uri: str, extension: Exte
 async def load_task(rows: list[Row], window_days: int) -> int:
     """Keep the rows of the window, replace the tmp table with them, and MERGE it into the final table.
 
-    The MERGE updates the rows with the same key and inserts the new ones, and it never deletes from the final table.
-    Return the rows that the MERGE touched.
+    The MERGE updates the rows with the same key and inserts the new ones, and it never
+    deletes from the final table. Return the rows that the MERGE touched.
     """
     recent = filter_recent(rows, window_days, datetime.now(UTC))
     tmp = f"{PROJECT_ID}.{DATASET_ID}.{TMP_TABLE_ID}"

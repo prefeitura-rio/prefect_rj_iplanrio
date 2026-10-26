@@ -18,9 +18,10 @@ def message_order(message: Message) -> tuple[str, bool, datetime]:
 def build_conversations(messages: Sequence[Message]) -> Extraction:
     """Group the messages by session, and return a conversation for each one that has a citizen message.
 
-    A conversation has the lines `CIDADÃO: ...` and `AGENTE: ...` in time order. The HSM text is
-    kept apart as `hsm_text`, the same for all the sessions of a dispatch, and does not repeat in the
-    conversation. The totals count all the sessions, so the report can give the rate of engagement.
+    A conversation has the lines `CIDADÃO: ...` and `AGENTE: ...` in time order. The HSM
+    text is kept apart as `hsm_text`, the same for all the sessions of a dispatch, and
+    does not repeat in the conversation. The totals count all the sessions, so the
+    report can give the rate of engagement.
     """
     ordered = sorted(messages, key=message_order)
     sessions = [list(group) for _, group in groupby(ordered, key=lambda message: message["id_sessao_48h"])]

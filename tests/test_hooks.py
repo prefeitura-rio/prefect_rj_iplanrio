@@ -22,7 +22,7 @@ def dump() -> object:
         pytest.param({"options": {"shard": {"index": 0, "count": 2}}}, 0, id="a_shard_leaves_the_post_to_its_parent"),
     ],
 )
-async def test_only_a_run_that_is_not_a_shard_posts_its_failure(monkeypatch, parameters, posted):
+async def test_only_a_run_that_is_not_a_shard_posts_its_failure(monkeypatch, parameters, posted) -> None:
     """Post once for the parent of a dump in shards, and not for each of its child runs."""
     messages: list[str] = []
 
