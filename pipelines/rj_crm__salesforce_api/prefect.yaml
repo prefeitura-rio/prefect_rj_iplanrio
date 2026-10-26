@@ -29,14 +29,19 @@ deployments:
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_crm__salesforce_api/flow.py:rj_crm__salesforce_api
     work_pool:
-      name: onprem-pool
+      name: default-pool
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: "uv run --package rj_crm__salesforce_api -- prefect flow-run execute"
-        namespace: pipelines-staging
-        secretName: pipelines-rj-crm--salesforce-api
+        command: uv run --package rj_crm__salesforce_api -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
+        service_account_name: pipelines
+        env:
+          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: staging
+          INFISICAL_PATHS: /rj_crm__salesforce_api,/shared/sfmc,/gke
     schedules:
 
       - cron: "0 9,11,13,15,17 * * 1-5"
@@ -94,14 +99,19 @@ deployments:
     version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_crm__salesforce_api/flow.py:rj_crm__salesforce_api
     work_pool:
-      name: onprem-pool
+      name: default-pool
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: "uv run --package rj_crm__salesforce_api -- prefect flow-run execute"
-        namespace: pipelines-prod
-        secretName: pipelines-rj-crm--salesforce-api
+        command: uv run --package rj_crm__salesforce_api -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
+        service_account_name: pipelines
+        env:
+          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: prod
+          INFISICAL_PATHS: /rj_crm__salesforce_api,/shared/sfmc,/gke
     schedules:
 
       - cron: "0 9,11,13,15,17 * * 1-5"
