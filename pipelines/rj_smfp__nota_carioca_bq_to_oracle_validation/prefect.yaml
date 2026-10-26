@@ -37,7 +37,8 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_smfp__nota_carioca_bq_to_oracle_validation -- prefect flow-run execute
-        secretName: prefect-jobs-secrets-staging
+        namespace: pipelines-staging
+        secretName: pipelines-rj-smfp--nota-carioca-bq-to-oracle-validation
         image_pull_policy: Always
   - name: rj-smfp--nota-carioca-bq-to-oracle-validation--prod
     tags:
@@ -55,5 +56,6 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_smfp__nota_carioca_bq_to_oracle_validation -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        namespace: pipelines-prod
+        secretName: pipelines-rj-smfp--nota-carioca-bq-to-oracle-validation
         image_pull_policy: Always

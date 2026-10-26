@@ -42,7 +42,8 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_iplanrio__cor_alerts_aggregator -- prefect flow-run execute
-        secretName: prefect-jobs-secrets-staging
+        namespace: pipelines-staging
+        secretName: pipelines-rj-iplanrio--cor-alerts-aggregator
         image_pull_policy: Always
 
   - name: rj-iplanrio--cor-alerts-aggregator--prod
@@ -63,7 +64,8 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_iplanrio__cor_alerts_aggregator -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        namespace: pipelines-prod
+        secretName: pipelines-rj-iplanrio--cor-alerts-aggregator
         image_pull_policy: Always
     schedule:
       - cron: "*/2 * * * *"
