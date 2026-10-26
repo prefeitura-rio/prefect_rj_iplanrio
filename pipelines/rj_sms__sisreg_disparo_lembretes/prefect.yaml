@@ -44,7 +44,7 @@ deployments:
           INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
           INFISICAL_PROJECT_ID: 38db61c8-a9b7-433a-899b-55218586b57b
           INFISICAL_ENVIRONMENT: prod
-          INFISICAL_PATHS: /rj_sms__sisreg_disparo_lembretes,/shared
+          INFISICAL_PATHS: /shared
     parameters:
       table:
         dataset_id: disparos
@@ -76,7 +76,7 @@ deployments:
           INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
           INFISICAL_PROJECT_ID: 38db61c8-a9b7-433a-899b-55218586b57b
           INFISICAL_ENVIRONMENT: staging
-          INFISICAL_PATHS: /rj_sms__sisreg_disparo_lembretes,/shared
+          INFISICAL_PATHS: /shared
     parameters:
       table:
         dataset_id: disparos
