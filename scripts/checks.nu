@@ -97,7 +97,15 @@ def layout-problems [folder: string]: nothing -> list<string> {
     let files = glob $'($root)/**/*' | where {|file| ($file | path type) == file and not ($file | str contains '__pycache__') }
     let relative = $files | each {|file| $file | path relative-to $root }
     let python = $relative | where {|file| ($file | str ends-with '.py') and not ($file | str starts-with 'tests/') }
-    let forbidden_names = ['__init__.py' 'utils.py' 'env.py' 'schedules.py' 'build_prefect_yaml.py' '.python-version' '.DS_Store']
+    let forbidden_names = [
+        '__init__.py'
+        'utils.py'
+        'env.py'
+        'schedules.py'
+        'build_prefect_yaml.py'
+        '.python-version'
+        '.DS_Store'
+    ]
 
     let forbidden = $relative | where {|file|
         let base = $file | path basename
@@ -108,7 +116,7 @@ def layout-problems [folder: string]: nothing -> list<string> {
         ($file =~ '\.(json|xml|sql|jq)$') and not ($file | str starts-with 'queries/') and not ($file | str starts-with 'tests/') and not ($file | str starts-with 'pipelines/')
     } | each {|file| $'($name)/($file): data file outside queries/, tests/ and pipelines/' }
 
-    let flow = if ('flow.py' in $relative) {
+    let flow = if 'flow.py' in $relative {
         let text = open --raw $'($root)/flow.py'
         let named = $text =~ ('(?m)^(async )?def ' + $name + '\(|^' + $name + ' = ')
         let task = $text =~ '(?m)^@task'
