@@ -55,13 +55,13 @@ from pipelines.rj_secretaria__pipeline import helpers
 
 @task
 def fetch_items_task(dataset_id: str, table_id: str) -> str:
-    """Baixa os itens e retorna o caminho do Parquet."""
+    """Download the items and return the path of the Parquet file."""
     return helpers.fetch_items(dataset_id=dataset_id, table_id=table_id)
 ```
 
 ```python
 # pipelines/rj_secretaria__pipeline/helpers.py  — Seções 4.3, 5.5 e 5.8
-"""Funções puras da pipeline rj_secretaria__pipeline."""
+"""Helpers of rj_secretaria__pipeline."""
 
 import httpx2
 import polars as pl
@@ -71,13 +71,13 @@ logger = get_logger("toolkit")
 
 
 def fetch_items(dataset_id: str, table_id: str) -> str:
-    """Baixe os itens da API, salve em Parquet e devolva o caminho do arquivo.
+    """Download the items of the API, save them as Parquet and return the path.
 
-    Levante `httpx2.HTTPStatusError` se a API responder com erro.
+    Raise `httpx2.HTTPStatusError` if the API answers with an error.
     """
     response = httpx2.get("https://api.example.com/items", timeout=30)
     response.raise_for_status()
-    logger.info("Itens recebidos: %d", len(response.json()))
+    logger.info("Items received: %d", len(response.json()))
     path = f"/tmp/{dataset_id}/{table_id}.parquet"
     pl.DataFrame(response.json()).write_parquet(path)
     return path
@@ -384,8 +384,12 @@ def process(
 - Sem imports com wildcard (`from x import *`).
 - Sem cabeçalho de encoding (`# -*- coding: utf-8 -*-`). UTF-8 é o padrão no Python 3, e o cabeçalho é ruído.
 - Imports explícitos apenas: liste cada nome que você usa.
-- Importe nomes, não módulos: `from asyncio import to_thread`, e não `import asyncio`. Se o nome colide com um nome local, dê um apelido (`from duckdb import connect as duckdb_connect`). As exceções são o `pytest` (`import pytest`, que o `ruff` exige pela regra `PT013`) e o módulo que um teste precisa para trocar um nome (`from toolkit import dbt`, e então `monkeypatch.setattr(dbt, ...)`).
-- Sem `# noqa` nem `# pylint: disable=...` sem o id da regra e o motivo. Corrija o problema. Se o silêncio for inevitável, escreva `# noqa: EXXX  # motivo`.
+- Importe nomes, não módulos: `from asyncio import to_thread`, e não `import asyncio`. Se o nome colide com um nome local ou com um nome embutido, dê um apelido (`from duckdb import connect as duckdb_connect`, `from re import compile as compile_pattern`). As exceções são:
+  - o `pytest` (`import pytest`, que o `ruff` exige pela regra `PT013`);
+  - o módulo que um teste precisa para trocar um nome (`from toolkit import dbt`, e então `monkeypatch.setattr(dbt, ...)`, ou `import time` quando o teste troca `time`);
+  - o módulo que o código passa adiante como objeto (o `re` que a sandbox entrega à função);
+  - as bibliotecas de dados com apelido fixo: `import polars as pl`, `import numpy as np` e `import pyarrow as pa`.
+- Sem `# noqa`, `# type: ignore` nem `# pyright: ignore` sem o id da regra e o motivo. Corrija o problema com um `cast` ou com o tipo certo. Se o silêncio for inevitável, escreva `# noqa: EXXX  # motivo` ou `# pyright: ignore[regra]  # motivo`.
 
 ```python
 # ✅ correto
@@ -460,14 +464,14 @@ Regras de conteúdo:
 
 ### 5.6 Docstrings
 
-Toda função tem uma `docstring` em Markdown, sem `reST`: código com uma crase, sem `:param:`, `:returns:` nem `:type:`. Os type hints já dizem os tipos. O resumo é uma frase curta no imperativo, em uma linha, com ponto final e até 88 colunas. Escreva mais frases só se o contrato não aparecer no nome e nos tipos, após uma linha em branco. O erro que a função levanta entra na `docstring`. Uma função difícil de entender leva um exemplo em bloco `python` cercado, com o resultado num comentário `#` conferido ao rodar.
+Toda função tem uma `docstring` em inglês, em Markdown, sem `reST`: código com uma crase, sem `:param:`, `:returns:` nem `:type:`. Os type hints já dizem os tipos. O resumo é uma frase curta no imperativo, em uma linha, com ponto final e até 88 colunas. Escreva mais frases só se o contrato não aparecer no nome e nos tipos, após uma linha em branco. O erro que a função levanta entra na `docstring`. Uma função difícil de entender leva um exemplo em bloco `python` cercado, com o resultado num comentário `#` conferido ao rodar.
 
 ```python
 # ✅ correto — o contrato cabe numa linha, e o erro vem depois
 def fetch_items(dataset_id: str, table_id: str) -> str:
-    """Baixe os itens da API, salve em Parquet e devolva o caminho do arquivo.
+    """Download the items of the API, save them as Parquet and return the path.
 
-    Levante `httpx2.HTTPStatusError` se a API responder com erro.
+    Raise `httpx2.HTTPStatusError` if the API answers with an error.
     """
     ...
 ```
@@ -475,7 +479,7 @@ def fetch_items(dataset_id: str, table_id: str) -> str:
 ````python
 # ✅ correto — uma função difícil leva um exemplo
 def normalize_column(name: str) -> str:
-    """Devolva o nome de coluna que o BigQuery aceita.
+    """Return the column name that BigQuery accepts.
 
     ```python
     normalize_column("Código do Órgão")  # "codigo_do_orgao"
@@ -487,7 +491,7 @@ def normalize_column(name: str) -> str:
 ```python
 # ❌ errado — reST, e um resumo que repete o que os tipos dizem
 def fetch_items(dataset_id: str, table_id: str) -> str:
-    """Baixa os itens da API e salva em Parquet.
+    """Downloads the items of the API and saves them as Parquet.
 
     :param dataset_id: Dataset de destino no BigQuery.
     :returns: Caminho do arquivo Parquet.
@@ -898,7 +902,28 @@ Use letras minúsculas e hífens apenas. O `--` duplo separa segmentos lógicos.
 
 ### 9.2 Work pool e secrets
 
-O work pool depende do acesso de rede da pipeline: `default-pool` para o trabalho geral e `onprem-pool` para sistemas internos que exigem VPN (veja o README). Staging e prod de uma mesma pipeline usam o mesmo pool. Exemplo com `onprem-pool`:
+O work pool depende do acesso de rede da pipeline. Staging e prod de uma mesma pipeline usam o mesmo pool.
+
+- `default-pool` (GKE): para a pipeline que não precisa de um banco interno. O job lê os segredos do `Infisical` na hora de rodar, com `python -m utils.secrets -- prefect flow-run execute`. O `INFISICAL_PATHS` lista as pastas do projeto `pipelines`, em ordem: `/<pipeline>`, as pastas de `/shared` e `/gke`. A primeira pasta que tem a chave vence, e uma variável do job nunca é trocada. O job usa o `ServiceAccount` `pipelines`, e não leva `namespace` nem `secretName`.
+- `onprem-pool`: para bancos e sistemas internos da `IplanRio`, que exigem VPN. O `Secret` `pipelines-<pipeline>` do namespace `pipelines-staging` ou `pipelines-prod` é sincronizado do `Infisical`.
+- `taxirio-pool`: só a pipeline `rj_iplanrio__taxirio`.
+
+```yaml
+work_pool:
+  name: default-pool
+  work_queue_name: default
+  job_variables:
+    image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+    command: uv run --package rj_secretaria__pipeline -- python -m utils.secrets -- prefect flow-run execute
+    image_pull_policy: Always
+    service_account_name: pipelines
+    env:
+      INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+      INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+      INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+      INFISICAL_ENVIRONMENT: staging
+      INFISICAL_PATHS: /rj_secretaria__pipeline,/gke
+```
 
 ```yaml
 work_pool:
@@ -907,17 +932,14 @@ work_pool:
   job_variables:
     image: "{{ build-image.image_name }}:{{ build-image.tag }}"
     command: uv run --package rj_secretaria__pipeline -- prefect flow-run execute
-    secretName: prefect-jobs-secrets-staging # staging
+    namespace: pipelines-staging
+    secretName: pipelines-rj-secretaria--pipeline
     image_pull_policy: Always
-```
-
-```yaml
-secretName: prefect-jobs-secrets # prod
 ```
 
 ### 9.3 Staging vs. prod
 
-Staging não tem a chave `schedules:`. Prod tem agendamentos, e um agendamento desligado leva `active: false`. Em um flow pronto como o `dump_database`, a tabela e a leitura ficam no `schedule`, então uma execução manual no staging copia os `parameters` de um `schedule` da prod. Staging usa `secretName: prefect-jobs-secrets-staging`. Prod usa `secretName: prefect-jobs-secrets`.
+Staging não tem a chave `schedules:`. Prod tem agendamentos, e um agendamento desligado leva `active: false`. Em um flow pronto como o `dump_database`, a tabela e a leitura ficam no `schedule`, então uma execução manual no staging copia os `parameters` de um `schedule` da prod. No `onprem-pool`, staging usa `namespace: pipelines-staging` e prod usa `namespace: pipelines-prod`, com o mesmo `secretName`. No `default-pool`, o `INFISICAL_ENVIRONMENT` troca de `staging` para `prod`. Uma pipeline desligada guarda `deployments: []` e não entra no `.allow.json`.
 
 ### 9.4 Sem comentários
 
@@ -950,7 +972,8 @@ A pipeline lista só os pacotes que ela importa, pelo nome, sem versão. A vers�
 
 - Para subir a versão de um pacote compartilhado, mude uma linha no `pyproject.toml` da raiz.
 - Um pacote que só uma pipeline usa pode levar a versão na própria pipeline. Use `==` só com um comentário que explique o motivo.
-- Um pacote que vem de um repositório git (`prefeitura-rio`) tem o endereço e o `rev` em `[tool.uv.sources]` da raiz, e a pipeline só escreve o nome.
+- Um pacote que vem de um repositório git tem o endereço e o `rev` em `[tool.uv.sources]` da raiz, e a pipeline só escreve o nome.
+- Uma pipeline que importa outra pipeline (um caso a evitar) copia a pasta dela no `Dockerfile`. Fora isso, o `Dockerfile` só se afasta do template para instalar uma ferramenta do sistema.
 - A task `lint:deps` falha se uma pipeline escreve versão ou endereço de um pacote que a raiz já define.
 
 ```toml
@@ -1078,7 +1101,8 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_secretaria__pipeline -- prefect flow-run execute
-        secretName: prefect-jobs-secrets-staging
+        namespace: pipelines-staging
+        secretName: pipelines-rj-secretaria--pipeline
         image_pull_policy: Always
 
   - name: rj-secretaria--pipeline--prod
@@ -1094,7 +1118,8 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_secretaria__pipeline -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        namespace: pipelines-prod
+        secretName: pipelines-rj-secretaria--pipeline
         image_pull_policy: Always
 ```
 
@@ -1106,7 +1131,7 @@ deployments:
 | ------------- | ----------------------------------- | -------------------------------------------------------- |
 | `environment` | `staging`, `prod`                   | Estágio de execução — obrigatório em todo deployment     |
 | `severity`    | `low`, `medium`, `high`, `critical` | Criticidade da pipeline — obrigatório em todo deployment |
-| `code_owner`  | GitHub username                     | Responsável pelo código — obrigatório em todo deployment |
+| `code_owner`  | GitHub username, ou `unassigned`    | Responsável pelo código — obrigatório em todo deployment |
 
 ### 13.4 Por que tags e não parâmetros
 
@@ -1118,7 +1143,7 @@ A revisão do PR verifica as tags sempre que o `prefect.yaml` muda. Ainda não e
 
 - `environment:staging` ou `environment:prod`
 - `severity` com um dos 4 valores válidos
-- `code_owner` com um GitHub username válido
+- `code_owner` com um GitHub username válido, ou `unassigned` enquanto a pipeline não tem dono
 
 Quem revisa o PR deve recusar um deployment sem tags.
 
@@ -1143,7 +1168,7 @@ pipelines/rj_secretaria__pipeline/
 
 ### 14.3 Estilo
 
-Use `pytest` e `@pytest.mark.parametrize`, com `ids` que descrevem o cenário. Os testes não usam rede, credenciais nem o runtime do Prefect. Use mocks só para verificar um contrato de interface (por exemplo, que uma função recebeu a query correta), nunca para testar lógica de negócio. Para funções puras de transformação, `hypothesis` é permitido para verificar propriedades como idempotência e preservação do número de linhas.
+Use `pytest` e `@pytest.mark.parametrize`, com `pytest.param(..., id="cenario")` que descreve o cenário. Cada função de teste leva uma `docstring` de uma linha e `-> None`, e a regra `ANN` do `ruff` confere o retorno dos testes. Os testes não usam rede, credenciais nem o runtime do Prefect. Use mocks só para verificar um contrato de interface (por exemplo, que uma função recebeu a query correta), nunca para testar lógica de negócio. Para funções puras de transformação, `hypothesis` é permitido para verificar propriedades como idempotência e preservação do número de linhas.
 
 - Ponha cada teste no nível mais baixo que prova o comportamento. Não repita a mesma verificação em um nível mais alto.
 - Confira valores exatos. Não use `in` sobre texto, a não ser uma regex em texto gerado que seria frágil de comparar inteiro.
@@ -1159,8 +1184,7 @@ from pipelines.rj_secretaria__pipeline.helpers import parse_value
 
 @pytest.mark.parametrize(
     ("raw", "expected"),
-    [("1,5", 1.5), ("", None)],
-    ids=["decimal_comma", "empty"],
+    [pytest.param("1,5", 1.5, id="decimal_comma"), pytest.param("", None, id="empty")],
 )
 def test_parse_value(raw: str, expected: float | None) -> None:
     assert parse_value(raw) == expected

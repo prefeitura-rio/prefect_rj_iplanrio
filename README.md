@@ -401,7 +401,7 @@ Os testes de paridade (`tests/parity/`) rodam os seis motores de verdade: `Postg
 
 - O `prefect.yaml` define o `deployment`: parâmetros, agenda, infraestrutura e `secretName`. O CI usa esse arquivo para registrar os flows. Veja a [documentação do `Prefect`](https://docs.prefect.io/v3/how-to-guides/deployments/prefect-yaml).
 - O código e as dependências só da pipeline ficam no `Dockerfile` e no `pyproject.toml` dela.
-- `secretName` é o `Secret` do Kubernetes que o job monta. Use `prefect-jobs-secrets` em produção e `prefect-jobs-secrets-staging` em `staging`.
+- No `onprem-pool`, `secretName` é o `Secret` `pipelines-<pipeline>` que o job monta, e `namespace` é `pipelines-staging` ou `pipelines-prod`.
 - No `default-pool` o job lê os segredos direto do `Infisical`, sem `Secret` por pipeline no cluster. O comando é `python -m utils.secrets -- prefect flow-run execute`. O login usa o token do `ServiceAccount` do pod, e `INFISICAL_PATHS` lista as pastas do projeto `pipelines`, em ordem: `/<pipeline>`, as pastas de `/shared` e `/gke`. A primeira pasta que tem a chave vence, e uma variável do job nunca é trocada.
 - Os nomes usam só letras minúsculas, números e `_`:
   - pasta: `rj_<secretaria>__<pipeline>`
