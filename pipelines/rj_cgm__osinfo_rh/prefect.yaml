@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-cgm--osinfo_rh--staging
+  - name: rj-cgm--osinfo-rh--staging
     tags:
       - environment:staging
       - severity:medium
@@ -46,7 +46,7 @@ deployments:
         namespace: pipelines-staging
         secretName: pipelines-rj-cgm--osinfo-rh
         image_pull_policy: Always
-  - name: rj-cgm--osinfo_rh--prod
+  - name: rj-cgm--osinfo-rh--prod
     tags:
       - environment:prod
       - severity:medium

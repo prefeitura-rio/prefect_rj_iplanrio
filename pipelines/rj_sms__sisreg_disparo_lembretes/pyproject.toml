@@ -1,6 +1,6 @@
 [project]
 name = "rj_sms__sisreg_disparo_lembretes"
-version = "0.1.0"
+version = "1.0.0"
 description = "Pipeline SMS SISREG para disparo de lembretes de agendamentos"
 dependencies = [
     "prefect_rj_iplanrio",

@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-ssm--run_dbt--staging
+  - name: rj-ssm--run-dbt--staging
     tags:
       - environment:staging
       - severity:medium
@@ -45,7 +45,7 @@ deployments:
           INFISICAL_PROJECT_ID: 38db61c8-a9b7-433a-899b-55218586b57b
           INFISICAL_ENVIRONMENT: staging
           INFISICAL_PATHS: /rj_ssm__run_dbt,/gke
-  - name: rj-ssm--run_dbt--prod
+  - name: rj-ssm--run-dbt--prod
     tags:
       - environment:prod
       - severity:medium

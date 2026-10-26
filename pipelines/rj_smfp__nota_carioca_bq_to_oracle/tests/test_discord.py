@@ -1,7 +1,7 @@
-import json
-import math
 from dataclasses import replace
 from datetime import UTC, datetime
+from json import dumps, loads
+from math import nan
 from typing import final
 
 import httpx2
@@ -98,7 +98,7 @@ def total_chars(embed: dict[str, object]) -> int:
 
 
 @pytest.mark.parametrize(
-    ("fraction", "filled"), [(0.0, 0), (0.5, 10), (0.999, 19), (1.0, 20), (7.0, 20), (-1.0, 0), (math.nan, 0)]
+    ("fraction", "filled"), [(0.0, 0), (0.5, 10), (0.999, 19), (1.0, 20), (7.0, 20), (-1.0, 0), (nan, 0)]
 )
 def test_progress_bar_clamps_to_the_width(fraction: float, filled: int) -> None:
     # Given a fraction, in or out of range
@@ -131,7 +131,7 @@ def test_running_payload_has_state_color_link_fields_and_brt_footer() -> None:
     eta = next(field for field in list_fields(embed) if field["name"] == "🏁 Previsão de término")
     assert eta["value"] == "~12:40 (BRT)"
     assert payload["allowed_mentions"] == {"parse": []}
-    json.dumps(payload)
+    dumps(payload)
 
 
 def test_embed_without_url_or_eta_omits_them() -> None:
@@ -330,9 +330,9 @@ def test_first_publish_posts_with_wait_and_the_next_patches_the_same_message(clo
     # Then the first is POST ?wait=true and the second PATCHes /messages/777
     first, second = server.requests
     assert (first.method, first.url.params["wait"], str(first.url).split("?")[0]) == ("POST", "true", URL)
-    assert json.loads(first.content) == {"embeds": ["first"]}
+    assert loads(first.content) == {"embeds": ["first"]}
     assert (second.method, str(second.url)) == ("PATCH", f"{URL}/messages/777")
-    assert json.loads(second.content) == {"embeds": ["second"]}
+    assert loads(second.content) == {"embeds": ["second"]}
 
 
 def test_edits_are_throttled_and_force_bypasses_the_interval(clock: Clock) -> None:
@@ -350,7 +350,7 @@ def test_edits_are_throttled_and_force_bypasses_the_interval(clock: Clock) -> No
     # Then only the one past the interval goes out, and force goes out any time
     assert len(server.requests) == 2
     message.publish({"n": 4}, force=True)
-    assert [json.loads(request.content)["n"] for request in server.requests] == [1, 3, 4]
+    assert [loads(request.content)["n"] for request in server.requests] == [1, 3, 4]
 
 
 @pytest.mark.usefixtures("clock")
@@ -451,7 +451,7 @@ def test_announce_posts_a_standalone_message_and_swallows_failures(warnings: lis
     # Then the first is a new POST (never a PATCH), the failure is logged, and nothing
     # raised
     assert [request.method for request in server.requests] == ["POST", "POST", "POST"]
-    assert json.loads(server.requests[1].content) == {"content": "pronto"}
+    assert loads(server.requests[1].content) == {"content": "pronto"}
     assert len(warnings) == 1
 
 

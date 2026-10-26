@@ -1,7 +1,7 @@
 [project]
 name = "rj_crm__disparo_template"
-version = "0.1.0"
-description = "Pipeline de disparo de template"
+version = "1.0.0"
+description = "Send a templated WhatsApp message to the people of a query."
 dependencies = [
     "prefect_rj_iplanrio",
     "asyncssh",

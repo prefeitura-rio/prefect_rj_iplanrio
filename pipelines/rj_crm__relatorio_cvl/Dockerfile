@@ -8,8 +8,7 @@ COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 COPY ./src ./src/
 COPY ./packages ./packages/
 
-COPY ./pipelines/rj_crm__relatorio_cvl ./pipelines/rj_crm__relatorio_cvl/
-
 COPY ./pipelines/rj_crm__disparo_template ./pipelines/rj_crm__disparo_template/
+COPY ./pipelines/rj_crm__relatorio_cvl ./pipelines/rj_crm__relatorio_cvl/
 
 RUN uv sync --package rj_crm__relatorio_cvl

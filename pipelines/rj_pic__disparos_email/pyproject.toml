@@ -1,7 +1,7 @@
 [project]
 name = "rj_pic__disparos_email"
-version = "0.1.0"
-description = "Pipeline disparos_email da secretaria pic"
+version = "1.0.0"
+description = "Send an HTML mail to each recipient of a BigQuery table, via the Data Relay."
 dependencies = [
     "prefect_rj_iplanrio",
     "jinja2",

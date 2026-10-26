@@ -1,6 +1,6 @@
 [project]
 name = "rj_cor__meteorologia_redemet"
-version = "0.1.0"
+version = "1.0.0"
 description = "Pipeline para coleta de dados meteorológicos do REDEMET - COR"
 dependencies = [
     "prefect_rj_iplanrio",

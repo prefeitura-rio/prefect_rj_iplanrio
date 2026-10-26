@@ -4,15 +4,15 @@ Usage: python parity_docs.py couchdb|mongodb. It reads the connection data from 
 `env.json` of the lab folder, `PARITY_LAB`.
 """
 
-import json
-import socket
-import sys
-import time
 from base64 import b64encode
 from datetime import UTC, datetime
 from datetime import time as day_start
+from json import dumps, loads
 from os import environ
 from pathlib import Path
+from socket import create_connection
+from sys import argv
+from time import sleep
 from urllib.request import Request, urlopen
 
 from bson import Decimal128
@@ -20,7 +20,7 @@ from parity_dataset import rows
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
-ENV = json.loads((Path(environ.get("PARITY_LAB", "/tmp/toolkit-parity")) / "env.json").read_text())
+ENV = loads((Path(environ.get("PARITY_LAB", "/tmp/toolkit-parity")) / "env.json").read_text())
 
 
 def couchdb() -> None:
@@ -30,12 +30,12 @@ def couchdb() -> None:
     token = b64encode(f"{entry['user']}:{entry['password']}".encode()).decode()
 
     def call(method: str, path: str, body: object | None = None) -> object:
-        data = None if body is None else json.dumps(body).encode()
+        data = None if body is None else dumps(body).encode()
         request = Request(base + path, data=data, method=method)
         request.add_header("Authorization", f"Basic {token}")
         request.add_header("Content-Type", "application/json")
         with urlopen(request) as response:
-            return json.loads(response.read() or b"null")
+            return loads(response.read() or b"null")
 
     call("PUT", "/orders")
     documents = [
@@ -61,10 +61,10 @@ def mongodb() -> None:
 
     for _ in range(120):
         try:
-            socket.create_connection((entry["host"], entry["port"]), timeout=1).close()
+            create_connection((entry["host"], entry["port"]), timeout=1).close()
             break
         except OSError:
-            time.sleep(1)
+            sleep(1)
     else:
         raise SystemExit("mongod did not open its port")
 
@@ -81,7 +81,7 @@ def mongodb() -> None:
             client.admin.command("ping")
             break
         except PyMongoError:
-            time.sleep(1)
+            sleep(1)
     documents = [
         {
             "id": row["id"],
@@ -95,4 +95,4 @@ def mongodb() -> None:
 
 
 if __name__ == "__main__":
-    {"couchdb": couchdb, "mongodb": mongodb}[sys.argv[1]]()
+    {"couchdb": couchdb, "mongodb": mongodb}[argv[1]]()

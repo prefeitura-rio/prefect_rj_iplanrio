@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj_iplanrio__sisbicho_imagem--staging
+  - name: rj-iplanrio--sisbicho-images--staging
     tags:
       - environment:staging
       - severity:medium
@@ -55,7 +55,7 @@ deployments:
       storage:
         bucket: portal-do-cidadao
         prefix: animal/fotos_staging
-  - name: rj_iplanrio__sisbicho_imagem--prod
+  - name: rj-iplanrio--sisbicho-images--prod
     tags:
       - environment:prod
       - severity:medium

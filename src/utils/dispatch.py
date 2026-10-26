@@ -95,7 +95,7 @@ def read_expiration(raw: object) -> date | None:
         return None
 
     try:
-        return datetime.strptime(str(raw)[:10], "%Y-%m-%d").date()  # noqa: DTZ007
+        return datetime.strptime(str(raw)[:10], "%Y-%m-%d").date()  # noqa: DTZ007  # the cell has no time zone
     except ValueError:
         logger.warning("The limit date cannot be read, so there is no limit: value=%r", raw)
 

@@ -254,8 +254,12 @@ def test_filters_become_json_selectors(filters, expected) -> None:
 
 @pytest.mark.parametrize(
     "filters",
-    [["not json"], ["[1, 2]"], ['"text"'], ['{"a": 1}', ""]],
-    ids=["text", "a_list", "a_string", "an_empty_filter"],
+    [
+        pytest.param(["not json"], id="text"),
+        pytest.param(["[1, 2]"], id="a_list"),
+        pytest.param(['"text"'], id="a_string"),
+        pytest.param(['{"a": 1}', ""], id="an_empty_filter"),
+    ],
 )
 def test_a_filter_that_is_not_a_json_object_is_refused(filters) -> None:
     """Raise `ValueError` for a filter that is not a selector."""

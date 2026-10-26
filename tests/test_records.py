@@ -86,13 +86,27 @@ async def test_json_lines_load_as_rows_and_nested_values_stay_nested(tmp_path) -
     assert [(row["id"], row["nome"], row["tags"]) for row in table] == [(1, "Ana", ["a", "b"]), (2, "Bia", [])]
 
 
-@pytest.mark.parametrize("schema", [ItemModel, ItemData, ItemDict], ids=["model", "dataclass", "typeddict"])
+@pytest.mark.parametrize(
+    "schema",
+    [
+        pytest.param(ItemModel, id="model"),
+        pytest.param(ItemData, id="dataclass"),
+        pytest.param(ItemDict, id="typeddict"),
+    ],
+)
 def test_records_that_fit_a_schema_pass(schema) -> None:
     """Accept a Pydantic model, a dataclass and a `TypedDict`."""
     validate_records([{"id": 1, "nome": "Ana"}, {"id": 2, "nome": "Bia"}], schema)
 
 
-@pytest.mark.parametrize("schema", [ItemModel, ItemData, ItemDict], ids=["model", "dataclass", "typeddict"])
+@pytest.mark.parametrize(
+    "schema",
+    [
+        pytest.param(ItemModel, id="model"),
+        pytest.param(ItemData, id="dataclass"),
+        pytest.param(ItemDict, id="typeddict"),
+    ],
+)
 def test_a_record_that_does_not_fit_names_its_index_and_its_field(schema) -> None:
     """Raise at the first bad record, and name where it is."""
     records = [{"id": 1, "nome": "Ana"}, {"id": "dois", "nome": "Bia"}]

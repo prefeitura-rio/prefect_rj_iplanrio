@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-iplanrio--vigia_urbano--staging
+  - name: rj-iplanrio--vigia-urbano--staging
     tags:
       - environment:staging
       - severity:medium
@@ -46,7 +46,7 @@ deployments:
         namespace: pipelines-staging
         secretName: pipelines-rj-iplanrio--vigia-urbano
         image_pull_policy: Always
-  - name: rj-iplanrio--vigia_urbano--prod
+  - name: rj-iplanrio--vigia-urbano--prod
     tags:
       - environment:prod
       - severity:medium

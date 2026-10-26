@@ -89,7 +89,7 @@ deployments:
         select: raw_cadunico_agendamentos
       date:
     schedules:
-      - cron: "0 12 * * 1-5"
-        timezone: UTC
+      - cron: "0 9 * * 1-5"
+        timezone: America/Sao_Paulo
         active: true
         slug: daily-atualizacao-api-datametrica-agend-cadunico

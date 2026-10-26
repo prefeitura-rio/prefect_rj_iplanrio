@@ -1,7 +1,7 @@
 [project]
 name = "rj_cor__precipitacao_websirene"
-version = "0.1.0"
-description = "Pipeline precipitacao_websirene da rj_cor"
+version = "1.0.0"
+description = "Add the rain readings of the WebSirene stations to a BigQuery table."
 
 dependencies = [
     "prefect_rj_iplanrio",

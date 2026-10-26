@@ -1,7 +1,7 @@
 [project]
 name = "rj_smfp__porte_empresa"
-version = "0.1.0"
-description = "Pipeline porte_empresa da secretaria smfp"
+version = "1.0.0"
+description = "Dump the company size tables of SMFP from SQL Server to BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",
 ]

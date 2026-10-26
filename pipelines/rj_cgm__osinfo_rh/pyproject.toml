@@ -1,7 +1,7 @@
 [project]
 name = "rj_cgm__osinfo_rh"
-version = "0.1.0"
-description = "Pipeline osinfo_rh da secretaria cgm"
+version = "1.0.0"
+description = "Dump the OSINFO human resources tables of CGM from MySQL to BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",
 ]

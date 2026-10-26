@@ -17,13 +17,13 @@ ends. It publishes under the same lock as the other changes, so it never overwri
 the final message.
 """
 
-import asyncio
-import threading
 import time
+from asyncio import CancelledError
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from threading import Event, RLock, Thread, current_thread
 from typing import Literal, final
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import (
@@ -43,7 +43,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify_view import (
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr_progress import ProgressSnapshot
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.stages import Step, TableStep
 
-CANCELLATIONS = (KeyboardInterrupt, SystemExit, asyncio.CancelledError)
+CANCELLATIONS = (KeyboardInterrupt, SystemExit, CancelledError)
 DEFAULT_HEARTBEAT_SECONDS = 60.0
 HEARTBEAT_JOIN_TIMEOUT_SECONDS = 2.0
 
@@ -97,13 +97,13 @@ class LoadNotifier:
         self.started = time.monotonic()
         self.step_started = self.started
         self.table_started: dict[str, float] = {}
-        self.lock = threading.RLock()
+        self.lock = RLock()
         self.finalized = False
         self.warn = Warner()
         self.cancellations = config.cancellations
         self.heartbeat_seconds = config.heartbeat_seconds
-        self.heartbeat_stop = threading.Event()
-        self.heartbeat_thread: threading.Thread | None = None
+        self.heartbeat_stop = Event()
+        self.heartbeat_thread: Thread | None = None
         self.run_state = RunState(
             dataset_id=config.dataset_id,
             run_name=config.run_name,
@@ -191,7 +191,7 @@ class LoadNotifier:
                 return
             if self.heartbeat_thread is not None:
                 return
-            thread = threading.Thread(target=self.heartbeat_loop, name="discord-heartbeat", daemon=True)
+            thread = Thread(target=self.heartbeat_loop, name="discord-heartbeat", daemon=True)
             thread.start()
             self.heartbeat_thread = thread
 
@@ -220,7 +220,7 @@ class LoadNotifier:
         """
         self.heartbeat_stop.set()
         thread = self.heartbeat_thread
-        if thread is not None and thread is not threading.current_thread():
+        if thread is not None and thread is not current_thread():
             thread.join(timeout=HEARTBEAT_JOIN_TIMEOUT_SECONDS)
 
     @never_raises
@@ -375,7 +375,7 @@ class LoadNotifier:
 
         It finishes as a success, or as a failure or cancel before it raises again.
         """
-        global active  # noqa: PLW0603 - ponteiro de módulo restaurado ao sair
+        global active  # noqa: PLW0603  # the module pointer goes back when the block exits
         previous, active = active, self
         try:
             yield self

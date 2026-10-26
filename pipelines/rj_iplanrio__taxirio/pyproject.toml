@@ -1,6 +1,6 @@
 [project]
 name = "rj_iplanrio__taxirio"
-version = "0.1.0"
+version = "1.0.0"
 description = "Dumps the collections of the TaxiRio MongoDB to BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",

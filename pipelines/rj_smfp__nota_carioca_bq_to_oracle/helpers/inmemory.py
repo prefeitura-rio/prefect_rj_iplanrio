@@ -1,8 +1,8 @@
 """Populate the In-Memory of the table just loaded, so the swap finds data in memory."""
 
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from time import monotonic, sleep
 
 import oracledb
 
@@ -117,7 +117,7 @@ def wait_for_population(
     wait, summed over all the tables. `report` gets the progress messages. Return
     whether all the tables became whole in the In-Memory.
     """
-    deadline = time.monotonic() + timeout_seconds
+    deadline = monotonic() + timeout_seconds
     with connect(config) as connection, connection.cursor() as cursor:
         try:
             (area,) = fetch_rows(cursor, "get_inmemory_area", {})[0].values()
@@ -133,9 +133,9 @@ def wait_for_population(
                 report(status.description)
             if all(status.complete for status in statuses):
                 return True
-            if time.monotonic() >= deadline:
+            if monotonic() >= deadline:
                 report(
                     f"In-Memory não terminou de popular em {timeout_seconds / 60:.0f} min; a troca segue assim mesmo."
                 )
                 return False
-            time.sleep(poll_seconds)
+            sleep(poll_seconds)

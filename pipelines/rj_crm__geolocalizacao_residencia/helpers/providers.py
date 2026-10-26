@@ -149,7 +149,7 @@ def parse_waze(response: Response, today: str) -> Geocode | None:
     full_name = dig(first, "fullName") or dig(first, "name") or ""
     parts = str(full_name).split(", ")
     street, neighborhood = parts[0] if parts else "", parts[1] if len(parts) > 1 else ""
-    city = parts[2] if len(parts) > 2 else RIO_CONTEXT  # noqa: PLR2004
+    city = parts[2] if len(parts) > 2 else RIO_CONTEXT  # noqa: PLR2004  # the city is the third part
 
     return {
         "latitude": as_float(dig(first, "location", "lat")),

@@ -1,16 +1,17 @@
 """Load into Oracle with SQL*Loader in direct path, reading gzip CSV from GCS."""
 
-import gzip
-import os
-import re
-import shutil
-import subprocess
-import tempfile
-import threading
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from gzip import GzipFile
+from os import environ
 from pathlib import Path
+from re import MULTILINE
+from re import compile as compile_pattern
+from shutil import copyfileobj
+from subprocess import DEVNULL, PIPE, Popen
+from tempfile import TemporaryDirectory
+from threading import Thread
+from time import monotonic, sleep
 from typing import BinaryIO
 
 from toolkit.gcs import ObjectReader, create_store
@@ -31,7 +32,7 @@ SQLLDR_BIN = "sqlldr"
 COPY_BUFFER_BYTES = 1024 * 1024
 
 
-LOADED_PATTERN = re.compile(r"^\s*(\d+) Rows? successfully loaded\.", re.MULTILINE)
+LOADED_PATTERN = compile_pattern(r"^\s*(\d+) Rows? successfully loaded\.", MULTILINE)
 
 
 POLL_SECONDS = 0.5
@@ -117,8 +118,8 @@ def stream_blobs(
 
         for exported in files:
             raw = ObjectReader(store, exported.name)
-            with gzip.GzipFile(fileobj=CountingReader(raw, progress)) as unzipped:
-                shutil.copyfileobj(unzipped, target, COPY_BUFFER_BYTES)
+            with GzipFile(fileobj=CountingReader(raw, progress)) as unzipped:
+                copyfileobj(unzipped, target, COPY_BUFFER_BYTES)
             progress.add_file()
     except BaseException as error:
         errors.append(error)
@@ -142,7 +143,7 @@ def load_from_gcs(
     `RuntimeError` if a session fails.
     """
     groups = split_round_robin(job.files, max(job.sessions, 1))
-    env = {**os.environ, "NLS_LANG": "AMERICAN_AMERICA.AL32UTF8"}
+    env = {**environ, "NLS_LANG": "AMERICAN_AMERICA.AL32UTF8"}
     options = [
         "direct=true",
         f"parallel={'true' if len(groups) > 1 else 'false'}",
@@ -150,9 +151,9 @@ def load_from_gcs(
         "silent=header,feedback",
     ]
     bytes_total = sum(exported.size for exported in job.files)
-    started = time.monotonic()
+    started = monotonic()
 
-    with tempfile.TemporaryDirectory(prefix="sqlldr-") as workdir:
+    with TemporaryDirectory(prefix="sqlldr-") as workdir:
         work = Path(workdir)
         control = work / "load.ctl"
         control.write_text(build_control_file(config.schema, job.table, job.fields), encoding="utf-8")
@@ -163,7 +164,7 @@ def load_from_gcs(
         sessions_state = []
         for index, group in enumerate(groups):
             log_file = work / f"session-{index}.log"
-            process = subprocess.Popen(
+            process = Popen(
                 [
                     SQLLDR_BIN,
                     f"parfile={parfile}",
@@ -173,14 +174,14 @@ def load_from_gcs(
                     f"bad={work / f'session-{index}.bad'}",
                     *options,
                 ],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
+                stdin=PIPE,
+                stdout=DEVNULL,
+                stderr=PIPE,
                 env=env,
             )
             errors: list[BaseException] = []
             progress = SessionProgress()
-            writer = threading.Thread(target=stream_blobs, args=(job.bucket, group, process.stdin, progress, errors))
+            writer = Thread(target=stream_blobs, args=(job.bucket, group, process.stdin, progress, errors))
             writer.start()
             sessions_state.append((index, group, process, writer, errors, log_file, progress))
 
@@ -190,13 +191,13 @@ def load_from_gcs(
                 files_total=len(job.files),
                 bytes_done=sum(state[6].bytes_done for state in sessions_state),
                 bytes_total=bytes_total,
-                elapsed_seconds=time.monotonic() - started,
+                elapsed_seconds=monotonic() - started,
             )
 
         next_report = started + progress_interval_seconds
         while any(state[3].is_alive() for state in sessions_state):
-            time.sleep(POLL_SECONDS)
-            if on_progress and time.monotonic() >= next_report:
+            sleep(POLL_SECONDS)
+            if on_progress and monotonic() >= next_report:
                 on_progress(snapshot())
                 next_report += progress_interval_seconds
         if on_progress:
@@ -218,5 +219,5 @@ def load_from_gcs(
     if failures:
         raise RuntimeError(f"SQL*Loader falhou em {job.table}: {failures}")
     return LoadResult(
-        rows=sum(result.rows for result in results), sessions=results, elapsed_seconds=time.monotonic() - started
+        rows=sum(result.rows for result in results), sessions=results, elapsed_seconds=monotonic() - started
     )

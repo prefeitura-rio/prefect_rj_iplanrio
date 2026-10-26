@@ -1,7 +1,7 @@
 [project]
 name = "rj_smfp__iptu_inadimplentes"
-version = "0.1.0"
-description = "Pipeline iptu_inadimplentes da secretaria smfp"
+version = "1.0.0"
+description = "Dump the IPTU defaulters tables of SMFP from SQL Server to BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",
 ]

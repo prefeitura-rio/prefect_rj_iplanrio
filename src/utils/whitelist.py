@@ -117,7 +117,7 @@ class Whitelist:
 
         Raise `HTTPStatusError` for an error status.
         """
-        response = await self.client.request(method, path, headers={"Authorization": f"Bearer {self.token}"}, **options)  # pyright: ignore[reportArgumentType]
+        response = await self.client.request(method, path, headers={"Authorization": f"Bearer {self.token}"}, **options)  # pyright: ignore[reportArgumentType]  # `options` are the keyword arguments of the request
         response.raise_for_status()
 
         return read_json(response)

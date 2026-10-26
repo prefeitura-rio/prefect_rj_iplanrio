@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-cetrio--ocr_radar--staging
+  - name: rj-cetrio--ocr-radar--staging
     tags:
       - environment:staging
       - severity:medium

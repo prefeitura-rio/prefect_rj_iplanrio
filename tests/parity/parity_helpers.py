@@ -1,10 +1,10 @@
 """Helpers shared by the parity tests."""
 
-import tempfile
 from collections.abc import Callable
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from parity_dataset import Order
 from parity_dataset import rows as dataset_rows
@@ -54,7 +54,7 @@ def filters_for(engine: str, kind: str) -> list[str]:
 async def stage(name: str, rows: Rows, columns=(), **options: object) -> Table:
     """Write a chunk of `orders` through the engine of `name`, and return the table."""
     async with Engine.from_source(build_source(name, **options)) as engine:
-        with tempfile.TemporaryDirectory() as folder:
+        with TemporaryDirectory() as folder:
             target = Path(folder) / "out.parquet"
             await engine.materialize(target, rows, columns)
 

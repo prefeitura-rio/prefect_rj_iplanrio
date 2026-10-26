@@ -1,7 +1,7 @@
 [project]
 name = "rj_iplanrio__run_dbt"
-version = "0.1.0"
-description = "Pipeline run_dbt da secretaria iplanrio"
+version = "1.0.0"
+description = "Run a dbt command of the IplanRio queries repository."
 dependencies = [
     "prefect_rj_iplanrio",
 ]

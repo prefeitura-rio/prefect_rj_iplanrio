@@ -20,7 +20,7 @@ pull:
   - prefect.deployments.steps.set_working_directory:
       directory: /opt/prefect/prefect_rj_iplanrio
 deployments:
-  - name: rj_crm__relatorio_cvl--staging
+  - name: rj-crm--relatorio-cvl--staging
     tags:
       - environment:staging
       - severity:medium
@@ -47,7 +47,7 @@ deployments:
         table_id: receptivo_sessoes_24h
       dump_mode: append
 
-  - name: rj_crm__relatorio_cvl--prod
+  - name: rj-crm--relatorio-cvl--prod
     tags:
       - environment:prod
       - severity:medium

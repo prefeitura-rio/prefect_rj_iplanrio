@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-sme--brutos_gestao_escolar--staging
+  - name: rj-sme--brutos-gestao-escolar--staging
     tags:
       - environment:staging
       - severity:medium
@@ -46,7 +46,7 @@ deployments:
         namespace: pipelines-staging
         secretName: pipelines-rj-sme--brutos-gestao-escolar
         image_pull_policy: Always
-  - name: rj-sme--brutos_gestao_escolar--prod
+  - name: rj-sme--brutos-gestao-escolar--prod
     tags:
       - environment:prod
       - severity:medium

@@ -1,7 +1,7 @@
 [project]
 name = "rj_iplanrio__maintain_delta"
-version = "0.1.0"
-description = "Pipeline maintain_delta da secretaria iplanrio"
+version = "1.0.0"
+description = "Compact and clean the Delta tables of the raw layer in the bucket."
 dependencies = [
     "prefect_rj_iplanrio",
 ]

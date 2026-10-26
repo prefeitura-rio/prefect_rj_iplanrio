@@ -56,7 +56,7 @@ def test_a_model_with_the_features_in_another_order_is_refused() -> None:
             return list(reversed(FEATURES))
 
     with pytest.raises(ValueError, match="order of FEATURES"):
-        contribute(np.zeros((1, len(FEATURES))), Reordered())  # pyright: ignore[reportArgumentType]
+        contribute(np.zeros((1, len(FEATURES))), Reordered())  # pyright: ignore[reportArgumentType]  # a fake model stands in for the booster
 
 
 @pytest.mark.parametrize(

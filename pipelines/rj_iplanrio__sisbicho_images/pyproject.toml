@@ -1,7 +1,7 @@
 [project]
 name = "rj-iplanrio-sisbicho-images"
-version = "0.1.0"
-description = "Add your description here"
+version = "1.0.0"
+description = "Read the QR code and upload the photo of each new SISBICHO animal."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

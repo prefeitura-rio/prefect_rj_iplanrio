@@ -1,6 +1,6 @@
 [project]
 name = "rj_cor__precipitacao_alertario"
-version = "0.1.0"
+version = "1.0.0"
 description = "Pipeline para coleta de dados de precipitação e meteorologia do AlertaRio - COR"
 dependencies = [
     "prefect_rj_iplanrio",

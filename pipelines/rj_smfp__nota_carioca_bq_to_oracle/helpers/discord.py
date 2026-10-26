@@ -13,11 +13,11 @@ that is down to the timeout of one request (10 s) for each try. The URL of the w
 is a secret and never goes to the log.
 """
 
-import logging
-import threading
 import time
 from collections.abc import Callable, Mapping
 from functools import wraps
+from logging import INFO, WARNING, getLogger
+from threading import Lock
 from typing import final
 
 import httpx2
@@ -34,7 +34,7 @@ HTTP_NOT_FOUND = 404
 HTTP_RATE_LIMITED = 429
 HTTP_SUCCESS_MAX = 299
 DEFAULT_RETRY_AFTER_SECONDS = 5.0
-fallback_logger = logging.getLogger(__name__)
+fallback_logger = getLogger(__name__)
 
 
 def log_safely(message: str, level: str) -> None:
@@ -42,7 +42,7 @@ def log_safely(message: str, level: str) -> None:
     try:
         logger.info(message, level)
     except Exception:
-        fallback_logger.log(logging.WARNING if level == "warning" else logging.INFO, message)
+        fallback_logger.log(WARNING if level == "warning" else INFO, message)
 
 
 def warn(message: str) -> None:
@@ -138,7 +138,7 @@ class DiscordStatusMessage:
         self.next_allowed: float = 0.0
         self.failures: int = 0
         self.warn: Warner = Warner()
-        self.lock: threading.Lock = threading.Lock()
+        self.lock: Lock = Lock()
         if self.url is None:
             info(f"Notificações do Discord desligadas (parâmetro discord_notifications=false ou {WEBHOOK_ENV} vazia).")
 

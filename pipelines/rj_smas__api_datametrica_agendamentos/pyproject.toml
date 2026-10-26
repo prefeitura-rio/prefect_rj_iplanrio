@@ -1,6 +1,6 @@
 [project]
 name = "rj_smas__api_datametrica_agendamentos"
-version = "0.1.0"
+version = "1.0.0"
 description = "Pipeline API Datametrica agendamentos da secretaria smas"
 dependencies = [
     "prefect_rj_iplanrio",

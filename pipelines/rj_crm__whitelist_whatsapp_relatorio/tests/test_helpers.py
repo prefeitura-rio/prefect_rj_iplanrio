@@ -127,10 +127,12 @@ def test_the_recipients_come_from_a_comma_list(raw: str | None, expected: list[s
 @pytest.mark.parametrize(
     ("start", "end", "anchor", "now", "origin", "begin"),
     [
-        pytest.param("2026-09-14 09:00:00", "2026-09-15 09:00:00", None, moment(20), "parametros", moment(14)),
-        pytest.param(None, None, moment(15), moment(20), "agendamento", moment(14)),
-        pytest.param(None, None, None, moment(20, 12), "corte_local", moment(19)),
-        pytest.param(None, None, None, moment(20, 8), "corte_local", moment(18)),
+        pytest.param(
+            "2026-09-14 09:00:00", "2026-09-15 09:00:00", None, moment(20), "parametros", moment(14), id="explicit"
+        ),
+        pytest.param(None, None, moment(15), moment(20), "agendamento", moment(14), id="schedule_anchor"),
+        pytest.param(None, None, None, moment(20, 12), "corte_local", moment(19), id="cut_of_the_day"),
+        pytest.param(None, None, None, moment(20, 8), "corte_local", moment(18), id="cut_of_the_day_before"),
     ],
 )
 def test_the_window_comes_from_the_parameters_then_the_schedule_then_the_last_cut(

@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-pic--disparos_email--staging
+  - name: rj-pic--disparos-email--staging
     tags:
       - environment:staging
       - severity:medium
@@ -45,7 +45,7 @@ deployments:
           INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
           INFISICAL_ENVIRONMENT: staging
           INFISICAL_PATHS: /rj_pic__disparos_email,/gke
-  - name: rj-pic--disparos_email--prod
+  - name: rj-pic--disparos-email--prod
     tags:
       - environment:prod
       - severity:medium

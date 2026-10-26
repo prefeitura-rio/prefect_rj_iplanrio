@@ -1,6 +1,6 @@
-import json
 from dataclasses import replace
 from datetime import UTC, datetime
+from json import loads
 from typing import Literal, final
 
 import httpx2
@@ -48,7 +48,7 @@ class Discord:
 
     def handle(self, request: httpx2.Request) -> httpx2.Response:
         """Handle."""
-        self.calls.append((request.method, json.loads(request.content)))
+        self.calls.append((request.method, loads(request.content)))
         return httpx2.Response(200, json={"id": "42"})
 
     @property

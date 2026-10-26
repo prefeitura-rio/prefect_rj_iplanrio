@@ -122,7 +122,7 @@ def cut_text(text: str, limit: int = MAX_EXAMPLE_CHARS) -> str:
 
 def shade(paragraph: Paragraph, fill: str, border: str) -> None:
     """Give a paragraph a background and a border, as a block of code has."""
-    properties = paragraph._p.get_or_add_pPr()  # pyright: ignore[reportPrivateUsage]
+    properties = paragraph._p.get_or_add_pPr()  # pyright: ignore[reportPrivateUsage]  # python-docx has no public call for the paragraph properties
     shading = OxmlElement("w:shd")
     shading.set(qn("w:val"), "clear")
     shading.set(qn("w:color"), "auto")

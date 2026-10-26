@@ -217,7 +217,7 @@ def pair_test(changes: Mapping[str, Flags], failed: Flags, first: str, second: s
     difference = changes[first].astype(int) - changes[second].astype(int)
     result = ttest_ind(difference[failed], difference[~failed], equal_var=False)
 
-    return SignificanceTest(float(result.statistic), float(result.pvalue))  # pyright: ignore[reportAttributeAccessIssue]
+    return SignificanceTest(float(result.statistic), float(result.pvalue))  # pyright: ignore[reportAttributeAccessIssue]  # scipy types the result of the test loosely
 
 
 def simulate(raw: pl.DataFrame, phones: frozenset[str], new: Booster, production: Booster | None = None) -> Simulation:

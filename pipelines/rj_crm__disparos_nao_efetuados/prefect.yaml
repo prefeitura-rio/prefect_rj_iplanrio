@@ -46,12 +46,6 @@ deployments:
           INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
           INFISICAL_ENVIRONMENT: staging
           INFISICAL_PATHS: /rj_crm__disparos_nao_efetuados,/gke
-    schedules:
-      - cron: "0 15 * * *"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: daily-disparos-nao-efetuados
-
   - name: rj-crm--disparos-nao-efetuados--prod
     tags:
       - environment:prod

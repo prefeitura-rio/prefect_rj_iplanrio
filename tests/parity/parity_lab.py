@@ -1,7 +1,7 @@
 """The sources of the lab: one for each real engine, built from env.json."""
 
-import json
 from datetime import datetime
+from json import loads
 from os import environ
 from pathlib import Path
 
@@ -46,7 +46,7 @@ COUCH_SHAPE = Shape(
 
 def environment() -> dict[str, dict[str, object]]:
     """Return the connection data of the engines that are up."""
-    return json.loads(ENV_FILE.read_text()) if ENV_FILE.exists() else {}
+    return loads(ENV_FILE.read_text()) if ENV_FILE.exists() else {}
 
 
 def available() -> list[str]:

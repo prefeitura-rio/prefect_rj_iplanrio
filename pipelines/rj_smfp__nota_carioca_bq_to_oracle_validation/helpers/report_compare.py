@@ -1,6 +1,6 @@
 """Compare columns, partitions, indexes, synonyms and grants of BigQuery and Oracle."""
 
-import re
+from re import compile as compile_pattern
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import OracleColumn
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import (
@@ -16,7 +16,7 @@ STATUS_OK = "OK"
 STATUS_DIVERGE = "DIVERGE"
 
 
-DATE_BOUND_PATTERN = re.compile(r"^TO_DATE\('\s*([0-9-]+ [0-9:]+)'")
+DATE_BOUND_PATTERN = compile_pattern(r"^TO_DATE\('\s*([0-9-]+ [0-9:]+)'")
 
 
 def describe_column(column: OracleColumn | None) -> str:

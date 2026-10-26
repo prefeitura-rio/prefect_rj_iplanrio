@@ -34,6 +34,6 @@ def make_session() -> SessionFactory:
             "hsm_texto": "olá",
         } | changes
 
-        return Session(**base)  # pyright: ignore[reportArgumentType]
+        return Session(**base)  # pyright: ignore[reportArgumentType]  # the factory builds a TypedDict from a plain dict
 
     return build

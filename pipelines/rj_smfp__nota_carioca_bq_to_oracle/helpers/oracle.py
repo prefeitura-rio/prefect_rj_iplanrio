@@ -1,7 +1,7 @@
 """Access the target Oracle: configuration, protected creation and table counts."""
 
-import re
 from dataclasses import dataclass
+from re import compile as compile_pattern
 
 import oracledb
 
@@ -41,7 +41,7 @@ CROSS_SCHEMA_PRIVILEGES = (
 KEEPALIVE_MINUTES = 2
 
 
-IDENTIFIER_PATTERN = re.compile(r"^[A-Z][A-Z0-9_$#]{0,127}$")
+IDENTIFIER_PATTERN = compile_pattern(r"^[A-Z][A-Z0-9_$#]{0,127}$")
 
 
 @dataclass(frozen=True)

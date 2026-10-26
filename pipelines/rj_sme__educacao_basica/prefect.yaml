@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-sme--educacao_basica--staging
+  - name: rj-sme--educacao-basica--staging
     tags:
       - environment:staging
       - severity:medium
@@ -46,7 +46,7 @@ deployments:
         namespace: pipelines-staging
         secretName: pipelines-rj-sme--educacao-basica
         image_pull_policy: Always
-  - name: rj-sme--educacao_basica--prod
+  - name: rj-sme--educacao-basica--prod
     tags:
       - environment:prod
       - severity:medium

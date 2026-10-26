@@ -3,9 +3,9 @@
 The load goes to the idle one, and the swap only points the synonyms again.
 """
 
-import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from re import compile as compile_pattern
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import (
     MANAGED_TABLE_MARKER,
@@ -31,7 +31,7 @@ CONSUMER_GRANTS = (
 REPLACEABLE_OBJECT_TYPES = {"TABLE", "TABLE PARTITION", "TABLE SUBPARTITION", "SYNONYM"}
 
 
-SNAPSHOT_PATTERN = re.compile(r"snapshot do BigQuery de ([0-9-]+ [0-9:]+) UTC; carregada em ([0-9-]+ [0-9:]+) UTC")
+SNAPSHOT_PATTERN = compile_pattern(r"snapshot do BigQuery de ([0-9-]+ [0-9:]+) UTC; carregada em ([0-9-]+ [0-9:]+) UTC")
 
 
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"

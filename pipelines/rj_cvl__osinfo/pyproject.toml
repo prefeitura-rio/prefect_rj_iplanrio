@@ -1,7 +1,7 @@
 [project]
 name = "rj_cvl__osinfo"
-version = "0.1.0"
-description = "Pipeline osinfo da secretaria cvl"
+version = "1.0.0"
+description = "Dump the OSINFO tables of CVL from MySQL to BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",
 ]

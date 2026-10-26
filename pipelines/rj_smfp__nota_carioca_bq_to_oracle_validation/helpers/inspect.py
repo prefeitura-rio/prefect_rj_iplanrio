@@ -171,7 +171,7 @@ def swap_state(cursor: oracledb.Cursor, schema: str, base: str, bigquery_modifie
     )
 
 
-def validate_table(config: OracleConfig, request: ValidationRequest) -> TableReport:  # noqa: PLR0915
+def validate_table(config: OracleConfig, request: ValidationRequest) -> TableReport:  # noqa: PLR0915  # the report has one section for each check
     """Compare the table loaded in Oracle with the original table and with BigQuery.
 
     Return the report with the text sections and the total of divergences.

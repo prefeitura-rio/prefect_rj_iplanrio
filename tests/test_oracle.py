@@ -165,8 +165,12 @@ async def test_a_user_without_the_scn_grant_still_dumps(oracle, tmp_path, dump_o
 
 @pytest.mark.parametrize(
     "code",
-    [942, 1031, 41900, 1466],
-    ids=["no_privilege_942", "no_privilege_1031", "no_flashback_privilege_41900", "table_just_changed_1466"],
+    [
+        pytest.param(942, id="no_privilege_942"),
+        pytest.param(1031, id="no_privilege_1031"),
+        pytest.param(41900, id="no_flashback_privilege_41900"),
+        pytest.param(1466, id="table_just_changed_1466"),
+    ],
 )
 async def test_a_table_that_cannot_be_read_as_of_the_scn_is_read_without_it_once(
     oracle, tmp_path, code, dump_oracle

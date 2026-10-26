@@ -1,7 +1,7 @@
 [project]
 name = "rj_cetrio__ocr_radar"
-version = "0.1.0"
-description = "Pipeline ocr_radar da secretaria cetrio"
+version = "1.0.0"
+description = "Dump the OCR radar tables of CET-Rio from SQL Server to the raw layer in BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",
 ]

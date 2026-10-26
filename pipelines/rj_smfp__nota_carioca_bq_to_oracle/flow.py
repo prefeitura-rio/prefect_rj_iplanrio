@@ -1,6 +1,6 @@
 """Flow for rj_smfp__nota_carioca_bq_to_oracle."""
 
-import time
+from time import monotonic
 from typing import Literal, cast
 
 from prefect import flow
@@ -89,9 +89,9 @@ def rj_smfp__nota_carioca_bq_to_oracle(
         notifier.begin()
         dbt_finished_at = None
         if dbt_enabled:
-            dbt_started = time.monotonic()
+            dbt_started = monotonic()
             dbt_finished_at = run_dbt_task(options=dbt)
-            notifier.dbt_finished(time.monotonic() - dbt_started)
+            notifier.dbt_finished(monotonic() - dbt_started)
         tables = list_tables_task(source=source)
         notifier.set_tables(dict.fromkeys(tables, 1))
         if mode == "synonyms_only":

@@ -30,7 +30,7 @@ def make_alert() -> AlertFactory:
             "created_at": NOW - timedelta(minutes=10),
         } | changes
 
-        return Alert(**alert)  # pyright: ignore[reportArgumentType]
+        return Alert(**alert)  # pyright: ignore[reportArgumentType]  # the factory builds a TypedDict from a plain dict
 
     return build
 
@@ -57,6 +57,6 @@ def make_cluster() -> ClusterFactory:
             "severity": "alta",
         } | changes
 
-        return Cluster(**base)  # pyright: ignore[reportArgumentType]
+        return Cluster(**base)  # pyright: ignore[reportArgumentType]  # the factory builds a TypedDict from a plain dict
 
     return build

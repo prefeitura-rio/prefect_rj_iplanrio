@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-iplanrio--dados_mestres--staging
+  - name: rj-iplanrio--dados-mestres--staging
     tags:
       - environment:staging
       - severity:medium
@@ -45,7 +45,7 @@ deployments:
           INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
           INFISICAL_ENVIRONMENT: staging
           INFISICAL_PATHS: /rj_iplanrio__dados_mestres,/gke
-  - name: rj-iplanrio--dados_mestres--prod
+  - name: rj-iplanrio--dados-mestres--prod
     tags:
       - environment:prod
       - severity:medium

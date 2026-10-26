@@ -1,11 +1,11 @@
 """Constantes do passo opcional de dbt antes da carga."""
 
-import copy
+from copy import deepcopy
 
 DBT_FLOW_NAME = "rj-iplanrio--run-dbt"
 """The name of the flow in Prefect, `rj_iplanrio__run_dbt` with `_` as `-`."""
 
-DBT_DEPLOYMENT = f"{DBT_FLOW_NAME}/rj-iplanrio--run_dbt--prod"
+DBT_DEPLOYMENT = f"{DBT_FLOW_NAME}/rj-iplanrio--run-dbt--prod"
 """Deployment do flow de dbt, no formato ``<flow>/<deployment>``."""
 
 DBT_POLL_SECONDS = 30.0
@@ -28,4 +28,4 @@ def default_dbt_parameters() -> dict[str, object]:
     They are the parameters of the flow `rj_iplanrio__run_dbt`, and the caller may
     change them.
     """
-    return copy.deepcopy(DBT_DEFAULT_PARAMETERS)
+    return deepcopy(DBT_DEFAULT_PARAMETERS)

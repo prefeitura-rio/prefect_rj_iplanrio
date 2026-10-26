@@ -1,7 +1,7 @@
 [project]
 name = "rj_crm__run_dbt"
-version = "0.1.0"
-description = "Pipeline run_dbt da secretaria crm"
+version = "1.0.0"
+description = "Run a dbt command of the CRM queries repository."
 dependencies = [
     "prefect_rj_iplanrio",
 ]

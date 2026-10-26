@@ -1,6 +1,6 @@
 [project]
 name = "rj_crm__geolocalizacao_residencia"
-version = "0.1.0"
+version = "1.0.0"
 description = "Pipeline CRM para geolocalização de endereços residenciais com múltiplas estratégias"
 dependencies = [
     "prefect_rj_iplanrio",

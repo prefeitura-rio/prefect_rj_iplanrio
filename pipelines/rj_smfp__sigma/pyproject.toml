@@ -1,7 +1,7 @@
 [project]
 name = "rj_smfp__sigma"
-version = "0.1.0"
-description = "Pipeline sigma da secretaria smfp"
+version = "1.0.0"
+description = "Dump the SIGMA purchase tables of SMFP from Oracle to BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",
 ]

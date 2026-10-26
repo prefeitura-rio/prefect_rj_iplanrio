@@ -1,7 +1,7 @@
 [project]
 name = "rj_crm__relatorio_cvl"
-version = "0.1.0"
-description = "Pipeline de Relatório CVL"
+version = "1.0.0"
+description = "Build the 24 hour sessions of the receptive service and load them to BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",
 ]

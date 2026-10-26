@@ -28,7 +28,7 @@ def make_message() -> MessageFactory:
             "msg_texto": text,
             "msg_fonte": source,
         }
-        message.update(changes)  # pyright: ignore[reportCallIssue,reportArgumentType]
+        message.update(changes)  # pyright: ignore[reportCallIssue,reportArgumentType]  # the factory builds a TypedDict from a plain dict
 
         return message
 
@@ -50,7 +50,7 @@ def make_conversation() -> ConversationFactory:
             "text": text,
         } | changes
 
-        return Conversation(**base)  # pyright: ignore[reportArgumentType]
+        return Conversation(**base)  # pyright: ignore[reportArgumentType]  # the factory builds a TypedDict from a plain dict
 
     return build
 

@@ -1,9 +1,9 @@
 """Modelos da estrutura física de uma tabela: partições, índices e plano."""
 
-import re
 from dataclasses import dataclass, field
+from re import compile as compile_pattern
 
-INDEX_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_$#]{0,127}$")
+INDEX_NAME_PATTERN = compile_pattern(r"^[A-Z][A-Z0-9_$#]{0,127}$")
 
 
 # O Oracle cria I_SNAP$_<mview> sozinho para o fast refresh de views materializadas;
@@ -22,10 +22,10 @@ FUNCTION_BASED_INDEX_TYPE = "FUNCTION-BASED NORMAL"
 
 # Identificadores entre aspas duplas, como o dicionário do Oracle grava as colunas
 # dentro de uma expressão de índice.
-QUOTED_IDENTIFIER_PATTERN = re.compile(r'"([^"]+)"')
+QUOTED_IDENTIFIER_PATTERN = compile_pattern(r'"([^"]+)"')
 
 
-STRING_LITERAL_PATTERN = re.compile(r"'(?:[^']|'')*'")
+STRING_LITERAL_PATTERN = compile_pattern(r"'(?:[^']|'')*'")
 
 
 USABLE_INDEX_STATUSES = ("VALID", "N/A")

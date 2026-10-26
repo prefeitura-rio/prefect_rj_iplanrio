@@ -44,7 +44,7 @@ def build_api(handler: object, calls: list[Request]) -> WetalkieApi:
 
     def serve(request: Request) -> Response:
         calls.append(request)
-        return handler(request)  # pyright: ignore[reportCallIssue]
+        return handler(request)  # pyright: ignore[reportCallIssue]  # the handler stands in for the transport callback
 
     return WetalkieApi(AsyncClient(transport=MockTransport(serve), base_url=URL), "users/login", ("user", "secret"))
 

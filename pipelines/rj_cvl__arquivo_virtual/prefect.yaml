@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj_cvl__arquivo_virtual--staging
+  - name: rj-cvl--arquivo-virtual--staging
     tags:
       - environment:staging
       - severity:medium
@@ -46,7 +46,7 @@ deployments:
         namespace: pipelines-staging
         secretName: pipelines-rj-cvl--arquivo-virtual
         image_pull_policy: Always
-  - name: rj_cvl__arquivo_virtual--prod
+  - name: rj-cvl--arquivo-virtual--prod
     tags:
       - environment:prod
       - severity:medium

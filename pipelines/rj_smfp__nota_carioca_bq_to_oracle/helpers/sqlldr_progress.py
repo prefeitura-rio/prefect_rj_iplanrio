@@ -1,8 +1,8 @@
 """Progresso da carga com SQL*Loader: contagem de bytes lidos e texto do andamento."""
 
-import threading
 from dataclasses import dataclass, field
 from io import UnsupportedOperation
+from threading import Lock
 from typing import Protocol, final
 
 GIGABYTE = 1024**3
@@ -33,7 +33,7 @@ class SessionProgress:
 
     bytes_done: int = 0
     files_done: int = 0
-    lock: threading.Lock = field(default_factory=threading.Lock)
+    lock: Lock = field(default_factory=Lock)
 
     def add_bytes(self, amount: int) -> None:
         """Soma bytes lidos."""

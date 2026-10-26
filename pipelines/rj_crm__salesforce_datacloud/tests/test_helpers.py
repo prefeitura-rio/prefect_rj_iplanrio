@@ -201,7 +201,7 @@ def test_a_window_is_formatted_for_a_log() -> None:
 )
 def test_the_windows_of_a_run_follow_its_mode(window: dict[str, object], starts: list[str], count: int) -> None:
     """Plan one window, or one for each day of a reprocess."""
-    spans = plan_spans(window, NOW)  # pyright: ignore[reportArgumentType]
+    spans = plan_spans(window, NOW)  # pyright: ignore[reportArgumentType]  # the test passes a plain dict as the window
 
     assert [span.start for span in spans] == starts
     assert len(spans) == count
@@ -225,7 +225,7 @@ def test_the_windows_of_a_run_follow_its_mode(window: dict[str, object], starts:
 def test_a_reprocess_that_does_not_make_sense_is_refused(window: dict[str, object], message: str) -> None:
     """Raise before anything runs."""
     with pytest.raises(ValueError, match=message):
-        plan_spans(window, NOW)  # pyright: ignore[reportArgumentType]
+        plan_spans(window, NOW)  # pyright: ignore[reportArgumentType]  # the test passes a plain dict as the window
 
 
 def test_the_feeds_have_unique_names_and_a_query_file() -> None:

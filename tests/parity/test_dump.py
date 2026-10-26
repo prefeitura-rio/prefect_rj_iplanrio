@@ -1,9 +1,9 @@
 """`dump_to_delta` end to end on every engine, into a local Delta table."""
 
-import json
 from asyncio import sleep as sleep_async
 from base64 import b64encode
 from datetime import date
+from json import dumps, loads
 from pathlib import Path
 from time import sleep as sleep_blocking
 from urllib.request import Request, urlopen
@@ -98,11 +98,11 @@ def couchdb_update(number: int, nome: str) -> None:
     token = b64encode(f"{entry['user']}:{entry['password']}".encode()).decode()
 
     def call(method: str, body: object | None = None):
-        request = Request(base, data=None if body is None else json.dumps(body).encode(), method=method)
+        request = Request(base, data=None if body is None else dumps(body).encode(), method=method)
         request.add_header("Authorization", f"Basic {token}")
         request.add_header("Content-Type", "application/json")
         with urlopen(request) as response:
-            return json.loads(response.read())
+            return loads(response.read())
 
     document = call("GET")
     document["nome"] = nome

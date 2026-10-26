@@ -26,7 +26,7 @@ def connect() -> Resource:
 
 def list_files(drive: Resource, query: str) -> Files:
     """Return the id and name of the files that a Drive query finds, in all drives."""
-    api = drive.files()  # pyright: ignore[reportAttributeAccessIssue]
+    api = drive.files()  # pyright: ignore[reportAttributeAccessIssue]  # the Drive client builds its methods at run time
     answer = api.list(
         q=query, fields="files(id, name)", spaces="drive", supportsAllDrives=True, includeItemsFromAllDrives=True
     ).execute()
@@ -52,7 +52,7 @@ def confirm_root(drive: Resource, root_id: str) -> None:
     that name gets the files.
     """
     try:
-        api = drive.files()  # pyright: ignore[reportAttributeAccessIssue]
+        api = drive.files()  # pyright: ignore[reportAttributeAccessIssue]  # the Drive client builds its methods at run time
         api.get(fileId=root_id, fields="id", supportsAllDrives=True).execute()
     except HttpError as error:
         raise RuntimeError(f"The folder {root_id!r} is not reachable: check that it is shared (Editor)") from error
@@ -64,7 +64,7 @@ def ensure_folder(drive: Resource, root_id: str, name: str) -> str:
         return folder_id
 
     body = {"name": name, "mimeType": DRIVE_FOLDER_MIME, "parents": [root_id]}
-    api = drive.files()  # pyright: ignore[reportAttributeAccessIssue]
+    api = drive.files()  # pyright: ignore[reportAttributeAccessIssue]  # the Drive client builds its methods at run time
     folder = api.create(body=body, fields="id", supportsAllDrives=True).execute()
     logger.info("Folder created: %s", name)
 
@@ -74,7 +74,7 @@ def ensure_folder(drive: Resource, root_id: str, name: str) -> str:
 def upload(drive: Resource, folder_id: str, name: str, content: bytes, mime_type: str) -> None:
     """Upload a file to a folder."""
     media = MediaIoBaseUpload(BytesIO(content), mimetype=mime_type, resumable=False)
-    api = drive.files()  # pyright: ignore[reportAttributeAccessIssue]
+    api = drive.files()  # pyright: ignore[reportAttributeAccessIssue]  # the Drive client builds its methods at run time
     api.create(
         body={"name": name, "parents": [folder_id]}, media_body=media, fields="id", supportsAllDrives=True
     ).execute()

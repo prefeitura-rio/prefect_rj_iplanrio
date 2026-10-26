@@ -1,7 +1,7 @@
 [project]
 name = "rj_crm__disparos_nao_efetuados"
-version = "0.1.0"
-description = "Pipeline de disparo de template"
+version = "1.0.0"
+description = "Check the active campaigns that sent nothing today, save it and tell Discord."
 dependencies = [
     "prefect_rj_iplanrio",
 ]

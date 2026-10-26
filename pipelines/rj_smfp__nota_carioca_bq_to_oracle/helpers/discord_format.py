@@ -4,8 +4,8 @@ This file is the same in both Nota Carioca pipelines, and it imports nothing fro
 `pipelines.*`.
 """
 
-import math
 from datetime import datetime, timedelta, timezone
+from math import isnan
 
 BRT = timezone(timedelta(hours=-3), "America/Sao_Paulo")
 BAR_WIDTH = 20
@@ -31,14 +31,14 @@ def progress_bar(fraction: float, width: int = BAR_WIDTH) -> str:
     A `fraction` below 0 (or NaN) counts as 0, and above 1 it counts as 1. `width` is in
     characters.
     """
-    safe = 0.0 if math.isnan(fraction) else min(max(fraction, 0.0), 1.0)
+    safe = 0.0 if isnan(fraction) else min(max(fraction, 0.0), 1.0)
     filled = int(safe * width)
     return "█" * filled + "░" * (width - filled)
 
 
 def format_percent(fraction: float) -> str:
     """Formata a fração como porcentagem com vírgula decimal, limitada a 0-100%."""
-    safe = 0.0 if math.isnan(fraction) else min(max(fraction, 0.0), 1.0)
+    safe = 0.0 if isnan(fraction) else min(max(fraction, 0.0), 1.0)
     return f"{safe * 100:.1f}%".replace(".", ",")
 
 

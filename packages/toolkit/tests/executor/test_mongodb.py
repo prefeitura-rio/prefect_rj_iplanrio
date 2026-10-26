@@ -1,5 +1,5 @@
-import sys
 from datetime import UTC, date, datetime
+from sys import modules
 from types import ModuleType, SimpleNamespace
 from typing import cast
 
@@ -289,10 +289,10 @@ async def test_a_dump_describes_the_columns_of_the_schema(duckdb_memory) -> None
 def shapes(monkeypatch) -> ModuleType:
     """Put a module with a schema, one without `_id` and a value that is no schema."""
     module = ModuleType("mongo_shapes_of_the_test")
-    setattr(module, "GOOD", SCHEMA)  # noqa: B010
-    setattr(module, "NO_ID", Schema({"nome": str}))  # noqa: B010
-    setattr(module, "NOT_A_SCHEMA", "text")  # noqa: B010
-    monkeypatch.setitem(sys.modules, "mongo_shapes_of_the_test", module)
+    setattr(module, "GOOD", SCHEMA)  # noqa: B010  # the name is a constant of the fake module
+    setattr(module, "NO_ID", Schema({"nome": str}))  # noqa: B010  # the name is a constant of the fake module
+    setattr(module, "NOT_A_SCHEMA", "text")  # noqa: B010  # the name is a constant of the fake module
+    monkeypatch.setitem(modules, "mongo_shapes_of_the_test", module)
 
     return module
 

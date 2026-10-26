@@ -1,8 +1,9 @@
-import threading
-import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from threading import Condition, Thread
+from threading import enumerate as list_threads
+from time import sleep
 from typing import final, override
 
 import pytest
@@ -37,7 +38,7 @@ class RecordingMessage(DiscordStatusMessage):
         self.publishes: list[Publish] = []
         self.announcements: list[Mapping[str, object]] = []
         self.on_publish: Callable[[bool], None] | None = on_publish
-        self.changed: threading.Condition = threading.Condition()
+        self.changed: Condition = Condition()
 
     @override
     def publish(self, payload: Mapping[str, object], force: bool = False) -> None:
@@ -80,9 +81,9 @@ def make(
     return LoadNotifier(config, message)
 
 
-def heartbeat_threads() -> set[threading.Thread]:
+def heartbeat_threads() -> set[Thread]:
     """Return the heartbeat threads."""
-    return {thread for thread in threading.enumerate() if thread.name == THREAD_NAME and thread.is_alive()}
+    return {thread for thread in list_threads() if thread.name == THREAD_NAME and thread.is_alive()}
 
 
 def fields_by_name(payload: Mapping[str, object]) -> dict[str, str]:
@@ -190,7 +191,7 @@ def test_heartbeat_stops_when_the_run_is_finalized(finish: Callable[[LoadNotifie
     assert message.publishes[-1].force
     assert len(message.announcements) == 1
     published = len(message.publishes)
-    time.sleep(2 * INTERVAL)
+    sleep(2 * INTERVAL)
     assert len(message.publishes) == published
 
 
@@ -203,7 +204,7 @@ def run_until_beat(notifier: LoadNotifier, message: RecordingMessage, *, fails: 
             raise RuntimeError("sqlldr exited 1")
 
 
-@pytest.mark.parametrize("fails", [False, True], ids=["normal exit", "exception"])
+@pytest.mark.parametrize("fails", [pytest.param(False, id="normal_exit"), pytest.param(True, id="exception")])
 def test_heartbeat_stops_when_the_guard_exits(*, fails: bool) -> None:
     # Given a notifier that begins inside the guard and beats at least once
     """Check that heartbeat stops when the guard exits."""
@@ -219,7 +220,7 @@ def test_heartbeat_stops_when_the_guard_exits(*, fails: bool) -> None:
     # Then the thread is gone and the message stopped receiving publishes
     assert not heartbeat_threads() - before
     published = len(message.publishes)
-    time.sleep(2 * INTERVAL)
+    sleep(2 * INTERVAL)
     assert len(message.publishes) == published
 
 

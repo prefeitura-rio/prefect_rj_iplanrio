@@ -1,6 +1,6 @@
 [project]
 name = "rj_crm__salesforce_api"
-version = "0.1.0"
+version = "1.0.0"
 description = "Pipeline genérica para ingestão de rotas da API REST do Salesforce Marketing Cloud"
 dependencies = [
     "prefect_rj_iplanrio",

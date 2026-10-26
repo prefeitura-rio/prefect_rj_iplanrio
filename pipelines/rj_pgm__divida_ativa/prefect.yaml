@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-pgm--divida_ativa--staging
+  - name: rj-pgm--divida-ativa--staging
     tags:
       - environment:staging
       - severity:medium
@@ -46,7 +46,7 @@ deployments:
         namespace: pipelines-staging
         secretName: pipelines-rj-pgm--divida-ativa
         image_pull_policy: Always
-  - name: rj-pgm--divida_ativa--prod
+  - name: rj-pgm--divida-ativa--prod
     tags:
       - environment:prod
       - severity:medium

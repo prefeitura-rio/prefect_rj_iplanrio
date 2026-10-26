@@ -44,12 +44,6 @@ deployments:
           INFISICAL_PATHS: /rj_crm__salesforce_datacloud,/gke
     parameters:
       dataset_id: brutos_salesforce_staging
-    schedules:
-      - cron: "*/15 * * * *"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: datacloud-teste-15min
-
   - name: rj-crm--salesforce-datacloud--prod
     tags:
       - environment:prod

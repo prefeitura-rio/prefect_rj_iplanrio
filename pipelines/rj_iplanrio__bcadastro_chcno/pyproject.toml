@@ -1,6 +1,6 @@
 [project]
 name = "rj_iplanrio__bcadastro_chcno"
-version = "0.1.0"
+version = "1.0.0"
 description = "Dumps the works (CNO) database of the bcadastro CouchDB to BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",

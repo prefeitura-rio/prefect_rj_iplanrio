@@ -3,17 +3,17 @@
 The fields come from BigQuery.
 """
 
-import re
 from dataclasses import dataclass
 from decimal import Decimal
 from math import ceil
+from re import compile as compile_pattern
 from typing import Literal
 
-COLUMN_NAME_PATTERN = re.compile(r"^[A-Z_][A-Z0-9_$#]{0,127}$")
-SIMPLE_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_$#]{0,127}$")
+COLUMN_NAME_PATTERN = compile_pattern(r"^[A-Z_][A-Z0-9_$#]{0,127}$")
+SIMPLE_NAME_PATTERN = compile_pattern(r"^[A-Z][A-Z0-9_$#]{0,127}$")
 CHARACTER_TYPES = ("VARCHAR2", "CHAR", "NVARCHAR2", "NCHAR")
 ROWID_TYPES = ("ROWID", "UROWID")
-TIMESTAMP_TYPE_PATTERN = re.compile(r"^TIMESTAMP\(\d\)( WITH TIME ZONE)?$")
+TIMESTAMP_TYPE_PATTERN = compile_pattern(r"^TIMESTAMP\(\d\)( WITH TIME ZONE)?$")
 # Data guardada como texto no BigQuery é sempre ``AAAA-MM-DDTHH:MI:SS`` (19 caracteres,
 # sem fração, fuso ou espaço). O campo ``DATE`` com máscara é convertido pelo próprio
 # SQL*Loader, sem expressão SQL por linha. O ``T`` literal vai entre aspas duplas

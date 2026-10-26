@@ -1,6 +1,6 @@
 [project]
 name = "rj_crm__agentforce_classificacao_llm"
-version = "0.1.0"
+version = "1.0.0"
 description = "Classificação inicial por LLM (Bifrost/Gemini) das sessões do Agentforce (WhatsApp) -> BigQuery"
 dependencies = [
     "prefect_rj_iplanrio",

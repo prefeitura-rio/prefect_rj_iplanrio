@@ -1,7 +1,7 @@
 """Helpers of rj_setur__turismo_fluxo_visitantes."""
 
-import re
 from collections.abc import Mapping, Sequence
+from re import search, sub
 
 import gspread
 from google.auth.credentials import Credentials
@@ -14,7 +14,7 @@ from utils.types import DumpMode
 
 def extract_year_from_filename(filename: str) -> str:
     """Extract year from filename ending with _YYYY pattern."""
-    year_match = re.search(r"_(\d{4})$", filename)
+    year_match = search(r"_(\d{4})$", filename)
     return year_match.group(1) if year_match else "unknown"
 
 
@@ -39,8 +39,8 @@ def get_base_table_name(worksheet_title: str, suffix: str | None) -> str:
 def normalize_to_bigquery_table_name(name: str) -> str:
     """Normalize name to valid BigQuery table name."""
     normalized_name = unidecode(name.lower())
-    normalized_name = re.sub(r"[^a-z0-9_]", "_", normalized_name)
-    normalized_name = re.sub(r"_+", "_", normalized_name)
+    normalized_name = sub(r"[^a-z0-9_]", "_", normalized_name)
+    normalized_name = sub(r"_+", "_", normalized_name)
     return normalized_name.strip("_")
 
 

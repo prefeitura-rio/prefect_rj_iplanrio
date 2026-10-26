@@ -1,7 +1,7 @@
 [project]
 name = "rj_iplanrio__dados_mestres"
-version = "0.1.0"
-description = "Pipeline dados_mestres da secretaria iplanrio"
+version = "1.0.0"
+description = "Dump the master data layers of IplanRio from ArcGIS to BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",
 ]

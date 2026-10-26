@@ -46,21 +46,3 @@ deployments:
         namespace: pipelines-staging
         secretName: pipelines-rj-smfp--iptu-inadimplentes
         image_pull_policy: Always
-    schedules:
-      - interval: 86400
-        anchor_date: '2026-01-01T01:00:00'
-        timezone: America/Sao_Paulo
-        slug: perfil_inadimplente_v2
-        active: false
-        parameters:
-          table:
-            dataset_id: iptu_inadimplentes
-            table_id: perfil_inadimplente_v2
-          read:
-            query: |
-              SELECT *
-                          FROM DBINAD.IPTU.IPTU;
-          dump_mode: overwrite
-          options:
-            columns:
-              add_timestamp: true

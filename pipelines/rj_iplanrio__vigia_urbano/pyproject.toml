@@ -1,7 +1,7 @@
 [project]
 name = "rj_iplanrio__vigia_urbano"
-version = "0.1.0"
-description = "Pipeline vigia_urbano da secretaria iplanrio"
+version = "1.0.0"
+description = "Dump the occurrence form tables of Vigia Urbano from MySQL to BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",
 ]

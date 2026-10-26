@@ -63,7 +63,7 @@ def test_the_search_keys_are_the_ones_of_the_space() -> None:
 
     recorder = Recorder()
 
-    training.search_space(recorder)  # pyright: ignore[reportArgumentType]
+    training.search_space(recorder)  # pyright: ignore[reportArgumentType]  # a fake stands in for the Optuna trial and the booster
 
     assert tuple(recorder.names) == SEARCH_KEYS
     assert Trial is not None
@@ -99,12 +99,12 @@ def test_the_shap_sample_is_capped_and_repeats(make_booster: Callable[[int], obj
     booster = make_booster(0)
     matrix = np.random.default_rng(1).random((50, len(FEATURES)))
 
-    first = sample_shap(booster, matrix, size=10)  # pyright: ignore[reportArgumentType]
-    second = sample_shap(booster, matrix, size=10)  # pyright: ignore[reportArgumentType]
+    first = sample_shap(booster, matrix, size=10)  # pyright: ignore[reportArgumentType]  # a fake stands in for the Optuna trial and the booster
+    second = sample_shap(booster, matrix, size=10)  # pyright: ignore[reportArgumentType]  # a fake stands in for the Optuna trial and the booster
 
     assert first.features.shape == (10, len(FEATURES))
     assert np.array_equal(first.features, second.features)
-    assert sample_shap(booster, matrix, size=500).features.shape[0] == 50  # pyright: ignore[reportArgumentType]
+    assert sample_shap(booster, matrix, size=500).features.shape[0] == 50  # pyright: ignore[reportArgumentType]  # a fake stands in for the Optuna trial and the booster
 
 
 def test_a_training_gives_a_model_with_the_metrics_and_the_phones(

@@ -1,6 +1,6 @@
 [project]
 name = "rj_cor__precipitacao_inea"
-version = "0.1.0"
+version = "1.0.0"
 description = "Pipeline para coleta de dados de precipitação e fluviometria do INEA - COR"
 
 dependencies = [

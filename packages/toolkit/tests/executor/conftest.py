@@ -1,4 +1,3 @@
-import sys
 from base64 import b64decode, b64encode
 from collections.abc import Iterator
 from dataclasses import replace
@@ -7,6 +6,7 @@ from importlib import import_module
 from importlib.util import find_spec
 from json import dumps, loads
 from pathlib import Path
+from sys import modules
 from threading import Thread
 from types import ModuleType
 from typing import TypedDict, override
@@ -399,7 +399,7 @@ def shapes(monkeypatch, shout_row) -> Shape:
     shape = Shape(arrow_schema([("id", arrow_string())]), shout_row)
     module = ModuleType("shapes_of_the_test")
     module.__dict__.update(SHOUT=shape, NOT_A_SHAPE="text")
-    monkeypatch.setitem(sys.modules, "shapes_of_the_test", module)
+    monkeypatch.setitem(modules, "shapes_of_the_test", module)
 
     return shape
 

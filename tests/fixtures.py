@@ -7,7 +7,6 @@ container. `conftest.py` registers this module as a plugin, so a test asks for a
 by name.
 """
 
-import sys
 from collections import deque
 from collections.abc import AsyncGenerator, Callable, Iterator, Mapping, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -20,6 +19,7 @@ from json import dumps, loads
 from multiprocessing import get_context
 from pathlib import Path
 from re import findall, search
+from sys import modules
 from threading import Thread
 from types import ModuleType, SimpleNamespace
 from typing import ClassVar, Self, TypedDict, Unpack, cast, override
@@ -1084,6 +1084,6 @@ def schemas(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     """Put a module with the three kinds of schema, and a name that is no type."""
     module = ModuleType("schemas_of_the_test")
     module.__dict__.update(MODEL=ItemModel, DATA=ItemData, DICT=ItemDict, NOT_A_TYPE="text")
-    monkeypatch.setitem(sys.modules, "schemas_of_the_test", module)
+    monkeypatch.setitem(modules, "schemas_of_the_test", module)
 
     return module

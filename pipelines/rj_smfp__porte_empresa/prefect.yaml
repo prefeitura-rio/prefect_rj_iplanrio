@@ -46,28 +46,3 @@ deployments:
         namespace: pipelines-staging
         secretName: pipelines-rj-smfp--porte-empresa
         image_pull_policy: Always
-    schedules:
-      - interval: 86400
-        anchor_date: '2026-01-01T01:00:00'
-        timezone: America/Sao_Paulo
-        slug: situacao_cadastral
-        active: false
-        parameters:
-          table:
-            dataset_id: porte_empresa
-            table_id: situacao_cadastral
-          read:
-            query: |
-              SELECT
-                              CNPJ_basico,
-                              CNPJ_ordem,
-                              CNPJ_dv,
-                              RazaoSocial,
-                              cd_PorteEmpresa,
-                              cd_SituacaoCadastral,
-                              dt_SituacaoCadastral
-                          FROM SDI.ReceitaFederal.Vw_PorteEmpresa_Sigma
-          dump_mode: append
-          options:
-            columns:
-              add_timestamp: true

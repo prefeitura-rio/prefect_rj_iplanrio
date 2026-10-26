@@ -187,6 +187,6 @@ def compile_rules(code: str) -> dict[str, Callable[[str], bool]]:
 
         namespace: dict[str, object] = {"__builtins__": SAFE_BUILTINS, "re": re, "unicodedata": unicodedata}
         exec(unparse(Module(body=[node], type_ignores=[])), namespace)
-        compiled[node.name] = namespace[node.name]  # pyright: ignore[reportArgumentType]
+        compiled[node.name] = namespace[node.name]  # pyright: ignore[reportArgumentType]  # the namespace holds the compiled functions
 
     return compiled

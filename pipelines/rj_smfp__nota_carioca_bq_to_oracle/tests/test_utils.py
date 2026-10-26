@@ -1,8 +1,8 @@
-import io
 from asyncio import run
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from typing import final
 
 import pytest
@@ -567,7 +567,7 @@ def test_progress_message_before_start_and_after_all_files_sent() -> None:
 def test_counting_reader_tracks_bytes_read() -> None:
     """Check that counting reader tracks bytes read."""
     progress = SessionProgress()
-    reader = CountingReader(io.BytesIO(b"x" * 10), progress)
+    reader = CountingReader(BytesIO(b"x" * 10), progress)
     assert reader.read(4) == b"xxxx"
     assert reader.read() == b"xxxxxx"
     assert reader.read() == b""

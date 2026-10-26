@@ -130,7 +130,7 @@ async def extract_training_task() -> pl.DataFrame:
 @task
 async def train_task(frame: pl.DataFrame, n_trials: int, champion: Champion | None) -> Training:
     """Search the hyperparameters, measure the held-out set and fit the final model."""
-    return await to_thread(train, frame, n_trials, champion.metadata.get("hiperparametros") if champion else None)  # pyright: ignore[reportArgumentType]
+    return await to_thread(train, frame, n_trials, champion.metadata.get("hiperparametros") if champion else None)  # pyright: ignore[reportArgumentType]  # the metadata holds JSON values
 
 
 @task

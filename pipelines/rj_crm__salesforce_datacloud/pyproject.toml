@@ -1,6 +1,6 @@
 [project]
 name = "rj_crm__salesforce_datacloud"
-version = "0.2.0"
+version = "1.0.0"
 description = "Pipeline Salesforce Data Cloud (Agentforce, Messaging, eventos WhatsApp) → BigQuery via CRM REST e Data Cloud Query API"
 dependencies = [
     "prefect_rj_iplanrio",

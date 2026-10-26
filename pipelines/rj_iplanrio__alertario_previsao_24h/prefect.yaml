@@ -77,3 +77,4 @@ deployments:
     schedules:
       - cron: "*/30 * * * *"
         timezone: America/Sao_Paulo
+        slug: every-30-minutes

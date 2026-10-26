@@ -1,7 +1,7 @@
 [project]
 name = "rj_segur__forca_municipal"
-version = "0.1.0"
-description = "Pipeline forca_municipal da secretaria rj-segur"
+version = "1.0.0"
+description = "Read a table of the Forca Municipal API and load it to BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",
     "fastkml>=1.4.0",

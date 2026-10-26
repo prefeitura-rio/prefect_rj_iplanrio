@@ -72,7 +72,7 @@ def make_relay() -> Callable[..., Relay]:
             **options,
         }
 
-        return Relay(**values)  # pyright: ignore[reportArgumentType]
+        return Relay(**values)  # pyright: ignore[reportArgumentType]  # the factory builds a dataclass from a plain dict
 
     return build
 

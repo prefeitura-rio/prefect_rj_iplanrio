@@ -1,6 +1,6 @@
 [project]
 name = "rj_smfp__adm_instrumentos_firmados"
-version = "0.1.0"
+version = "1.0.0"
 description = "Pipeline adm instrumentos firmados da secretaria smfp"
 dependencies = [
     "prefect_rj_iplanrio",

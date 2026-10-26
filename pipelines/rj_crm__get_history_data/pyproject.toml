@@ -1,6 +1,6 @@
 [project]
 name = "rj_crm__get_history_data"
-version = "0.1.0"
+version = "1.0.0"
 description = "Pipeline CRM para extração de Data Extensions históricas do Salesforce Marketing Cloud"
 dependencies = [
     "prefect_rj_iplanrio",

@@ -1,7 +1,7 @@
 [project]
 name = "rj_ssm__run_dbt"
-version = "0.1.0"
-description = "Pipeline run_dbt da secretaria ssm"
+version = "1.0.0"
+description = "Run a dbt command of the SSM queries repository."
 dependencies = [
     "prefect_rj_iplanrio",
 ]

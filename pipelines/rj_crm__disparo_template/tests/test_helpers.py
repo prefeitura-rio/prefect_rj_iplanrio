@@ -113,7 +113,7 @@ async def test_a_failure_of_the_server_reaches_the_flow(
 )
 def test_the_success_flag_of_the_api_is_read(value: object, expected: bool) -> None:
     """Accept a bool or the text true."""
-    assert is_success(value) is expected  # pyright: ignore[reportArgumentType]
+    assert is_success(value) is expected  # pyright: ignore[reportArgumentType]  # the test passes values of any type
 
 
 def test_a_value_is_escaped_for_sfmc() -> None:
