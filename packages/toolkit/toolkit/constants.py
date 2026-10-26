@@ -1,14 +1,10 @@
 """Every constant of the toolkit."""
 
+import re
 from collections.abc import Mapping
-from re import compile as compile_pattern
 from typing import Final, LiteralString
 
-from pyarrow import binary as arrow_binary
-from pyarrow import float32
-from pyarrow import float64 as arrow_float64
-from pyarrow import string as arrow_string
-from pyarrow import timestamp as arrow_timestamp
+import pyarrow as pa
 
 PREFECT_LOGGER: Final = "prefect"
 """The logger whose tree carries every Prefect log and every toolkit log."""
@@ -58,7 +54,7 @@ DELTA_CASTS: Final[Mapping[str, LiteralString]] = {
 }
 """The DuckDB types that Delta cannot hold, with the type a dump casts each to."""
 
-TEXT_TYPE: Final = compile_pattern(r"VARCHAR|MSSQL_N?(VAR)?CHAR\(\d+\)")
+TEXT_TYPE: Final = re.compile(r"VARCHAR|MSSQL_N?(VAR)?CHAR\(\d+\)")
 """The DuckDB text types: `VARCHAR` and the sized ones of the SQL Server extension."""
 
 TIMEZONE: Final = "America/Sao_Paulo"
@@ -203,26 +199,26 @@ on without the number.
 """
 
 ORACLE_EXPRESSIONS: Final = {
-    "DB_TYPE_BINARY_FLOAT": ("plain", float32()),
-    "DB_TYPE_BINARY_DOUBLE": ("plain", arrow_float64()),
-    "DB_TYPE_VARCHAR": ("plain", arrow_string()),
-    "DB_TYPE_CHAR": ("plain", arrow_string()),
-    "DB_TYPE_NVARCHAR": ("plain", arrow_string()),
-    "DB_TYPE_NCHAR": ("plain", arrow_string()),
-    "DB_TYPE_CLOB": ("plain", arrow_string()),
-    "DB_TYPE_NCLOB": ("plain", arrow_string()),
-    "DB_TYPE_LONG": ("plain", arrow_string()),
-    "DB_TYPE_RAW": ("plain", arrow_binary()),
-    "DB_TYPE_BLOB": ("plain", arrow_binary()),
-    "DB_TYPE_LONG_RAW": ("plain", arrow_binary()),
-    "DB_TYPE_DATE": ("plain", arrow_timestamp("us")),
-    "DB_TYPE_TIMESTAMP": ("plain", arrow_timestamp("us")),
-    "DB_TYPE_TIMESTAMP_TZ": ("utc", arrow_timestamp("us")),
-    "DB_TYPE_TIMESTAMP_LTZ": ("utc", arrow_timestamp("us")),
-    "DB_TYPE_INTERVAL_YM": ("text", arrow_string()),
-    "DB_TYPE_INTERVAL_DS": ("text", arrow_string()),
-    "DB_TYPE_ROWID": ("rowid", arrow_string()),
-    "DB_TYPE_UROWID": ("rowid", arrow_string()),
-    "DB_TYPE_XMLTYPE": ("xml", arrow_string()),
+    "DB_TYPE_BINARY_FLOAT": ("plain", pa.float32()),
+    "DB_TYPE_BINARY_DOUBLE": ("plain", pa.float64()),
+    "DB_TYPE_VARCHAR": ("plain", pa.string()),
+    "DB_TYPE_CHAR": ("plain", pa.string()),
+    "DB_TYPE_NVARCHAR": ("plain", pa.string()),
+    "DB_TYPE_NCHAR": ("plain", pa.string()),
+    "DB_TYPE_CLOB": ("plain", pa.string()),
+    "DB_TYPE_NCLOB": ("plain", pa.string()),
+    "DB_TYPE_LONG": ("plain", pa.string()),
+    "DB_TYPE_RAW": ("plain", pa.binary()),
+    "DB_TYPE_BLOB": ("plain", pa.binary()),
+    "DB_TYPE_LONG_RAW": ("plain", pa.binary()),
+    "DB_TYPE_DATE": ("plain", pa.timestamp("us")),
+    "DB_TYPE_TIMESTAMP": ("plain", pa.timestamp("us")),
+    "DB_TYPE_TIMESTAMP_TZ": ("utc", pa.timestamp("us")),
+    "DB_TYPE_TIMESTAMP_LTZ": ("utc", pa.timestamp("us")),
+    "DB_TYPE_INTERVAL_YM": ("text", pa.string()),
+    "DB_TYPE_INTERVAL_DS": ("text", pa.string()),
+    "DB_TYPE_ROWID": ("rowid", pa.string()),
+    "DB_TYPE_UROWID": ("rowid", pa.string()),
+    "DB_TYPE_XMLTYPE": ("xml", pa.string()),
 }
 """The Oracle types of a fixed form, with their expression kind and Arrow type."""

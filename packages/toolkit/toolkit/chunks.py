@@ -209,6 +209,7 @@ def select_pending(
 
     ranges = [chunk for chunk in cut if chunk != NULL_CHUNK]
     recent = {chunk.key for chunk in ranges[max(len(ranges) - lookback, 0) :]}
+
     return [
         chunk
         for chunk in cut
