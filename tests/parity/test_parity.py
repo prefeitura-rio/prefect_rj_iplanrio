@@ -21,6 +21,7 @@ pytestmark = pytest.mark.parity
 
 
 async def describe(engine_name: str) -> dict[str, str]:
+    """Describe."""
     async with Engine.from_source(build_source(engine_name)) as engine:
         return await engine.describe()
 

@@ -25,6 +25,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.report_comp
 
 
 def field(name: str, type_: str, mode: str = "NULLABLE") -> dict[str, str]:
+    """Return the field."""
     return {"name": name, "type": type_, "mode": mode}
 
 
@@ -37,6 +38,7 @@ def ora(
     scale: int | None = None,
     nullable: bool = False,
 ) -> OracleColumn:
+    """Return the ora."""
     return OracleColumn(name, data_type, length, char_used, precision, scale, nullable)
 
 
@@ -201,6 +203,7 @@ def test_compare_partitions_flags_unpartitioned_missing_and_extra_partitions() -
 
 
 def index(name: str, degree: str = "1", status: str = "N/A", columns: tuple[str, ...] = ("A", "B")) -> IndexDefinition:
+    """Return the index."""
     return IndexDefinition(name, "NORMAL", False, columns, "LOCAL", "DFEN_BIG_IDX", degree=degree, status=status)
 
 

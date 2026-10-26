@@ -54,6 +54,7 @@ class Pacer:
     """Keep a least time between two sends."""
 
     def __init__(self, interval: float, clock: Clock = monotonic, pause: Pause = sleep) -> None:
+        """Keep the interval, the clock and the pause."""
         self.interval = interval
         self.clock = clock
         self.pause = pause

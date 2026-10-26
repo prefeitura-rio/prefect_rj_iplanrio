@@ -82,10 +82,12 @@ def table_block(table: TableView, status: RunStatus) -> str:
 
 
 def count_text(side: CountSide) -> str:
+    """Return the label of a side and its count."""
     return f"{side.label} {format_count(side.rows) if side.rows is not None else MISSING_COUNT}"
 
 
 def count_separator(left: CountSide, right: CountSide) -> str:
+    """Return `=` if the two counts are equal, `≠` if not, and `·` if one is missing."""
     if left.rows is None or right.rows is None:
         return " · "
     return " = " if left.rows == right.rows else " ≠ "
@@ -94,9 +96,9 @@ def count_separator(left: CountSide, right: CountSide) -> str:
 def format_validation_line(line: ValidationLine) -> str:
     """Format the comparison of a table as one line.
 
-    ✅ when all the counts exist and are equal, ⬜ if none was measured yet, and ❌ in the
-    other cases (they differ, or a side is missing and shown as `—`). Between two sides:
-    `=` if equal, `≠` if different, `·` if one is missing.
+    ✅ when all the counts exist and are equal, ⬜ if none was measured yet, and ❌ in
+    the other cases (they differ, or a side is missing and shown as `—`). Between two
+    sides: `=` if equal, `≠` if different, `·` if one is missing.
 
     ```text
     ✅ DPS · Oracle (SCN) 10 = BigQuery 10 · Σ VALOR iguais
@@ -114,6 +116,7 @@ def count_validated(lines: tuple[ValidationLine, ...]) -> int:
 
 
 def count_chain(sides: tuple[CountSide, ...]) -> str:
+    """Return the sides as one text, with a separator between each pair."""
     if not sides:
         return ""
     parts = [count_text(sides[0])]
@@ -173,6 +176,7 @@ def build_fields(view: RunView) -> list[dict[str, object]]:
 
 
 def embed_size(embed: dict[str, object], fields: list[dict[str, object]]) -> int:
+    """Return the characters that Discord counts in an embed."""
     footer = embed["footer"]
     footer_text = footer["text"] if isinstance(footer, dict) else ""
     field_chars = sum(len(str(field["name"])) + len(str(field["value"])) for field in fields)

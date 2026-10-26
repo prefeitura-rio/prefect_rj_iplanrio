@@ -163,15 +163,18 @@ reportUnusedParameter = false # Prefect calls a retry check and a hook with a fi
 target-version = "py314"
 line-length = 120
 indent-width = 4
+extend-exclude = ["templates"] # cookiecutter files with Jinja inside the Python syntax
 
 [tool.ruff.lint]
 fixable = ["ALL"]
 select = [
   "A",
+  "ANN",
   "ARG",
   "B",
   "C4",
   "C90",
+  "D",
   "DTZ",
   "E",
   "F",
@@ -182,8 +185,18 @@ select = [
   "PTH",
   "RUF",
   "T20",
+  "TID",
   "W",
 ]
+ignore = [
+  "D104", # an __init__.py is always empty
+  "D203", # blank line before the class docstring: conflicts with D211
+  "D213", # summary on the second line: conflicts with D212
+  "ANN401", # basedpyright reports every use of Any
+]
+
+[tool.ruff.lint.pycodestyle]
+max-doc-length = 88 # a docstring or a comment line holds up to 88 columns, as the guide says
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "prefect_rj_iplanrio".msg = "The package is gone: use `utils` and `toolkit`."
@@ -194,6 +207,17 @@ select = [
 "toolkit.tasks".msg = "The module is gone: use `utils.tasks`."
 "toolkit.prefect".msg = "The module is gone: write schedules in the `prefect.yaml`."
 "pandas".msg = "Use Polars."
+"requests".msg = "Use httpx2."
+"geopandas".msg = "Use DuckDB spatial."
+"basedosdados".msg = "Use toolkit.bigquery and toolkit.gcs."
+"google.cloud.storage".msg = "Use toolkit.gcs (obstore)."
+"boto3".msg = "Use toolkit.gcs (obstore)."
+"psycopg2".msg = "Read databases through toolkit.executor.sources."
+"pymysql".msg = "Read databases through toolkit.executor.sources."
+"pyodbc".msg = "Read databases through toolkit.executor.sources."
+"aiobotocore".msg = "Use toolkit.gcs (obstore)."
+"obstore".msg = "Import obstore only in toolkit/gcs.py."
+"deltalake".msg = "Import deltalake only in toolkit/delta.py."
 
 [tool.ruff.lint.per-file-ignores]
 "src/utils/tasks.py" = [
@@ -204,26 +228,58 @@ select = [
   "ARG001",
 ] # Prefect calls a retry check and a hook with a fixed signature, and these use some of the arguments only
 "tests/**" = [
+  "ANN001",
+  "ANN002",
+  "ANN003",
+  "ANN202",
+  "ANN204",
   "C901",
+  "D100",
+  "D101",
+  "D106",
   "PLR2004",
-] # the expected values of an assertion are the point of a test, and a fake server has one branch for each route
+  "TID251",
+] # fixtures arrive untyped, a fake returns what the test sets, a test module and its fake classes have no docstring, a test imports the drivers to set up or check a fake, the expected values of an assertion are the point of a test, and a fake server has one branch for each route
 "pipelines/*/tests/**" = [
+  "ANN001",
+  "ANN002",
+  "ANN003",
+  "ANN202",
+  "ANN204",
+  "D100",
+  "D101",
+  "D106",
+  "DTZ001",
   "PLR0913",
   "PLR0917",
   "PLR2004",
-] # the expected values of an assertion are the point of a test, and a factory of test data takes many options
+  "TID251",
+] # fixtures arrive untyped, a fake returns what the test sets, a test module and its fake classes have no docstring, a test imports the drivers to set up or check a fake, the expected values of an assertion are the point of a test (some are naive, as the source gives them), and a factory of test data takes many options
 "tests/fixtures.py" = [
   "A002",
+  "ANN201",
   "ARG002",
   "ARG003",
   "ARG005",
   "N802",
   "N815",
-] # a fake follows the names and the signatures of the real API (`http.server`, the BigQuery client)
+] # a fake follows the names and the signatures of the real API (`http.server`, the BigQuery client), and a fixture returns a factory whose type the tests infer
 "tests/conftest.py" = [
   "ARG002",
   "ARG005",
 ] # a fake follows the signature of the real API, and ignores some arguments
+"src/utils/delta.py" = [
+  "TID251",
+] # it types the store that toolkit.gcs creates
+"pipelines/rj_iplanrio__sisbicho_images/helpers.py" = [
+  "TID251",
+] # it types the store that toolkit.gcs creates
+"pipelines/rj_crm__modelo_qualidade_telefone/**" = [
+  "TID251",
+] # the bucket of the models is in rj-crm-registry, which the HMAC key of toolkit.gcs cannot read
+"**/conftest.py" = [
+  "ANN201",
+] # a fixture returns a factory or a fake whose type the tests infer
 
 [tool.ruff.format]
 quote-style = "double"

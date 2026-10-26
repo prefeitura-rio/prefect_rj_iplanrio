@@ -15,10 +15,10 @@ from pipelines.rj_iplanrio__cor_alerts_aggregator.types import Cluster, Environm
 
 
 def number_lines(values: Sequence[str], placeholder: str) -> str:
-    """Return the values as numbered lines, with the placeholder for a blank one.
+    r"""Return the values as numbered lines, with the placeholder for a blank one.
 
     ```python
-    number_lines(["Rua A", " "], "none")  # "1. Rua A\\n2. none"
+    number_lines(["Rua A", " "], "none")  # "1. Rua A\n2. none"
     ```
     """
     return "\n".join(

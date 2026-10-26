@@ -132,8 +132,8 @@ def test_the_message_groups_the_alerts_by_day_after_the_synoptic_text() -> None:
     )
 
     assert format_alert_message(alerts, "Chuva.", date(2025, 11, 27)) == (
-        "⚠️ Previsão de chuva – próximos dias (AlertaRio)\n\n"
-        "Quadro sinótico – 27/11/2025\nChuva.\n\n"
+        "⚠️ Previsão de chuva \u2013 próximos dias (AlertaRio)\n\n"
+        "Quadro sinótico \u2013 27/11/2025\nChuva.\n\n"
         "27/11/2025\n• Manhã: Pancadas de chuva isoladas\n• Tarde: Pancadas de chuva\n\n"
         "28/11/2025\n• Manhã: Pancadas de chuva"
     )

@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+from pathlib import Path
 
 import pytest
 from pydantic import JsonValue
@@ -229,8 +230,6 @@ def test_a_reprocess_that_does_not_make_sense_is_refused(window: dict[str, objec
 
 def test_the_feeds_have_unique_names_and_a_query_file() -> None:
     """Check the configuration at test time, as the old loader did at import."""
-    from pathlib import Path
-
     names = [item.name for item in FEEDS]
     queries = Path(__file__).parent.parent / "queries"
 

@@ -63,6 +63,7 @@ class CountingReader:
     """
 
     def __init__(self, raw: Readable, progress: SessionProgress) -> None:
+        """Keep the source file and the counters of the session."""
         self.raw = raw
         self.progress = progress
 

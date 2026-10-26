@@ -98,6 +98,7 @@ class RunWaiter:
         return status.end_time or datetime.now(UTC)
 
     def poll(self, run_id: str, started: float) -> RunStatus | None:
+        """Read the run state until it ends, and return it, or nothing on a timeout."""
         while True:
             status = self.runs.read_status(run_id)
             elapsed = self.monotonic() - started
@@ -109,5 +110,6 @@ class RunWaiter:
             self.sleep(min(self.poll_seconds, self.timeout_seconds - elapsed))
 
     def cancel_run(self, run_id: str, message: str) -> None:
+        """Report the message and cancel the run."""
         self.report(message)
         self.runs.cancel(run_id)

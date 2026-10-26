@@ -47,16 +47,19 @@ class Discord:
         self.transport = httpx2.MockTransport(self.handle)
 
     def handle(self, request: httpx2.Request) -> httpx2.Response:
+        """Handle."""
         self.calls.append((request.method, json.loads(request.content)))
         return httpx2.Response(200, json={"id": "42"})
 
     @property
     def embeds(self) -> list[dict[str, object]]:
+        """Return the embeds."""
         embeds = [body["embeds"] for _, body in self.calls if "embeds" in body]
         return [embed[0] for embed in embeds if isinstance(embed, list)]
 
     @property
     def standalone(self) -> list[str]:
+        """Return the standalone."""
         return [str(body["content"]) for _, body in self.calls if "content" in body]
 
 
@@ -66,6 +69,7 @@ def make(
     run_dbt: bool = False,
     mode: Literal["full", "synonyms_only"] = "full",
 ) -> LoadNotifier:
+    """Make."""
     config = NotifierConfig("nota_carioca_staging", None, "nota_carioca_staging", tables, 2, run_dbt, mode, True)
     message = (
         DiscordStatusMessage("https://discord.example/api/webhooks/1/t", transport=discord.transport)
@@ -76,6 +80,7 @@ def make(
 
 
 def snapshot(done: int, total: int = 100 * GIB, elapsed: float = 100.0) -> sqlldr_progress.ProgressSnapshot:
+    """Return the snapshot."""
     return sqlldr_progress.ProgressSnapshot(
         files_done=3, files_total=10, bytes_done=done, bytes_total=total, elapsed_seconds=elapsed
     )
@@ -83,10 +88,12 @@ def snapshot(done: int, total: int = 100 * GIB, elapsed: float = 100.0) -> sqlld
 
 @pytest.fixture(autouse=True)
 def quiet_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run the quiet warnings."""
     monkeypatch.setattr(discord_module, "warn", silence)
 
 
 def state(**overrides: object) -> RunState:
+    """Return the state."""
     base = RunState(
         dataset_id="ds",
         run_name="ds",
@@ -212,11 +219,17 @@ def test_failure_in_a_table_marks_it_and_the_step_and_reraises() -> None:
     """Check that failure in a table marks it and the step and reraises."""
     discord = Discord()
     notifier = make(discord)
-    with pytest.raises(RuntimeError, match="sqlldr"), notifier.guard():
-        notifier.begin()
-        notifier.enter(Step.TABLES)
-        notifier.table_step("B", TableStep.LOAD)
-        raise RuntimeError("sqlldr exited 1")
+
+    def fail_in_table_b() -> None:
+        """Die while the load of table B runs."""
+        with notifier.guard():
+            notifier.begin()
+            notifier.enter(Step.TABLES)
+            notifier.table_step("B", TableStep.LOAD)
+            raise RuntimeError("sqlldr exited 1")
+
+    with pytest.raises(RuntimeError, match="sqlldr"):
+        fail_in_table_b()
     # Then the final message is red, names the table and stage, and the standalone line
     # has the short error
     last = discord.embeds[-1]
@@ -232,10 +245,16 @@ def test_interruption_finalizes_as_cancelled() -> None:
     """Check that interruption finalizes as cancelled."""
     discord = Discord()
     notifier = make(discord)
-    with pytest.raises(KeyboardInterrupt), notifier.guard():
-        notifier.begin()
-        notifier.enter(Step.EXPORT)
-        raise KeyboardInterrupt
+
+    def interrupt_export() -> None:
+        """Interrupt the run during the export."""
+        with notifier.guard():
+            notifier.begin()
+            notifier.enter(Step.EXPORT)
+            raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        interrupt_export()
     # Then the message is gray and says cancelled in the export step
     assert discord.embeds[-1]["color"] == COLOR_CANCELLED
     assert "cancelado na etapa **Exportação do BigQuery**" in discord.standalone[0]
@@ -291,12 +310,14 @@ def test_a_bug_in_the_notifier_never_reaches_the_flow(monkeypatch: pytest.Monkey
 
 
 def fields_by_name(embed: dict[str, object]) -> dict[str, str]:
+    """Return the fields by name."""
     fields = embed["fields"]
     assert isinstance(fields, list)
     return {field["name"]: field["value"] for field in fields}
 
 
 def count_tables(notifier: LoadNotifier, names: tuple[str, ...], validated: tuple[str, ...]) -> None:
+    """Count tables."""
     notifier.set_bigquery_rows(dict.fromkeys(names, 73891343))
     for name in validated:
         notifier.set_physical_table(name, f"BQLOAD_{name}_B")
@@ -329,13 +350,19 @@ def test_failure_keeps_validated_tables_and_shows_what_is_known_of_the_failing_o
     """Keep the validated tables, and show what is known of the failing one."""
     discord = Discord()
     notifier = make(discord)
-    with pytest.raises(RuntimeError, match="sqlldr"), notifier.guard():
-        notifier.begin()
-        notifier.enter(Step.TABLES)
-        count_tables(notifier, ("A", "B"), ("A",))
-        notifier.set_physical_table("B", "BQLOAD_B_A")
-        notifier.table_step("B", TableStep.LOAD)
-        raise RuntimeError("sqlldr exited 1")
+
+    def fail_in_table_b() -> None:
+        """Die in the load of B, after A was validated and the slot of B is known."""
+        with notifier.guard():
+            notifier.begin()
+            notifier.enter(Step.TABLES)
+            count_tables(notifier, ("A", "B"), ("A",))
+            notifier.set_physical_table("B", "BQLOAD_B_A")
+            notifier.table_step("B", TableStep.LOAD)
+            raise RuntimeError("sqlldr exited 1")
+
+    with pytest.raises(RuntimeError, match="sqlldr"):
+        fail_in_table_b()
     # Then A shows its full comparison, B has dashes for what never happened, and the
     # summary says 1/2
     section = fields_by_name(discord.embeds[-1])["🔎 Validação"].splitlines()
@@ -375,16 +402,19 @@ def test_running_and_synonyms_only_views_have_no_validation_section() -> None:
 
 
 def fake_artifact(**kwargs: object) -> str:
+    """Fake artifact."""
     del kwargs
 
     return "artifact"
 
 
 def fake_progress(**kwargs: object) -> None:
+    """Fake progress."""
     del kwargs
 
 
 def fake_config() -> None:
+    """Fake config."""
     return None
 
 

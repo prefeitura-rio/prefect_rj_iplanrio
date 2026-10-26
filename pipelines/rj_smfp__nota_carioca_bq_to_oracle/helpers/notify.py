@@ -92,6 +92,7 @@ class LoadNotifier:
     """
 
     def __init__(self, config: NotifierConfig, message: DiscordStatusMessage | None) -> None:
+        """Keep the config and the message, and start the state of the run."""
         self.message = message
         self.started = time.monotonic()
         self.step_started = self.started
@@ -142,6 +143,7 @@ class LoadNotifier:
             )
 
     def push(self, force: bool) -> None:
+        """Publish the current view, and never raise."""
         if self.message is None:
             return
         try:
@@ -152,6 +154,7 @@ class LoadNotifier:
         self.message.publish(payload, force=force)
 
     def change(self, force: bool = True, **changes: object) -> None:
+        """Change the state of the run, and publish it."""
         with self.lock:
             if self.finalized:
                 return
@@ -162,6 +165,7 @@ class LoadNotifier:
             self.push(force)
 
     def change_table(self, name: str, force: bool = True, **changes: object) -> None:
+        """Change the state of one table, and publish it."""
         with self.lock:
             table = self.run_state.tables.get(name) or TableState(name)
             self.change(force, tables={**self.run_state.tables, name: replace(table, **changes)}, current_table=name)
@@ -192,6 +196,7 @@ class LoadNotifier:
             self.heartbeat_thread = thread
 
     def heartbeat_loop(self) -> None:
+        """Publish the view every `heartbeat_seconds`, until the heartbeat stops."""
         while not self.heartbeat_stop.wait(self.heartbeat_seconds):
             self.beat()
 
@@ -354,6 +359,7 @@ class LoadNotifier:
         self.stop_heartbeat()
 
     def finalize(self) -> None:
+        """Mark the run as finished, stop the heartbeat, and publish the last view."""
         self.finalized = True
         self.heartbeat_stop.set()
         self.push(force=True)

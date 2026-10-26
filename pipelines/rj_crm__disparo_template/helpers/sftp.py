@@ -65,6 +65,7 @@ class AsyncSshSession:
     """An SFTP session of asyncssh, which closes the SFTP client and the connection."""
 
     def __init__(self, target: SftpTarget) -> None:
+        """Keep the target, and open no connection yet."""
         self.target = target
         self.connection: SSHClientConnection | None = None
         self.sftp: SFTPClient | None = None

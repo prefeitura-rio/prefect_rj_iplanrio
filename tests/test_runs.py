@@ -23,9 +23,11 @@ class FakeClient:
         self.set_to: list[tuple[UUID, str, bool]] = []
 
     def read_flow_run(self, run_id: UUID) -> SimpleNamespace:
+        """Read flow run."""
         return SimpleNamespace(id=run_id, state=self.state, end_time=datetime(2026, 7, 17, tzinfo=UTC))
 
     def set_flow_run_state(self, run_id: UUID, state: State, *, force: bool) -> None:
+        """Set flow run state."""
         self.set_to.append((run_id, str(state.name), force))
 
 

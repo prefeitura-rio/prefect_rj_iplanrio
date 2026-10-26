@@ -49,7 +49,7 @@ def test_a_bad_dictionary_is_refused_with_its_context(
     make_record: Callable[..., Record], text: str, error: type[Exception]
 ) -> None:
     """Raise with the column, the type of record and the version."""
-    with pytest.raises(error, match="column=a, reg=1, version=7.01"):
+    with pytest.raises(error, match=r"column=a, reg=1, version=7\.01"):
         parse_attributes(make_record("a", dicionario_atributos=text))
 
 

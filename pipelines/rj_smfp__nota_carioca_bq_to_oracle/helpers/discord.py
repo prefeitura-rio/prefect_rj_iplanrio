@@ -63,6 +63,7 @@ class Warner:
     """
 
     def __init__(self, emit: Callable[[str], None] | None = None) -> None:
+        """Keep the function that emits a warning, and the last message."""
         self.emit = emit
         self.last: str | None = None
 
@@ -129,6 +130,7 @@ class DiscordStatusMessage:
         min_interval_seconds: float = DEFAULT_MIN_INTERVAL_SECONDS,
         transport: httpx2.BaseTransport | None = None,
     ) -> None:
+        """Keep the URL, the interval and the transport, and start with no message."""
         self.url: str | None = webhook_url.strip() if webhook_url and webhook_url.strip() else None
         self.interval: float = min_interval_seconds
         self.transport: httpx2.BaseTransport | None = transport
@@ -224,6 +226,7 @@ class DiscordStatusMessage:
                 return DEFAULT_RETRY_AFTER_SECONDS
 
     def succeeded(self) -> None:
+        """Clear the failures after a good request."""
         self.failures = 0
         self.warn.reset()
 

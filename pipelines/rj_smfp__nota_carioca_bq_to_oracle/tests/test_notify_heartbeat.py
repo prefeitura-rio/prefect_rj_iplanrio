@@ -66,12 +66,14 @@ class Clock:
         self.now = 1000.0
 
     def monotonic(self) -> float:
+        """Return the monotonic."""
         return self.now
 
 
 def make(
     message: DiscordStatusMessage | None, heartbeat_seconds: float = INTERVAL, tables: tuple[str, ...] = ("A",)
 ) -> LoadNotifier:
+    """Make."""
     config = NotifierConfig(
         "nota_carioca_staging", None, "nota_carioca_staging", tables, 2, False, "full", True, heartbeat_seconds
     )
@@ -79,10 +81,12 @@ def make(
 
 
 def heartbeat_threads() -> set[threading.Thread]:
+    """Return the heartbeat threads."""
     return {thread for thread in threading.enumerate() if thread.name == THREAD_NAME and thread.is_alive()}
 
 
 def fields_by_name(payload: Mapping[str, object]) -> dict[str, str]:
+    """Return the fields by name."""
     embeds = payload["embeds"]
     assert isinstance(embeds, list)
     fields = embeds[0]["fields"]
@@ -91,11 +95,13 @@ def fields_by_name(payload: Mapping[str, object]) -> dict[str, str]:
 
 
 def etapa_atual(notifier: LoadNotifier) -> str:
+    """Return the etapa atual."""
     return fields_by_name(build_payload(build_view(notifier.state)))["🧭 Etapa atual"]
 
 
 @pytest.fixture
 def warnings(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Return the warnings."""
     seen: list[str] = []
     monkeypatch.setattr(discord_module, "warn", seen.append)
     return seen
@@ -103,6 +109,7 @@ def warnings(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
 @pytest.fixture
 def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
+    """Return the clock."""
     fake = Clock()
     monkeypatch.setattr(notify_module, "time", fake)
     return fake
@@ -145,14 +152,17 @@ def test_begin_twice_keeps_a_single_heartbeat() -> None:
 
 
 def succeed(notifier: LoadNotifier) -> None:
+    """Run the succeed."""
     notifier.succeed()
 
 
 def fail_with_error(notifier: LoadNotifier) -> None:
+    """Run the fail with error."""
     notifier.fail(RuntimeError("falhou"))
 
 
 def fail_with_interrupt(notifier: LoadNotifier) -> None:
+    """Run the fail with interrupt."""
     notifier.fail(KeyboardInterrupt())
 
 
@@ -185,6 +195,7 @@ def test_heartbeat_stops_when_the_run_is_finalized(finish: Callable[[LoadNotifie
 
 
 def run_until_beat(notifier: LoadNotifier, message: RecordingMessage, *, fails: bool) -> None:
+    """Run until beat."""
     with notifier.guard():
         notifier.begin()
         assert message.wait_for(2)

@@ -23,6 +23,7 @@ RUN_ID = "run-1"
 def status(
     state_type: str, name: str | None = None, message: str | None = None, end_time: datetime | None = None
 ) -> RunStatus:
+    """Return the status."""
     return RunStatus(state_type=state_type, state_name=name or state_type.title(), message=message, end_time=end_time)
 
 
@@ -36,9 +37,11 @@ class FakeClock:
         self.sleeps: list[float] = []
 
     def monotonic(self) -> float:
+        """Return the monotonic."""
         return self.now
 
     def sleep(self, seconds: float) -> None:
+        """Sleep."""
         self.sleeps.append(seconds)
         self.now += seconds
 
@@ -55,6 +58,7 @@ class FakeRuns:
         self.cancelled: list[str] = []
 
     def read_status(self, run_id: str) -> RunStatus:
+        """Read status."""
         assert run_id == RUN_ID
         if self.error is not None and self.reads == len(self.statuses):
             raise self.error
@@ -63,10 +67,12 @@ class FakeRuns:
         return current
 
     def cancel(self, run_id: str) -> None:
+        """Cancel."""
         self.cancelled.append(run_id)
 
 
 def waiter(runs: FakeRuns, clock: FakeClock, messages: list[str], timeout_seconds: float = 600) -> RunWaiter:
+    """Return the waiter."""
     return RunWaiter(
         runs=runs,
         timeout_seconds=timeout_seconds,
@@ -187,12 +193,14 @@ class FrozenDatetime:
 
     @staticmethod
     def now(tz: object) -> datetime:
+        """Return the now."""
         del tz
 
         return T0
 
 
 def ignore(message: str) -> None:
+    """Ignore."""
     del message
 
 
@@ -230,6 +238,7 @@ def fake_bigquery(monkeypatch: pytest.MonkeyPatch, modified_reads: list[dict[str
 
 
 def request(dbt_finished_at: datetime | None) -> bigquery.SnapshotRequest:
+    """Return the request."""
     return bigquery.SnapshotRequest(
         project="p",
         dataset_id="d",

@@ -264,6 +264,6 @@ def test_the_probe_follows_the_options_the_source_and_the_mode(source, mode, opt
     ],
 )
 def test_a_probe_that_cannot_run_is_refused(source, options, message) -> None:
-    """Raise with the reason, so a bad deployment name never falls back to a download."""
+    """Raise with the reason, so a bad name never falls back to a download."""
     with pytest.raises(ValueError, match=message):
         pick_probe(source, Replace(DAYS), options)

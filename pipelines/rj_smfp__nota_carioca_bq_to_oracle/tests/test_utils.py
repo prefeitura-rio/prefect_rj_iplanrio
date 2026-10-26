@@ -73,6 +73,7 @@ from utils.utils import render_query
 
 
 def field(name: str, type_: str, mode: str = "NULLABLE") -> dict[str, str]:
+    """Return the field."""
     return {"name": name, "type": type_, "mode": mode}
 
 
@@ -85,6 +86,7 @@ def ora(
     scale: int | None = None,
     nullable: bool = False,
 ) -> OracleColumn:
+    """Return the ora."""
     return OracleColumn(name, data_type, length, char_used, precision, scale, nullable)
 
 
@@ -279,6 +281,7 @@ def test_inmemory_queries_keep_the_dollar_of_the_views() -> None:
 
 
 def syn(owner: str, table_name: str, table_owner: str = "DFEN") -> SynonymTarget:
+    """Return the syn."""
     return SynonymTarget(owner, table_owner, table_name)
 
 
@@ -355,6 +358,7 @@ def test_quiet_wait_and_changed_tables() -> None:
 
 
 def snapshot_request(max_wait_seconds: float = 3600, max_attempts: int = 3) -> bigquery.SnapshotRequest:
+    """Return the snapshot request."""
     return bigquery.SnapshotRequest(
         project="p",
         dataset_id="d",
@@ -373,22 +377,26 @@ class FrozenDatetime:
 
     @staticmethod
     def now(tz: object) -> datetime:
+        """Return the now."""
         del tz
 
         return T0
 
 
 def ignore_message(message: str) -> None:
+    """Ignore message."""
     del message
 
 
 def ignore_seconds(seconds: float) -> None:
+    """Ignore seconds."""
     del seconds
 
 
 def fake_bigquery(
     monkeypatch: pytest.MonkeyPatch, modified_reads: list[dict[str, datetime]]
 ) -> tuple[list[str], list[str]]:
+    """Fake bigquery."""
     reads = iter(modified_reads)
     extracted: list[str] = []
     deleted: list[str] = []
@@ -586,6 +594,7 @@ def index(
     tablespace: str | None = "DFEN_BIG_IDX",
     owner: str = "",
 ) -> IndexDefinition:
+    """Return the index."""
     return IndexDefinition(name, index_type, unique, tuple(columns), locality, tablespace, owner=owner)
 
 
@@ -703,6 +712,7 @@ def inmemory_row(
     distribute: str | None = "AUTO",
     duplicate: str | None = "NO DUPLICATE",
 ) -> dict[str, object]:
+    """Return the inmemory row."""
     return {
         "inmemory": inmemory,
         "inmemory_priority": priority,
@@ -859,6 +869,7 @@ class FakeCursor:
         return False
 
     def execute(self, sql: str, binds: dict[str, str] | None = None) -> None:
+        """Execute."""
         binds = binds or {}
         if "FROM all_objects" in sql:
             self.answer(["object_type"], [(kind,) for kind in self.objects.get(binds["object_name"], [])])
@@ -874,13 +885,16 @@ class FakeCursor:
             self.ddl.append(" ".join(sql.split()))
 
     def answer(self, names: list[str], rows: Sequence[DbRow]) -> None:
+        """Answer."""
         self.description = [(name,) for name in names]
         self.rows = list(rows)
 
     def fetchone(self) -> DbRow | None:
+        """Return the fetchone."""
         return self.rows[0] if self.rows else None
 
     def fetchall(self) -> list[DbRow]:
+        """Return the fetchall."""
         return self.rows
 
 
@@ -899,6 +913,7 @@ class FakeConnection:
         return False
 
     def cursor(self) -> FakeCursor:
+        """Return the cursor."""
         return self.fake_cursor
 
 
@@ -908,6 +923,7 @@ def fake_database(
     comments: dict[str, str | None],
     synonyms: Sequence[tuple[str, str, str]] = (),
 ) -> FakeCursor:
+    """Fake database."""
     cursor = FakeCursor(objects, comments, synonyms)
 
     def connect(config: object) -> FakeConnection:
@@ -921,6 +937,7 @@ def fake_database(
 
 
 def slots_config() -> OracleConfig:
+    """Return the slots config."""
     return OracleConfig("DFEN", "x", "h", "1521", "S", "DFEN")
 
 
@@ -1065,6 +1082,7 @@ STATUS_EXPRESSIONS = (
 def function_based_index(
     columns: Sequence[str] = STATUS_EXPRESSIONS, locality: str | None = "LOCAL"
 ) -> IndexDefinition:
+    """Return the function based index."""
     return index(
         "IX_MVT_NN_CANC_COMP_NN", columns, locality=locality, index_type="FUNCTION-BASED NORMAL", tablespace=None
     )
@@ -1295,9 +1313,11 @@ class CountCursor:
         return False
 
     def execute(self, sql: str) -> None:
+        """Execute."""
         self.executed.append(sql)
 
     def fetchone(self) -> tuple[int]:
+        """Return the fetchone."""
         return (7,)
 
 
@@ -1318,6 +1338,7 @@ class CountConnection:
         return False
 
     def cursor(self) -> CountCursor:
+        """Return the cursor."""
         return CountCursor(self.executed)
 
 

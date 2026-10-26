@@ -66,6 +66,7 @@ target-version = "py314"
 [tool.ruff.lint]
 select = [
   "A",
+  "ANN",
   "B",
   "C4",
   "C90",
@@ -104,6 +105,7 @@ ignore = [
   "S106",   # hardcoded password argument: false positives on secret type names
   "ISC001", # conflicts with the formatter
   "TID252", # relative imports are the house style
+  "ANN401", # basedpyright reports every use of Any
 ]
 
 [tool.ruff.lint.pycodestyle]
@@ -126,6 +128,11 @@ max-doc-length = 88 # a docstring or a comment line holds up to 88 columns, as t
 "typings/**" = ["W505"] # copies of third-party stubs, which this repo does not edit
 "toolkit/gcs.py" = ["TID251"] # the one module that imports obstore
 "tests/**" = [
+  "ANN001",   # pytest fixtures arrive untyped
+  "ANN002",   # same cause, for `*args`
+  "ANN003",   # same cause, for `**kwargs`
+  "ANN202",   # a fake returns what the test sets
+  "ANN204",   # same cause, for a special method
   "D100",    # a test module has no module docstring
   "D101",    # the schema classes of a test are named by the test
   "D106",    # same cause, for a nested class
@@ -137,6 +144,10 @@ max-doc-length = 88 # a docstring or a comment line holds up to 88 columns, as t
   "TID251",  # a test imports obstore and the database drivers to set up or check a fake
   "PLR2004", # a test compares with the literal that it expects
   "C901",    # a fake server has one branch for each route
+]
+
+"tests/**/conftest.py" = [
+  "ANN201", # a fixture returns a factory or a fake whose type the tests infer
 ]
 
 [tool.basedpyright]

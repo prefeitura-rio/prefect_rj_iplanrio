@@ -44,6 +44,7 @@ NOW = datetime(2026, 10, 9, 15, 30, 5, tzinfo=UTC)
 
 
 def view(status: RunStatus = RunStatus.RUNNING, **overrides: object) -> RunView:
+    """Return the view."""
     base = RunView(
         flow_label="Oracle → BigQuery",
         dataset_id="brutos_nota_fiscal",
@@ -70,18 +71,21 @@ def view(status: RunStatus = RunStatus.RUNNING, **overrides: object) -> RunView:
 
 
 def parse_embed(payload: dict[str, object]) -> dict[str, object]:
+    """Parse embed."""
     embeds = payload["embeds"]
     assert isinstance(embeds, list)
     return embeds[0]
 
 
 def list_fields(embed: dict[str, object]) -> list[dict[str, str]]:
+    """List fields."""
     fields = embed["fields"]
     assert isinstance(fields, list)
     return fields
 
 
 def total_chars(embed: dict[str, object]) -> int:
+    """Return the total chars."""
     fields = list_fields(embed)
     footer = embed["footer"]
     assert isinstance(footer, dict)
@@ -252,6 +256,7 @@ class Server:
         self.transport = httpx2.MockTransport(self.handle)
 
     def handle(self, request: httpx2.Request) -> httpx2.Response:
+        """Handle."""
         self.requests.append(request)
         reply = self.responses.pop(0) if self.responses else httpx2.Response(200, json={"id": "m1"})
         if isinstance(reply, Exception):
@@ -266,11 +271,13 @@ class Clock:
         self.now = 1000.0
 
     def monotonic(self) -> float:
+        """Return the monotonic."""
         return self.now
 
 
 @pytest.fixture
 def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
+    """Return the clock."""
     fake = Clock()
     monkeypatch.setattr(discord_module, "time", fake)
     return fake
@@ -278,12 +285,14 @@ def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
 
 @pytest.fixture
 def warnings(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Return the warnings."""
     captured: list[str] = []
     monkeypatch.setattr(discord_module, "warn", captured.append)
     return captured
 
 
 def client(server: Server) -> DiscordStatusMessage:
+    """Return the client."""
     return DiscordStatusMessage(URL, min_interval_seconds=20.0, transport=server.transport)
 
 
@@ -465,6 +474,7 @@ def test_never_raises_swallows_and_warns(warnings: list[str]) -> None:
 
 
 def equal_line() -> ValidationLine:
+    """Return the equal line."""
     sides = (
         CountSide("Oracle (SCN)", 193_000_000),
         CountSide("arquivos", 193_000_000),

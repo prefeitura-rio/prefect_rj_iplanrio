@@ -151,6 +151,7 @@ def table_fraction(table: TableState) -> float:
 
 
 def tables_fraction(state: RunState) -> float:
+    """Return the progress of all the tables from 0 to 1, weighted by their size."""
     tables = state.tables.values()
     total = sum(table.weight for table in tables)
     return sum(table.weight * table_fraction(table) for table in tables) / total if total else 0.0
@@ -170,6 +171,7 @@ def overall_fraction(state: RunState) -> float:
 
 
 def rate_and_eta(load: ProgressSnapshot) -> tuple[float, float | None]:
+    """Return the load rate in bytes a second, and the seconds left, or `None`."""
     rate = load.bytes_done / load.elapsed_seconds if load.elapsed_seconds > 0 else 0.0
     if rate <= 0 or load.bytes_done >= load.bytes_total:
         return rate, None
@@ -177,6 +179,7 @@ def rate_and_eta(load: ProgressSnapshot) -> tuple[float, float | None]:
 
 
 def load_detail(load: ProgressSnapshot) -> str:
+    """Return the load detail: the bytes sent, the total and the rate."""
     rate, _ = rate_and_eta(load)
     parts = [
         f"{format_size(load.bytes_done)} de {format_size(load.bytes_total)}",
@@ -224,6 +227,7 @@ def validation_line(table: TableState) -> ValidationLine:
 
 
 def stage_text(state: RunState, step: Step) -> str:
+    """Return the text of the current stage of the run."""
     table = state.tables.get(state.current_table or "")
     if step is Step.TABLES and table is not None and table.step is not None:
         return f"{table.name}: {TABLE_STEP_LABELS[table.step]}"
@@ -243,6 +247,7 @@ def stage_elapsed(state: RunState) -> str:
 
 
 def checklist(state: RunState) -> tuple[ChecklistItem, ...]:
+    """Return the steps of the run with their state."""
     items = []
     marker = state.step if state.failed_step is None else state.failed_step
     finished = sum(table.step is TableStep.DONE for table in state.tables.values())
@@ -261,6 +266,7 @@ def checklist(state: RunState) -> tuple[ChecklistItem, ...]:
 
 
 def facts(state: RunState) -> tuple[Fact, ...]:
+    """Return the fields that the embed shows for the run."""
     facts = []
     table = state.tables.get(state.current_table or "")
     if table is not None and table.slot:
