@@ -148,12 +148,10 @@ deployments:
             query: |
               SELECT
                               ID_Alvara,
-                              DSC_Alvara,
                               DSC_Endereco,
                               DSC_Bairro,
                               DSC_Zoneamento,
                               DSC_IRLF,
-                              DSC_TipoAnalise,
                               DSC_TempoRespDia,
                               DSC_StatusIntermediario,
                               DSC_StatusCPL,
