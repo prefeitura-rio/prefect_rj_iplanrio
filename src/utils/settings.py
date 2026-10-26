@@ -1,6 +1,8 @@
 """Settings of the pipelines that more than one of them reads."""
 
-from pydantic import SecretStr
+from typing import Self
+
+from pydantic import SecretStr, model_validator
 from toolkit.settings import ToolkitSettings, required_secret, required_text
 
 
@@ -51,17 +53,32 @@ class WhitelistSettings(ToolkitSettings):
 
 
 class InfisicalSettings(ToolkitSettings):
-    """Where a job reads its secrets: the server, identity, project and folders.
+    """Where a job reads its secrets: the server, login, project and folders.
 
     `INFISICAL_PATHS` lists the folders in order, separated by commas, and the first
-    folder that holds a key wins.
+    folder that holds a key wins. A job logs in with the token of its Kubernetes service
+    account and `INFISICAL_IDENTITY_ID`, or with `INFISICAL_CLIENT_ID` and
+    `INFISICAL_CLIENT_SECRET` (universal auth) where the cluster has no such identity.
     """
 
     INFISICAL_URL: str = required_text()
-    INFISICAL_IDENTITY_ID: str = required_text()
+    INFISICAL_IDENTITY_ID: str = ""
+    INFISICAL_CLIENT_ID: str = ""
+    INFISICAL_CLIENT_SECRET: SecretStr = SecretStr("")
     INFISICAL_PROJECT_ID: str = required_text()
     INFISICAL_ENVIRONMENT: str = required_text()
     INFISICAL_PATHS: str = required_text()
+
+    @model_validator(mode="after")
+    def check_login(self) -> Self:
+        """Require one complete login: the client pair, or the identity."""
+        if self.INFISICAL_CLIENT_ID:
+            if not self.INFISICAL_CLIENT_SECRET.get_secret_value():
+                raise ValueError("INFISICAL_CLIENT_SECRET is required with INFISICAL_CLIENT_ID")
+        elif not self.INFISICAL_IDENTITY_ID:
+            raise ValueError("INFISICAL_IDENTITY_ID or INFISICAL_CLIENT_ID is required")
+
+        return self
 
     @property
     def paths(self) -> list[str]:

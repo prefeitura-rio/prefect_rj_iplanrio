@@ -92,6 +92,9 @@ DEFAULT_CLOUD: Final = Cloud(bucket="rj-iplanrio", project="rj-iplanrio", connec
 INFISICAL_LOGIN_PATH: Final = "/api/v1/auth/kubernetes-auth/login"
 """The Infisical route that swaps a Kubernetes token for an access token."""
 
+INFISICAL_UNIVERSAL_LOGIN_PATH: Final = "/api/v1/auth/universal-auth/login"
+"""The Infisical route that swaps a client id and secret for an access token."""
+
 INFISICAL_SECRETS_PATH: Final = "/api/v3/secrets/raw"
 """The Infisical route that lists the secrets of one folder."""
 
