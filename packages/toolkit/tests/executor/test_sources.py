@@ -11,14 +11,13 @@ from toolkit.executor.render import render_template
 from toolkit.executor.sources.backends.bigquery import BigQuerySource
 from toolkit.executor.sources.backends.couchdb import CouchDBSource
 from toolkit.executor.sources.backends.mssql import MSSQLSource
-from toolkit.executor.sources.backends.mysql import MySQLSource
 from toolkit.executor.sources.backends.oracle import OracleSource
 from toolkit.executor.sources.backends.postgres import PostgresSource
 from toolkit.executor.sources.protocols import DBConn, Source
 from toolkit.executor.sources.registry import get_source, load_sources
 from toolkit.types import QueryParams
 
-BACKENDS = [PostgresSource, MySQLSource, MSSQLSource]
+BACKENDS = [PostgresSource, MSSQLSource]
 
 
 def setup_statements(
@@ -56,7 +55,6 @@ def test_the_password_is_a_bound_value_that_never_reaches_the_statement_text(
     ("source", "read_only"),
     [
         pytest.param(PostgresSource, True, id="postgres_is_read_only"),
-        pytest.param(MySQLSource, True, id="mysql_is_read_only"),
         pytest.param(MSSQLSource, False, id="mssql_is_read_write"),
     ],
 )
@@ -128,7 +126,7 @@ def test_every_registered_source_refuses_an_option_that_it_does_not_take(name) -
         source(conn=CONN, not_an_option=1)
 
 
-DUCKDB_SOURCES = ["postgres", "mysql", "mssql", "bigquery"]
+DUCKDB_SOURCES = ["postgres", "mssql", "bigquery"]
 
 
 @pytest.mark.parametrize("name", DUCKDB_SOURCES)

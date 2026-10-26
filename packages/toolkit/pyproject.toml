@@ -5,6 +5,7 @@ description = "DuckDB-first shared library for the data pipelines: typed SQL exe
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
 dependencies = [
+  "aiomysql>=0.2",
   "dbt-bigquery",
   "dbt-core>=1.12.6",
   "deltalake>=1.6.6",
@@ -173,6 +174,20 @@ reportUnknownMemberType = false   # oracledb types its cursors and descriptions 
 reportUnknownVariableType = false # same cause
 reportUnknownArgumentType = false # same cause
 reportAny = false                 # same cause
+
+[[tool.basedpyright.executionEnvironments]]
+root = "toolkit/mysql.py"
+reportMissingTypeStubs = false    # aiomysql ships no stubs
+reportUnknownMemberType = false   # same cause, for the cursor and its description
+reportUnknownVariableType = false # same cause
+reportUnknownArgumentType = false # same cause
+reportAny = false                 # the values that the driver gives are untyped
+
+[[tool.basedpyright.executionEnvironments]]
+root = "toolkit/executor/engines/mysql.py"
+reportMissingTypeStubs = false    # aiomysql ships no stubs
+reportUnknownVariableType = false # polars types from_arrow loosely
+reportAny = false                 # the values of an Arrow scalar are untyped
 
 [[tool.basedpyright.executionEnvironments]]
 root = "toolkit/executor/engines/oracle.py"

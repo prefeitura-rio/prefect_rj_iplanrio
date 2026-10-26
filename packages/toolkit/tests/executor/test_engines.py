@@ -8,6 +8,7 @@ from toolkit.executor.engines.base import Engine, load_engines
 from toolkit.executor.engines.couchdb import CouchDBEngine
 from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.engines.mongodb import MongoDBEngine
+from toolkit.executor.engines.mysql import MySQLEngine
 from toolkit.executor.engines.oracle import OracleEngine
 from toolkit.executor.requests import UnsupportedRequestError
 from toolkit.executor.sources.backends.arcgis import ArcGISSource
@@ -32,12 +33,12 @@ SCHEMA = Schema({"_id": ObjectIdType()})
         pytest.param(
             PostgresSource(CONN), DuckDBEngine, id="postgres_is_read_by_duckdb"
         ),
-        pytest.param(MySQLSource(CONN), DuckDBEngine, id="mysql_is_read_by_duckdb"),
         pytest.param(MSSQLSource(CONN), DuckDBEngine, id="mssql_is_read_by_duckdb"),
         pytest.param(FilesSource(), DuckDBEngine, id="files_are_read_by_duckdb"),
         pytest.param(ArcGISSource(), DuckDBEngine, id="arcgis_is_read_by_duckdb"),
         pytest.param(GSheetsSource(), DuckDBEngine, id="gsheets_is_read_by_duckdb"),
         pytest.param(OracleSource(CONN), OracleEngine, id="oracle_has_its_engine"),
+        pytest.param(MySQLSource(CONN), MySQLEngine, id="mysql_has_its_engine"),
         pytest.param(CouchDBSource(CONN), CouchDBEngine, id="couchdb_has_its_engine"),
     ],
 )

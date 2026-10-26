@@ -182,6 +182,27 @@ VACUUM_RETENTION_HOURS: Final = 168
 FILTER_FORBIDDEN: Final = (";", "--", "/*")
 """The marks that a filter may not hold, so that it stays one predicate."""
 
+MYSQL_BATCH_ROWS: Final = 50_000
+"""The rows of one fetch from a MySQL, so a chunk never sits whole in memory."""
+
+MYSQL_INTEGER_TYPES: Final = frozenset({1, 2, 3, 8, 9, 13})
+"""The MySQL field types read as `int64`: tiny, short, long, longlong, int24, year."""
+
+MYSQL_FLOAT_TYPES: Final = frozenset({4, 5})
+"""The MySQL field types read as `float64`: float and double."""
+
+MYSQL_DECIMAL_TYPES: Final = frozenset({0, 246})
+"""The MySQL field types read as `decimal128`: decimal and newdecimal."""
+
+MYSQL_DATE_TYPES: Final = frozenset({10, 14})
+"""The MySQL field types read as `date32`: date and newdate."""
+
+MYSQL_TIMESTAMP_TYPES: Final = frozenset({7, 12})
+"""The MySQL field types read as a `timestamp`: timestamp and datetime."""
+
+MYSQL_BLOB_TYPES: Final = frozenset({249, 250, 251, 252})
+"""The MySQL blob field types: text or bytes, told by the value."""
+
 ORACLE_BATCH_ROWS: Final = 50_000
 """The rows of one fetch from Oracle, so a chunk never sits whole in memory."""
 

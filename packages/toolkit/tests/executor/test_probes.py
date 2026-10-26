@@ -273,7 +273,6 @@ def postgres(origin: Origin | None = None) -> PostgresSource:
         pytest.param(
             PostgresSource, "postgres_query", '"public"."items"', id="postgres"
         ),
-        pytest.param(MySQLSource, "mysql_query", "`public`.`items`", id="mysql"),
         pytest.param(MSSQLSource, "mssql_scan", "[public].[items]", id="mssql"),
     ],
 )

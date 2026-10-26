@@ -4,7 +4,7 @@
   "description": "Create the secret that holds the credentials of a source database. The password is bound as the only parameter.",
   "inputs": {
     "secret": "Secret identifier.",
-    "type": "Scanner type: postgres, mysql or mssql.",
+    "type": "Scanner type: postgres or mssql.",
     "host": "Host literal.",
     "port": "Port literal.",
     "database": "Database literal.",

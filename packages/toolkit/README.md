@@ -76,12 +76,14 @@ Uma **fonte** é só configuração: a conexão, as opções e a origem do que l
 
 ```mermaid
 flowchart LR
-  DS[DuckDBSource postgres mysql mssql bigquery files gsheets arcgis] --> D[DuckDBEngine]
+  DS[DuckDBSource postgres mssql bigquery files gsheets arcgis] --> D[DuckDBEngine]
   OS[OracleSource] --> O[OracleEngine]
+  YS[MySQLSource] --> Y[MySQLEngine]
   CS[CouchDBSource] --> C[CouchDBEngine]
   MS[MongoDBSource] --> M[MongoDBEngine]
   D --> X[Executor]
   O --> X
+  Y --> X
   C --> X
   M --> X
 ```
@@ -145,7 +147,7 @@ dump_options:
   range_column: updated_at
 ```
 
-**Postgres, MySQL e SQL Server** fazem o `probe` com a função de consulta nativa da extensão do `DuckDB` (`postgres_query`, `mysql_query` e `mssql_scan`). O `DuckDB` sozinho não faz isso: ele só empurra filtros e colunas, então leria o chunk inteiro. O SQL fica em `templates/duckdb/probe_range.sql`, com `COUNT(*)` (`COUNT_BIG` no SQL Server) e `MAX(coluna)`. O chunk vira um predicado no dialeto (`build_native_chunk`): uma faixa de números é exata, e uma faixa de dias cresce um dia para cada lado, porque o corte do `dump` usa o fuso de São Paulo. Com `filters` não há `probe`, porque os filtros são SQL do `DuckDB`. Um erro do `DuckDB` (um `timeout`, por exemplo) avisa uma vez e baixa o chunk.
+**Postgres e SQL Server** fazem o `probe` com a função de consulta nativa da extensão do `DuckDB` (`postgres_query` e `mssql_scan`). O `DuckDB` sozinho não faz isso: ele só empurra filtros e colunas, então leria o chunk inteiro. O SQL fica em `templates/duckdb/probe_range.sql`, com `COUNT(*)` (`COUNT_BIG` no SQL Server) e `MAX(coluna)`. O chunk vira um predicado no dialeto (`build_native_chunk`): uma faixa de números é exata, e uma faixa de dias cresce um dia para cada lado, porque o corte do `dump` usa o fuso de São Paulo. Com `filters` não há `probe`, porque os filtros são SQL do `DuckDB`. Um erro do `DuckDB` (um `timeout`, por exemplo) avisa uma vez e baixa o chunk.
 
 **CouchDB** lê `_all_docs` sem os documentos, página por página, e faz o `hash` das linhas `id:rev` (`hash_revisions`). A revisão muda a cada escrita e um documento apagado sai da lista, então o `hash` muda quando qualquer documento do chunk muda. Uma escrita que não muda nada também muda a revisão (um falso positivo). As faixas de chave são as da leitura (`list_key_ranges`, duas para o chunk `null`), e os `_design/` ficam de fora. Com `filters`, com uma origem `Query` ou `Changes`, ou com um chunk de outra coluna que não o `id`, não há `probe`. Um erro de HTTP avisa uma vez e baixa o chunk. Usa o `probe` por padrão.
 
@@ -182,6 +184,12 @@ Conferido em Postgres, MySQL, SQL Server e Oracle de verdade.
 **ArcGIS:** `crs`, como `EPSG:31983`, faz o servidor responder nesse sistema de coordenadas. A geometria vira uma coluna `geoarrow.wkb` com o sistema gravado.
 
 **Google Sheets:** o `DuckDB` lê todo número da planilha como `DOUBLE`. A planilha precisa estar compartilhada com a service account.
+
+**MySQL**
+
+- O `MySQLEngine` lê com o `aiomysql`, em lotes de `batch_size` linhas (50 000 por padrão) com um cursor que lê do servidor aos poucos. O `mysql_scanner` do `DuckDB` pede `utf8mb4`, que o MySQL 5.0 e o 5.1 não conhecem, e por isso o `DuckDB` não lê esses servidores. Cada lote vira uma tabela `Arrow`, e o chunk é gravado em `Parquet` local para um `DuckDBEngine` do próprio motor terminar, como no Oracle.
+- `charset` é o conjunto de caracteres da conexão: `utf8mb4` por padrão, e `utf8` ou `latin1` nos servidores antigos (`options: {charset: utf8}` no `database`). Os tipos são `int64`, `float64`, `decimal128` (texto exato se passar de 38 dígitos), `date32`, `timestamp` de microssegundos e texto. Uma data `0000-00-00` vira nulo, com um aviso. Um blob com bytes vira `binary`, e um número que o `int64` não guarda vira texto.
+- O `probe` conta as linhas do chunk e pega o maior valor de `range_column`, no servidor, como antes. Com `filters` ou com uma origem `Query` o chunk é sempre baixado. O filtro e o chunk são SQL do MySQL, e os valores do chunk vão como parâmetros `%s`.
 
 **CouchDB**
 

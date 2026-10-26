@@ -111,7 +111,6 @@ def test_a_cast_column_is_cast_in_the_select_list(dump_values) -> None:
             "mssql", 'utf8_text("a") AS "a"', id="a_sql_server_query_is_decoded"
         ),
         pytest.param("postgres", '"a" AS "a"', id="a_postgres_query_is_read_as_it_is"),
-        pytest.param("mysql", '"a" AS "a"', id="a_mysql_query_is_read_as_it_is"),
     ],
 )
 def test_only_a_sql_server_query_goes_through_the_text_decoder(
@@ -167,7 +166,6 @@ def test_the_text_decoder_passes_what_is_not_windows_1252_text(value, expected) 
         pytest.param("json", "read_json('q', hive_partitioning = false)", id="json"),
         pytest.param("gsheets", "read_gsheet('q')", id="a_sheet_without_a_name"),
         pytest.param("postgres", "postgres_query('src', 'q')", id="postgres"),
-        pytest.param("mysql", "mysql_query('src', 'q')", id="mysql"),
         pytest.param("mssql", "mssql_scan('src', 'q')", id="mssql"),
     ],
 )

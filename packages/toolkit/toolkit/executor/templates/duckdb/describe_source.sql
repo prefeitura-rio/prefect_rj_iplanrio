@@ -3,7 +3,7 @@
   "kind": "template",
   "description": "Describe the columns that a dump reads, without reading its rows.",
   "inputs": {
-    "type": "Source name: postgres, mysql, mssql, bigquery, arcgis, gsheets, parquet, csv or json.",
+    "type": "Source name: postgres, mssql, bigquery, arcgis, gsheets, parquet, csv or json.",
     "alias": "SQL literal with the name of the attached database.",
     "secret": "SQL literal with the name of the source secret.",
     "query": "SQL literal with the native query, the layer URL, the spreadsheet id or the file path or glob.",

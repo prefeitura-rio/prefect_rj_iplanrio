@@ -21,7 +21,7 @@ ST_Read('ESRIJSON:' || {{ url }} || '/query?outFields=*&f=json&where=' || url_en
   "name": "duckdb.native_query",
   "description": "Run a query in the dialect of a source database, through the function of its extension.",
   "inputs": {
-    "type": "Source name: postgres, mysql, mssql or bigquery.",
+    "type": "Source name: postgres, mssql or bigquery.",
     "alias": "SQL literal with the name of the attached database.",
     "secret": "SQL literal with the name of the source secret.",
     "query": "SQL literal with the native query."
@@ -32,8 +32,6 @@ ST_Read('ESRIJSON:' || {{ url }} || '/query?outFields=*&f=json&where=' || url_en
 {% macro native_query(type, alias, secret, query) -%}
 {%- if type == "postgres" -%}
 postgres_query({{ alias }}, {{ query }})
-{%- elif type == "mysql" -%}
-mysql_query({{ alias }}, {{ query }})
 {%- elif type == "mssql" -%}
 mssql_scan({{ alias }}, {{ query }})
 {%- elif type == "bigquery" -%}
@@ -47,7 +45,7 @@ bigquery_query({{ alias }}, {{ query }})
   "name": "duckdb.source_table",
   "description": "Read what a dump copies: a native query, an ArcGIS layer, a Google Sheet or local files.",
   "inputs": {
-    "type": "Source name: postgres, mysql, mssql, bigquery, arcgis, gsheets, parquet, csv or json.",
+    "type": "Source name: postgres, mssql, bigquery, arcgis, gsheets, parquet, csv or json.",
     "alias": "SQL literal with the name of the attached database.",
     "secret": "SQL literal with the name of the source secret.",
     "query": "SQL literal with the native query, the layer URL, the spreadsheet id or the file path or glob.",

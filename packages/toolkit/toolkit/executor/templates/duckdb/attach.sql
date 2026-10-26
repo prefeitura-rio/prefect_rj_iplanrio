@@ -5,7 +5,7 @@
   "inputs": {
     "secret": "Secret identifier.",
     "alias": "Database alias identifier.",
-    "type": "Scanner type: postgres, mysql or mssql.",
+    "type": "Scanner type: postgres or mssql.",
     "read_only": "Whether to attach read-only."
   }
 }
