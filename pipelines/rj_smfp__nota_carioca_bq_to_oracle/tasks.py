@@ -1,6 +1,7 @@
 """Tasks da carga BigQuery → GCS → SQL*Loader → Oracle."""
 
 import time
+from collections.abc import Callable
 from datetime import datetime
 from typing import cast
 from uuid import UUID
@@ -27,9 +28,10 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import (
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import TableSchema
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import LoadPlan, build_load_plan
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify import current as current_notifier
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import OracleConfig
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import plan_structure, slot_indexes
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_ddl import describe_partitioning
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import StructurePlan
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import IndexDefinition, StructurePlan
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import Dbt, Load, Source
 from utils.runs import PrefectRuns, start_deployment_run
 
@@ -178,6 +180,28 @@ def truncate_oracle_table_task(table: str) -> str:
     return table
 
 
+def progress_reporter(table: str, artifact_id: UUID) -> Callable[[sqlldr_progress.ProgressSnapshot], None]:
+    """Return the callback that reports the progress of the load."""
+    notifier = current_notifier()
+
+    def report(snapshot: sqlldr_progress.ProgressSnapshot) -> None:
+        """Log the snapshot, and update the artifact and the notice."""
+        logger.info(sqlldr_progress.format_progress(table, snapshot))
+        update_progress_artifact(artifact_id=artifact_id, progress=sqlldr_progress.progress_percent(snapshot))
+        if notifier is not None:
+            notifier.loading(snapshot)
+
+    return report
+
+
+def describe_sessions(result: sqlldr.LoadResult) -> str:
+    """Return the files and the rows that each session of the load handled."""
+    return ", ".join(
+        f"sessão {item.index}: {item.files} arquivos, {sqlldr_progress.format_count(item.rows)} linhas"
+        for item in result.sessions
+    )
+
+
 @task(cache_policy=NO_CACHE)
 def load_into_oracle_task(
     table: str, plan: LoadPlan, files: list[bigquery.ExportedFile], source: Source, load: Load
@@ -194,13 +218,7 @@ def load_into_oracle_task(
         f"Carga de {table} iniciada: {len(files)} arquivos ({total_size}) em {min(sessions, len(files))} sessão(ões)"
     )
 
-    notifier = current_notifier()
-
-    def report(snapshot: sqlldr_progress.ProgressSnapshot) -> None:
-        logger.info(sqlldr_progress.format_progress(table, snapshot))
-        update_progress_artifact(artifact_id=artifact_id, progress=sqlldr_progress.progress_percent(snapshot))
-        if notifier is not None:
-            notifier.loading(snapshot)
+    report = progress_reporter(table, artifact_id)
 
     result = sqlldr.load_from_gcs(
         config=oracle.read_oracle_config(),
@@ -209,14 +227,9 @@ def load_into_oracle_task(
         progress_interval_seconds=load.progress_interval_seconds,
     )
     update_progress_artifact(artifact_id=artifact_id, progress=100.0)
-    sessions_text = ", ".join(
-        f"sessão {item.index}: {item.files} arquivos, {sqlldr_progress.format_count(item.rows)} linhas"
-        for item in result.sessions
-    )
-    logger.info(
-        f"Carga de {table} concluída: {sqlldr_progress.format_count(result.rows)} linhas em "
-        + f"{sqlldr_progress.format_duration(result.elapsed_seconds)} ({sessions_text})"
-    )
+    rows = sqlldr_progress.format_count(result.rows)
+    duration = sqlldr_progress.format_duration(result.elapsed_seconds)
+    logger.info(f"Carga de {table} concluída: {rows} linhas em {duration} ({describe_sessions(result)})")
     return result.rows
 
 
@@ -263,6 +276,14 @@ def delete_gcs_files_task(source: Source, files: list[bigquery.ExportedFile]) ->
     logger.info(f"Removidos {len(files)} arquivos temporários de gs://{source.bucket}")
 
 
+def create_timed_index(config: OracleConfig, table: str, index: IndexDefinition, degree: int, step: str) -> None:
+    """Create one index, and log its step, its name and how long it took."""
+    logger.info(f"{table}: criando índice {step} {index.name} {index.description} com PARALLEL {degree}")
+    started = time.monotonic()
+    oracle_ddl.create_index(config=config, table=table, index=index, parallel_degree=degree)
+    logger.info(f"{table}: índice {index.name} criado em {sqlldr_progress.format_duration(time.monotonic() - started)}")
+
+
 @task(cache_policy=NO_CACHE)
 def create_oracle_indexes_task(table: str, structure: StructurePlan, slot: str, load: Load) -> str:
     """Create the indexes of the physical table, one at a time, and return its name.
@@ -281,17 +302,10 @@ def create_oracle_indexes_task(table: str, structure: StructurePlan, slot: str, 
         notifier.indexes(0, len(indexes))
     started = time.monotonic()
     for position, index in enumerate(indexes, start=1):
-        logger.info(
-            f"{table}: criando índice {position}/{len(indexes)} {index.name} {index.description} "
-            + f"com PARALLEL {parallel_degree}"
-        )
-        index_started = time.monotonic()
-        oracle_ddl.create_index(config=config, table=table, index=index, parallel_degree=parallel_degree)
+        create_timed_index(config, table, index, parallel_degree, f"{position}/{len(indexes)}")
         update_progress_artifact(artifact_id=artifact_id, progress=100.0 * position / len(indexes))
         if notifier is not None:
             notifier.indexes(position, len(indexes))
-        took = sqlldr_progress.format_duration(time.monotonic() - index_started)
-        logger.info(f"{table}: índice {index.name} criado em {took}")
     elapsed = sqlldr_progress.format_duration(time.monotonic() - started)
     logger.info(f"{table}: {len(indexes)} índice(s) criado(s) em {elapsed}")
     return table

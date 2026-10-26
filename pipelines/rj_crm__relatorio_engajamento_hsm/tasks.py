@@ -1,11 +1,9 @@
 """Tasks of rj_crm__relatorio_engajamento_hsm."""
 
 from asyncio import to_thread
-from collections import Counter
 from datetime import date, datetime
 
 from prefect import task
-from pydantic import JsonValue
 from toolkit.telemetry import logger
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.constants import (
@@ -25,19 +23,12 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.constants import (
     PROJECT_ID,
     SOURCES,
     SP_TZ,
-    STALE_BATCHES_LIMIT,
 )
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers import bq
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.catalog import Catalog
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.conversations import build_conversations
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.drive import report_exists
-from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.prompts import (
-    fill_prompt,
-    first_hsm_text,
-    format_conversations,
-    format_judged,
-    read_prompt,
-)
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.llm import classify_batches, discover_catalog, judge_batches
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.report import (
     build_categories,
     build_docx,
@@ -46,9 +37,6 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.report import (
     report_slug,
 )
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.steps import (
-    read_classifications,
-    read_verdicts,
-    register_discoveries,
     sample_conversations,
     select_for_judge,
 )
@@ -60,7 +48,7 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.types import (
     Limits,
     Report,
 )
-from utils.bifrost import Bifrost, BifrostError, parse_json_list, scale_output_tokens
+from utils.bifrost import Bifrost
 from utils.drive import confirm_root, connect, ensure_folder, upload
 from utils.utils import render_query
 
@@ -120,83 +108,23 @@ async def extract_task(dispatch: Dispatch) -> Extraction:
     return extraction
 
 
-async def ask_list(
-    bifrost: Bifrost, prompt: str, max_tokens: int, step: str, batch: int
-) -> list[dict[str, JsonValue]] | None:
-    """Ask the model and return the objects of its answer, or log and return nothing.
-
-    It does so when the batch fails.
-    """
-    try:
-        return parse_json_list(await bifrost.ask(prompt, max_output_tokens=max_tokens))
-    except (BifrostError, ValueError) as error:
-        logger.warning("A batch of the %s failed: conversations=%d error=%s", step, batch, error)
-        return None
-
-
 @task
 async def classify_task(
     conversations: list[Conversation], model: str, limits: Limits
 ) -> tuple[list[Classification], dict[str, str]]:
-    """Discover the categories of the dispatch from a random sample.
+    """Discover the categories of the dispatch from a random sample, then classify all.
 
-    Then classify every conversation.
-
-    The discovery looks at the sample in batches and stops after 5 batches in a row with
-    nothing new. It is the only step that adds a category. The classification only picks
+    The discovery is the only step that adds a category. The classification only picks
     one that exists. Return the classifications and the catalog.
     """
     catalog = Catalog()
-    discovery_batch = limits.get("discovery_batch", DEFAULT_DISCOVERY_BATCH)
-    batch_size = limits.get("classification_batch", DEFAULT_CLASSIFICATION_BATCH)
     sample = sample_conversations(conversations, limits.get("discovery_cap", DEFAULT_DISCOVERY_CAP), DISCOVERY_SEED)
 
     async with Bifrost.connect(model) as bifrost:
-        stale = 0
-
-        for start in range(0, len(sample), discovery_batch):
-            batch = sample[start : start + discovery_batch]
-            prompt = fill_prompt(
-                read_prompt("descoberta"), first_hsm_text(batch), catalog.as_prompt(), format_conversations(batch)
-            )
-            answer = await ask_list(bifrost, prompt, scale_output_tokens(discovery_batch), "discovery", len(batch))
-            new, failed = register_discoveries(answer, catalog) if answer is not None else (0, len(batch))
-            logger.info(
-                "Discovery: batch=%d new=%d failed=%d catalog=%d",
-                start // discovery_batch + 1,
-                new,
-                failed,
-                len(catalog.entries),
-            )
-            stale = 0 if new else stale + 1
-
-            if stale >= STALE_BATCHES_LIMIT:
-                logger.info("The catalog is stable after %d batches with nothing new", stale)
-                break
-
-        results: list[Classification] = []
-        failures: Counter[str] = Counter()
-
-        for start in range(0, len(conversations), batch_size):
-            batch = conversations[start : start + batch_size]
-            prompt = fill_prompt(
-                read_prompt("classificacao"), first_hsm_text(batch), catalog.as_prompt(), format_conversations(batch)
-            )
-            answer = await ask_list(bifrost, prompt, scale_output_tokens(batch_size), "classification", len(batch))
-
-            if answer is None:
-                failures["lote_inteiro_falhou"] += len(batch)
-                continue
-
-            found, missed = read_classifications(answer, batch, catalog)
-            results += found
-            failures += missed
-            logger.info(
-                "Classification: batch=%d classified=%d failed=%d",
-                start // batch_size + 1,
-                len(found),
-                sum(missed.values()),
-            )
+        await discover_catalog(bifrost, sample, catalog, limits.get("discovery_batch", DEFAULT_DISCOVERY_BATCH))
+        results, failures = await classify_batches(
+            bifrost, conversations, catalog, limits.get("classification_batch", DEFAULT_CLASSIFICATION_BATCH)
+        )
 
     logger.info("Classified: %d, failures: %s", len(results), dict(failures))
 
@@ -209,42 +137,19 @@ async def judge_task(
 ) -> list[Classification]:
     """Have a second model call audit a sample of the classifications.
 
-    Return all of them with the verdicts.
-
     A category under `judge_all_below` conversations is judged in full, a larger one in
-    `large_category_pct` percent.
+    `large_category_pct` percent. Return all of them with the verdicts.
     """
     below = limits.get("judge_all_below", DEFAULT_JUDGE_ALL_BELOW)
     pct = limits.get("large_category_pct", DEFAULT_LARGE_CATEGORY_PCT)
-    batch_size = limits.get("judge_batch", DEFAULT_JUDGE_BATCH)
     selected = select_for_judge(items, below, pct, JUDGE_SEED)
 
     if not selected:
         logger.info("Nothing to judge")
         return items
 
-    catalog_text = "\n".join(f"- {name}: {text}" for name, text in sorted(catalog.items())) or "(catálogo vazio)"
-    judged: dict[str, Classification] = {}
-    failed = 0
-
     async with Bifrost.connect(model) as bifrost:
-        for start in range(0, len(selected), batch_size):
-            batch = selected[start : start + batch_size]
-            prompt = fill_prompt(
-                read_prompt("juiz"),
-                first_hsm_text([item.conversation for item in batch]),
-                catalog_text,
-                format_judged(batch),
-            )
-            answer = await ask_list(bifrost, prompt, scale_output_tokens(50), "judge", len(batch))
-
-            if answer is None:
-                failed += len(batch)
-                continue
-
-            found, missed = read_verdicts(answer, batch)
-            judged.update(found)
-            failed += missed
+        judged, failed = await judge_batches(bifrost, selected, catalog, limits.get("judge_batch", DEFAULT_JUDGE_BATCH))
 
     logger.info("Judged: %d, failed: %d", len(judged), failed)
 

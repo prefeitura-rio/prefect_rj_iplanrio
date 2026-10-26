@@ -5,6 +5,7 @@ import pytest
 
 from pipelines.rj_smas__cadunico.helpers.layout import (
     clean_name,
+    layout_for_versions,
     name_columns,
     name_version,
     parse_blob_version,
@@ -13,6 +14,7 @@ from pipelines.rj_smas__cadunico.helpers.layout import (
     read_tables,
     read_title_version,
     text_of,
+    unmapped_message,
 )
 from pipelines.rj_smas__cadunico.tests.conftest import TABLE_HEADER
 from pipelines.rj_smas__cadunico.types import Cells, Record
@@ -159,3 +161,40 @@ def test_the_layout_keeps_only_the_version_of_the_file(make_workbook: Callable[[
 
     assert {row["table"] for row in rows} == {"REG_01"}
     assert [row["column"] for row in rows] == ["numero_cep", "numero_cep_2"]
+
+
+@pytest.mark.parametrize(
+    ("versions", "expected"),
+    [
+        pytest.param({"0701"}, ["a"], id="the_rows_of_the_versions_are_kept"),
+        pytest.param({"0701", "1001"}, ["a", "b"], id="every_known_version_is_kept"),
+        pytest.param(set(), [], id="no_version_keeps_nothing"),
+    ],
+)
+def test_the_layout_keeps_the_rows_of_the_versions_of_the_records(versions: set[str], expected: list[str]) -> None:
+    """Filter the layout by the versions that the records have."""
+    rows: list[Record] = [
+        {"versao_layout_particao": "0701", "coluna": "a"},
+        {"versao_layout_particao": "1001", "coluna": "b"},
+        {"versao_layout_particao": "1001", "coluna": None},
+    ]
+
+    kept = [row["coluna"] for row in layout_for_versions(rows, versions) if row["coluna"]]
+
+    assert kept == expected
+
+
+def test_a_version_of_the_records_without_a_layout_is_an_error() -> None:
+    """Raise with the versions that lack a layout."""
+    rows: list[Record] = [{"versao_layout_particao": "0701", "coluna": "a"}]
+
+    with pytest.raises(ValueError, match=r"Upload the layouts of the versions \['9999'\]"):
+        layout_for_versions(rows, {"0701", "9999"})
+
+
+def test_the_unmapped_message_lists_the_columns_to_add() -> None:
+    """Write the sheet link and the columns as JSON."""
+    message = unmapped_message([{"coluna": "nova"}])
+
+    assert message.startswith("Add the columns below to the sheet dicionario_colunas_cadunico:\n")
+    assert message.endswith('[\n  {\n    "coluna": "nova"\n  }\n]')

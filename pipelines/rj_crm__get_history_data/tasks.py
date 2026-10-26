@@ -12,19 +12,12 @@ from pipelines.rj_crm__get_history_data.constants import (
     FINAL_TABLE_ID,
     HTTP_TIMEOUT,
     MERGE_KEYS,
-    PAGE_SIZE,
     PROJECT_ID,
-    SOAP_HEADERS,
     TMP_TABLE_ID,
 )
 from pipelines.rj_crm__get_history_data.helpers import bq
+from pipelines.rj_crm__get_history_data.helpers.client import list_extension_pages, read_fields, read_records
 from pipelines.rj_crm__get_history_data.helpers.history import filter_recent, keep_history
-from pipelines.rj_crm__get_history_data.helpers.sfmc import (
-    build_fields_envelope,
-    build_list_envelope,
-    parse_extensions,
-    parse_fields,
-)
 from pipelines.rj_crm__get_history_data.types import Extension, Extraction, Row
 from utils.records import dig, read_json
 from utils.settings import SfmcSettings
@@ -66,24 +59,9 @@ async def list_extensions_task(token: str, soap_uri: str) -> list[Extension]:
     `MoreDataAvailable`.
     """
     endpoint = f"{soap_uri.rstrip('/')}/Service.asmx"
-    found: list[Extension] = []
-    continue_id: str | None = None
 
     async with AsyncClient(timeout=HTTP_TIMEOUT) as client:
-        while True:
-            response = await client.post(
-                endpoint, content=build_list_envelope(token, continue_id), headers=SOAP_HEADERS
-            )
-            response.raise_for_status()
-            status, request_id, page = parse_extensions(response.text)
-            found += page
-
-            if status == "MoreDataAvailable":
-                continue_id = request_id
-            elif status in ("OK", ""):
-                break
-            else:
-                raise RuntimeError(f"The SOAP API answered with an unexpected status: {status}")
+        found = await list_extension_pages(client, endpoint, token)
 
     history = keep_history(found)
     logger.info("Data Extensions: total=%d history=%d", len(found), len(history))
@@ -100,35 +78,12 @@ async def extract_task(token: str, soap_uri: str, rest_uri: str, extension: Exte
     `error` of the extraction.
     """
     url = f"{rest_uri.rstrip('/')}/data/v1/customobjectdata/key/{extension.external_key}/rowset"
-    records = []
+    endpoint = f"{soap_uri.rstrip('/')}/Service.asmx"
 
     try:
         async with AsyncClient(timeout=HTTP_TIMEOUT) as client:
-            page = 1
-
-            while True:
-                response = await client.get(
-                    url, headers={"Authorization": f"Bearer {token}"}, params={"$page": page, "$pageSize": PAGE_SIZE}
-                )
-                response.raise_for_status()
-                body = read_json(response)
-                items = dig(body, "items")
-                batch = [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
-                records += batch
-                total = dig(body, "count")
-
-                if not batch or len(records) >= (total if isinstance(total, int) else len(batch)):
-                    break
-
-                page += 1
-
-            fields_response = await client.post(
-                f"{soap_uri.rstrip('/')}/Service.asmx",
-                content=build_fields_envelope(token, extension.external_key),
-                headers=SOAP_HEADERS,
-            )
-            fields_response.raise_for_status()
-            fields = parse_fields(fields_response.text)
+            records, page = await read_records(client, url, token)
+            fields = await read_fields(client, endpoint, token, extension.external_key)
     except (HTTPError, ValueError) as error:
         logger.error("A Data Extension failed: name=%s error=%s", extension.name, error)
         return Extraction(extension.name, error=str(error))

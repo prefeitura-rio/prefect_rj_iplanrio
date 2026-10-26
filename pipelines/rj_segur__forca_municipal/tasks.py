@@ -1,5 +1,6 @@
 """Tasks of rj_segur__forca_municipal."""
 
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -87,9 +88,6 @@ async def run_standard_endpoint_task(table: Table, cloud: Cloud, dump_mode: Dump
     size = limits.get("page_size", DEFAULT_PAGE_SIZE)
     target = Target(table, cloud, dump_mode, datetime.now(SP_TZ).replace(tzinfo=None), "updated_at")
 
-    async def upload(rows: list[Row], cycle: int) -> None:
-        await upload_cycle_task(rows, target, cycle)
-
     async with FMApi.connect(limits.get("concurrency", DEFAULT_CONCURRENCY)) as api:
         first_page = await api.get_first(endpoint, size)
 
@@ -97,7 +95,30 @@ async def run_standard_endpoint_task(table: Table, cloud: Cloud, dump_mode: Dump
             logger.warning("The endpoint returned nothing: %s", endpoint)
             return
 
-        await flush_buffer(read_pages(api, endpoint, table["table_id"], size, first_page), upload)
+        await flush_buffer(read_pages(api, endpoint, table["table_id"], size, first_page), uploader(target))
+
+
+def uploader(target: Target) -> Callable[[list[Row], int], Awaitable[None]]:
+    """Return the function that uploads the rows of one cycle to the target."""
+
+    async def upload(rows: list[Row], cycle: int) -> None:
+        await upload_cycle_task(rows, target, cycle)
+
+    return upload
+
+
+def resolve_window(window: Window) -> tuple[str, str]:
+    """Return the first and the last day of the window, which default to yesterday."""
+    first = window.get("data_inicio") or (datetime.now(SP_TZ) - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    return parse_date_range(first, window.get("data_fim") or first)
+
+
+async def read_unit_ids(table: Table, cloud: Cloud) -> list[str]:
+    """Return the ids of the units in the latest partitions of `unidades_historico`."""
+    return await read_ids_task(
+        cloud["project"], f"{cloud['project']}.{table['dataset_id']}.unidades_historico", "unit_ids", "UnitId"
+    )
 
 
 @task
@@ -111,11 +132,8 @@ async def run_unit_positions_task(
     of `unidades_historico` in BigQuery. A unit that fails is skipped, and the run fails
     if the share of failed unit-days is over 5%.
     """
-    first = window.get("data_inicio") or (datetime.now(SP_TZ) - timedelta(days=1)).strftime("%Y-%m-%d")
-    first, last = parse_date_range(first, window.get("data_fim") or first)
-    unit_ids = await read_ids_task(
-        cloud["project"], f"{cloud['project']}.{table['dataset_id']}.unidades_historico", "unit_ids", "UnitId"
-    )
+    first, last = resolve_window(window)
+    unit_ids = await read_unit_ids(table, cloud)
 
     if not unit_ids:
         logger.warning("No unit in the history")
@@ -124,18 +142,15 @@ async def run_unit_positions_task(
     target = Target(table, cloud, dump_mode, datetime.now(SP_TZ).replace(tzinfo=None), "data_coleta")
     tally = Tally()
 
-    async def upload(rows: list[Row], cycle: int) -> None:
-        await upload_cycle_task(rows, target, cycle)
-
     async with FMApi.connect(limits.get("concurrency", DEFAULT_CONCURRENCY)) as api:
+        endpoint = Endpoint(api, TABLE_CONFIG[table["table_id"]], limits.get("page_size", DEFAULT_PAGE_SIZE))
+        concurrency = limits.get("unit_id_concurrency", DEFAULT_UNIT_ID_CONCURRENCY)
+
         for number, day in enumerate(date_range(first, last), start=1):
             logger.info("Day %d: %s with %d units", number, day, len(unit_ids))
-            endpoint = Endpoint(api, TABLE_CONFIG[table["table_id"]], limits.get("page_size", DEFAULT_PAGE_SIZE))
-            batches = read_unit_days(
-                endpoint, unit_ids, day, limits.get("unit_id_concurrency", DEFAULT_UNIT_ID_CONCURRENCY), tally
-            )
+            batches = read_unit_days(endpoint, unit_ids, day, concurrency, tally)
 
-            if not await flush_buffer(batches, upload):
+            if not await flush_buffer(batches, uploader(target)):
                 logger.warning("No position on %s", day)
 
     check_error_rate("unit_positions", tally, MAX_ITEM_ERROR_RATE)
@@ -160,13 +175,10 @@ async def run_qmd_task(table: Table, cloud: Cloud, dump_mode: DumpMode, limits: 
     tally = Tally()
     reader = read_details if table_id == "qmd_detalhes" else read_kmls
 
-    async def upload(rows: list[Row], cycle: int) -> None:
-        await upload_cycle_task(rows, target, cycle)
-
     async with FMApi.connect(limits.get("concurrency", DEFAULT_CONCURRENCY)) as api:
         batches = reader(
             api, TABLE_CONFIG[table_id], qmd_ids, limits.get("qmd_id_concurrency", DEFAULT_QMD_ID_CONCURRENCY), tally
         )
-        await flush_buffer(batches, upload)
+        await flush_buffer(batches, uploader(target))
 
     check_error_rate(table_id, tally, MAX_ITEM_ERROR_RATE)

@@ -1,6 +1,7 @@
 """Read the layout spreadsheets of CadÚnico into rows."""
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
+from json import dumps
 from pathlib import Path
 from re import search
 
@@ -10,6 +11,8 @@ from xlrd import open_workbook
 
 from pipelines.rj_smas__cadunico.constants import (
     BLOB_VERSION_MARK,
+    DICTIONARY_URL,
+    LAYOUT_FOLDER_URL,
     LAYOUT_TITLE,
     TABLE_FIELDS,
     UNNAMED_COLUMN,
@@ -178,3 +181,24 @@ def parse_layout(cells_by_sheet: dict[str, Cells], version: str) -> list[Record]
     wanted = name_version(version)
 
     return name_columns([record for record in records if record["version"] == wanted])
+
+
+def unmapped_message(unmapped: Sequence[Record]) -> str:
+    """Return the text that asks to add the columns to the dictionary sheet."""
+    columns = dumps(list(unmapped), indent=2, ensure_ascii=False)
+
+    return f"Add the columns below to the sheet dicionario_colunas_cadunico:\n{DICTIONARY_URL}\n\n{columns}"
+
+
+def layout_for_versions(rows: Sequence[Record], versions: Collection[str]) -> list[Record]:
+    """Return the layout rows of the versions of the records.
+
+    Raise `ValueError` if a version of the records has no layout.
+    """
+    known = {row["versao_layout_particao"] for row in rows}
+    lacking = [version for version in versions if version not in known]
+
+    if lacking:
+        raise ValueError(f"Upload the layouts of the versions {lacking} to {LAYOUT_FOLDER_URL}")
+
+    return [row for row in rows if row["versao_layout_particao"] in versions]

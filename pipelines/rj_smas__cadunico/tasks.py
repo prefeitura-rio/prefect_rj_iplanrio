@@ -1,28 +1,23 @@
 """Tasks of rj_smas__cadunico."""
 
 from asyncio import Semaphore, gather, to_thread
-from datetime import datetime
-from json import dumps
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import cast
 
 from prefect import task
 from toolkit.dbt import DbtRun
 from toolkit.telemetry import logger
-from toolkit.types import TemplateValue
 
 from pipelines.rj_smas__cadunico.constants import (
-    DICTIONARY_URL,
-    LAYOUT_FOLDER_URL,
     MAX_CONCURRENT,
-    MODEL_PREFIX,
     SKIPPED_TABLE,
     VERSION_CONTROL_SUFFIX,
     WORK_FOLDER,
 )
-from pipelines.rj_smas__cadunico.helpers.models import build_models, dump_schema, find_long_descriptions
-from pipelines.rj_smas__cadunico.helpers.prepare import prepare_partition, read_layouts, to_records, write_table
+from pipelines.rj_smas__cadunico.helpers.ingest import ingest_archive
+from pipelines.rj_smas__cadunico.helpers.layout import layout_for_versions, unmapped_message
+from pipelines.rj_smas__cadunico.helpers.models import render_model_files
+from pipelines.rj_smas__cadunico.helpers.prepare import read_layouts, to_records, write_table
 from pipelines.rj_smas__cadunico.helpers.repository import push_models
 from pipelines.rj_smas__cadunico.helpers.storage import (
     list_layout_files,
@@ -77,28 +72,9 @@ async def ingest_archives_task(names: list[str], raw: RawFolders, tables: Tables
     destination = Table(dataset_id=tables["dataset_id"], table_id=tables["records"])
 
     async def ingest(name: str) -> None:
-        """Download a ZIP, turn it into Parquet files and load them."""
+        """Load a ZIP, `MAX_CONCURRENT` at a time."""
         async with semaphore:
-            with TemporaryDirectory(prefix=WORK_FOLDER) as directory:
-                partition = await to_thread(prepare_partition, raw["bucket"], name, Path(directory))
-
-                if partition.date != partition.extracted:
-                    logger.warning(
-                        "%s: the date of the name is %s, and the date in the file is %s",
-                        name,
-                        partition.date,
-                        partition.extracted,
-                    )
-
-                await upload_files_to_gcs.fn(
-                    partition.folder,
-                    destination,
-                    bucket=cloud["bucket"],
-                    dump_mode="append",
-                    source_format="parquet",
-                    options={"capture": datetime.fromisoformat(partition.date)},
-                )
-                logger.info("Loaded %s: date=%s layout=%s", name, partition.date, partition.layout_version)
+            await ingest_archive(name, raw, destination, cloud)
 
     results = await gather(*(ingest(name) for name in names), return_exceptions=True)
     failed = {name: result for name, result in zip(names, results, strict=True) if isinstance(result, BaseException)}
@@ -152,10 +128,7 @@ async def read_layout_task(tables: Tables, cloud: Cloud) -> list[Record]:
     unmapped = await read_bq.fn(render_query(__file__, "unmapped_columns", **names), project=project)
 
     if not unmapped.is_empty():
-        columns = dumps(to_records(unmapped), indent=2, ensure_ascii=False)
-        raise ValueError(
-            f"Add the columns below to the sheet dicionario_colunas_cadunico:\n{DICTIONARY_URL}\n\n{columns}"
-        )
+        raise ValueError(unmapped_message(to_records(unmapped)))
 
     layout = await read_bq.fn(render_query(__file__, "layout", skipped=SKIPPED_TABLE, **names), project=project)
     versions = await to_thread(
@@ -164,16 +137,11 @@ async def read_layout_task(tables: Tables, cloud: Cloud) -> list[Record]:
         staging_name(cloud, tables, tables["records"]),
         render_query(__file__, "versions", table=staging_name(cloud, tables, tables["records"])),
     )
-    rows = to_records(layout)
-    known = {row["versao_layout_particao"] for row in rows}
-    lacking = [version for version in versions if version not in known]
-
-    if lacking:
-        raise ValueError(f"Upload the layouts of the versions {lacking} to {LAYOUT_FOLDER_URL}")
+    rows = layout_for_versions(to_records(layout), versions)
 
     logger.info("Layout: %d rows, filtered by the versions %s of the records", len(rows), sorted(versions))
 
-    return [row for row in rows if row["versao_layout_particao"] in versions]
+    return rows
 
 
 @task
@@ -202,24 +170,7 @@ async def push_models_task(rows: list[Record], tables: Tables, cloud: Cloud, dbt
 
     Return whether the push changed the repository.
     """
-    files: dict[str, str] = {}
-
-    for model in build_models(rows, tables["dataset_id"]):
-        for column in find_long_descriptions(model):
-            logger.warning("%s.%s: the description is over the limit of BigQuery", model["name"], column)
-
-        sql = render_query(
-            __file__,
-            "model",
-            alias=model["name"],
-            number=model["number"],
-            project=cloud["project"],
-            dataset=tables["dataset_id"],
-            records=tables["records"],
-            versions=cast("TemplateValue", model["versions"]),
-        )
-        files[f"{MODEL_PREFIX}__{model['name']}.sql"] = sql
-        files[f"{MODEL_PREFIX}__{model['name']}.yml"] = dump_schema(model)
+    files = render_model_files(rows, __file__, tables["dataset_id"], tables["records"], cloud["project"])
 
     changed = await to_thread(
         push_models, dbt.repository, dbt.branch, files, f"feat: update CadUnico models - {tables['dataset_id']}"

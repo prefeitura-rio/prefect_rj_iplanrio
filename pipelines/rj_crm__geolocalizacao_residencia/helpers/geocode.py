@@ -4,7 +4,7 @@ Geocode.xyz has retries, and Geoapify takes batches.
 """
 
 from asyncio import Semaphore, gather, sleep
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from random import uniform
 
 from httpx2 import AsyncClient, HTTPError
@@ -13,6 +13,7 @@ from toolkit.telemetry import logger
 
 from pipelines.rj_crm__geolocalizacao_residencia.constants import (
     DEFAULT_TIMEOUT,
+    FALLBACK_STEPS,
     GEOAPIFY_MAX_WAIT_SECONDS,
     GEOAPIFY_POLL_SECONDS,
     GEOAPIFY_POLL_TIMEOUT,
@@ -38,7 +39,8 @@ from pipelines.rj_crm__geolocalizacao_residencia.helpers.providers import (
     parse_xyz,
     xyz_url,
 )
-from pipelines.rj_crm__geolocalizacao_residencia.types import Geocode, Pause, Run, Step
+from pipelines.rj_crm__geolocalizacao_residencia.helpers.rows import has_point, split_found, texts
+from pipelines.rj_crm__geolocalizacao_residencia.types import Address, Geocode, Pause, Run, Step
 from utils.records import dig, read_json
 
 ERRORS = (HTTPError, ValidationError, ValueError, KeyError, IndexError, TypeError)
@@ -268,3 +270,39 @@ async def run_step(step: Step, addresses: Sequence[str], key: str, today: str) -
         return [*done, *(empty_geocode(provider.name, today) for _ in addresses[balance:])]
 
     return await geocode_many(provider, addresses, today=today, concurrent=step.concurrent, wait=step.wait)
+
+
+async def run_chain(
+    addresses: Sequence[Address], keys: Mapping[str, str], today: str
+) -> tuple[list[Address], list[Geocode]]:
+    """Geocode the addresses with the services in order, each one over what is left.
+
+    Skip a service whose key is not set. A service whose answers are all empty counts
+    as out of quota and is skipped. Return the addresses with a point, and the points.
+    """
+    found_addresses: list[Address] = []
+    found_geocodes: list[Geocode] = []
+    remaining = list(addresses)
+
+    for step in FALLBACK_STEPS:
+        if not remaining:
+            break
+
+        key = keys[step.key_setting] if step.key_setting else ""
+
+        if step.key_setting and not key:
+            logger.warning("The key is not set, so the service is skipped: service=%s", step.name)
+            continue
+
+        geocodes = await run_step(step, texts(remaining), key, today)
+
+        if not any(has_point(geocode) for geocode in geocodes):
+            logger.warning("Every answer is empty, so the service counts as out of quota: service=%s", step.name)
+            continue
+
+        found, points, remaining = split_found(remaining, geocodes)
+        found_addresses += found
+        found_geocodes += points
+        logger.info("Service done: service=%s found=%d left=%d", step.name, len(found_addresses), len(remaining))
+
+    return found_addresses, found_geocodes

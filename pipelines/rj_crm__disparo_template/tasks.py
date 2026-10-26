@@ -219,6 +219,15 @@ async def materialize_task() -> None:
     await run_dbt.fn(DbtRun(repository=REPOSITORY, command="run", target="prod", select=STATUS_MODEL))
 
 
+async def read_success_count(campaign: str, dispatch_date: str) -> int:
+    """Build the status model, and count the sends of the dispatch with a status."""
+    await materialize_task.fn()
+    query = render_query(__file__, "campaign_success", campaign=Literal(campaign), dispatch_date=Literal(dispatch_date))
+    frame = await read_bq.fn(query, project=BILLING_PROJECT)
+
+    return int(frame.get_column("total_sucesso").cast(pl.Int64).sum()) if frame.height else 0
+
+
 @task
 async def monitor_task(campaign: str, dispatch_date: str, total: int, delivery: Delivery, *, test_mode: bool) -> bool:
     """Wait and look for the status of the dispatch, until it shows or time ends.
@@ -236,12 +245,7 @@ async def monitor_task(campaign: str, dispatch_date: str, total: int, delivery: 
     elapsed = initial
 
     while True:
-        await materialize_task.fn()
-        query = render_query(
-            __file__, "campaign_success", campaign=Literal(campaign), dispatch_date=Literal(dispatch_date)
-        )
-        frame = await read_bq.fn(query, project=BILLING_PROJECT)
-        count = int(frame.get_column("total_sucesso").cast(pl.Int64).sum()) if frame.height else 0
+        count = await read_success_count(campaign, dispatch_date)
         confirmed = is_confirmed(count, total)
         logger.info("Check of the status: elapsed=%d confirmed=%s count=%d total=%d", elapsed, confirmed, count, total)
 

@@ -11,6 +11,7 @@ from pydantic import JsonValue
 from toolkit.telemetry import logger
 
 from pipelines.rj_pic__disparos_email.constants import PERMANENT_STATUSES, REQUEST_TIMEOUT
+from pipelines.rj_pic__disparos_email.settings import Settings
 from pipelines.rj_pic__disparos_email.types import Mail
 from utils.records import dig, read_json
 
@@ -27,6 +28,20 @@ class Relay:
     max_retries: int = 3
     retry_delay: float = 5
     throttle_delay: float = 1
+
+
+def relay_from(settings: Settings) -> Relay:
+    """Return the Data Relay that the settings describe."""
+    return Relay(
+        url=settings.DATA_RELAY_URL,
+        api_key=settings.DATA_RELAY_API_KEY.get_secret_value(),
+        from_address=settings.DATA_RELAY_FROM_ADDRESS,
+        use_gmail_api=settings.DATA_RELAY_USE_GMAIL_API,
+        is_html_body=settings.DATA_RELAY_IS_HTML_BODY,
+        max_retries=settings.MAX_RETRIES,
+        retry_delay=settings.RETRY_DELAY,
+        throttle_delay=settings.THROTTLE_DELAY,
+    )
 
 
 type Pause = Callable[[float], Awaitable[None]]

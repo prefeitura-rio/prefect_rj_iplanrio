@@ -9,15 +9,14 @@ from toolkit.telemetry import logger
 from pipelines.rj_crm__geolocalizacao_residencia.constants import (
     BILLING_PROJECT,
     DEFAULT_SLEEP_SECONDS,
-    FALLBACK_STEPS,
     GEOAPIFY_BATCH_SIZE,
     SP_TZ,
 )
-from pipelines.rj_crm__geolocalizacao_residencia.helpers.geocode import geocode_geoapify, geocode_many, run_step
+from pipelines.rj_crm__geolocalizacao_residencia.helpers.geocode import geocode_geoapify, geocode_many, run_chain
 from pipelines.rj_crm__geolocalizacao_residencia.helpers.providers import nominatim
-from pipelines.rj_crm__geolocalizacao_residencia.helpers.rows import has_point, join_rows
+from pipelines.rj_crm__geolocalizacao_residencia.helpers.rows import join_rows, texts
 from pipelines.rj_crm__geolocalizacao_residencia.settings import Settings
-from pipelines.rj_crm__geolocalizacao_residencia.types import Address, Geocode, Row
+from pipelines.rj_crm__geolocalizacao_residencia.types import Address, Row
 from utils.tasks import read_bq
 from utils.utils import render_query
 
@@ -27,11 +26,6 @@ ADDRESSES: TypeAdapter[list[Address]] = TypeAdapter(list[Address])
 def today() -> str:
     """Return today in São Paulo, as the text of the `updated_date` column."""
     return datetime.now(SP_TZ).date().isoformat()
-
-
-def texts(addresses: list[Address]) -> list[str]:
-    """Return the full address of each address."""
-    return [address["endereco_completo"] or "" for address in addresses]
 
 
 @task(retries=2, retry_delay_seconds=30)
@@ -81,38 +75,7 @@ async def geocode_fallback_task(addresses: list[Address]) -> list[Row]:
         "LOCATIONIQ_API_KEY": settings.LOCATIONIQ_API_KEY.get_secret_value(),
         "OPENCAGE_API_KEY": settings.OPENCAGE_API_KEY.get_secret_value(),
     }
-    day = today()
-    found_addresses: list[Address] = []
-    found_geocodes: list[Geocode] = []
-    remaining = list(addresses)
-
-    for step in FALLBACK_STEPS:
-        if not remaining:
-            break
-
-        key = keys[step.key_setting] if step.key_setting else ""
-
-        if step.key_setting and not key:
-            logger.warning("The key is not set, so the service is skipped: service=%s", step.name)
-            continue
-
-        geocodes = await run_step(step, texts(remaining), key, day)
-
-        if not any(has_point(geocode) for geocode in geocodes):
-            logger.warning("Every answer is empty, so the service counts as out of quota: service=%s", step.name)
-            continue
-
-        still: list[Address] = []
-
-        for address, geocode in zip(remaining, geocodes, strict=True):
-            if has_point(geocode):
-                found_addresses.append(address)
-                found_geocodes.append(geocode)
-            else:
-                still.append(address)
-
-        logger.info("Service done: service=%s found=%d left=%d", step.name, len(found_addresses), len(still))
-        remaining = still
+    found_addresses, found_geocodes = await run_chain(addresses, keys, today())
 
     return join_rows(found_addresses, found_geocodes, need_street=True)
 

@@ -9,6 +9,29 @@ from pipelines.rj_crm__geolocalizacao_residencia.constants import GEOCODE_FIELDS
 from pipelines.rj_crm__geolocalizacao_residencia.types import Address, Geocode, Row
 
 
+def texts(addresses: Sequence[Address]) -> list[str]:
+    """Return the full address of each address."""
+    return [address["endereco_completo"] or "" for address in addresses]
+
+
+def split_found(
+    addresses: Sequence[Address], geocodes: Sequence[Geocode]
+) -> tuple[list[Address], list[Geocode], list[Address]]:
+    """Split the addresses into those with a point, their geocodes and those left."""
+    found: list[Address] = []
+    points: list[Geocode] = []
+    left: list[Address] = []
+
+    for address, geocode in zip(addresses, geocodes, strict=True):
+        if has_point(geocode):
+            found.append(address)
+            points.append(geocode)
+        else:
+            left.append(address)
+
+    return found, points, left
+
+
 def to_pluscode(latitude: str, longitude: str) -> str | None:
     """Return the Google Plus Code of a point, or nothing if the coordinates are bad.
 

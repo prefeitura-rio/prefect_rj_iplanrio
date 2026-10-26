@@ -3,9 +3,12 @@
 from collections.abc import Mapping, Sequence
 from io import StringIO
 from re import sub
+from typing import cast
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
 from ruamel.yaml import YAML
+from toolkit.telemetry import logger
+from toolkit.types import TemplateValue
 
 from pipelines.rj_smas__cadunico.constants import (
     DESCRIPTION_LIMIT,
@@ -18,6 +21,7 @@ from pipelines.rj_smas__cadunico.constants import (
 )
 from pipelines.rj_smas__cadunico.helpers.versions import sort_rows
 from pipelines.rj_smas__cadunico.types import Field, Model, ModelVersion, Record, SchemaColumn
+from utils.utils import render_query
 
 INDENT_MAPPING = 2
 INDENT_SEQUENCE = 4
@@ -216,3 +220,32 @@ def dump_schema(model: Model) -> str:
     yaml.dump(document, output)
 
     return output.getvalue()
+
+
+def render_model_files(
+    rows: Sequence[Record], anchor: str, dataset_id: str, records: str, project: str
+) -> dict[str, str]:
+    """Return the SQL and the schema of each dbt model, by file name.
+
+    The SQL is `queries/model.sql` next to `anchor`. A description over the limit of
+    BigQuery is logged.
+    """
+    files: dict[str, str] = {}
+
+    for model in build_models(rows, dataset_id):
+        for column in find_long_descriptions(model):
+            logger.warning("%s.%s: the description is over the limit of BigQuery", model["name"], column)
+
+        files[f"{MODEL_PREFIX}__{model['name']}.sql"] = render_query(
+            anchor,
+            "model",
+            alias=model["name"],
+            number=model["number"],
+            project=project,
+            dataset=dataset_id,
+            records=records,
+            versions=cast("TemplateValue", model["versions"]),
+        )
+        files[f"{MODEL_PREFIX}__{model['name']}.yml"] = dump_schema(model)
+
+    return files

@@ -170,16 +170,8 @@ async def classify_task(batch: list[Prompted], llm: Llm) -> list[Row]:
     return rows
 
 
-@task(retries=3, retry_delay_seconds=[30, 60, 120])
-async def load_task(names: Names, rows: list[Row]) -> int:
-    """Add the rows to the tmp table and MERGE them by `id_sessao`.
-
-    The MERGE writes every column, so a later step that updates only some columns must
-    not reuse it. Return the rows that the MERGE touched, or 0 for no row.
-    """
-    if not rows:
-        return 0
-
+def merge_queries(names: Names) -> tuple[str, str]:
+    """Return the MERGE of the tmp table into the destination, and the tmp truncate."""
     columns = [column for column in COLUMNS if column != PRIMARY_KEY]
     merge = render_query(
         __file__,
@@ -191,7 +183,21 @@ async def load_task(names: Names, rows: list[Row]) -> int:
         insert_cols=", ".join(COLUMNS),
         insert_vals=", ".join(f"s.{column}" for column in COLUMNS),
     )
-    truncate = render_query(__file__, "truncate_table", table=names.tmp)
+
+    return merge, render_query(__file__, "truncate_table", table=names.tmp)
+
+
+@task(retries=3, retry_delay_seconds=[30, 60, 120])
+async def load_task(names: Names, rows: list[Row]) -> int:
+    """Add the rows to the tmp table and MERGE them by `id_sessao`.
+
+    The MERGE writes every column, so a later step that updates only some columns must
+    not reuse it. Return the rows that the MERGE touched, or 0 for no row.
+    """
+    if not rows:
+        return 0
+
+    merge, truncate = merge_queries(names)
     touched = await to_thread(
         bq.load_and_merge,
         names.project,

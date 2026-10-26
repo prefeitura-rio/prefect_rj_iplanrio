@@ -3,6 +3,7 @@
 from asyncio import to_thread
 from datetime import UTC, datetime
 
+import polars as pl
 from google.api_core.exceptions import NotFound
 from prefect import task
 from toolkit.gcs import create_store
@@ -13,6 +14,24 @@ from pipelines.rj_iplanrio__sisbicho_images.types import Row, Storage
 from utils.tasks import read_bq
 from utils.types import Table
 from utils.utils import render_query
+
+
+async def read_pending(project: str, identifier: str, source_table: str, target_table: str) -> pl.DataFrame:
+    """Return the pending ids, or every source id if the target does not exist."""
+    try:
+        return await read_bq(
+            render_query(
+                __file__, "pending_ids", identifier=identifier, source_table=source_table, target_table=target_table
+            ),
+            project=project,
+        )
+    except NotFound:
+        logger.info("The target table does not exist yet: table=%s", target_table)
+
+    return await read_bq(
+        render_query(__file__, "pending_ids", identifier=identifier, source_table=source_table, target_table=""),
+        project=project,
+    )
 
 
 @task(retries=2, retry_delay_seconds=10)
@@ -30,20 +49,7 @@ async def list_pending_task(project: str, source: Table, target: Table) -> tuple
     source_table = f"{project}.{source['dataset_id']}.{source['table_id']}"
     target_table = f"{project}.{target['dataset_id']}.{target['table_id']}"
 
-    try:
-        frame = await read_bq(
-            render_query(
-                __file__, "pending_ids", identifier=identifier, source_table=source_table, target_table=target_table
-            ),
-            project=project,
-        )
-    except NotFound:
-        logger.info("The target table does not exist yet: table=%s", target_table)
-        frame = await read_bq(
-            render_query(__file__, "pending_ids", identifier=identifier, source_table=source_table, target_table=""),
-            project=project,
-        )
-
+    frame = await read_pending(project, identifier, source_table, target_table)
     ids = quote_ids(frame["animal_identifier"].to_list())
     logger.info("Pending animals: identifier=%s count=%d", identifier, len(ids))
 

@@ -49,6 +49,32 @@ def build_tables_task(xml: str) -> Forecast:
     return forecast
 
 
+async def read_alert_stats(project: str, full_name: str, alert_hash: str) -> dict[str, int | None] | None:
+    """Return the stats of the alert log for the hash, or nothing if the log is new."""
+    try:
+        frame = await read_bq(
+            render_query(__file__, "alert_stats", table=full_name, alert_hash=alert_hash), project=project
+        )
+    except NotFound:
+        logger.info("The alert log does not exist yet: table=%s", full_name)
+        return None
+
+    return frame.cast(pl.Int64).to_dicts()[0] if frame.height else None
+
+
+def decide_to_send(stats: dict[str, int | None] | None, alert_hash: str, rules: Alerts) -> bool:
+    """Decide with the rules if the alert goes out, and log the reason."""
+    should_send, reason = decide_alert(
+        stats,
+        alert_hash,
+        rules.get("max_daily", DEFAULT_MAX_DAILY_ALERTS),
+        rules.get("min_interval_hours", DEFAULT_MIN_INTERVAL_HOURS),
+    )
+    logger.info("Alert decision: send=%s reason=%s", should_send, reason)
+
+    return should_send
+
+
 @task
 async def alert_task(
     alerts: list[PrecipitationAlert], forecast: Forecast, *, project: str, dataset_id: str, rules: Alerts
@@ -63,26 +89,8 @@ async def alert_task(
     alert_hash = hash_message(message)
     full_name = f"{project}.{dataset_id}.{ALERT_LOG_TABLE}"
 
-    stats: dict[str, int | None] | None
-
-    try:
-        frame = await read_bq(
-            render_query(__file__, "alert_stats", table=full_name, alert_hash=alert_hash), project=project
-        )
-        stats = frame.cast(pl.Int64).to_dicts()[0] if frame.height else None
-    except NotFound:
-        logger.info("The alert log does not exist yet: table=%s", full_name)
-        stats = None
-
-    should_send, reason = decide_alert(
-        stats,
-        alert_hash,
-        rules.get("max_daily", DEFAULT_MAX_DAILY_ALERTS),
-        rules.get("min_interval_hours", DEFAULT_MIN_INTERVAL_HOURS),
-    )
-    logger.info("Alert decision: send=%s reason=%s", should_send, reason)
-
-    if not should_send:
+    stats = await read_alert_stats(project, full_name, alert_hash)
+    if not decide_to_send(stats, alert_hash, rules):
         return []
 
     message_id = await notify_discord(message)

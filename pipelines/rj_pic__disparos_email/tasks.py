@@ -6,7 +6,7 @@ from pydantic import TypeAdapter
 from toolkit.telemetry import logger
 
 from pipelines.rj_pic__disparos_email.constants import EMAIL_COLUMN, TEMPLATE_DIR
-from pipelines.rj_pic__disparos_email.helpers.mail import Pacer, Relay, send_mail
+from pipelines.rj_pic__disparos_email.helpers.mail import Pacer, relay_from, send_mail
 from pipelines.rj_pic__disparos_email.helpers.recipients import build_mail, parse_filter
 from pipelines.rj_pic__disparos_email.settings import Settings
 from pipelines.rj_pic__disparos_email.types import Delivery
@@ -41,17 +41,7 @@ async def send_mails_task(rows: list[dict[str, str]], subject: str) -> Delivery:
 
     A row with no address is skipped and counts as a failure.
     """
-    settings = Settings()
-    relay = Relay(
-        url=settings.DATA_RELAY_URL,
-        api_key=settings.DATA_RELAY_API_KEY.get_secret_value(),
-        from_address=settings.DATA_RELAY_FROM_ADDRESS,
-        use_gmail_api=settings.DATA_RELAY_USE_GMAIL_API,
-        is_html_body=settings.DATA_RELAY_IS_HTML_BODY,
-        max_retries=settings.MAX_RETRIES,
-        retry_delay=settings.RETRY_DELAY,
-        throttle_delay=settings.THROTTLE_DELAY,
-    )
+    relay = relay_from(Settings())
     pacer = Pacer(relay.throttle_delay)
     sent = 0
 
