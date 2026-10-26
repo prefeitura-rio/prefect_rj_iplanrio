@@ -48,3 +48,22 @@ class WhitelistSettings(ToolkitSettings):
     WHITELIST_ISSUER: str = required_text()
     WHITELIST_CLIENT_ID: str = required_text()
     WHITELIST_CLIENT_SECRET: SecretStr = required_secret()
+
+
+class InfisicalSettings(ToolkitSettings):
+    """Where a job reads its secrets: the server, the identity, the project and the folders.
+
+    `INFISICAL_PATHS` lists the folders in order, separated by commas, and the first folder
+    that holds a key wins.
+    """
+
+    INFISICAL_URL: str = required_text()
+    INFISICAL_IDENTITY_ID: str = required_text()
+    INFISICAL_PROJECT_ID: str = required_text()
+    INFISICAL_ENVIRONMENT: str = required_text()
+    INFISICAL_PATHS: str = required_text()
+
+    @property
+    def paths(self) -> list[str]:
+        """Return the folders, in order."""
+        return [path.strip() for path in self.INFISICAL_PATHS.split(",") if path.strip()]

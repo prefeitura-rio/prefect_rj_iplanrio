@@ -89,3 +89,12 @@ TEST_PREFIX: Final = "teste-"
 
 DEFAULT_CLOUD: Final = Cloud(bucket="rj-iplanrio", project="rj-iplanrio", connection="rj-iplanrio.us.biglake")
 """The bucket and the BigQuery project of a flow that does not set its own `cloud`."""
+
+INFISICAL_LOGIN_PATH: Final = "/api/v1/auth/kubernetes-auth/login"
+"""The Infisical route that exchanges a Kubernetes service account token for an access token."""
+
+INFISICAL_SECRETS_PATH: Final = "/api/v3/secrets/raw"
+"""The Infisical route that lists the secrets of one folder."""
+
+SERVICE_ACCOUNT_TOKEN: Final = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+"""The file where Kubernetes mounts the token of the service account of a pod."""
