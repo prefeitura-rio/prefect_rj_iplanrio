@@ -52,7 +52,7 @@ deployments:
           campaign_name: recado_mobirio_pref_rio_bonus_v1
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
-          data_extension_filename: DE_WHATSAPP_SMA_MOBIRIO_BONUS_2026
+          data_extension_filename: whatsapp_sma_mobirio_bonus_2026
           de_columns: ["nome_servidor"]
           filter_duplicated_phones: false
           filter_duplicated_cpfs: false
@@ -69,11 +69,13 @@ deployments:
           campaign_name: recado_servidores_pref_rio_14
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
-          data_extension_filename: DE_WHATSAPP_SMA_SERVIDORES_AR_2026_
+          data_extension_filename: whatsapp_sma_servidores_ar_2026
           de_columns: ["nome_servidor"]
           filter_duplicated_phones: false
           filter_duplicated_cpfs: false
           filter_failed_phones: true
+          batch_size: 10000
+          batch_sleep_minutes: 5
           query_file: queries/sma/bonus_servidores/bonus_servidores_segundo_envio.sql
 
       # Disparo infrequência escolar (SME)
