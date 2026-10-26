@@ -41,6 +41,41 @@ deployments:
       filter_duplicated_phones: false
       filter_duplicated_cpfs: true
     schedules:
+      # Disparo recado_mobirio
+      - cron: "0 9 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: oneshot-recado_mobirio
+        flow_run_name: recado_mobirio
+        parameters:
+          flow_environment: staging
+          campaign_name: recado_mobirio_pref_rio_bonus_v1
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          data_extension_filename: DE_WHATSAPP_SMA_MOBIRIO_BONUS_2026
+          de_columns: ["nome_servidor"]
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: false
+          filter_failed_phones: true
+          query_file: queries/sma/bonus_servidores/bonus_mobi_rio.sql
+      # Disparo bonus_segundo_envio
+      - cron: "0 9 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: oneshot-bonus_segundo_envio
+        flow_run_name: bonus_segundo_envio
+        parameters:
+          flow_environment: staging
+          campaign_name: recado_servidores_pref_rio_14
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          data_extension_filename: DE_WHATSAPP_SMA_SERVIDORES_AR_2026_
+          de_columns: ["nome_servidor"]
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: false
+          filter_failed_phones: true
+          query_file: queries/sma/bonus_servidores/bonus_servidores_segundo_envio.sql
+
       # Disparo infrequência escolar (SME)
       - cron: "0 15 * * *"
         timezone: America/Sao_Paulo
