@@ -22,6 +22,8 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
+ENV CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
 ARG DUCKDB_VERSION=1.5.6
 RUN uv run --no-project --with "duckdb==${DUCKDB_VERSION}" python -c "\
 import duckdb; \
