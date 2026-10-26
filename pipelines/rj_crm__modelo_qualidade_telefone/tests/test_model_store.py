@@ -83,7 +83,7 @@ def test_a_missing_version_is_reported(tmp_path: Path) -> None:
 def test_there_is_no_champion_before_the_first_promotion(
     make_booster: Callable[[int], Booster], tmp_path: Path
 ) -> None:
-    """Return nothing when the pointer does not exist, even if a version is published."""
+    """Return nothing when the pointer is missing, even if a version is published."""
     publish_version(str(tmp_path), "v1", make_booster(0), METADATA)
 
     assert load_champion(str(tmp_path)) is None

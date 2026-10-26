@@ -1,4 +1,7 @@
-"""The debts of each CPF, from the public API `consulta_debitos`, to add to the frame."""
+"""The debts of each CPF, from the public API `consulta_debitos`.
+
+They are added to the frame.
+"""
 
 from asyncio import sleep
 from collections.abc import Awaitable, Callable, Mapping
@@ -33,7 +36,9 @@ def is_success(value: JsonValue) -> bool:
 
 
 def escape_json(value: JsonValue) -> str | None:
-    """Return a value as JSON with the inner quotes escaped by a backslash and no quotes around it.
+    """Return a value as JSON with the inner quotes escaped by a backslash.
+
+    The result has no outer quotes.
 
     A null stays null, so the CSV has an empty field and not the text `null`.
     """
@@ -44,7 +49,7 @@ def escape_json(value: JsonValue) -> str | None:
 
 
 def format_debts(debts: JsonValue) -> str | None:
-    """Write the list of debts as numbered lines for a person to read, or nothing for no debt.
+    """Write the list of debts as numbered lines for a person, or nothing for no debt.
 
     ```text
     1. CDA 01/022303/2026-00 - Valor: R$4.128,56
@@ -124,7 +129,9 @@ def build_row(cpf: str, response: Mapping[str, JsonValue]) -> dict[str, str | No
 async def enrich_with_debts(
     frame: pl.DataFrame, cpf_column: str, url: str, client: AsyncClient, pause: Pause = sleep
 ) -> pl.DataFrame:
-    """Add the debts to the frame, one request for each CPF, and drop the CPFs with no confirmed debt.
+    """Add the debts to the frame, one request for each CPF.
+
+    CPFs with no confirmed debt are dropped.
 
     A CPF whose request failed, or whose answer does not confirm a debt
     (`api_resposta_sucesso` not true), leaves the frame. The columns of `DEBTS_OUTPUT`

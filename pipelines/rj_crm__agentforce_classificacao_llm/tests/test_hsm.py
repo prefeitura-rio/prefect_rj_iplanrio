@@ -61,7 +61,7 @@ def test_the_titles_of_the_buttons_come_from_their_json(buttons: str | None, exp
 
 
 def test_the_row_of_the_catalog_prefers_a_version_before_the_change_and_breaks_a_tie_by_activity() -> None:
-    """Choose a row that does not come after a change of the template, then by the name of the activity."""
+    """Choose a row from before a template change, then by the activity name."""
     rows = [row("j", "h", "after", "a", post=True), row("j", "h", "second", "c"), row("j", "h", "first", "b")]
 
     assert choose_button_row(rows)["hsm_botoes_json"] == "first"
@@ -104,7 +104,7 @@ def test_the_longest_common_subsequence_has_its_length(first: str, second: str, 
 def test_a_placeholder_finds_the_key_that_looks_most_like_it(
     placeholder: str, variables: dict[str, JsonValue], expected: JsonValue
 ) -> None:
-    """Take the key with the longest common subsequence, if it covers 70% of the placeholder."""
+    """Take the key with the longest common subsequence, if it covers 70% of it."""
     assert find_fuzzy(placeholder, variables) == expected
 
 
@@ -168,7 +168,7 @@ def test_a_reply_that_is_the_text_of_a_button_is_late(
 
 
 def test_the_sessions_get_the_text_the_buttons_and_the_late_flag(make_session: SessionFactory) -> None:
-    """Render the text, take the buttons of the journey and HSM, and mark the late reply."""
+    """Render the text, take the buttons of the journey and HSM, mark the late reply."""
     sessions = [
         make_session(
             id_sessao="a", hsm_texto="oi ${n}", hsm_variaveis_json='{"n": "Ana"}', mensagens_usuario_concatenadas="sim"

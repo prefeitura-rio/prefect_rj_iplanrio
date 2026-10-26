@@ -1,4 +1,7 @@
-"""The labels that the model answers, checked against the catalog, and what comes out of an answer."""
+"""The labels that the model answers, checked against the catalog.
+
+It also builds what an answer gives.
+"""
 
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
@@ -22,12 +25,17 @@ from utils.bifrost import Answer
 
 
 def normalize_label(text: object) -> str:
-    """Return a label to compare: no accents, no capitals, `_` as a space and one space between words."""
+    """Return a label to compare: no accents, no capitals, one space between words.
+
+    An underscore counts as a space.
+    """
     return normalize_text(str(text).replace("_", " "))
 
 
 def check_label(value: JsonValue, valid: Sequence[str]) -> str | None:
-    """Return the label of the catalog that the value matches, with accents and capitals ignored, or nothing.
+    """Return the catalog label that the value matches, or nothing.
+
+    Accents and capitals do not count.
 
     A value that is empty or in none of the labels gives nothing. A label out of the
     catalog would break the count by value in any later analysis, so it is dropped.
@@ -39,7 +47,7 @@ def check_label(value: JsonValue, valid: Sequence[str]) -> str | None:
 
 
 def check_labels(value: JsonValue, valid: Sequence[str]) -> str | None:
-    """Return the labels of a field that has many, separated by commas, each checked and without repeats.
+    """Return the labels of a field split by commas, each checked and once only.
 
     A label that is not in the catalog is dropped and the others stay. Return nothing if
     none is left.
@@ -53,7 +61,9 @@ def check_labels(value: JsonValue, valid: Sequence[str]) -> str | None:
 
 
 def derive_sentiment(nature: str | None) -> str | None:
-    """Return the sentiment from the nature of the manifestation, by rule and not by the model.
+    """Return the sentiment from the nature of the manifestation, by rule.
+
+    The model does not decide it.
 
     A complaint or a problem is negative, and weighs more than a praise. A praise alone
     is positive, and any other nature is neutral. Without a nature there is no
@@ -127,7 +137,9 @@ def build_classified_row(prompted: Prompted, parsed: Mapping[str, JsonValue], mo
 
 
 def build_rule_row(session: Session) -> Row:
-    """Return the row of a session that a rule decided: a late reply to a button, with no call to the model.
+    """Return the row of a session that a rule decided, with no model call.
+
+    It is a late reply to a button.
 
     Clicking a button of the HSM, even late, is engagement with its subject, so the
     phone belongs to the citizen. The model, the prompt, the tokens and the type of
@@ -156,7 +168,7 @@ def build_rule_row(session: Session) -> Row:
 
 
 def finish_rows(rows: Sequence[Row], prompt_version: str, now: datetime) -> list[Row]:
-    """Return the rows with the columns of the load: the time and day of the classification and the prompt version.
+    """Return the rows with the load columns: the time, day and prompt version.
 
     The date of the phone confirmation is the end of the session, kept only when the
     flag is there. The theme and the cause start empty, because the rules fill them

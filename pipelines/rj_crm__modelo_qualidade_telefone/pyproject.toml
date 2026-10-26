@@ -4,7 +4,6 @@ version = "1.0.0"
 description = "Estima a probabilidade de cada telefone ser HighDelivery no WhatsApp (LightGBM) e retreina o modelo todo mês, para o CRM escolher telefones com menos falha de entrega."
 dependencies = [
     "prefect_rj_iplanrio",
-    "google-api-python-client",
     "google-cloud-bigquery",
     "google-cloud-bigquery-storage",
     "google-cloud-storage",

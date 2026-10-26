@@ -31,7 +31,7 @@ def phones(make_features: Callable[..., pl.DataFrame], cpfs: list[list[str]], fi
 
 
 def test_the_probability_is_the_sigmoid_of_the_raw_score(make_booster: Callable[[int], Booster]) -> None:
-    """Make the base plus the sum of the SHAP values the raw score, and its sigmoid the probability."""
+    """Make base plus the SHAP sum the raw score, and its sigmoid the probability."""
     booster = make_booster(0)
     matrix = np.random.default_rng(1).random((20, len(FEATURES)))
 
@@ -89,7 +89,7 @@ def test_the_matrix_follows_the_order_of_the_features_and_not_the_one_of_the_col
 def test_a_phone_repeats_for_each_cpf_with_the_structs(
     make_features: Callable[..., pl.DataFrame], make_booster: Callable[[int], Booster]
 ) -> None:
-    """Make one row for each pair (cpf, phone), with the same probability for the CPFs of a phone."""
+    """Make a row for each (cpf, phone) pair, with one probability for a phone."""
     batch = phones(make_features, [["a", "b"], ["c"], []])
     scores = score_batch(batch, make_booster(0))
 

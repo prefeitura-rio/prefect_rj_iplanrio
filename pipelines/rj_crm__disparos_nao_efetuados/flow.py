@@ -31,7 +31,7 @@ async def notify_failure(flow: Flow[..., object], flow_run: FlowRun, state: Stat
 async def rj_crm__disparos_nao_efetuados(
     *, cloud: Cloud = DEFAULT_CLOUD, table: Table, dump_mode: DumpMode = "append"
 ) -> None:
-    """Check the active campaigns that sent nothing today, save the result and tell Discord.
+    """Check the active campaigns that sent nothing today, save it and tell Discord.
 
     The result is always saved, for the history. A list of campaigns with no dispatch
     goes to the channel of the errors, and a day with all of them sent goes to the

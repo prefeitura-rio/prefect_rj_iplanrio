@@ -5,14 +5,15 @@ O corpo é o `email_template.html` renderizado com Jinja2, seguindo o padrão de
 """
 
 from dataclasses import dataclass
+from http import HTTPStatus
 from pathlib import Path
 
-import requests
+from httpx2 import post
 from jinja2 import Environment, FileSystemLoader
 from pydantic import JsonValue, TypeAdapter
+from toolkit.telemetry import logger
 
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.janela import Janela
-from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.log import logger_da_pipeline
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.ocorrencias import (
     Ocorrencia,
     frequencias,
@@ -21,7 +22,6 @@ from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.ocorrencias import (
 )
 from utils.records import dig
 
-logger = logger_da_pipeline(__name__)
 JSON: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
 DIRETORIO_TEMPLATE = Path(__file__).resolve().parent.parent
@@ -38,23 +38,18 @@ class ConexaoDataRelay:
 
 
 def montar_assunto(janela: Janela, ocorrencias: list[Ocorrencia]) -> str:
-    """Monta o assunto do e-mail.
+    """Build the subject of the e-mail, with the date and the volume.
 
-    :param janela: Recorte do relatório.
-    :param ocorrencias: Ocorrências do período.
-    :returns: Assunto com data e volume, para a caixa de entrada já dizer o essencial.
+    The inbox then shows the essentials.
     """
     return f"[Relatório diário] URLs redigidas — {janela.data_relatorio} ({len(ocorrencias)} ocorrências)"
 
 
 def renderizar(janela: Janela, ocorrencias: list[Ocorrencia], run_url: str) -> str:
-    """Renderiza o corpo HTML do relatório.
+    """Render the HTML body of the report.
 
-    :param janela: Recorte do relatório.
-    :param ocorrencias: Ocorrências do período.
-    :param run_url: Endereço da execução na interface do Prefect.
-    :returns: HTML pronto para envio.
-    :raises jinja2.TemplateNotFound: Se ``email_template.html`` não estiver na pipeline.
+    `run_url` is the address of the run in the Prefect UI. Raise
+    `jinja2.TemplateNotFound` if `email_template.html` is not in the pipeline.
     """
     ambiente = Environment(
         loader=FileSystemLoader(str(DIRETORIO_TEMPLATE)),
@@ -83,17 +78,11 @@ def enviar_relatorio(
     ocorrencias: list[Ocorrencia],
     run_url: str,
 ) -> None:
-    """Monta e envia o relatório detalhado do período.
+    """Build and send the detailed report of the period.
 
-    Reúne assunto, corpo e envio numa chamada só, para que a task correspondente não
-    precise conhecer a ordem de composição da mensagem (§4.2 do styleguide).
-
-    :param conexao: Endereço, chave e tempo limite do Data Relay.
-    :param destinatarios: Lista de e-mails, que vira ``to_addresses``.
-    :param janela: Recorte do relatório.
-    :param ocorrencias: Ocorrências do período.
-    :param run_url: Endereço da execução na interface do Prefect.
-    :raises ValueError: Se a lista de destinatários estiver vazia ou o envio falhar.
+    It puts the subject, the body and the send in one call, so the task does not need to
+    know how the message is composed. `destinatarios` becomes `to_addresses`. Raise
+    `ValueError` if the list of recipients is empty or the send fails.
     """
     enviar(
         conexao=conexao,
@@ -104,21 +93,16 @@ def enviar_relatorio(
 
 
 def enviar(conexao: ConexaoDataRelay, destinatarios: list[str], assunto: str, corpo: str) -> None:
-    """Envia o relatório pelo Data Relay.
+    """Send the report through the Data Relay.
 
-    ``is_html_body`` precisa ser ``True``: o padrão do endpoint é ``False``, e sem isso
-    o HTML chegaria como texto cru.
-
-    :param conexao: Endereço, chave e tempo limite do Data Relay.
-    :param destinatarios: Lista de e-mails, que vira ``to_addresses``.
-    :param assunto: Assunto da mensagem.
-    :param corpo: Corpo HTML já renderizado.
-    :raises ValueError: Se a lista de destinatários estiver vazia ou o envio falhar.
+    `is_html_body` must be `True`: the endpoint default is `False`, and without it the
+    HTML would arrive as raw text. Raise `ValueError` if the list of recipients is empty
+    or the send fails.
     """
     if not destinatarios:
         raise ValueError("Nenhum destinatário configurado para o relatório.")
 
-    resposta = requests.post(
+    resposta = post(
         conexao.url,
         headers={"x-api-key": conexao.api_key},
         json={
@@ -129,7 +113,7 @@ def enviar(conexao: ConexaoDataRelay, destinatarios: list[str], assunto: str, co
         },
         timeout=conexao.timeout,
     )
-    if resposta.status_code != requests.codes.ok:
+    if resposta.status_code != HTTPStatus.OK:
         raise ValueError(f"Falha ao enviar o e-mail: {resposta.status_code} - {resposta.text}")
 
     conteudo = JSON.validate_json(resposta.content)

@@ -1,4 +1,7 @@
-"""The runs of the geocoding: a service over many addresses, Geocode.xyz with its retries, and the Geoapify batches."""
+"""The geocoding runs: one service over many addresses, Geocode.xyz and Geoapify.
+
+Geocode.xyz has retries, and Geoapify takes batches.
+"""
 
 from asyncio import Semaphore, gather, sleep
 from collections.abc import Sequence
@@ -42,7 +45,9 @@ ERRORS = (HTTPError, ValidationError, ValueError, KeyError, IndexError, TypeErro
 
 
 def backoff_delay(attempt: int, base: float, jitter: float) -> float:
-    """Return the seconds to wait before a try: `base` doubled for each attempt up to 60, plus or minus a share.
+    """Return the seconds to wait before a try.
+
+    It is `base` doubled for each attempt up to 60, plus or minus a share.
 
     `jitter` is the share, from -0.1 to 0.1. The wait is never under 0.1 seconds.
     """
@@ -57,7 +62,9 @@ async def rest(run: Run) -> None:
 
 
 async def geocode_one(run: Run, provider: Provider, address: str) -> Geocode:
-    """Ask a service for one address, and return its geocode, or an empty one if it finds nothing or fails.
+    """Ask a service for one address and return its geocode.
+
+    An empty geocode comes back if it finds nothing or fails.
 
     The wait comes after the request and outside the limit of requests at one time.
     """
@@ -80,7 +87,7 @@ async def geocode_one(run: Run, provider: Provider, address: str) -> Geocode:
 async def geocode_many(
     provider: Provider, addresses: Sequence[str], *, today: str, concurrent: int, wait: float
 ) -> list[Geocode]:
-    """Geocode the addresses with a service, `concurrent` at one time, and return the geocodes in the same order."""
+    """Geocode the addresses with one service, `concurrent` at a time, in order."""
     async with AsyncClient() as client:
         run = Run(client, Semaphore(concurrent), today, wait, sleep)
         results = await gather(*(geocode_one(run, provider, address) for address in addresses))
@@ -145,7 +152,7 @@ async def geocode_xyz_many(
 
 
 async def read_locationiq_balance(key: str) -> int:
-    """Return the requests that LocationIQ still gives today, or 0 if the answer is not clear."""
+    """Return the requests that LocationIQ still gives today, or 0 if unclear."""
     try:
         async with AsyncClient() as client:
             response = await client.get("https://us1.locationiq.com/v1/balance", params={"key": key, "format": "json"})
@@ -158,7 +165,10 @@ async def read_locationiq_balance(key: str) -> int:
 
 
 async def submit_geoapify(client: AsyncClient, addresses: Sequence[str], key: str) -> str | None:
-    """Send a batch of addresses to Geoapify, and return the URL of its job, or nothing if it is refused."""
+    """Send a batch of addresses to Geoapify and return the URL of its job.
+
+    It gives nothing if Geoapify refuses it.
+    """
     url = "https://api.geoapify.com/v1/batch/geocode/search"
 
     try:
@@ -182,7 +192,10 @@ async def submit_geoapify(client: AsyncClient, addresses: Sequence[str], key: st
 
 
 async def poll_geoapify(client: AsyncClient, job_url: str, key: str, pause: Pause = sleep) -> list[JsonValue] | None:
-    """Wait for a Geoapify job, and return its results, or nothing if it fails or takes over five minutes."""
+    """Wait for a Geoapify job and return its results, or nothing on a failure.
+
+    It gives up after five minutes.
+    """
     waited = 0
 
     while waited < GEOAPIFY_MAX_WAIT_SECONDS:
@@ -211,7 +224,7 @@ async def poll_geoapify(client: AsyncClient, job_url: str, key: str, pause: Paus
 async def geocode_geoapify(
     addresses: Sequence[str], key: str, *, today: str, batch_size: int, pause: Pause = sleep
 ) -> list[Geocode]:
-    """Geocode the addresses with the batch API of Geoapify, `batch_size` at a time, and return the geocodes in order.
+    """Geocode the addresses with Geoapify batches of `batch_size`, in order.
 
     A batch that is refused, fails or times out gives empty geocodes for its addresses.
     """
@@ -234,7 +247,7 @@ async def geocode_geoapify(
 
 
 async def run_step(step: Step, addresses: Sequence[str], key: str, today: str) -> list[Geocode]:
-    """Run a service of the fallback over the addresses and return the geocodes in order.
+    """Run one service of the fallback over the addresses, in order.
 
     LocationIQ gives a daily balance of requests, and only that many addresses go to it.
     The rest comes back empty. With no balance, or no clear answer, all of them come

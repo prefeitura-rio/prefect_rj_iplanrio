@@ -66,7 +66,7 @@ deployments:
             port: 27017
             database: taxirio
             options:
-              shape: pipelines.rj_iplanrio__taxirio.helpers:CITIES
+              shape: pipelines.rj_iplanrio__taxirio.constants:CITIES
           table:
             dataset_id: brutos_taxirio
             table_id: cities
@@ -85,7 +85,7 @@ deployments:
             port: 27017
             database: taxirio
             options:
-              shape: pipelines.rj_iplanrio__taxirio.helpers:DRIVERS
+              shape: pipelines.rj_iplanrio__taxirio.constants:DRIVERS
           table:
             dataset_id: brutos_taxirio
             table_id: drivers
@@ -104,7 +104,7 @@ deployments:
             port: 27017
             database: taxirio
             options:
-              shape: pipelines.rj_iplanrio__taxirio.helpers:DISCOUNTS
+              shape: pipelines.rj_iplanrio__taxirio.constants:DISCOUNTS
           table:
             dataset_id: brutos_taxirio
             table_id: discounts
@@ -123,7 +123,7 @@ deployments:
             port: 27017
             database: taxirio
             options:
-              shape: pipelines.rj_iplanrio__taxirio.helpers:PAYMENTMETHODS
+              shape: pipelines.rj_iplanrio__taxirio.constants:PAYMENTMETHODS
           table:
             dataset_id: brutos_taxirio
             table_id: paymentmethods
@@ -142,7 +142,7 @@ deployments:
             port: 27017
             database: taxirio
             options:
-              shape: pipelines.rj_iplanrio__taxirio.helpers:USERS
+              shape: pipelines.rj_iplanrio__taxirio.constants:USERS
           table:
             dataset_id: brutos_taxirio
             table_id: users
@@ -161,7 +161,7 @@ deployments:
             port: 27017
             database: taxirio
             options:
-              shape: pipelines.rj_iplanrio__taxirio.helpers:RACES
+              shape: pipelines.rj_iplanrio__taxirio.constants:RACES
           table:
             dataset_id: brutos_taxirio
             table_id: races
@@ -186,7 +186,7 @@ deployments:
             port: 27017
             database: taxirio
             options:
-              shape: pipelines.rj_iplanrio__taxirio.helpers:PASSENGERS
+              shape: pipelines.rj_iplanrio__taxirio.constants:PASSENGERS
           table:
             dataset_id: brutos_taxirio
             table_id: passengers
@@ -211,7 +211,7 @@ deployments:
             port: 27017
             database: taxirio
             options:
-              shape: pipelines.rj_iplanrio__taxirio.helpers:RANKINGRACES
+              shape: pipelines.rj_iplanrio__taxirio.constants:RANKINGRACES
           table:
             dataset_id: brutos_taxirio
             table_id: rankingraces
@@ -236,7 +236,7 @@ deployments:
             port: 27017
             database: taxirio
             options:
-              shape: pipelines.rj_iplanrio__taxirio.helpers:METRICSDRIVERUNOCCUPIEDS
+              shape: pipelines.rj_iplanrio__taxirio.constants:METRICSDRIVERUNOCCUPIEDS
           table:
             dataset_id: brutos_taxirio
             table_id: metricsdriverunoccupieds

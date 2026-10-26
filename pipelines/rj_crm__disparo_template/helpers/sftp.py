@@ -26,7 +26,10 @@ from pipelines.rj_crm__disparo_template.types import Csv
 
 @dataclass(frozen=True)
 class SftpTarget:
-    """The SFTP server, its login, its pinned host key (a line of `known_hosts`) and the folder of the files."""
+    """The SFTP server, its login, its pinned host key and the folder of the files.
+
+    The host key is a line of `known_hosts`.
+    """
 
     host: str
     user: str
@@ -48,7 +51,10 @@ type Opener = Callable[[SftpTarget], AbstractAsyncContextManager[Uploader]]
 
 
 def remote_file(target: SftpTarget, name: str) -> str:
-    """Return the path of a file on the server: the folder of the target, with no slash at its end, and the name."""
+    """Return the path of a file on the server, in the folder of the target.
+
+    The folder has no slash at its end.
+    """
     folder = target.remote_path.rstrip("/")
 
     return f"{folder}/{name}" if folder else name
@@ -56,7 +62,7 @@ def remote_file(target: SftpTarget, name: str) -> str:
 
 @final
 class AsyncSshSession:
-    """An SFTP session of asyncssh, which closes the SFTP client and then the connection."""
+    """An SFTP session of asyncssh, which closes the SFTP client and the connection."""
 
     def __init__(self, target: SftpTarget) -> None:
         self.target = target

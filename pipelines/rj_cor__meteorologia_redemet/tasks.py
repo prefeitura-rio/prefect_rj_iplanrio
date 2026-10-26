@@ -38,7 +38,7 @@ async def fetch_observation(
 
 @task
 async def fetch_observations_task(first_date: date, last_date: date) -> list[dict[str, JsonValue]]:
-    """Fetch the observations of the five stations of Rio, for every hour of the dates."""
+    """Fetch the observations of the five stations of Rio, for every hour."""
     token = Settings().REDEMET_TOKEN.get_secret_value()
     limit = Semaphore(CONCURRENCY)
 

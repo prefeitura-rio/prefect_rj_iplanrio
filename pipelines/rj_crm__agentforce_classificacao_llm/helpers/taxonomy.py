@@ -82,7 +82,7 @@ def match_row(row: Mapping[str, JsonValue], rules: Sequence[CompiledRule]) -> li
 
 
 def apply_rules(rows: Sequence[Row], index: Mapping[str, Sequence[CompiledRule]], column: str) -> list[Row]:
-    """Return the rows with `column` filled with the categories that the rules found, none if nothing matches.
+    """Return the rows with `column` filled with the categories that rules found.
 
     Only a session with relevant content and a summary gets rules, those of its
     secretariat or, with none, of `Sem secretaria identificada`. For the others the

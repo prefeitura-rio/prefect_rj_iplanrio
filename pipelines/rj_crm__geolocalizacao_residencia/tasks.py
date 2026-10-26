@@ -36,7 +36,7 @@ def texts(addresses: list[Address]) -> list[str]:
 
 @task(retries=2, retry_delay_seconds=30)
 async def read_addresses_task() -> list[Address]:
-    """Read up to 10,000 addresses of citizens that have no coordinates yet, in a random order.
+    """Read up to 10,000 addresses of citizens with no coordinates, in random order.
 
     Only an address with a full text is kept.
     """
@@ -49,7 +49,10 @@ async def read_addresses_task() -> list[Address]:
 
 @task
 async def geocode_nominatim_task(addresses: list[Address], max_concurrent: int) -> list[Row]:
-    """Geocode the addresses with the Nominatim server of the settings, and return the rows that got a point."""
+    """Geocode the addresses with the Nominatim server of the settings.
+
+    Return the rows that got a point.
+    """
     settings = Settings()
     provider = nominatim(settings.NOMINATIM_DOMAIN, settings.NOMINATIM_USER_AGENT)
     geocodes = await geocode_many(
@@ -63,7 +66,9 @@ async def geocode_nominatim_task(addresses: list[Address], max_concurrent: int) 
 
 @task
 async def geocode_fallback_task(addresses: list[Address]) -> list[Row]:
-    """Geocode the addresses with a chain of services, each taking what the one before could not find.
+    """Geocode the addresses with a chain of services.
+
+    Each takes what the one before could not find.
 
     The order is Waze, MapTiler, Geocode.xyz, LocationIQ and OpenCage. A service whose
     answers are all empty counts as out of quota and is skipped, and so is one whose key
@@ -114,7 +119,9 @@ async def geocode_fallback_task(addresses: list[Address]) -> list[Row]:
 
 @task
 async def geocode_geoapify_task(addresses: list[Address]) -> list[Row]:
-    """Geocode the addresses with the batch API of Geoapify, 100 at a time, and return the rows that got a point.
+    """Geocode the addresses with the Geoapify batch API, 100 at a time.
+
+    Return the rows that got a point.
 
     Without a key in the settings the result is empty.
     """

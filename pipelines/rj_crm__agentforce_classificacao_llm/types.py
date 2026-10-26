@@ -11,7 +11,7 @@ type Row = dict[str, JsonValue]
 
 @dataclass(frozen=True)
 class Session:
-    """A session of the citizen with the agent that waits to be classified, with the HSM that came before it.
+    """A citizen session with the agent that waits for a class, with its HSM.
 
     `hsm_variables` are the values that fill the placeholders of `hsm_text`.
     `hsm_buttons` and `late_button` come from the catalog of HSMs: the buttons of the
@@ -60,7 +60,7 @@ class Prompted:
 
 @dataclass(frozen=True)
 class Split:
-    """The sessions of a run by what happens to each: a prompt, a decision by rule, or nothing."""
+    """The sessions of a run by what happens to each: a prompt, a rule, or nothing."""
 
     prompted: list[Prompted]
     by_rule: list[Session]
@@ -69,7 +69,7 @@ class Split:
 
 @dataclass(frozen=True)
 class Rule:
-    """A rule of the catalog: a Python function that tells whether a summary belongs to a category."""
+    """A rule of the catalog: a Python function that tells if a summary fits."""
 
     secretariat: str
     parent: str | None
@@ -90,14 +90,14 @@ class Tables(TypedDict, total=False):
 
 
 class Window(TypedDict, total=False):
-    """How far back a run looks for sessions, and how far back before a session its HSM can be."""
+    """How far back a run looks for sessions, and how far back its HSM can be."""
 
     lookback_days: int
     hsm_max_days_before: int
 
 
 class Llm(TypedDict, total=False):
-    """How a run asks the model: which one, how many questions at one time, and the sessions per load."""
+    """How a run asks the model: which one, how many at once, and sessions per load."""
 
     model: str
     max_workers: int
@@ -119,7 +119,7 @@ class Names:
 
 
 class Relevant(TypedDict):
-    """What the rules need of a classified session: its summary, its secretariat, and the cause it already has."""
+    """What the rules need of a classified session: summary, secretariat and cause."""
 
     id_sessao: str
     resumo: str | None

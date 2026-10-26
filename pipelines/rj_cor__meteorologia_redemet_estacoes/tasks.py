@@ -16,7 +16,7 @@ from utils.tasks import request_json
 
 @task
 async def fetch_stations_task() -> list[dict[str, JsonValue]]:
-    """Fetch the stations of Rio de Janeiro from the REDEMET and warn about the new ones."""
+    """Fetch the stations of Rio from the REDEMET and warn about the new ones."""
     token = Settings().REDEMET_TOKEN.get_secret_value()
     data = await request_json(STATIONS_URL, params={"api_key": token, "pais": "Brasil"})
     today = datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()

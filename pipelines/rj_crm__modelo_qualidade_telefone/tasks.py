@@ -78,7 +78,7 @@ async def load_champion_task(models_root: str, *, required: bool) -> Champion | 
 
 @task
 async def score_task(champion: Champion, batch_size: int) -> tuple[Path, ScoreStats]:
-    """Read the features of the phones to score, score them with the champion and write the Parquet file.
+    """Read the phone features, score them with the champion and write Parquet.
 
     The file is in a temporary folder of the run, and `publish_scores_task` loads it.
     """
@@ -168,7 +168,10 @@ async def decide_task(training: Training, simulation: Simulation, *, require_gat
 async def publish_model_task(
     training: Training, gate: Gate, models_root: str, release: Release, *, auto_promote: bool
 ) -> None:
-    """Publish the version in GCS, always, and make it the champion if the gate passed and `auto_promote` is on."""
+    """Publish the version in GCS, and make it the champion if the gate passes.
+
+    It promotes only if `auto_promote` is on.
+    """
     client = StorageClient(credentials=load_credentials(), project=PROJECT_ID)
     metadata = build_metadata(training, gate)
     version = release.version
@@ -184,7 +187,7 @@ async def publish_model_task(
 
 @task
 async def publish_evaluation_task(training: Training, judgement: Judgement, release: Release, tables: Tables) -> None:
-    """Delete the rows of this version from the evaluation table, if any, and append the new ones."""
+    """Delete the rows of this version from the evaluation table, then append."""
     rows = build_evaluation(training, judgement.simulation, judgement.gate, release.version, release.date)
     client = await to_thread(connect)
     await to_thread(append_evaluation, client, rows, tables["dataset_id"], tables["evaluation"], QUERIES_ANCHOR)
@@ -194,7 +197,7 @@ async def publish_evaluation_task(training: Training, judgement: Judgement, rele
 async def publish_report_task(
     training: Training, judgement: Judgement, release: Release, root_id: str, frame: pl.DataFrame
 ) -> None:
-    """Upload the report of the retrain to the subfolder `version` of the root folder of the Drive.
+    """Upload the retrain report to the `version` subfolder of the Drive root.
 
     Raise `RuntimeError` if the root folder does not exist or is not shared with the
     service account.

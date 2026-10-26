@@ -15,7 +15,7 @@ from pipelines.rj_crm__agentforce_classificacao_llm.types import Names, Tables
 
 
 def resolve_names(project: str, tables: Tables) -> Names:
-    """Return the full names of the tables of a run, with the defaults for what `tables` does not set."""
+    """Return the full table names of a run, with defaults for what is not set."""
     dataset = tables.get("dataset_id", DEFAULT_DATASET_ID)
 
     return Names(

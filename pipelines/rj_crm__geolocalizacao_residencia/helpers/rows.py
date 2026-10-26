@@ -10,7 +10,9 @@ from pipelines.rj_crm__geolocalizacao_residencia.types import Address, Geocode, 
 
 
 def to_pluscode(latitude: str, longitude: str) -> str | None:
-    """Return the Google Plus Code of a point, or nothing if the coordinates are not numbers or are out of range.
+    """Return the Google Plus Code of a point, or nothing if the coordinates are bad.
+
+    Coordinates that are not numbers, or out of range, are bad.
 
     ```python
     to_pluscode("-22.907104", "-43.172897")  # "589R3RVG+5R"
@@ -39,7 +41,9 @@ def has_point(geocode: Mapping[str, str | float | None]) -> bool:
 
 
 def join_rows(addresses: Sequence[Address], geocodes: Sequence[Geocode], *, need_street: bool) -> list[Row]:
-    """Return a row of text for each address that got a point, with the geocode and the plus code after it.
+    """Return a text row for each address that got a point.
+
+    The geocode and the plus code follow it.
 
     With `need_street`, as in the fallback, an address whose geocode has no street is
     dropped, and so is an address whose treated street is the text `nan`.

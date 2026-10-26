@@ -101,7 +101,7 @@ def test_a_record_of_the_rest_api_becomes_one_object(
 
 
 def test_each_record_becomes_a_row_with_the_columns_found_in_any_case() -> None:
-    """Look up the phone, the key and the date ignoring case, and skip an extension that failed."""
+    """Look up the phone, key and date ignoring case, and skip a failed extension."""
     fields = [Field("Telefone", "Phone", False), Field("Id", "Text", True), Field("Data de Entrada", "Date", False)]
     records: list[dict[str, JsonValue]] = [
         {"keys": {"id": "7"}, "values": {"telefone": "5521", "data de entrada": "2026-09-01"}}

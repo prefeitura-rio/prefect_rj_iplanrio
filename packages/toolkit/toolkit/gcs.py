@@ -1,10 +1,19 @@
 """Google Cloud Storage operations through the S3-compatible API with HMAC keys."""
 
 from asyncio import Semaphore, gather
-from collections.abc import Coroutine, Iterable
+from collections.abc import Coroutine, Iterable, Iterator, Mapping
 from pathlib import Path
+from typing import final
 
-from obstore import delete_async, list_with_delimiter_async, put_async
+from obstore import (
+    delete_async,
+    get,
+    head,
+    list_with_delimiter_async,
+    open_reader,
+    put,
+    put_async,
+)
 from obstore import list as list_objects
 from obstore.store import ObjectStore, S3Store
 
@@ -46,6 +55,85 @@ async def list_prefixes(store: ObjectStore, prefix: str) -> list[str]:
     """
     listing = await list_with_delimiter_async(store, prefix)
     return sorted(folder.rstrip("/") for folder in listing["common_prefixes"])
+
+
+def list_sizes(store: ObjectStore, prefix: str) -> dict[str, int]:
+    """Map the key of each object under one prefix to its size in bytes."""
+    return {
+        item["path"]: item["size"]
+        for batch in list_objects(store, prefix)
+        for item in batch
+    }
+
+
+def has_key(store: ObjectStore, key: str) -> bool:
+    """Return whether the object exists."""
+    try:
+        head(store, key)
+    except FileNotFoundError:
+        return False
+
+    return True
+
+
+def read_bytes(store: ObjectStore, key: str) -> bytes | None:
+    """Read one object, or return nothing if the key does not exist."""
+    try:
+        return bytes(get(store, key).bytes())
+    except FileNotFoundError:
+        return None
+
+
+def write_bytes(
+    store: ObjectStore,
+    key: str,
+    data: bytes,
+    *,
+    content_type: str | None = None,
+    metadata: Mapping[str, str] | None = None,
+) -> None:
+    """Write one object and replace it if it exists.
+
+    ```python
+    write_bytes(store, "a/b.png", image, content_type="image/png")
+    ```
+    """
+    attributes: dict[str, str] = dict(metadata or {})
+
+    if content_type:
+        attributes["Content-Type"] = content_type
+
+    put(store, key, data, attributes=attributes or None)
+
+
+def download(store: ObjectStore, key: str, path: Path) -> Path:
+    """Write one object to a file, create the folders, and return the path."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with path.open("wb") as file:
+        for chunk in read_chunks(store, key):
+            file.write(chunk)
+
+    return path
+
+
+@final
+class ObjectReader:
+    """A binary file over one object that reads in chunks."""
+
+    def __init__(self, store: ObjectStore, key: str) -> None:
+        """Open the object."""
+        self.reader = open_reader(store, key)
+
+    def read(self, size: int = -1, /) -> bytes:
+        """Read up to `size` bytes, or all of them with a negative size."""
+        return bytes(self.reader.read(None if size < 0 else size))
+
+
+def read_chunks(store: ObjectStore, key: str) -> Iterator[bytes]:
+    """Read one object in chunks, so a large file never sits in memory."""
+    for chunk in get(store, key):
+        yield bytes(chunk)
 
 
 def list_files(path: Path) -> dict[str, Path]:

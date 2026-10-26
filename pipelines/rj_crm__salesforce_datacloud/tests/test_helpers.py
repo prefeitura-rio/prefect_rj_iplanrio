@@ -10,6 +10,7 @@ from pipelines.rj_crm__salesforce_datacloud.helpers.messages import (
     build_summary,
     cut,
 )
+from pipelines.rj_crm__salesforce_datacloud.helpers.run import add_up, plan_run
 from pipelines.rj_crm__salesforce_datacloud.helpers.salesforce import as_rows
 from pipelines.rj_crm__salesforce_datacloud.helpers.transform import (
     build_rows,
@@ -26,7 +27,7 @@ from pipelines.rj_crm__salesforce_datacloud.helpers.window import (
     plan_spans,
     to_utc_window,
 )
-from pipelines.rj_crm__salesforce_datacloud.types import Feed, Row, Span
+from pipelines.rj_crm__salesforce_datacloud.types import Feed, Outcome, Row, Span, Window
 
 NOW = datetime(2026, 9, 29, 15, 20, 30, tzinfo=SP_TZ)
 
@@ -95,7 +96,10 @@ def test_the_records_of_the_crm_lose_attributes_and_get_snake_case_names() -> No
 
 
 def test_a_feed_row_gets_utc_dates_and_the_columns_of_the_load() -> None:
-    """Convert the date columns, empty text to nothing, and stamp `_loaded_at` and `data_particao`."""
+    """Convert the date columns, turn empty text to nothing, stamp the load columns.
+
+    They are `_loaded_at` and `data_particao`.
+    """
     rows: list[Row] = [{"id": "a", "start_timestamp": "2026-09-29T10:00:00Z", "end_timestamp": "", "other": "x"}]
 
     [row] = transform_rows(rows, feed("ai_agent_session"), date(2026, 9, 29), datetime(2026, 9, 29, 12, tzinfo=UTC))
@@ -155,7 +159,7 @@ def test_a_past_day_is_a_whole_day_and_today_ends_now() -> None:
 
 
 def test_the_utc_window_adds_the_partitions_of_utc() -> None:
-    """Convert from São Paulo to UTC, and give the partitions that the window falls in."""
+    """Convert from São Paulo to UTC, and give the partitions of the window."""
     span, partitions = to_utc_window(Span("2026-09-28T00:00:00Z", "2026-09-29T00:00:00Z", date(2026, 9, 28)))
 
     assert (span.start, span.end) == ("2026-09-28T03:00:00Z", "2026-09-29T03:00:00Z")
@@ -266,3 +270,48 @@ def test_the_summary_lists_the_rows_by_group_and_the_failed_tables() -> None:
     assert "❌ **Falharam:** `messaging_session`" in message
     assert message.startswith("⚠️")
     assert build_summary("x", {}, [], 0).startswith("✅")
+
+
+def test_a_run_plan_picks_the_listed_feeds_and_labels_a_reprocess() -> None:
+    """Pick the feeds that the tables name, a window for each day, and a label."""
+    names = [FEEDS[0].name]
+    window = Window(reprocess_from=date(2026, 7, 15), reprocess_to=date(2026, 7, 16))
+
+    plan = plan_run(window, names, datetime(2026, 7, 17, 12, tzinfo=UTC), 1.0)
+
+    assert ([feed.name for feed in plan.feeds], len(plan.spans), plan.summarize) == (names, 2, True)
+    assert plan.label == "reprocessamento 2026-07-15 a 2026-07-16 (2 dia(s))"
+
+
+@pytest.mark.parametrize(
+    ("window", "tables", "feeds", "summarize"),
+    [
+        pytest.param(Window(), None, len(FEEDS), False, id="the_hour_mode_runs_every_feed_without_a_summary"),
+        pytest.param(Window(mode="day"), [], len(FEEDS), True, id="the_day_mode_posts_a_summary"),
+    ],
+)
+def test_a_run_plan_follows_the_mode(window: Window, tables: list[str] | None, feeds: int, summarize: bool) -> None:
+    """Run every feed when no table is named, and post the summary only for a day."""
+    plan = plan_run(window, tables, datetime(2026, 7, 17, 12, tzinfo=UTC), 1.0)
+
+    assert (len(plan.feeds), plan.summarize) == (feeds, summarize)
+
+
+def test_a_table_that_is_not_a_feed_is_refused() -> None:
+    """Raise with the unknown name before any extraction."""
+    with pytest.raises(ValueError, match="Unknown tables: \\['nope'\\]"):
+        plan_run({}, ["nope"], datetime(2026, 7, 17, tzinfo=UTC), 1.0)
+
+
+def test_the_outcomes_add_up_by_group_and_the_failed_feeds_count_once() -> None:
+    """Sum the rows of a feed over the windows and list a failed feed one time."""
+    totals = add_up(
+        [
+            Outcome("a", "g1", 3),
+            Outcome("a", "g1", 4),
+            Outcome("b", "g2", 0, failed=True),
+            Outcome("b", "g2", 0, failed=True),
+        ]
+    )
+
+    assert (totals.rows, totals.failed) == ({"g1": {"a": 7}, "g2": {"b": 0}}, ["b"])

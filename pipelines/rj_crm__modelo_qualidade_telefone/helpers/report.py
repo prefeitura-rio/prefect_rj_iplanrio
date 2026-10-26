@@ -1,4 +1,6 @@
-"""Build the files of the report of one retrain: CSV files, two plots and a text with the decision.
+"""Build the files of the report of one retrain: CSV files, two plots and a text.
+
+The text has the decision.
 
 The official numbers are in BigQuery. These files are for a person who wants to compare
 two retrains with no query.
@@ -37,7 +39,7 @@ def csv_bytes(header: list[str], rows: Sequence[tuple[object, ...]]) -> bytes:
 
 
 def metrics_csv(training: Training) -> bytes:
-    """Return a CSV of `metrica` and `valor`: the held-out metrics and the volume of the training."""
+    """Return a CSV of `metrica` and `valor`: the held-out metrics and the volume."""
     rows: list[tuple[object, ...]] = [
         *training.holdout_metrics.items(),
         ("n_treino", training.n_rows),
@@ -49,7 +51,7 @@ def metrics_csv(training: Training) -> bytes:
 
 
 def importance_csv(training: Training) -> bytes:
-    """Return a CSV of `feature` and `importancia_media_abs`, from the most important down."""
+    """Return a CSV of `feature` and `importancia_media_abs`, most important first."""
     ordered = sorted(training.shap_importance.items(), key=lambda item: -item[1])
 
     return csv_bytes(["feature", "importancia_media_abs"], ordered)
@@ -71,7 +73,9 @@ def simulation_csv(simulation: Simulation) -> bytes:
 
 
 def coverage_csv(frame: pl.DataFrame) -> bytes:
-    """Return a CSV of the share of filled rows of each feature, over the raw training frame.
+    """Return a CSV of the share of filled rows of each feature.
+
+    It reads the raw training frame.
 
     The frame is the one before the model sees it, so a broken source shows: a feature
     that turns to a sentinel or to 0 for almost everyone does not show in the trained
@@ -108,7 +112,10 @@ def png_bytes() -> bytes:
 
 
 def ranking_plot(training: Training, version: str) -> bytes:
-    """Return a PNG of horizontal bars with the mean absolute SHAP of each feature, the least at the bottom."""
+    """Return a PNG of horizontal bars with the mean absolute SHAP of each feature.
+
+    The least important feature is at the bottom.
+    """
     ordered = sorted(training.shap_importance.items(), key=lambda item: item[1])
     names = [name for name, _ in ordered]
     values = [value for _, value in ordered]
@@ -122,7 +129,9 @@ def ranking_plot(training: Training, version: str) -> bytes:
 
 
 def beeswarm_plot(training: Training, version: str) -> bytes:
-    """Return a PNG with a point for each feature and sample row, at its SHAP value, coloured by the feature value.
+    """Return a PNG with a point for each feature and sample row, at its SHAP value.
+
+    The colour is the feature value.
 
     It shows the spread of the impact, which the bars do not. The `shap` package only
     draws: the values come from LightGBM.

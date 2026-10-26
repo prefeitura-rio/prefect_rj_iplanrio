@@ -69,7 +69,7 @@ def test_only_the_xml_files_after_the_watermark_are_new() -> None:
 
 
 def test_the_xml_gives_a_rain_reading_for_each_station_and_a_weather_reading_for_the_met_ones() -> None:
-    """Read both kinds of reading at the time of `<chuvas>`, and skip a station without that time."""
+    """Read both readings at the time of `<chuvas>`, and skip a station without it."""
     pluviometric, meteorological = parse_xml(XML)
 
     assert [(row["id_estacao"], row["data_medicao"]) for row in pluviometric] == [

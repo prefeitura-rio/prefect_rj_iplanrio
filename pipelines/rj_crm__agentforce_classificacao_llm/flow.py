@@ -39,7 +39,10 @@ async def notify_failure(flow: Flow[..., object], flow_run: FlowRun, state: Stat
 
 
 async def apply_catalog(names: Names, rows: list[Row], themes: list[Rule], causes: list[Rule]) -> list[Row]:
-    """Fill the theme of the rows with the rules of theme, and then the cause, which needs the theme."""
+    """Fill the theme of the rows by the theme rules, then the cause.
+
+    The cause rules need the theme.
+    """
     del names
 
     return apply_rules(apply_rules(rows, compile_catalog(themes), "tema_nome"), compile_catalog(causes), "causa_nome")
@@ -54,7 +57,9 @@ async def rj_crm__agentforce_classificacao_llm(
     llm: Llm | None = None,
     recalculate_taxonomy: bool = False,
 ) -> None:
-    """Classify the Agentforce sessions that have no classification, with a model, and load them to BigQuery.
+    """Classify the Agentforce sessions that have no class, and load them.
+
+    A model classifies each session.
 
     The flow reads the sessions of the last days (7 by default) with the HSM that came
     before each. A late reply to a button is decided by rule, and any other session goes

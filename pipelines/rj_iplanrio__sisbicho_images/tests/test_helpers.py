@@ -4,7 +4,9 @@ from datetime import UTC, datetime
 from hashlib import sha1
 
 import pytest
+from obstore.store import MemoryStore
 from pydantic import ValidationError
+from toolkit.gcs import list_sizes, read_bytes
 
 from pipelines.rj_iplanrio__sisbicho_images.helpers import (
     PdfError,
@@ -20,10 +22,10 @@ from pipelines.rj_iplanrio__sisbicho_images.helpers import (
     to_text,
     upload_photo,
 )
-from pipelines.rj_iplanrio__sisbicho_images.tests.conftest import PNG, FakeBucket, twice
+from pipelines.rj_iplanrio__sisbicho_images.tests.conftest import PNG, twice
 from pipelines.rj_iplanrio__sisbicho_images.types import Animal, Storage
 
-STORAGE = Storage(bucket="photos", prefix="animal/fotos", project="p")
+STORAGE = Storage(bucket="photos", prefix="animal/fotos")
 
 
 def animal(identifier: str = "7", qrcode: bytes | str | None = None, photo: bytes | str | None = None) -> Animal:
@@ -174,42 +176,42 @@ def test_the_id_in_a_file_name_has_only_safe_characters(identifier: str, expecte
     assert sanitize_identifier(identifier) == expected
 
 
-def test_a_photo_goes_to_the_bucket_once_under_a_name_with_its_hash(bucket: FakeBucket) -> None:
+def test_a_photo_goes_to_the_bucket_once_under_a_name_with_its_hash(store: MemoryStore) -> None:
     """Name the file by animal and SHA-1, and skip an upload that exists."""
     text = b64encode(PNG).decode()
     digest = sha1(PNG).hexdigest()
     expected = f"animal/fotos/animal_id=7/{digest}.png"
 
-    first = upload_photo(bucket, STORAGE, animal(photo=text))
-    second = upload_photo(bucket, STORAGE, animal(photo=text))
+    first = upload_photo(store, STORAGE, animal(photo=text))
+    second = upload_photo(store, STORAGE, animal(photo=text))
 
     assert first == second == f"https://storage.googleapis.com/photos/{expected}"
-    assert bucket.files == {expected: (PNG, "image/png")}
-    assert bucket.patched == [expected]
+    assert list(list_sizes(store, "animal/")) == [expected]
+    assert read_bytes(store, expected) == PNG
 
 
-def test_a_missing_photo_or_a_pdf_gives_no_url(bucket: FakeBucket) -> None:
+def test_a_missing_photo_or_a_pdf_gives_no_url(store: MemoryStore) -> None:
     """Skip the photo and do not upload."""
-    assert upload_photo(bucket, STORAGE, animal()) is None
-    assert upload_photo(bucket, STORAGE, animal(photo=b64encode(b"%PDF-1.4").decode())) is None
-    assert bucket.files == {}
+    assert upload_photo(store, STORAGE, animal()) is None
+    assert upload_photo(store, STORAGE, animal(photo=b64encode(b"%PDF-1.4").decode())) is None
+    assert list_sizes(store, "animal/") == {}
 
 
-def test_a_photo_that_does_not_decode_stops_the_batch(bucket: FakeBucket) -> None:
+def test_a_photo_that_does_not_decode_stops_the_batch(store: MemoryStore) -> None:
     """Raise with the animal, so no broken photo is taken."""
     with pytest.raises(ValueError, match="animal 7"):
-        upload_photo(bucket, STORAGE, animal(photo="!!!!"))
+        upload_photo(store, STORAGE, animal(photo="!!!!"))
 
 
 def test_the_rows_have_the_qrcode_the_photo_and_the_time(
-    bucket: FakeBucket, qrcode_png: Callable[[str], bytes]
+    store: MemoryStore, qrcode_png: Callable[[str], bytes]
 ) -> None:
     """Build one row for each animal."""
     now = datetime(2026, 7, 17, 12, tzinfo=UTC)
 
     rows = build_rows(
         [animal(photo=b64encode(PNG).decode()), animal("8", qrcode=b64encode(qrcode_png("Nome: Rex")))],
-        bucket,
+        store,
         STORAGE,
         now,
     )

@@ -18,7 +18,7 @@ def mask_cpf(cpf: object) -> str:
 
 
 def sample_text(row: Mapping[str, object]) -> str:
-    """Return a row as an example: the phone, the CPF masked and the other columns, all as text, in JSON."""
+    """Return a row as an example in JSON: phone, masked CPF and the other columns."""
     extra = {key: value for key, value in row.items() if key not in {"telefone", "cpf"}}
     sample = {"telefone": row.get("telefone", ""), "cpf": mask_cpf(row.get("cpf")), **extra}
 
@@ -51,7 +51,10 @@ def missing_status_notice(campaign: str, minutes: int) -> str:
 
 
 def unknown_campaign_notice(campaign: str) -> str:
-    """Return the notice of a campaign that is not in the table of the journeys, so its status is lost."""
+    """Return the notice of a campaign that is not in the table of journeys.
+
+    Its status is lost.
+    """
     return (
         f"<@821121576455634955> <@302518123066556426>\nATENÇÃO: campaign_name='{campaign}' não encontrado na coluna "
         "hsm.nome_hsm da tabela rj-crm-registry.brutos_salesforce.jornada. Devido a isso os dados não "
@@ -60,5 +63,8 @@ def unknown_campaign_notice(campaign: str) -> str:
 
 
 def is_confirmed(count: int, total: int) -> bool:
-    """Tell whether enough sends have a status for the campaign to count as sent: at least a fifth of them."""
+    """Tell whether enough sends have a status for the campaign to count as sent.
+
+    It takes at least a fifth of them.
+    """
     return count >= total * SUCCESS_SHARE

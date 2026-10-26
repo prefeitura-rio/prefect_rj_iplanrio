@@ -110,7 +110,7 @@ def test_the_shap_sample_is_capped_and_repeats(make_booster: Callable[[int], obj
 def test_a_training_gives_a_model_with_the_metrics_and_the_phones(
     monkeypatch: pytest.MonkeyPatch, make_features: Callable[..., pl.DataFrame]
 ) -> None:
-    """Run the search with one small trial, and check the model, the metrics and the counts."""
+    """Run the search with one small trial, and check the model, metrics and counts."""
     rng = np.random.default_rng(0)
     rows = 400
     signal = rng.random(rows)

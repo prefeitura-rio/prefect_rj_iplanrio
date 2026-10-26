@@ -4,14 +4,11 @@ SEPARADOR_DESTINATARIOS = ","
 
 
 def ler_destinatarios(bruto: str | None) -> list[str]:
-    """Interpreta a lista de destinatários vinda de variável de ambiente.
+    """Read the list of recipients from a comma-separated environment variable.
 
-    O formato é uma string separada por vírgula, como em
-    ``DATA_RELAY_TO_ADDRESSES``. E-mail não contém vírgula, então não há
-    ambiguidade.
-
-    :param bruto: Conteúdo da variável, ou ``None``.
-    :returns: E-mails sem espaços em volta e sem entradas vazias.
+    An e-mail address has no comma, so the split is exact, as in
+    `DATA_RELAY_TO_ADDRESSES`. Return the addresses with no spaces around them and no
+    empty entries. `bruto` is the content of the variable, or `None`.
     """
     if not bruto:
         return []

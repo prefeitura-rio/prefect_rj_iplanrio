@@ -29,7 +29,10 @@ def test_a_table_is_read_by_the_last_header_row_with_a_decimal_point() -> None:
 
 
 def test_the_rows_have_the_columns_of_the_table_and_nothing_for_a_missing_reading() -> None:
-    """Name the columns, empty the `ND` and the `-`, keep the first of a repeat, and fill a column that is absent."""
+    """Name the columns, empty `ND` and `-`, keep the first of a repeat, and fill a gap.
+
+    A column that is absent gets an empty value.
+    """
     rows = build_rows(read_tables(PAGE)[0], PLUVIOMETRIC_COLUMNS)
 
     assert len(rows) == 2

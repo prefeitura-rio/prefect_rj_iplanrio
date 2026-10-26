@@ -39,7 +39,7 @@ def make_summary(algorithm: str, gap: float) -> Summary:
 
 
 def make_simulation(new_gap: float, production_gap: float | None, p_value: float | None) -> Simulation:
-    """Build a simulation with the gaps of the models and the p-value against the random choice."""
+    """Build a simulation with the model gaps and the p-value against random choice."""
     summary = [make_summary(NEW_MODEL, new_gap)]
 
     if production_gap is not None:

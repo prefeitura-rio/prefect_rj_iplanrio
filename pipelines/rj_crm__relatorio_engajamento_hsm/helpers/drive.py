@@ -9,7 +9,7 @@ from utils.drive import confirm_root, find_folder, list_files
 
 
 def report_exists(drive: Resource, root_id: str, hsm_name: str, reference: date) -> bool:
-    """Tell whether the subfolder of the HSM has a file of the report of a day, found by the prefix of its name."""
+    """Tell whether the HSM subfolder has a report file of a day, by its name prefix."""
     confirm_root(drive, root_id)
     folder_id = find_folder(drive, hsm_name, root_id)
 

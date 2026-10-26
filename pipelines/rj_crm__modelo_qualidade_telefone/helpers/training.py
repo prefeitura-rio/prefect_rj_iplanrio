@@ -1,4 +1,6 @@
-"""Train the LightGBM of the monthly retrain: a search of hyperparameters, held-out metrics and the final fit.
+"""Train the LightGBM of the monthly retrain.
+
+It runs a hyperparameter search, held-out metrics and the final fit.
 
 Only LightGBM goes to production. The search starts from the hyperparameters of the
 champion (`study.enqueue_trial`), so a month of trials builds on what worked before.
@@ -49,7 +51,10 @@ def make_model(parameters: dict[str, object]) -> LGBMClassifier:
 
 
 def search_space(trial: Trial) -> dict[str, float]:
-    """Return the hyperparameters that a trial suggests, in the ranges of the LightGBM tuning guide."""
+    """Return the hyperparameters that a trial suggests.
+
+    The ranges come from the LightGBM tuning guide.
+    """
     return {
         "num_leaves": trial.suggest_int("num_leaves", 15, 255),
         "max_depth": trial.suggest_int("max_depth", 3, 12),
@@ -64,7 +69,7 @@ def search_space(trial: Trial) -> dict[str, float]:
 
 
 def seed_parameters(champion: dict[str, object] | None) -> dict[str, object] | None:
-    """Return the hyperparameters of the champion that the search accepts, or nothing if none is left.
+    """Return the champion hyperparameters that the search accepts, or nothing.
 
     `study.enqueue_trial` refuses a key that the search space does not define.
     """
@@ -77,7 +82,9 @@ def seed_parameters(champion: dict[str, object] | None) -> dict[str, object] | N
 def optimize(
     features: Matrix, labels: Labels, n_trials: int, seed: dict[str, object] | None = None
 ) -> dict[str, object]:
-    """Search the hyperparameters that give the best mean AUC-ROC in a stratified cross-validation.
+    """Search the hyperparameters with the best mean AUC-ROC.
+
+    It uses a stratified cross-validation.
 
     Return the fixed arguments and the best ones, ready to be keyword arguments. `seed`
     is the first trial: the hyperparameters of the champion.
@@ -106,7 +113,10 @@ def optimize(
 def measure_holdout(
     parameters: dict[str, object], train: tuple[Matrix, Labels], test: tuple[Matrix, Labels]
 ) -> dict[str, float]:
-    """Train on the train part and return the metrics on the test part: AUC-ROC, precision, recall, F1 and F-beta."""
+    """Train on the train part and return the metrics on the test part.
+
+    They are AUC-ROC, precision, recall, F1 and F-beta.
+    """
     model = make_model(parameters).fit(*train)
     expected = test[1]
     predicted = model.predict(test[0])
@@ -143,14 +153,14 @@ def importance_of(sample: ShapSample) -> dict[str, float]:
 
 
 def split_rows(labels: Labels) -> tuple[Rows, Rows]:
-    """Return the rows of the train part and of the test part, stratified by the label."""
+    """Return the train and test rows, stratified by the label."""
     parts = train_test_split(np.arange(len(labels)), test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=labels)
 
     return cast("tuple[Rows, Rows]", cast("object", parts))
 
 
 def train(frame: pl.DataFrame, n_trials: int, champion: dict[str, object] | None = None) -> Training:
-    """Run the whole retrain: the search, the held-out metrics, the final fit and the SHAP importance.
+    """Run the whole retrain: search, held-out metrics, final fit and SHAP.
 
     `champion` holds the hyperparameters of the model in production, to seed the search.
     It is `None` in the first run.

@@ -6,7 +6,6 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "prefect_rj_iplanrio",
-    "google-cloud-storage",
     "opencv-python-headless>=4.10.0",
 ]
 

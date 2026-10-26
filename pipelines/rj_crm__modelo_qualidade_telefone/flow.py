@@ -45,7 +45,9 @@ async def rj_crm__modelo_qualidade_telefone(
     batch_size: int = DEFAULT_BATCH_SIZE,
     retrain: RetrainOptions | None = None,
 ) -> None:
-    """Estimate the probability that a phone is HighDelivery on WhatsApp (LightGBM), and retrain the model each month.
+    """Estimate the chance that a phone is HighDelivery on WhatsApp with LightGBM.
+
+    It also retrains the model each month.
 
     `score` runs every three days with the model that is trained. It loads the champion
     from GCS, scores every eligible phone linked to a living CPF (about 6.75 million

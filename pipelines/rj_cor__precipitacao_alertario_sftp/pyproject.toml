@@ -4,7 +4,6 @@ version = "1.0.0"
 description = "Coleta dados de precipitação e meteorologia do AlertaRio via arquivos XML em bucket GCS landing zone, processa e carrega em BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",
-    "google-cloud-storage",
     "defusedxml",
 ]
 

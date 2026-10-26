@@ -12,7 +12,7 @@ from utils.tasks import request_json
 
 @task
 async def fetch_readings_task() -> list[dict[str, JsonValue]]:
-    """Fetch the rain readings of the CEMADEN stations of Rio, and warn about the new stations."""
+    """Fetch the rain readings of the CEMADEN stations, and warn about new ones."""
     data = await request_json(SOURCE_URL, params={"uf": "RJ"}, timeout=30)
     rows = build_rows(extract_records(data, None))
     new_stations = find_new_stations(rows)

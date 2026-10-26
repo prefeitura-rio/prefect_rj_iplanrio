@@ -1,4 +1,4 @@
-"""The frame of the people to message: columns, filters, retries, the file and the log."""
+"""The frame of the people to message: columns, filters, retries, file, log."""
 
 from collections.abc import Collection, Sequence
 from datetime import date, datetime
@@ -18,7 +18,7 @@ ROWS: TypeAdapter[list[dict[str, JsonValue]]] = TypeAdapter(list[dict[str, JsonV
 
 
 class LogLine(BaseModel):
-    """The columns that every line of the log needs: the dispatch, the campaign, the CPF and the phone."""
+    """The columns that every log line needs: the dispatch, campaign, CPF and phone."""
 
     dispatch_date: str
     campaign_name: str
@@ -38,7 +38,10 @@ class LogLine(BaseModel):
 
 
 def normalize_columns(frame: pl.DataFrame) -> pl.DataFrame:
-    """Add `LOCALE` as `BR` if the frame lacks it, and name the CPF column `cpf` if it has an old name."""
+    """Add `LOCALE` as `BR` if the frame lacks it, and name the CPF column `cpf`.
+
+    An old name of the CPF column is renamed.
+    """
     if "LOCALE" not in frame.columns:
         frame = frame.with_columns(pl.lit("BR").alias("LOCALE"))
 
@@ -111,7 +114,7 @@ def quarantine(frame: pl.DataFrame, failed_phones: Collection[str], *, retries: 
 
 
 def fill_phones(frame: pl.DataFrame) -> pl.DataFrame:
-    """Give a row with no phone the first of `others`, and drop the rows that still have none."""
+    """Give a row with no phone the first of `others`, and drop rows with none."""
     if "others" in frame.columns:
         first = pl.col("others").list.get(0, null_on_oob=True)
         frame = frame.with_columns(pl.coalesce("telefone", first).alias("telefone"))
@@ -120,7 +123,7 @@ def fill_phones(frame: pl.DataFrame) -> pl.DataFrame:
 
 
 def has_alternatives(frame: pl.DataFrame, attempt: int) -> bool:
-    """Tell whether any row has at least `attempt` alternative phones, or whether the frame has no `others` column."""
+    """Tell whether a row has `attempt` alternative phones, or `others` is missing."""
     if "others" not in frame.columns:
         return True
 
@@ -128,7 +131,9 @@ def has_alternatives(frame: pl.DataFrame, attempt: int) -> bool:
 
 
 def retry_frame(frame: pl.DataFrame, failed_cpfs: Collection[str], attempt: int) -> pl.DataFrame:
-    """Return the rows of the CPFs that failed, with the phone number `attempt` of `others`, and drop those with none.
+    """Return the rows of the CPFs that failed, with the phone `attempt` of `others`.
+
+    Rows with no such phone are dropped.
 
     Raise `ValueError` if the frame has no `others` column.
     """

@@ -16,7 +16,7 @@ from utils.records import extract_records, read_json
 
 
 async def fetch_station(client: AsyncClient, limit: Semaphore, url: str, station: str) -> list[dict[str, JsonValue]]:
-    """Fetch the measurements of one station from its URL, or nothing if the request fails."""
+    """Fetch the measurements of one station, or nothing if the request fails."""
     async with limit:
         try:
             response = await client.get(url)

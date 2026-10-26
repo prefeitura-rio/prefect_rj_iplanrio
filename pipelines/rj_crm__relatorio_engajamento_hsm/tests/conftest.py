@@ -12,7 +12,10 @@ type ClassificationFactory = Callable[..., Classification]
 
 @pytest.fixture
 def make_message() -> MessageFactory:
-    """Return a factory of messages of a session, with the minute as its time, and changes for any field."""
+    """Return a factory of session messages, with the minute as the time.
+
+    It accepts changes for any field.
+    """
 
     def build(session: str, source: str, text: str | None, minute: int = 0, **changes: str | None) -> Message:
         message: Message = {

@@ -9,7 +9,7 @@ from utils.utils import render_query
 
 
 def read_report_dates(start_date: str | None, end_date: str | None) -> tuple[date, date]:
-    """Return the dates of the report: the ones given, or the previous month in São Paulo."""
+    """Return the dates of the report: those given, or the last month in São Paulo."""
     if start_date and end_date:
         return date.fromisoformat(start_date), date.fromisoformat(end_date)
 
@@ -48,7 +48,7 @@ def flag_new_sessions(times: list[datetime]) -> list[bool]:
 
 
 def fix_phone(phone: str | None) -> str | None:
-    """Return a phone of 12 digits with the 9 after the area code, and any other phone as it is."""
+    """Return a 12 digit phone with the 9 after the area code, or the phone as it is."""
     return f"{phone[:4]}9{phone[4:]}" if phone is not None and len(phone) == 12 else phone  # noqa: PLR2004  # the length of a phone without the 9
 
 

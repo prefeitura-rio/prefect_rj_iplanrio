@@ -21,7 +21,7 @@ def first_hsm_text(conversations: Sequence[Conversation]) -> str:
 
 
 def fill_prompt(template: str, hsm_text: str, catalog_text: str, conversations_text: str) -> str:
-    """Return the template with the HSM text, the catalog and the conversations put in their places."""
+    """Return the template with the HSM text, catalog and conversations in place."""
     return (
         template.replace("<<HSM_TEXTO>>", hsm_text)
         .replace("<<CATALOGO_CATEGORIAS>>", catalog_text)
@@ -38,7 +38,7 @@ def format_conversations(batch: Sequence[Conversation]) -> str:
 
 
 def format_judged(batch: Sequence[Classification]) -> str:
-    """Return a batch for the judge: each conversation with the category and the justification that it got."""
+    """Return a batch for the judge: each conversation with its category and reason."""
     blocks = [
         "\n".join(
             [

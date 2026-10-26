@@ -140,3 +140,68 @@ async def test_prefixes_list_the_folders_of_one_level_only() -> None:
         "staging/a/t1",
         "staging/a/t2",
     ]
+
+
+@pytest.mark.parametrize(
+    ("key", "expected"),
+    [
+        pytest.param("ds/a.txt", b"hello", id="an_existing_key_returns_its_bytes"),
+        pytest.param("ds/missing.txt", None, id="a_missing_key_returns_nothing"),
+    ],
+)
+def test_read_bytes_returns_the_object_or_nothing(
+    key: str, expected: bytes | None
+) -> None:
+    """Return the bytes of an existing key and nothing for a missing key."""
+    store = MemoryStore()
+    gcs.write_bytes(store, "ds/a.txt", b"hello")
+
+    assert gcs.read_bytes(store, key) == expected
+
+
+def test_write_bytes_replaces_the_object_and_has_key_sees_it() -> None:
+    """Replace an object with the same key and report that it exists."""
+    store = MemoryStore()
+
+    assert gcs.has_key(store, "ds/a.txt") is False
+
+    gcs.write_bytes(
+        store, "ds/a.txt", b"one", content_type="text/plain", metadata={"sha1": "x"}
+    )
+    gcs.write_bytes(store, "ds/a.txt", b"two")
+
+    assert gcs.has_key(store, "ds/a.txt") is True
+    assert gcs.read_bytes(store, "ds/a.txt") == b"two"
+
+
+def test_list_sizes_maps_each_key_under_the_prefix_to_its_size() -> None:
+    """Map the keys under one prefix to their sizes and skip other prefixes."""
+    store = MemoryStore()
+    gcs.write_bytes(store, "ds/a.txt", b"12")
+    gcs.write_bytes(store, "ds/sub/b.txt", b"123")
+    gcs.write_bytes(store, "other/c.txt", b"1")
+
+    assert gcs.list_sizes(store, "ds/") == {"ds/a.txt": 2, "ds/sub/b.txt": 3}
+
+
+def test_download_writes_the_object_to_a_file_and_read_chunks_yields_it(
+    tmp_path: Path,
+) -> None:
+    """Write the object to a new folder and yield the same bytes in chunks."""
+    store = MemoryStore()
+    gcs.write_bytes(store, "ds/a.bin", b"abcdef")
+
+    path = gcs.download(store, "ds/a.bin", tmp_path / "out" / "a.bin")
+
+    assert path.read_bytes() == b"abcdef"
+    assert b"".join(gcs.read_chunks(store, "ds/a.bin")) == b"abcdef"
+
+
+def test_object_reader_reads_the_bytes_in_chunks() -> None:
+    """Read the bytes of an object in two calls."""
+    store = MemoryStore()
+    gcs.write_bytes(store, "ds/a.bin", b"abcdef")
+
+    reader = gcs.ObjectReader(store, "ds/a.bin")
+
+    assert (reader.read(4), reader.read(4)) == (b"abcd", b"ef")

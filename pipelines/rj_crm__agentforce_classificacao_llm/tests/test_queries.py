@@ -6,7 +6,7 @@ ANCHOR = str(Path(__file__).parent.parent / "tasks.py")
 
 
 def test_the_extraction_query_takes_the_window_and_the_tables() -> None:
-    """Put the days, the tables and the limit of the HSM in the query, with nothing left to fill."""
+    """Put the days, tables and HSM limit in the query, with nothing left to fill."""
     sql = render_query(
         ANCHOR,
         "extract_sessions",

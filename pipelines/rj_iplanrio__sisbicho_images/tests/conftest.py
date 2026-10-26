@@ -1,54 +1,17 @@
 from base64 import b64encode
 from collections.abc import Callable
-from typing import final
 
 import pytest
 from cv2 import INTER_NEAREST, QRCodeEncoder, imencode, resize
+from obstore.store import MemoryStore
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"image"
 
 
-@final
-class FakeBlob:
-    """A blob of a fake bucket that records its uploads."""
-
-    def __init__(self, bucket: "FakeBucket", name: str) -> None:
-        """Store the arguments."""
-        self.bucket = bucket
-        self.name = name
-        self.metadata: dict[str, str] | None = {}
-
-    def exists(self) -> bool:
-        """Tell whether the name has an upload."""
-        return self.name in self.bucket.files
-
-    def upload_from_string(self, data: bytes, content_type: str) -> None:
-        """Record the upload."""
-        self.bucket.files[self.name] = (data, content_type)
-
-    def patch(self) -> None:
-        """Record the metadata."""
-        self.bucket.patched.append(self.name)
-
-
-@final
-class FakeBucket:
-    """A bucket that keeps its uploads in memory."""
-
-    def __init__(self) -> None:
-        """Store the arguments."""
-        self.files: dict[str, tuple[bytes, str]] = {}
-        self.patched: list[str] = []
-
-    def blob(self, blob_name: str) -> FakeBlob:
-        """Return a blob of the name."""
-        return FakeBlob(self, blob_name)
-
-
 @pytest.fixture
-def bucket() -> FakeBucket:
-    """Return an empty fake bucket."""
-    return FakeBucket()
+def store() -> MemoryStore:
+    """Return an empty in-memory bucket."""
+    return MemoryStore()
 
 
 @pytest.fixture

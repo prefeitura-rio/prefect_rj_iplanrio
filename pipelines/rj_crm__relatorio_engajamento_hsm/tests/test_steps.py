@@ -27,7 +27,7 @@ def test_a_sample_is_capped_and_the_same_for_the_same_seed(make_conversation: Co
 
 
 def test_a_discovery_adds_new_categories_and_counts_the_items_that_fail() -> None:
-    """Add a new name once, ignore a repeat of the catalog, and fail an item with no name."""
+    """Add a new name once, ignore a repeat, and fail an item with no name."""
     catalog = Catalog()
     catalog.register("EXISTENTE", "d")
     answer: list[dict[str, JsonValue]] = [
@@ -100,7 +100,10 @@ def test_the_judge_sample_takes_a_share_of_each_category_in_alphabetical_order(
 def test_a_verdict_matches_by_number_and_keeps_the_expected_category_only_when_incorrect(
     make_classification: ClassificationFactory,
 ) -> None:
-    """Fail a verdict that is not valid or has no item, and clear the expected category of a correct one."""
+    """Fail a verdict that is not valid or has no item.
+
+    Clear the expected category unless it is incorrect.
+    """
     batch = [make_classification(str(number)) for number in range(1, 5)]
     answer: list[dict[str, JsonValue]] = [
         {"id": 1, "veredito": "correto", "categoria_esperada": "ignored", "justificativa": "ok"},

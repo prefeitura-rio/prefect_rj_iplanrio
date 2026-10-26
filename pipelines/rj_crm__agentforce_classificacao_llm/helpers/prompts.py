@@ -25,7 +25,7 @@ def fill_prompt(template: str, hsm_text: str | None, conversation: str | None) -
 
 
 def split_sessions(sessions: Sequence[Session]) -> Split:
-    """Split the sessions into the ones for the model, the ones that a rule decides, and the ones dropped.
+    """Split the sessions into those for the model, those for a rule, and those dropped.
 
     - With an HSM and not a late reply to a button, the session goes to the model with
       the `com_hsm` prompt.

@@ -22,7 +22,10 @@ async def no_pause(seconds: float) -> None:
 
 @pytest.fixture
 def make_run() -> Callable[..., tuple[Run, list[Request]]]:
-    """Return a factory of runs whose service gives the replies in order, with the requests that it saw."""
+    """Return a factory of runs whose service gives replies in order.
+
+    It also keeps the requests.
+    """
 
     def build(*replies: Response | Exception) -> tuple[Run, list[Request]]:
         seen: list[Request] = []

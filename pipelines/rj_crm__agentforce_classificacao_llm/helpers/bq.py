@@ -1,4 +1,4 @@
-"""The native BigQuery tables of the pipeline: their creation, the reads and the load with a MERGE.
+"""The native BigQuery tables of the pipeline: creation, reads, MERGE load.
 
 The client carries the credentials of the environment. Without them the client falls
 back to the default credentials, which in the pod are not the service account that has
@@ -62,7 +62,10 @@ def ensure_table(client: bigquery.Client, full_id: str, description: str, *, par
 
 
 def ensure_tables(project: str, destination: str, tmp: str, descriptions: tuple[str, str]) -> None:
-    """Check that the table of the classifications and its tmp table exist, and create the one that is missing."""
+    """Check that the classification table and its tmp table exist.
+
+    Create the one that is missing.
+    """
     client = connect(project)
     ensure_table(client, destination, descriptions[0], partitioned=True)
     ensure_table(client, tmp, descriptions[1], partitioned=False)
@@ -72,7 +75,7 @@ def ensure_tables(project: str, destination: str, tmp: str, descriptions: tuple[
 def load_and_merge(
     project: str, tmp: str, rows: Sequence[Mapping[str, JsonValue]], merge_sql: str, truncate_sql: str
 ) -> int:
-    """Add rows to the tmp table, MERGE them, clear the tmp table, and return the rows that the MERGE touched.
+    """Add rows to the tmp table, MERGE them, clear it, and return the rows touched.
 
     Raise `RuntimeError` if the load has errors.
     """

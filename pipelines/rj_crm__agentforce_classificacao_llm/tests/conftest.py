@@ -10,7 +10,10 @@ type SessionFactory = Callable[..., Session]
 
 @pytest.fixture
 def make_session() -> SessionFactory:
-    """Return a factory of sessions with one message of the citizen and an HSM, with changes for any field."""
+    """Return a factory of sessions with one citizen message and an HSM.
+
+    It accepts changes for any field.
+    """
 
     def build(**changes: object) -> Session:
         base = {

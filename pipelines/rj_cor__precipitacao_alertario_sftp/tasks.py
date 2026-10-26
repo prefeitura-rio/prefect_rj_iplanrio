@@ -20,7 +20,7 @@ from utils.utils import render_query
 
 @task(retries=3, retry_delay_seconds=10)
 async def read_watermark_task(table: str, project: str) -> str | None:
-    """Return the latest `data_medicao` of the table, or nothing if the table is empty or does not exist."""
+    """Return the latest `data_medicao` of the table, or nothing if it is empty."""
     try:
         frame = await read_bq(render_query(__file__, "get_max_update", table=table), project=project)
     except NotFound:
@@ -44,7 +44,10 @@ async def fetch_files_task(bucket_name: str, prefix: str, watermark: str | None)
 
 @task
 def build_rows_task(xml_files: list[str]) -> tuple[list[Record], list[Record]]:
-    """Read the XML files and return the pluviometric and the meteorological rows, without repeats."""
+    """Read the XML files and return the pluviometric and weather rows.
+
+    Each reading appears once.
+    """
     pluviometric: list[Record] = []
     meteorological: list[Record] = []
 

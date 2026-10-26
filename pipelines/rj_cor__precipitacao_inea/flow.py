@@ -21,7 +21,7 @@ async def rj_cor__precipitacao_inea(
     fluviometric: Table,
     dump_mode: DumpMode = "append",
 ) -> None:
-    """Add the rain and the water height of the five INEA stations to two BigQuery tables."""
+    """Add the rain and water height of the INEA stations to two BigQuery tables."""
     pluviometric_rows, fluviometric_rows = await fetch_stations_task()
 
     for table, rows in ((pluviometric, pluviometric_rows), (fluviometric, fluviometric_rows)):

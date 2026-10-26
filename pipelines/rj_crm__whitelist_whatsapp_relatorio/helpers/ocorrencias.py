@@ -6,16 +6,14 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
+from toolkit.telemetry import logger
 
-from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.log import logger_da_pipeline
-
-logger = logger_da_pipeline(__name__)
 JSON: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
 
 @dataclass(frozen=True)
 class Ocorrencia:
-    """Um passo do agente em que ao menos uma URL foi redigida."""
+    """A step of the agent in which at least one URL was redacted."""
 
     id_passo: str
     datahora: datetime
@@ -23,22 +21,15 @@ class Ocorrencia:
 
 
 def itens_validos(valores: Iterable[object]) -> tuple[str, ...]:
-    """Converte uma sequência em URLs limpas, descartando vazios.
-
-    :param valores: Sequência de valores brutos.
-    :returns: URLs sem espaços em volta.
-    """
+    """Return the clean URLs of a sequence, and drop the empty ones."""
     return tuple(str(item).strip() for item in valores if str(item).strip())
 
 
 def extrair_urls(valor: object) -> tuple[str, ...]:
-    """Normaliza o conteúdo de ``redacted_urls`` para uma tupla de URLs.
+    """Return the content of `redacted_urls` as a tuple of URLs.
 
-    A coluna vem do tipo ``JSON`` do BigQuery e pode chegar como lista, como string JSON
-    ou como escalar. Todos os formatos são aceitos.
-
-    :param valor: Valor bruto da coluna ``redacted_urls``.
-    :returns: URLs encontradas, possivelmente vazia.
+    The column has the `JSON` type of BigQuery, and it can arrive as a list, as a JSON
+    string or as a scalar. Every format is accepted. The tuple may be empty.
     """
     if isinstance(valor, list | tuple):
         return itens_validos(valor)
@@ -62,14 +53,10 @@ def extrair_urls(valor: object) -> tuple[str, ...]:
 
 
 def normalizar(dados: list[dict[str, object]]) -> list[Ocorrencia]:
-    """Converte o resultado da query em ocorrências tipadas.
+    """Return the result of the query as typed occurrences, in the order they came.
 
-    Linhas sem nenhuma URL utilizável são descartadas e contabilizadas no log: a query
-    já filtra ``redacted_urls IS NOT NULL``, então elas indicam formato inesperado.
-
-    :param dados: Resultado da query, com ``id_passo``, ``inicio_datahora`` e
-        ``redacted_urls``.
-    :returns: Ocorrências na ordem em que vieram.
+    A row with no usable URL is dropped and counted in the log. The query already
+    filters `redacted_urls IS NOT NULL`, so such a row means an unexpected format.
     """
     ocorrencias: list[Ocorrencia] = []
     descartadas = 0
@@ -88,11 +75,10 @@ def normalizar(dados: list[dict[str, object]]) -> list[Ocorrencia]:
 
 
 def ler_ultima_ocorrencia(dados: list[dict[str, object]]) -> datetime | None:
-    """Extrai o instante da última ocorrência conhecida do resultado da query.
+    """Return the time of the last known occurrence, or `None` if there never was one.
 
-    :param dados: Resultado de ``get_ultima_ocorrencia``, com a coluna
-        ``ultima_ocorrencia``.
-    :returns: Instante da última ocorrência, ou ``None`` se a fonte nunca registrou uma.
+    `dados` is the result of `get_ultima_ocorrencia`, with the column
+    `ultima_ocorrencia`.
     """
     if not dados:
         return None
@@ -101,16 +87,14 @@ def ler_ultima_ocorrencia(dados: list[dict[str, object]]) -> datetime | None:
 
 
 def descrever_ultima_ocorrencia(ultima: datetime | None, referencia: datetime) -> str:
-    """Descreve há quanto tempo foi a última ocorrência conhecida na fonte.
+    """Say how long ago the last occurrence known to the source was.
 
-    A frase entra na mensagem do Discord em dia sem ocorrências, e é o que distingue um
-    dia tranquilo de uma fonte que parou de gerar dados: a distância cresce sozinha e
-    fica visível para quem acompanha o canal, sem limiar configurado nem estado
-    guardado.
+    The phrase goes into the Discord message on a day with no occurrence. It tells a
+    quiet day from a source that stopped making data: the distance grows alone, and a
+    reader of the channel sees it, with no threshold to set and no state to keep.
 
-    :param ultima: Instante da última ocorrência, ou ``None``.
-    :param referencia: Data contra a qual medir a distância — o fim da janela.
-    :returns: Frase pronta para a mensagem.
+    `ultima` is the time of the last occurrence, or `None`. `referencia` is the date to
+    measure from, the end of the window.
     """
     if ultima is None:
         return "Nenhuma ocorrência registrada na fonte até o momento."
@@ -125,13 +109,10 @@ def descrever_ultima_ocorrencia(ultima: datetime | None, referencia: datetime) -
 
 
 def urls_distintas(ocorrencias: list[Ocorrencia]) -> list[str]:
-    """Lista as URLs únicas, preservando a ordem de aparição.
+    """List the unique URLs, in the order they first appear.
 
-    É o que vai para o bloco de cópia do e-mail: o que se libera na whitelist é a URL,
-    não a ocorrência.
-
-    :param ocorrencias: Ocorrências do período.
-    :returns: URLs sem repetição.
+    They go to the copy block of the e-mail, because the whitelist takes the URL and not
+    the occurrence.
     """
     vistas: dict[str, None] = {}
     for ocorrencia in ocorrencias:
@@ -141,20 +122,18 @@ def urls_distintas(ocorrencias: list[Ocorrencia]) -> list[str]:
 
 
 def frequencias(ocorrencias: list[Ocorrencia]) -> list[dict[str, object]]:
-    """Conta quantas vezes cada URL apareceu, da mais frequente para a menos.
+    """Count how many times each URL appeared, from the most frequent to the least.
 
-    :param ocorrencias: Ocorrências do período.
-    :returns: Registros com as chaves ``url`` e ``total``.
+    Return records with the keys `url` and `total`.
     """
     contagem = Counter(url for ocorrencia in ocorrencias for url in ocorrencia.urls)
     return [{"url": url, "total": total} for url, total in contagem.most_common()]
 
 
 def para_template(ocorrencias: list[Ocorrencia]) -> list[dict[str, str]]:
-    """Achata as ocorrências em uma linha por URL, para a tabela do e-mail.
+    """Flatten the occurrences into one row for each URL, for the table of the e-mail.
 
-    :param ocorrencias: Ocorrências do período.
-    :returns: Registros com ``datahora``, ``url`` e ``id_passo``.
+    Return records with `datahora`, `url` and `id_passo`.
     """
     return [
         {

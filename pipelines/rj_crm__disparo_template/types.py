@@ -88,7 +88,7 @@ class Csv:
 
 @dataclass(frozen=True)
 class Report:
-    """What a try sent: the campaign, the time of the dispatch, how many people and how many batches."""
+    """What a try sent: the campaign, the dispatch time, the people and the batches."""
 
     campaign: str
     dispatch_date: str
@@ -99,7 +99,7 @@ class Report:
 
 @dataclass(frozen=True)
 class Delivered:
-    """What a try put on the SFTP: the rows of its log, the time of its last file and the number of files."""
+    """What a try put on the SFTP: its log rows, last file time and file count."""
 
     rows: list[dict[str, JsonValue]]
     last_date: str

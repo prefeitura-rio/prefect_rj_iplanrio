@@ -61,7 +61,7 @@ SAFE_BUILTINS: dict[str, object] = {
 
 
 class RemoveImports(NodeTransformer):
-    """Take the imports out of a tree, because the sandbox gives the safe modules itself."""
+    """Take the imports out of a tree, as the sandbox gives the safe modules."""
 
     @override
     def visit_Import(self, node: Import) -> None:
@@ -83,7 +83,10 @@ def is_safe_import(node: Import | ImportFrom) -> bool:
 
 
 def check_top_level(tree: Module) -> str | None:
-    """Return why the top level of the code is not safe, or nothing: it must hold functions and safe imports alone."""
+    """Return why the top level of the code is unsafe, or nothing.
+
+    It must hold functions and safe imports alone.
+    """
     if not any(isinstance(node, FunctionDef) for node in tree.body):
         return "the block has no function"
 
@@ -95,7 +98,7 @@ def check_top_level(tree: Module) -> str | None:
 
 
 def check_nodes(tree: Module) -> str | None:
-    """Return why a node in the code is not safe: an unsafe import, a dunder or a forbidden name."""
+    """Return why a node is unsafe: an unsafe import, a dunder or a forbidden name."""
     for node in walk(tree):
         if isinstance(node, Import | ImportFrom) and not is_safe_import(node):
             return "import not allowed"
@@ -120,7 +123,10 @@ def check_safe(code: str) -> str | None:
 
 
 def bound_names(function: FunctionDef) -> set[str]:
-    """Return the names that a function binds itself: its parameters, its variables, and its inner functions."""
+    """Return the names that a function binds itself.
+
+    They are its parameters, variables and inner functions.
+    """
     arguments = function.args
     names = {argument.arg for argument in [*arguments.args, *arguments.posonlyargs, *arguments.kwonlyargs]}
     names |= {argument.arg for argument in (arguments.vararg, arguments.kwarg) if argument}
@@ -141,7 +147,10 @@ def bound_names(function: FunctionDef) -> set[str]:
 
 
 def outside_references(function: FunctionDef) -> set[str]:
-    """Return the names that a function reads that are not its own, a safe builtin, `re` or `unicodedata`."""
+    """Return the names that a function reads from outside its own scope.
+
+    A safe builtin, `re` and `unicodedata` do not count.
+    """
     allowed = set(SAFE_BUILTINS) | {"re", "unicodedata", function.name} | bound_names(function)
 
     return {

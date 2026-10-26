@@ -36,7 +36,7 @@ from pipelines.rj_crm__modelo_qualidade_telefone.types import Champion
 
 
 def split_gcs(root: str) -> tuple[str, str]:
-    """Return the bucket and the prefix, with no slash at the ends, of `gs://bucket/prefix`."""
+    """Return the bucket and the prefix of `gs://bucket/prefix`, with no end slashes."""
     bucket, _, prefix = root[len(GCS_PREFIX) :].partition("/")
 
     return bucket, prefix.strip("/")
@@ -143,7 +143,7 @@ def load_version(root: str, version: str, client: Client | None = None) -> Champ
 
 
 def load_champion(root: str, client: Client | None = None) -> Champion | None:
-    """Load the model that `champion.json` points to, or nothing if there is no pointer yet."""
+    """Load the model that `champion.json` points to, or nothing if no pointer."""
     pointer = read_text(root, CHAMPION_FILE, client=client)
 
     if pointer is None:

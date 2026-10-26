@@ -15,7 +15,7 @@ from pipelines.rj_cor__precipitacao_cemaden.constants import (
 
 
 def read_rain(value: JsonValue) -> float:
-    """Return a rain reading as a number, with nothing, `-` and a negative number as 0."""
+    """Return a rain reading as a number, with nothing, `-` and a negative as 0."""
     try:
         return max(float(str(value)), 0.0)
     except ValueError:

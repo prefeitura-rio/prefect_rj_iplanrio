@@ -51,7 +51,7 @@ def test_a_time_that_does_not_parse_is_nothing() -> None:
 
 
 def test_the_rows_split_into_rain_and_water_height_without_repeats_or_errors_of_the_sensor() -> None:
-    """Drop bad times and repeats, and drop a height above 10000 from the water rows only."""
+    """Drop bad times and repeats, and a height above 10000 in the water rows."""
     base = {"Data": "25/05/2026", "Hora": "14:00", "Chuva Último dado": "0.2", "Chuva Acumulada 1H": "Dado Nulo"}
     pluviometric, fluviometric = build_rows(
         {

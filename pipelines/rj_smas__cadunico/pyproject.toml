@@ -9,7 +9,6 @@ dependencies = [
     "unidecode",
     "ruamel.yaml",
     "google-cloud-bigquery",
-    "google-cloud-storage",
 ]
 
 [tool.uv.sources]

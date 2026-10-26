@@ -24,7 +24,7 @@ async def rj_cor__precipitacao_alertario_sftp(
     dump_mode: DumpMode = "append",
     max_date_bigquery: str | None = None,
 ) -> None:
-    """Load the AlertaRio readings that the SFTP leaves as XML files in a bucket to BigQuery tables.
+    """Load the AlertaRio readings that the SFTP leaves as XML in a bucket to BigQuery.
 
     Only the files after the latest `data_medicao` of the pluviometric table are read,
     or after `max_date_bigquery` (`YYYY-MM-DD HH:MM:SS`) when it is given. The

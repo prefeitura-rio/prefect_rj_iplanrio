@@ -33,7 +33,10 @@ from utils.utils import render_query
 
 @task(retries=2, retry_delay_seconds=30)
 async def authenticate_task() -> str:
-    """Log in to SFMC with the client credentials and return the access token, which lasts about 20 minutes."""
+    """Log in to SFMC with the client credentials and return the access token.
+
+    The token lasts about 20 minutes.
+    """
     settings = SfmcSettings()
     payload = {
         "grant_type": "client_credentials",
@@ -55,7 +58,9 @@ async def authenticate_task() -> str:
 
 @task(retries=2, retry_delay_seconds=30)
 async def list_extensions_task(token: str, soap_uri: str) -> list[Extension]:
-    """List the Data Extensions whose name ends in `historico`, with the pages of the SOAP API.
+    """List the Data Extensions whose name ends in `historico`, page by page.
+
+    It uses the SOAP API.
 
     Raise `RuntimeError` if the API answers with a status that is neither `OK` nor
     `MoreDataAvailable`.
@@ -88,7 +93,7 @@ async def list_extensions_task(token: str, soap_uri: str) -> list[Extension]:
 
 @task
 async def extract_task(token: str, soap_uri: str, rest_uri: str, extension: Extension) -> Extraction:
-    """Read all the records and the columns of a Data Extension, or return the error if it fails.
+    """Read all the records and columns of a Data Extension, or return the error.
 
     The records come from the REST API in pages of 2500, and the columns from the SOAP
     API. A failure of one extension does not stop the others, so it comes back as the
@@ -137,7 +142,9 @@ async def extract_task(token: str, soap_uri: str, rest_uri: str, extension: Exte
 
 @task(retries=2, retry_delay_seconds=60)
 async def load_task(rows: list[Row], window_days: int) -> int:
-    """Keep the rows of the window, replace the tmp table with them, and MERGE it into the final table.
+    """Keep the rows of the window, replace the tmp table with them, and MERGE it.
+
+    The MERGE goes into the final table.
 
     The MERGE updates the rows with the same key and inserts the new ones, and it never
     deletes from the final table. Return the rows that the MERGE touched.

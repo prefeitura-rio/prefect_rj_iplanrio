@@ -82,7 +82,10 @@ def decide(training: Training, simulation: Simulation, *, require_gate: bool = T
 
 
 def build_metadata(training: Training, gate: Gate) -> dict[str, object]:
-    """Return the `metadata.json` of a version: features, hyperparameters, metrics and the decision of the gate."""
+    """Return the `metadata.json` of a version.
+
+    It has the features, hyperparameters, metrics and the gate decision.
+    """
     return {
         "features": list(FEATURES),
         "hiperparametros": training.hyperparameters,

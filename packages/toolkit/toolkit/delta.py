@@ -373,6 +373,11 @@ def maintain(uri: str) -> None:
     table.vacuum(retention_hours=VACUUM_RETENTION_HOURS, dry_run=False)
 
 
+def table_exists(uri: str) -> bool:
+    """Return whether a Delta table lives at `uri`."""
+    return DeltaTable.is_deltatable(uri)
+
+
 def inspect_table(uri: str) -> TableReport:
     """Read the version, the files, the bytes, the last commit and the chunk keys.
 

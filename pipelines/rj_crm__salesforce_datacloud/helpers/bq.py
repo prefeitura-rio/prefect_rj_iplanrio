@@ -1,4 +1,4 @@
-"""The native BigQuery tables of the pipeline: their creation, the staging load and the MERGE."""
+"""The native BigQuery tables of the pipeline: creation, staging load and MERGE."""
 
 from collections.abc import Sequence
 
@@ -11,7 +11,10 @@ from pipelines.rj_crm__salesforce_datacloud.types import Row
 
 
 def create_tables(project: str, dataset: str) -> None:
-    """Create each table of the pipeline that does not exist yet: the finals partitioned by day and clustered."""
+    """Create each table that does not exist yet.
+
+    The final tables are partitioned by day and clustered.
+    """
     client = bigquery.Client(project=project)
     dataset_ref = bigquery.DatasetReference(project, dataset)
 
@@ -56,7 +59,7 @@ def read_columns(project: str, table: str) -> list[str]:
 
 
 def run_merge(project: str, merge_sql: str, truncate_sql: str) -> dict[str, int]:
-    """Run the MERGE, clear the staging after it worked, and return the rows it inserted and updated."""
+    """Run the MERGE, clear the staging after it works, and return the rows touched."""
     client = bigquery.Client(project=project)
     job = client.query(merge_sql)
     job.result()

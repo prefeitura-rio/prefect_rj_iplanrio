@@ -7,7 +7,7 @@ from pipelines.rj_cor__precipitacao_websirene.constants import RAIN_COLUMNS, SP_
 
 
 def read_number(text: str | None) -> float | None:
-    """Return an attribute as a number, or nothing if it is missing or is not a number."""
+    """Return an attribute as a number, or nothing if it is missing or not a number."""
     try:
         return float(text) if text is not None else None
     except ValueError:
@@ -26,7 +26,7 @@ def read_time(text: str) -> str:
 
 
 def build_rows(xml: str | bytes) -> list[dict[str, str | float | None]]:
-    """Return one row for each station of the XML that has a rain reading, with the time in São Paulo."""
+    """Return one row for each XML station with a rain reading, in São Paulo time."""
     root: Element = fromstring(xml)  # the page is the public one of the city
     rows: list[dict[str, str | float | None]] = []
 

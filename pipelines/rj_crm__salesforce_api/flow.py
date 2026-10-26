@@ -19,7 +19,7 @@ async def rj_crm__salesforce_api(
     table: Table,
     dump_mode: DumpMode = "append",
 ) -> None:
-    """Load the records of any route of the Salesforce Marketing Cloud REST API to a BigQuery table.
+    """Load the records of any route of the SFMC REST API to a BigQuery table.
 
     Each record is a row with two columns: `data`, the record as JSON text, and
     `data_particao`, the day of the run. See `SfmcRequest` for the route and its paging.

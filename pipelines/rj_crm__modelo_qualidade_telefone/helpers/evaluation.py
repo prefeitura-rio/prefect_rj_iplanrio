@@ -1,4 +1,7 @@
-"""Build the long table of the evaluation of a retrain: a row for each metric of training, SHAP, simulation and gate."""
+"""Build the long table of the evaluation of a retrain.
+
+It has a row for each metric of training, SHAP, simulation and gate.
+"""
 
 from json import dumps
 
@@ -9,7 +12,10 @@ type Row = dict[str, str | float | None]
 
 
 def make_row(origin: str, metric: str, value: float, algorithm: str | None = None, detail: str | None = None) -> Row:
-    """Return a row of the table, with the version and the date left to `build_evaluation`."""
+    """Return a row of the table, with no version and date yet.
+
+    `build_evaluation` adds them.
+    """
     return {"origem": origin, "algoritmo": algorithm, "metrica": metric, "valor": float(value), "detalhe": detail}
 
 
@@ -24,12 +30,15 @@ def training_rows(training: Training) -> list[Row]:
 
 
 def shap_rows(training: Training) -> list[Row]:
-    """Return one row for each feature: the metric is its name, and the value is its mean importance."""
+    """Return one row for each feature: its name and its mean importance."""
     return [make_row("shap", feature, value) for feature, value in training.shap_importance.items()]
 
 
 def simulation_rows(simulation: Simulation) -> list[Row]:
-    """Return one row for each metric of each algorithm, the p-values of the tests and two rows about the pool."""
+    """Return a row for each metric of each algorithm, the p-values and the pool.
+
+    The pool has two rows.
+    """
     rows: list[Row] = []
 
     for item in simulation.summary:
@@ -61,7 +70,10 @@ def simulation_rows(simulation: Simulation) -> list[Row]:
 
 
 def gate_rows(gate: Gate) -> list[Row]:
-    """Return one row for each value that the gate measured and the decision, with the reasons as JSON in the detail."""
+    """Return a row for each value that the gate measured, and the decision.
+
+    The reasons go as JSON in the detail.
+    """
     rows = [
         make_row("gate", "promovido", float(gate.promoted), detail=dumps(gate.reasons, ensure_ascii=False)),
         make_row("gate", "probabilidade_degenerada", float(gate.degenerate)),
@@ -78,7 +90,10 @@ def gate_rows(gate: Gate) -> list[Row]:
 
 
 def build_evaluation(training: Training, simulation: Simulation, gate: Gate, version: str, run_date: str) -> list[Row]:
-    """Return the rows of the four origins, with `data_execucao` as `run_date` (`YYYY-MM-DD`) and the `versao`."""
+    """Return the rows of the four origins, with `data_execucao` and the `versao`.
+
+    `data_execucao` is `run_date`, as `YYYY-MM-DD`.
+    """
     rows = [*training_rows(training), *shap_rows(training), *simulation_rows(simulation), *gate_rows(gate)]
 
     return [{"data_execucao": run_date, "versao": version, **row} for row in rows]

@@ -107,7 +107,10 @@ def test_a_session_with_an_hsm_gets_every_label_checked(make_session: SessionFac
 
 
 def test_a_session_without_an_hsm_has_no_relation_to_check_and_no_phone_flag(make_session: SessionFactory) -> None:
-    """Force `SEM_HSM_ASSOCIADO`, since an empty relation would mean that it was not classified."""
+    """Force `SEM_HSM_ASSOCIADO`.
+
+    An empty relation would mean that it was not classified.
+    """
     prompted = Prompted(make_session(hsm_texto=None), "sem_hsm", "p")
 
     row = build_classified_row(
@@ -125,7 +128,7 @@ def test_a_session_without_an_hsm_has_no_relation_to_check_and_no_phone_flag(mak
 
 
 def test_a_late_reply_to_a_button_is_decided_by_rule_with_no_model(make_session: SessionFactory) -> None:
-    """Give the relation, the phone flag and the note, and leave the model columns empty."""
+    """Give the relation, phone flag and note, and leave the model columns empty."""
     row = build_rule_row(make_session())
 
     assert (row["relacao_hsm"], row["telefone_confirmacao_flag"], row["tipo_prompt"]) == (
@@ -149,7 +152,7 @@ def test_the_columns_of_a_session_are_written_as_iso_times(make_session: Session
 
 
 def test_the_rows_get_the_columns_of_the_load(make_session: SessionFactory) -> None:
-    """Stamp the time, the day and the prompt version, empty themes, and the date of the phone confirmation."""
+    """Stamp the time, day and prompt version, empty themes and the phone date."""
     with_flag = build_rule_row(make_session())
     without_flag = {**build_rule_row(make_session(id_sessao="s2")), "telefone_confirmacao_flag": None}
     now = datetime(2026, 7, 17, 23, 30, tzinfo=UTC)
@@ -167,7 +170,10 @@ def test_the_rows_get_the_columns_of_the_load(make_session: SessionFactory) -> N
 
 
 def test_the_sessions_split_by_what_happens_to_each(make_session: SessionFactory) -> None:
-    """Send an HSM session and a no-HSM session to the model, decide a late reply by rule, and drop one with no talk."""
+    """Send HSM and no-HSM sessions to the model, and decide a late reply by rule.
+
+    A session with no talk is dropped.
+    """
     sessions = [
         make_session(id_sessao="with_hsm"),
         make_session(id_sessao="no_hsm", hsm_texto=None),

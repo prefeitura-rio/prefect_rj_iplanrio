@@ -1,4 +1,4 @@
-"""Read the features in batches, count the rows of a table, and write the two tables of the pipeline."""
+"""Read the features in batches, count the rows of a table, and write two tables."""
 
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -72,7 +72,7 @@ def read_batches(sql: str, batch_size: int) -> Iterator[pl.DataFrame]:
 
 
 def count_rows(client: Client, dataset_id: str, table_id: str) -> int | None:
-    """Return the rows of a table before this run, or nothing if it does not exist yet."""
+    """Return the rows of a table before this run, or nothing if it does not exist."""
     try:
         return client.get_table(f"{client.project}.{dataset_id}.{table_id}").num_rows
     except NotFound:
@@ -80,7 +80,9 @@ def count_rows(client: Client, dataset_id: str, table_id: str) -> int | None:
 
 
 def replace_table(client: Client, path: Path, dataset_id: str, table_id: str) -> int:
-    """Replace a table with a Parquet file in one load job, which is atomic: a query during it sees the old rows.
+    """Replace a table with a Parquet file in one load job.
+
+    The job is atomic: a query during it sees the old rows.
 
     The schema, with the structs `features` and `shap`, comes from the file. Return the
     rows loaded.
@@ -97,7 +99,9 @@ def replace_table(client: Client, path: Path, dataset_id: str, table_id: str) ->
 
 
 def append_evaluation(client: Client, rows: Sequence[Row], dataset_id: str, table_id: str, anchor: str) -> None:
-    """Delete the rows of the same version, if the table exists, and append the new ones. It is never an upsert.
+    """Delete the rows of the same version, if the table exists, then append.
+
+    It is never an upsert.
 
     `anchor` is a file of the pipeline folder, from which the query is found.
     """

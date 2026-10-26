@@ -6,7 +6,6 @@ dependencies = [
     "prefect_rj_iplanrio",
     "google-cloud-bigquery",
     "jinja2",
-    "requests",
 ]
 
 [tool.uv.sources]

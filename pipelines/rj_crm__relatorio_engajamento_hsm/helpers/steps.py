@@ -1,4 +1,7 @@
-"""The steps of the model: how to read what it answers for the discovery, the classification and the judge."""
+"""The steps of the model: how to read its answers.
+
+They are the discovery, the classification and the judge.
+"""
 
 from collections import Counter
 from collections.abc import Mapping, Sequence
@@ -18,7 +21,7 @@ def text_of(value: JsonValue) -> str:
 
 
 def sample_conversations(conversations: Sequence[Conversation], cap: int, seed: int) -> list[Conversation]:
-    """Return the conversations in a random order, at most `cap` of them, the same for the same seed."""
+    """Return the conversations in random order, at most `cap`, the same for a seed."""
     shuffled = list(conversations)
     Random(seed).shuffle(shuffled)
 
@@ -26,7 +29,9 @@ def sample_conversations(conversations: Sequence[Conversation], cap: int, seed: 
 
 
 def register_discoveries(answer: Sequence[Mapping[str, JsonValue]], catalog: Catalog) -> tuple[int, int]:
-    """Add the new categories of an answer to the catalog, and return how many were new and how many items failed.
+    """Add the new categories of an answer to the catalog.
+
+    Return how many were new and how many items failed.
 
     An item with no `categoria_nova` fails, and one that the catalog already has is not
     new.
@@ -50,7 +55,9 @@ def register_discoveries(answer: Sequence[Mapping[str, JsonValue]], catalog: Cat
 def read_classifications(
     answer: Sequence[Mapping[str, JsonValue]], batch: Sequence[Conversation], catalog: Catalog
 ) -> tuple[list[Classification], Counter[str]]:
-    """Return the classifications of an answer, matched by the number of each conversation, and why the others failed.
+    """Return the classifications of an answer, matched by conversation number.
+
+    Also return why the others failed.
 
     A conversation fails when the answer has no category for it, says
     `NENHUMA_DO_CATALOGO`, or names a category that the catalog does not have. The
@@ -96,7 +103,7 @@ def judge_target(size: int, judge_all_below: int, large_category_pct: float) -> 
 def select_for_judge(
     items: Sequence[Classification], judge_all_below: int, large_category_pct: float, seed: int
 ) -> list[Classification]:
-    """Return the classifications for the judge: a sample of each category, in alphabetical order of the categories."""
+    """Return the classifications for the judge: a sample of each category, by name."""
     by_category: dict[str, list[Classification]] = {}
 
     for item in items:
@@ -115,7 +122,9 @@ def select_for_judge(
 def read_verdicts(
     answer: Sequence[Mapping[str, JsonValue]], batch: Sequence[Classification]
 ) -> tuple[dict[str, Classification], int]:
-    """Return the judged classifications of an answer by session id, and how many conversations had no valid verdict.
+    """Return the judged classifications of an answer by session id.
+
+    Also return how many conversations had no valid verdict.
 
     The expected category is kept only for an `INCORRETO`.
     """

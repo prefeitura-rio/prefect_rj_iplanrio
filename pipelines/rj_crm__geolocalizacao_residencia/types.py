@@ -24,7 +24,9 @@ class Address(TypedDict):
 
 @dataclass(frozen=True)
 class Step:
-    """A service of the fallback: its name, the setting of its key (none if it needs no key), and its pace.
+    """A service of the fallback: its name, the setting of its key and its pace.
+
+    A service that needs no key has none.
 
     `concurrent` is how many requests run at one time, and `wait` the seconds that each
     one rests after it.
@@ -38,7 +40,7 @@ class Step:
 
 @dataclass(frozen=True)
 class Run:
-    """What the requests of one run share: the client, the limit of requests at one time, the day, and the pace.
+    """What the requests of a run share: client, request limit, day and pace.
 
     `wait` is how many seconds each request rests after it, and `pause` is the function
     that waits.

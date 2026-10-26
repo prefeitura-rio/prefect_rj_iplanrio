@@ -32,7 +32,7 @@ RECORDS: list[dict[str, JsonValue]] = [
 
 
 def test_only_the_stations_of_rio_are_kept_renamed_and_without_accents() -> None:
-    """Keep the stations of Rio, with the columns of the table in order and the update date."""
+    """Keep the stations of Rio, with the columns of the table in order and the date."""
     stations = build_stations(RECORDS, "2026-01-02")
 
     assert stations == [

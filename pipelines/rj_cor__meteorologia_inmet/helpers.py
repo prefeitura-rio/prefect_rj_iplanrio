@@ -9,7 +9,7 @@ from pipelines.rj_cor__meteorologia_inmet.constants import MEASURES, SP_TZ
 
 
 def read_dates(first_date: str | None, last_date: str | None) -> tuple[str, str, bool]:
-    """Return the first and the last date to fetch, in UTC, and whether it is a backfill.
+    """Return the first and last date to fetch, in UTC, and whether it is a backfill.
 
     Without a first date the range is yesterday to today, and it is not a backfill.
     """

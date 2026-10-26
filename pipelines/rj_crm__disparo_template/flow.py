@@ -38,7 +38,9 @@ async def rj_crm__disparo_template(
     audience: Audience = DEFAULT_AUDIENCE,
     delivery: Delivery = DEFAULT_DELIVERY,
 ) -> None:
-    """Send a templated WhatsApp message, through the Data Extension of Salesforce, to the people of a query.
+    """Send a templated WhatsApp message to the people of a query.
+
+    It goes through the Salesforce Data Extension.
 
     The run stops, with a notice, if the control sheet has the campaign off or past its
     limit date. The query of `audience` gives the frame: `cpf`, `telefone`, an optional

@@ -1,5 +1,6 @@
-"""Simulate four ways to choose a phone on the same pool of candidates: the new model, the model in production,
-a heuristic and a random choice.
+"""Simulate four ways to choose a phone on the same pool of candidates.
+
+They are the new model, the model in production, a heuristic and a random choice.
 
 The number that matters is the gap: the share of the sends that failed that the
 algorithm would change, minus the share of the good sends that it would change. A high
@@ -33,7 +34,9 @@ PICK = ["id_interacao", "telefone_sugerido"]
 
 
 def drop_contaminated(events: pl.DataFrame, phones: frozenset[str]) -> tuple[pl.DataFrame, float]:
-    """Drop the sends (every row of an `id_interacao`) where the phone used or any candidate is in the training set.
+    """Drop the sends where the phone used, or any candidate, is in the training set.
+
+    It drops every row of an `id_interacao`.
 
     The new model trains on all the data, and the label of a training phone sums a
     window of days that can hold the send that is judged here, so the outcome would leak
@@ -65,7 +68,7 @@ def sends_of(events: pl.DataFrame) -> pl.DataFrame:
 
 
 def evaluated_flags(events: pl.DataFrame, sends: pl.DataFrame) -> Flags:
-    """Tell, for each send, whether the phone really used was among the candidates that were scored.
+    """Tell, for each send, whether the phone used was among the scored candidates.
 
     Every algorithm shares the pool, so they share the flags. Only the rule that picks
     the suggestion changes.
@@ -77,7 +80,7 @@ def evaluated_flags(events: pl.DataFrame, sends: pl.DataFrame) -> Flags:
 
 
 def would_change(sends: pl.DataFrame, ranking: pl.DataFrame) -> Flags:
-    """Tell, for each send, whether the algorithm suggests another phone than the one used."""
+    """Tell, for each send, whether the algorithm suggests another phone."""
     joined = sends.join(ranking.select(PICK), on="id_interacao", how="left", maintain_order="left")
 
     return joined.select(pl.col("telefone_sugerido").ne_missing(pl.col("telefone_usado")))[
@@ -86,10 +89,13 @@ def would_change(sends: pl.DataFrame, ranking: pl.DataFrame) -> Flags:
 
 
 def summarize(algorithm: str, evaluated: Flags, failed: Flags, changes: Flags) -> Summary:
-    """Return the numbers of one algorithm: the share evaluated and, inside it, the shares that it changes or keeps."""
+    """Return the numbers of one algorithm.
+
+    They are the share evaluated, and in it the shares changed or kept.
+    """
 
     def share(mask: Flags, numerator: Flags) -> float:
-        """Return the percentage of the rows of the mask that the numerator marks, or `nan` for no row."""
+        """Return the percentage of masked rows that the numerator marks, or `nan`."""
         total = int(mask.sum())
 
         return float(100 * (mask & numerator).sum() / total) if total else float("nan")
@@ -110,7 +116,7 @@ def summarize(algorithm: str, evaluated: Flags, failed: Flags, changes: Flags) -
 
 
 def top_one(frame: pl.DataFrame, key: str, *, descending: bool) -> pl.DataFrame:
-    """Return the first row of each send after a sort by the key, and keep the order of the sends."""
+    """Return the first row of each send after a sort, in the order of the sends."""
     ordered = frame.sort(key, descending=descending, maintain_order=True)
 
     return ordered.group_by("id_interacao", maintain_order=True).head(1)
@@ -186,7 +192,10 @@ def build_rankings(events: pl.DataFrame, new: Booster, production: Booster | Non
 
 
 def gap_test(changes: Flags, failed: Flags) -> SignificanceTest:
-    """Test whether the gap of an algorithm is above zero, or only noise (a Z test of two proportions)."""
+    """Test whether the gap of an algorithm is above zero or only noise.
+
+    It is a Z test of two proportions.
+    """
     statistic, p_value = proportions_ztest(
         [changes[failed].sum(), changes[~failed].sum()], [failed.sum(), (~failed).sum()]
     )
@@ -212,7 +221,7 @@ def pair_test(changes: Mapping[str, Flags], failed: Flags, first: str, second: s
 
 
 def simulate(raw: pl.DataFrame, phones: frozenset[str], new: Booster, production: Booster | None = None) -> Simulation:
-    """Run the whole simulation: clean the pool, rank the algorithms, build the summary and run the tests."""
+    """Run the whole simulation: clean, rank, summarize and test."""
     events, fraction = drop_contaminated(raw, phones)
     sends = sends_of(events)
     rankings = build_rankings(events, new, production)

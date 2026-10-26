@@ -13,7 +13,7 @@ from utils.types import Cloud, DumpMode, Table
 async def rj_cor__meteorologia_redemet_estacoes(
     *, cloud: Cloud = DEFAULT_CLOUD, table: Table, dump_mode: DumpMode = "append"
 ) -> None:
-    """Load the REDEMET stations of Rio de Janeiro to a BigQuery table, with the update date.
+    """Load the REDEMET stations of Rio to a BigQuery table with the update date.
 
     In `overwrite` the stations replace the table, so a station that left the API leaves
     it too.

@@ -9,8 +9,9 @@ from pipelines.rj_cor__meteorologia_redemet_estacoes.constants import CITY, COLU
 
 
 def build_stations(records: Sequence[Mapping[str, JsonValue]], updated_on: str) -> list[dict[str, JsonValue]]:
-    """Return the stations of Rio de Janeiro, renamed, without accents and with the update date and its
-    year, month and day as text, like the legacy table.
+    """Return the stations of Rio, renamed and without accents, with the update date.
+
+    The date also comes as year, month and day as text, like the legacy table.
     """
     stations: list[dict[str, JsonValue]] = []
 
@@ -31,7 +32,7 @@ def build_stations(records: Sequence[Mapping[str, JsonValue]], updated_on: str) 
 
 
 def find_new_stations(stations: Sequence[Mapping[str, JsonValue]]) -> list[str]:
-    """Return the ids of the stations that the REDEMET flow does not know, without repeats."""
+    """Return the ids of the stations that the REDEMET flow does not know, once each."""
     ids = dict.fromkeys(str(station["id_estacao"]) for station in stations)
 
     return [station_id for station_id in ids if station_id not in KNOWN_STATIONS]

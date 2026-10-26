@@ -21,7 +21,10 @@ def hour_window(now: datetime) -> Span:
 
 
 def day_window(day: date, now: datetime) -> Span:
-    """Return a whole day, up to now if it is today, so the window never asks for the future."""
+    """Return a whole day, up to now if it is today.
+
+    The window never asks for the future.
+    """
     local = now.astimezone(SP_TZ)
     start = datetime(day.year, day.month, day.day, tzinfo=SP_TZ)
     end = min(start + timedelta(days=1), local) if day == local.date() else start + timedelta(days=1)

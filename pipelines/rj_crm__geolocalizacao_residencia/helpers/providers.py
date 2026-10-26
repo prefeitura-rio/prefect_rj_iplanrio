@@ -36,7 +36,7 @@ class Query:
 
 @dataclass(frozen=True)
 class Provider:
-    """A geocoding service: its name in the `geocode` column, the request of an address, and the reader of the answer.
+    """A geocoding service: its `geocode` name, its request and its reader.
 
     `parse` takes the address, the response and the day, and gives the geocode or
     nothing.
@@ -48,7 +48,7 @@ class Provider:
 
 
 def fold(value: JsonValue, *, strip: bool = True) -> str | None:
-    """Return a text in lower case without accents, or nothing if it is empty or not text."""
+    """Return a text in lower case without accents, or nothing if it is not text."""
     if not isinstance(value, str) or not value:
         return None
 
@@ -71,7 +71,7 @@ def as_float(value: JsonValue) -> float | None:
 
 
 def empty_geocode(provider: str, today: str) -> Geocode:
-    """Return the geocode of an address that the service could not find: every field empty."""
+    """Return the geocode of an address that the service could not find: all empty."""
     return {
         "latitude": None,
         "longitude": None,
@@ -136,7 +136,10 @@ def waze_query(address: str) -> Query:
 
 
 def parse_waze(response: Response, today: str) -> Geocode | None:
-    """Read the first place of the answer of Waze, whose name is `street, neighborhood, city`."""
+    """Read the first place of a Waze answer.
+
+    Its name is `street, neighborhood, city`.
+    """
     data = read_json(response) if response.status_code == OK else None
     first = data[0] if isinstance(data, list) and data else None
 
@@ -302,14 +305,20 @@ def locationiq(key: str) -> Provider:
 
 
 def is_valid_xyz(data: JsonValue) -> bool:
-    """Tell whether an answer of Geocode.xyz has coordinates that are numbers and both negative, as Rio is."""
+    """Tell whether a Geocode.xyz answer has numeric, negative coordinates.
+
+    Rio has negative coordinates.
+    """
     latitude, longitude = as_float(dig(data, "latt")), as_float(dig(data, "longt"))
 
     return latitude is not None and longitude is not None and latitude < 0 and longitude < 0
 
 
 def read_state(state: JsonValue) -> str | None:
-    """Return the state of Geocode.xyz, which is a text, or an object or a list whose first item counts."""
+    """Return the Geocode.xyz state, which is a text, or an object or a list.
+
+    For a list, the first item counts.
+    """
     if isinstance(state, str):
         return fold(state, strip=False)
 
@@ -337,7 +346,7 @@ def parse_xyz(data: JsonValue, today: str) -> Geocode:
 
 
 def xyz_url(address: str, key: str) -> str:
-    """Return the address of the request to Geocode.xyz, with the key if there is one."""
+    """Return the Geocode.xyz request address, with the key if there is one."""
     return f"https://geocode.xyz/{address}?json=1" + (f"&auth={key}" if key else "")
 
 

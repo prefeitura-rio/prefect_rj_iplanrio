@@ -24,7 +24,9 @@ def to_snake_case(name: str) -> str:
 
 
 def clean_data_cloud_name(name: str) -> str:
-    """Return a Data Cloud name without the `ssot__` prefix and the `__c`, `__dlm` or `__dll` suffix, in snake case.
+    """Return a Data Cloud name in snake case, with no `ssot__` prefix.
+
+    The `__c`, `__dlm` and `__dll` suffixes go too.
 
     ```python
     clean_data_cloud_name("ssot__StartTime__c")  # "start_time"
@@ -61,7 +63,7 @@ def build_rows(names: Sequence[str], values: Sequence[Sequence[JsonValue]], *, d
 
 
 def clean_records(records: Sequence[Mapping[str, JsonValue]]) -> list[Row]:
-    """Return the records of the CRM REST API without `attributes`, with names in snake case."""
+    """Return the CRM REST API records without `attributes`, with snake case names."""
     rows: list[Row] = []
 
     for record in records:
@@ -77,7 +79,7 @@ def clean_records(records: Sequence[Mapping[str, JsonValue]]) -> list[Row]:
 
 
 def transform_rows(rows: Sequence[Row], feed: Feed, partition_date: date, loaded_at: datetime) -> list[Row]:
-    """Return the rows of a feed with its date columns in UTC, `_loaded_at` and `data_particao`.
+    """Return the rows of a feed with UTC dates, `_loaded_at` and `data_particao`.
 
     A text with nothing in it becomes nothing, as the bulk API sends `""` for null. With
     `step_output_only`, `output_value_text` is nothing unless the step is an

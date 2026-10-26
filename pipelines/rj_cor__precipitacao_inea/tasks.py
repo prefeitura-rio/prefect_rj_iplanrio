@@ -11,7 +11,7 @@ from pipelines.rj_cor__precipitacao_inea.settings import Settings
 
 @task(retries=3, retry_delay_seconds=10)
 async def fetch_stations_task() -> tuple[list[dict[str, str | float | None]], list[dict[str, str | float | None]]]:
-    """Fetch the Excel file of each INEA station, and return the pluviometric and fluviometric rows."""
+    """Fetch the Excel file of each INEA station and return its rain and water rows."""
     url = Settings().INEA_URL
     sheets: dict[str, list[dict[str, object]]] = {}
 

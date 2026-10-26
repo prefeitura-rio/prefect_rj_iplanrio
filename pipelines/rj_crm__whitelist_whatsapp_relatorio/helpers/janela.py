@@ -1,7 +1,7 @@
-"""Cálculo da janela de 24h do relatório.
+"""Compute the 24 hour window of the report.
 
-Sem dependência do Prefect: quem lê o contexto de execução é `tasks.py`, que passa os
-valores já resolvidos para cá. Isso mantém a regra da janela testável isoladamente.
+It does not depend on Prefect: `tasks.py` reads the run context and passes the
+resolved values here, so the rule of the window is testable alone.
 """
 
 from dataclasses import dataclass
@@ -33,13 +33,10 @@ CONFIG_PADRAO = ConfigJanela(timezone=TIMEZONE, hora_corte=HORA_CORTE)
 
 
 def agora_no_fuso() -> datetime:
-    """Momento atual no fuso de referência.
+    """Return the current time in the reference time zone.
 
-    Existe para que ``tasks.py`` não precise importar ``datetime`` nem ``ZoneInfo`` só
-    para montar o argumento de :func:`resolver`, que continua recebendo o instante por
-    injeção — é o que mantém a regra da janela testável sem congelar o relógio.
-
-    :returns: Instante atual com fuso.
+    It lets `tasks.py` skip `datetime` and `ZoneInfo`. `resolver` still gets the instant
+    by injection, which keeps the rule of the window testable without a frozen clock.
     """
     return datetime.now(tz=ZoneInfo(TIMEZONE))
 
@@ -54,12 +51,12 @@ class Janela:
 
     @property
     def inicio_sql(self) -> str:
-        """Início no formato aceito por ``DATETIME()`` do BigQuery."""
+        """Return the start in the format that `DATETIME()` of BigQuery accepts."""
         return self.inicio.strftime(FORMATO_SQL)
 
     @property
     def fim_sql(self) -> str:
-        """Fim no formato aceito por ``DATETIME()`` do BigQuery."""
+        """Return the end in the format that `DATETIME()` of BigQuery accepts."""
         return self.fim.strftime(FORMATO_SQL)
 
     @property
@@ -74,16 +71,15 @@ class Janela:
 
     @property
     def data_relatorio(self) -> str:
-        """Data de referência do relatório, que é a do fim da janela."""
+        """Return the date of the report, which is the date of the end of the window."""
         return self.fim.strftime(FORMATO_DATA)
 
 
 def para_fuso(momento: datetime, timezone: str) -> datetime:
-    """Converte um datetime para o fuso indicado.
+    """Return a datetime in the given time zone.
 
-    :param momento: Datetime ingênuo, assumido já no fuso alvo, ou com fuso definido.
-    :param timezone: Nome IANA do fuso, por exemplo ``America/Sao_Paulo``.
-    :returns: Datetime com fuso definido.
+    A naive `momento` counts as already in the target zone. `timezone` is an IANA name
+    such as `America/Sao_Paulo`.
     """
     fuso = ZoneInfo(timezone)
     if momento.tzinfo is None:
@@ -92,22 +88,19 @@ def para_fuso(momento: datetime, timezone: str) -> datetime:
 
 
 def interpretar(texto: str, timezone: str) -> datetime:
-    """Interpreta uma data-hora textual no fuso do relatório.
+    """Read a date and time from text, in the time zone of the report.
 
-    :param texto: Data-hora em formato ISO, por exemplo ``2026-09-15 09:00:00``.
-    :param timezone: Nome IANA do fuso.
-    :returns: Datetime com fuso definido.
-    :raises ValueError: Se o texto não for uma data-hora ISO válida.
+    `texto` is in ISO format, such as `2026-09-15 09:00:00`. Raise `ValueError` if it is
+    not a valid ISO date and time.
     """
     return para_fuso(datetime.fromisoformat(texto), timezone)
 
 
 def ultimo_corte(agora: datetime, hora_corte: int) -> datetime:
-    """Devolve o horário de corte mais recente que já passou.
+    """Return the latest cut time that has passed.
 
-    :param agora: Momento de referência, com fuso.
-    :param hora_corte: Hora do agendamento diário, de 0 a 23.
-    :returns: Datetime do corte mais recente, sempre menor ou igual a ``agora``.
+    `agora` has a time zone, and `hora_corte` is the hour of the daily schedule, from 0
+    to 23. The result is never after `agora`.
     """
     corte = agora.replace(hour=hora_corte, minute=0, second=0, microsecond=0)
     if corte > agora:
@@ -122,21 +115,16 @@ def resolver(
     agora: datetime,
     config: ConfigJanela,
 ) -> Janela:
-    """Resolve a janela do relatório pela cadeia de precedência.
+    """Resolve the window of the report by the order of precedence.
 
-    A ordem é: parâmetros explícitos, âncora do agendamento e, por último, o corte mais
-    recente anterior a ``agora``. O último caso cobre execução manual ou local, em que
-    não existe horário agendado confiável.
+    The order is: the explicit parameters, the anchor of the schedule, and last the
+    latest cut before `agora`. The last case covers a manual or local run, which has no
+    reliable scheduled time.
 
-    :param start_datetime: Início explícito, ou ``None``.
-    :param end_datetime: Fim explícito, ou ``None``.
-    :param ancora_agendada: Horário agendado, quando a execução vem de um deployment.
-        ``None`` em execução manual ou local.
-    :param agora: Momento atual, com fuso.
-    :param config: Fuso, hora de corte e duração da janela.
-    :returns: A janela resolvida, com a origem registrada.
-    :raises ValueError: Se apenas um dos extremos explícitos for informado, ou se o
-        início não for anterior ao fim.
+    `ancora_agendada` is the scheduled time of a run from a deployment, and `None` for a
+    manual or local run. `config` has the time zone, the cut hour and the length of the
+    window. Return the window with its origin. Raise `ValueError` if only one of the
+    explicit ends is given, or if the start is not before the end.
     """
     if (start_datetime is None) != (end_datetime is None):
         raise ValueError("start_datetime e end_datetime devem ser informados juntos ou ambos omitidos.")

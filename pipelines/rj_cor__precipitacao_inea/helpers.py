@@ -16,7 +16,7 @@ from pipelines.rj_cor__precipitacao_inea.constants import (
 
 
 def read_sheet(content: bytes) -> list[dict[str, object]]:
-    """Return the rows of the first sheet of an Excel file, by the name of the header cells.
+    """Return the rows of the first sheet of an Excel file, by header cell name.
 
     The names lose the spaces around them.
     """
@@ -39,7 +39,10 @@ def read_number(value: object) -> float | None:
 
 
 def read_time(row: Mapping[str, object]) -> str | None:
-    """Return the time of a row as `YYYY-MM-DD HH:MM:SS`, or nothing if it does not parse."""
+    """Return the time of a row as `YYYY-MM-DD HH:MM:SS`, or nothing.
+
+    It gives nothing if the time does not parse.
+    """
     text = f"{str(row.get('Data', '')).strip()} {str(row.get('Hora', '')).strip()}"
 
     try:
@@ -51,7 +54,7 @@ def read_time(row: Mapping[str, object]) -> str | None:
 def build_rows(
     stations: Mapping[str, Sequence[Mapping[str, object]]],
 ) -> tuple[list[dict[str, str | float | None]], list[dict[str, str | float | None]]]:
-    """Return the pluviometric rows and the fluviometric rows of the sheets of the stations.
+    """Return the pluviometric and fluviometric rows of the sheets of the stations.
 
     A row without a valid time is dropped, and a repeated station and time keeps the
     first. A water height above 10000 is dropped from the fluviometric rows.

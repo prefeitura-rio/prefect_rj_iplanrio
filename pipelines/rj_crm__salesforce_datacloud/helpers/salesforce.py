@@ -24,12 +24,14 @@ JSON: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
 
 def as_rows(value: JsonValue) -> list[Sequence[JsonValue]]:
-    """Return a value as the list of lists that Data Cloud sends as `data`, or an empty list."""
+    """Return a value as the list of lists that Data Cloud sends as `data`, or empty."""
     return [row for row in value if isinstance(row, list)] if isinstance(value, list) else []
 
 
 async def log_in(instance_url: str, client_id: str, client_secret: str, dataspace: str) -> Session:
-    """Log in to Salesforce with the client credentials of the Connected App `DataCloud_Integration`.
+    """Log in to Salesforce with the client credentials of `DataCloud_Integration`.
+
+    It is the Connected App.
 
     The login serves Data Cloud and the CRM REST API. Raise `HTTPStatusError` if
     Salesforce refuses it.
@@ -105,7 +107,9 @@ async def query_data_cloud(
 
 
 async def query_crm(session: Session, soql: str) -> list[Row]:
-    """Run a SOQL query in the CRM REST API and return all its records, following `nextRecordsUrl`.
+    """Run a SOQL query in the CRM REST API and return all records.
+
+    It follows `nextRecordsUrl`.
 
     Raise `HTTPStatusError` for an error.
     """

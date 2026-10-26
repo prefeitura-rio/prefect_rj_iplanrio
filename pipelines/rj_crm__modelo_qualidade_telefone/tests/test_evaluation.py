@@ -16,7 +16,10 @@ from pipelines.rj_crm__modelo_qualidade_telefone.types import (
 
 
 def test_the_table_has_a_row_for_each_metric_of_the_four_origins(make_booster: Callable[[int], Booster]) -> None:
-    """Make a long table: the held-out, the SHAP, the simulation and the gate, each with the version and the date."""
+    """Make a long table of the held-out, SHAP, simulation and gate metrics.
+
+    Each row has its metric and value.
+    """
     training = Training(
         booster=make_booster(0),
         hyperparameters={},

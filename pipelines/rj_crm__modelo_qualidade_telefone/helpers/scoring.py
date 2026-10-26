@@ -22,7 +22,7 @@ from pipelines.rj_crm__modelo_qualidade_telefone.types import Matrix, Scores, Sc
 
 
 def contribute(matrix: Matrix, booster: Booster) -> Scores:
-    """Return the probability, the SHAP values and the base value of the rows of a matrix.
+    """Return the probability, SHAP values and base value of the rows of a matrix.
 
     The SHAP comes in log-odds (`pred_contrib` of LightGBM): the base plus the sum of
     the SHAP is the raw score, and its sigmoid is the probability. The probability is
@@ -57,12 +57,14 @@ def to_matrix(frame: pl.DataFrame) -> Matrix:
 
 
 def score_batch(frame: pl.DataFrame, booster: Booster) -> Scores:
-    """Return the probability, the SHAP values and the base value of a batch of phones."""
+    """Return the probability, SHAP values and base value of a batch of phones."""
     return contribute(to_matrix(frame), booster)
 
 
 def build_table(frame: pl.DataFrame, scores: Scores, version: str, scored_at: datetime) -> pl.DataFrame:
-    """Return the table of a batch: one row for each pair (cpf, phone), with `features` and `shap` as structs.
+    """Return the table of a batch: a row for each (cpf, phone) pair.
+
+    `features` and `shap` are structs.
 
     The batch has one row for each phone, and each row repeats for each CPF of its list
     `cpfs`.
@@ -130,7 +132,7 @@ def write_scores(
 
 
 def summarize(probabilities: Vector, n_rows: int) -> ScoreStats:
-    """Return the statistics of a scoring from the probability of each phone and the number of rows."""
+    """Return the scoring statistics from the probabilities and the row count."""
     return ScoreStats(
         n_phones=len(probabilities),
         n_rows=n_rows,

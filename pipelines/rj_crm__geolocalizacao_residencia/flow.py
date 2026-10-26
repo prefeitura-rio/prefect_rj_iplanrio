@@ -31,7 +31,9 @@ async def rj_crm__geolocalizacao_residencia(
     dump_mode: DumpMode = "append",
     max_concurrent: int = DEFAULT_MAX_CONCURRENT,
 ) -> None:
-    """Find the coordinates of the home addresses of citizens that have none, and load them to BigQuery.
+    """Find the coordinates of citizen home addresses that have none, and load them.
+
+    The load goes to BigQuery.
 
     The flow reads up to 10,000 new addresses at random, and geocodes them by
     `strategy`:

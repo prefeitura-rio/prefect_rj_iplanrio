@@ -1,16 +1,11 @@
-"""Leitura do BigQuery.
-
-A credencial é a do ADC (workload identity), de ``utils.utils.load_credentials``.
-"""
+"""Read from BigQuery with the ADC credential (workload identity)."""
 
 from time import sleep
 
 from google.cloud import bigquery
+from toolkit.telemetry import logger
 
-from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.log import logger_da_pipeline
 from utils.utils import load_credentials
-
-logger = logger_da_pipeline(__name__)
 
 BILLING_PROJECT_ID = "rj-crm-registry"
 """Projeto cobrado pela consulta.
@@ -21,11 +16,10 @@ código. Só este módulo precisa dele, então mora aqui e não em ``constants.p
 
 
 def baixar(query: str) -> list[dict[str, object]]:
-    """Executa uma query no BigQuery e devolve as linhas do resultado como dicionários.
+    """Run a query in BigQuery and return the rows of the result as dictionaries.
 
-    :param query: SQL já renderizado.
-    :returns: Linhas do resultado.
-    :raises google.api_core.exceptions.GoogleAPIError: Se a execução falhar no BigQuery.
+    `query` is the rendered SQL. Raise `google.api_core.exceptions.GoogleAPIError` if
+    BigQuery fails to run it.
     """
     logger.info("Consultando o BigQuery no projeto %s", BILLING_PROJECT_ID)
     cliente = bigquery.Client(credentials=load_credentials(), project=BILLING_PROJECT_ID)

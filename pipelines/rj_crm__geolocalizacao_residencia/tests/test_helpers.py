@@ -160,7 +160,10 @@ def test_waze_uses_the_name_when_there_is_no_full_name_and_rio_when_there_is_no_
 
 
 def test_maptiler_puts_the_address_in_the_path_and_reads_the_context() -> None:
-    """Add `Rio de Janeiro, Brazil`, and take the neighborhood, the city, the state and the postcode from the context."""
+    """Add `Rio de Janeiro, Brazil`, and read the place fields from the context.
+
+    It takes the neighborhood, city, state and postcode.
+    """
     provider = maptiler("key")
     body = {
         "features": [
@@ -222,7 +225,7 @@ def test_opencage_scales_the_confidence_and_falls_back_to_the_county() -> None:
 
 
 def test_locationiq_keeps_only_results_in_rio_and_takes_the_most_important() -> None:
-    """Filter by the city part of the display name, and read the fields from its parts."""
+    """Filter by the city in the display name, and read the fields from its parts."""
     good = {
         "lat": "-22.9",
         "lon": "-43.2",
@@ -314,7 +317,7 @@ def test_a_geoapify_result_is_read_or_nothing() -> None:
 
 
 async def test_a_service_that_fails_gives_an_empty_geocode(make_run: Callable[..., tuple[Run, list[Request]]]) -> None:
-    """Answer with an empty geocode for a network error, a bad body and a match, in turn."""
+    """Answer with an empty geocode for a network error, a bad body and a match."""
     run, seen = make_run(
         ConnectError("down"),
         reply("not json"),

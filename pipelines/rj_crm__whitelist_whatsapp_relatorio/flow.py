@@ -23,22 +23,23 @@ def rj_crm__whitelist_whatsapp_relatorio(
     query_ocorrencias: QueryParam = QUERY_OCORRENCIAS_PADRAO,
     query_ultima_ocorrencia: QueryParam = QUERY_ULTIMA_OCORRENCIA_PADRAO,
 ) -> None:
-    """Relatar as URLs redigidas pelo agente de IA nas últimas 24 horas.
+    """Report the URLs that the AI agent redacted in the last 24 hours.
 
-    O e-mail roda antes do Discord e o Discord consome o resultado dele (D29), mas a
-    falha do e-mail **não** impede a publicação: ``return_state=True`` deixa o flow
-    seguir com a task marcada como falha, o Discord sai em modo degradado e o flow
-    termina em falha no fim (D41). Sem isso, um mailman fora do ar suprimiria justamente
-    a entrega diária que confirma que a pipeline está viva.
+    The e-mail runs before Discord, and Discord uses its result (D29). A failed e-mail
+    does not stop the post: `return_state=True` lets the flow go on with the task marked
+    as failed, Discord gets the degraded message, and the flow ends as failed (D41).
+    Without this, a mailman that is down would hide the daily post that shows the
+    pipeline is alive.
 
-    :param environment: Ambiente de execução — ``staging`` ou ``prod``. :param
-    start_datetime: Início explícito da janela, no formato ``YYYY-MM-DD HH:MM:SS``.
-        Quando omitido, a janela vem do horário agendado.
-    :param end_datetime: Fim explícito da janela, no mesmo formato.
-    :param query_ocorrencias: Query da janela — ``name`` do arquivo em ``queries/`` e
-        ``replacements`` com a fonte, vindos do ``prefect.yaml`` (§7.5 do styleguide).
-    :param query_ultima_ocorrencia: Query de diagnóstico, no mesmo formato.
-    :raises RuntimeError: Se o relatório foi publicado no Discord mas o e-mail falhou.
+    - `environment` is `staging` or `prod`.
+    - `start_datetime` is the start of the window as `YYYY-MM-DD HH:MM:SS`. Without it
+      the window follows the scheduled time.
+    - `end_datetime` is the end of the window, in the same format.
+    - `query_ocorrencias` is the query of the window: the `name` of the file in
+      `queries/` and the `replacements` with the source, from the `prefect.yaml`.
+    - `query_ultima_ocorrencia` is the diagnostic query, in the same format.
+
+    Raise `RuntimeError` if the report went to Discord but the e-mail failed.
     """
     validar_configuracao_task()
 

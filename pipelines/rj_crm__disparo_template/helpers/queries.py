@@ -8,7 +8,9 @@ from utils.dispatch import format_query
 
 
 def build_query(audience: Audience, folder: Path, today: date) -> str | None:
-    """Return the query of the run, or nothing if its processor says that today is no day to run.
+    """Return the query of the run, or nothing if today is no day to run.
+
+    Its processor decides.
 
     The text is `audience.query_file`, a file of `folder`, or else `audience.query`.
     With `replacements`, the placeholders are filled, through the processor of

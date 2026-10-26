@@ -37,7 +37,7 @@ FIELDS_REQUEST = (
 
 
 def build_list_envelope(token: str, continue_request_id: str | None = None) -> bytes:
-    """Return the message that lists the Data Extensions, or that asks for the next page of a list."""
+    """Return the message that lists the Data Extensions, or asks for the next page."""
     request = f"<ContinueRequest>{continue_request_id}</ContinueRequest>" if continue_request_id else LIST_REQUEST
 
     return ENVELOPE.format(token=token, request=request).encode()
@@ -63,7 +63,10 @@ def find_response(xml_text: str) -> Element:
 
 
 def parse_extensions(xml_text: str) -> tuple[str, str, list[Extension]]:
-    """Read the answer that lists the Data Extensions: the overall status, the id of the request and the extensions."""
+    """Read the answer that lists the Data Extensions.
+
+    It has the overall status, the request id and the extensions.
+    """
     response = find_response(xml_text)
     extensions = [
         Extension(

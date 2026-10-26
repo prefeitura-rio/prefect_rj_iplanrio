@@ -27,7 +27,7 @@ def normalize_text(text: object) -> str:
 
 
 def button_titles(buttons_json: str | None) -> list[str]:
-    """Return the titles of the buttons of an HSM from its JSON, or no title if it is empty or not JSON."""
+    """Return the button titles of an HSM from its JSON, or none if it is not JSON."""
     if not buttons_json or not buttons_json.strip():
         return []
 
@@ -43,7 +43,9 @@ def button_titles(buttons_json: str | None) -> list[str]:
 
 
 def choose_button_row(rows: Sequence[ButtonRow]) -> ButtonRow:
-    """Choose one row of the catalog for a journey and an HSM that has many, such as a republished template.
+    """Choose one catalog row for a journey and an HSM that has many.
+
+    A republished template is an example.
 
     It prefers the version that does not come after a change of the template version,
     and breaks a tie by the name of the activity.
@@ -87,7 +89,7 @@ def lcs_length(first: str, second: str) -> int:
 
 
 def find_fuzzy(placeholder: str, variables: Mapping[str, JsonValue]) -> JsonValue:
-    """Return the value of the key of the variables that looks most like a placeholder, or nothing.
+    """Return the variables key that looks most like a placeholder, or nothing.
 
     The keys often have a prefix of the system, such as `cc_wt_solicitacao` for
     `${solicitacao}`. The key with the longest common subsequence wins (capitals do not
@@ -106,7 +108,7 @@ def find_fuzzy(placeholder: str, variables: Mapping[str, JsonValue]) -> JsonValu
 
 
 def read_variables(variables: str | Mapping[str, JsonValue] | None) -> Mapping[str, JsonValue] | None:
-    """Return the variables of an HSM as an object, or nothing if there are none or they are not an object."""
+    """Return the variables of an HSM as an object, or nothing if they are not one."""
     parsed: JsonValue | Mapping[str, JsonValue] | None = variables
 
     if isinstance(variables, str):
@@ -119,7 +121,7 @@ def read_variables(variables: str | Mapping[str, JsonValue] | None) -> Mapping[s
 
 
 def render_hsm(text: str | None, variables: str | Mapping[str, JsonValue] | None) -> str | None:
-    """Put the values of the variables in the placeholders `${name}` of the text of an HSM.
+    """Put the values of the variables in the placeholders `${name}` of the HSM text.
 
     A placeholder takes the value of its own key, or else of the key that looks most
     like it. One that finds none stays as it is, because a visible placeholder is better
@@ -160,7 +162,7 @@ def is_late_button_reply(session: Session) -> bool:
 
 
 def enrich_sessions(sessions: Sequence[Session], buttons: Mapping[tuple[str, str], str | None]) -> list[Session]:
-    """Return the sessions with the HSM text rendered, the buttons of the HSM, and whether they are a late reply.
+    """Return the sessions with the HSM text, its buttons and the late flag.
 
     `buttons` has the buttons JSON of each journey and HSM. The variables of the HSM are
     no longer needed.

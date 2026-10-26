@@ -87,7 +87,7 @@ def stats(n_rows: int = 1_000, n_invalid: int = 0) -> ScoreStats:
     ],
 )
 def test_a_broken_scoring_is_not_published(current: ScoreStats, previous: int | None, message: str) -> None:
-    """Refuse a scoring with no row, a bad probability or a volume far from the last run."""
+    """Refuse a scoring with no row, a bad probability or a volume far from the last."""
     with pytest.raises(ValueError, match=message):
         validate_scores(current, previous)
 

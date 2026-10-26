@@ -5,7 +5,6 @@ description = "Copies Nota Carioca tables from BigQuery to the on-prem Oracle da
 dependencies = [
     "prefect_rj_iplanrio",
     "google-cloud-bigquery",
-    "google-cloud-storage",
     "oracledb",
 ]
 

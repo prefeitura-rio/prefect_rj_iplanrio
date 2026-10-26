@@ -1,11 +1,9 @@
-"""Tasks de rj_crm__whitelist_whatsapp_relatorio.
+"""Tasks of rj_crm__whitelist_whatsapp_relatorio.
 
-Fronteira entre o Prefect e o Python puro (§4.2 do styleguide): cada task lê o que só o
-ambiente de execução sabe — variáveis de ambiente e contexto do flow run — e delega o
-trabalho para ``utils``. Nenhuma regra de negócio mora aqui.
+Each task reads what only the run knows, the environment variables and the flow run
+context, and passes the work to the helpers. No business rule lives here.
 
-A configuração vem de ``Settings``, que lê o que o Kubernetes Secret injeta no
-container.
+`Settings` holds the configuration that the Kubernetes Secret puts in the container.
 """
 
 from datetime import datetime
@@ -13,12 +11,12 @@ from typing import TypedDict, cast
 
 from prefect import task
 from prefect.runtime import deployment, flow_run
+from toolkit.telemetry import logger
 
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers import bigquery, discord, mailman
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers import janela as janela_utils
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.configuracao import ler_destinatarios
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.janela import Janela
-from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.log import logger_da_pipeline
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.ocorrencias import (
     Ocorrencia,
     ler_ultima_ocorrencia,
@@ -27,14 +25,13 @@ from pipelines.rj_crm__whitelist_whatsapp_relatorio.helpers.ocorrencias import (
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.settings import Settings
 from utils.utils import render_query
 
-logger = logger_da_pipeline(__name__)
-
 
 class QueryParam(TypedDict):
-    """Parâmetro estruturado de query, no formato do §7.5 do styleguide.
+    """A structured query parameter.
 
-    ``name`` é o arquivo em ``queries/`` sem a extensão; ``replacements`` são os valores
-    dos ``$placeholder`` do template. Nenhum SQL trafega pelo ``prefect.yaml``.
+    `name` is the file in `queries/` with no extension, and `replacements` are the
+    values of the `$placeholder` of the template. No SQL goes through the
+    `prefect.yaml`.
     """
 
     name: str
@@ -58,13 +55,11 @@ QUERY_ULTIMA_OCORRENCIA_PADRAO: QueryParam = {"name": "get_ultima_ocorrencia", "
 
 @task
 def validar_configuracao_task() -> None:
-    """Confere no início do flow se todas as variáveis de ambiente existem.
+    """Check at the start of the flow that every environment variable exists.
 
-    Validar antes de qualquer envio evita o caso ruim: descobrir que falta destinatário
-    depois de a mensagem do Discord já ter saído.
-
-    :raises pydantic.ValidationError: Se alguma variável obrigatória estiver ausente ou
-        vazia. A mensagem nomeia todas de uma vez.
+    Checking before any send avoids the bad case: to find out that a recipient is
+    missing after the Discord message has gone out. Raise `pydantic.ValidationError` if
+    a required variable is missing or empty. The message names all of them at once.
     """
     Settings()
     logger.info("Configuração validada")
@@ -72,15 +67,11 @@ def validar_configuracao_task() -> None:
 
 @task
 def resolver_janela_task(start_datetime: str | None, end_datetime: str | None) -> Janela:
-    """Resolve a janela de 24h do relatório.
+    """Resolve the 24 hour window of the report.
 
-    Lê o contexto de execução do Prefect e delega o cálculo. ``deployment.id`` é o que
-    distingue execução agendada de manual: ``flow_run.scheduled_start_time`` devolve a
-    hora atual mesmo fora de agendamento, e serviria de âncora enganosa.
-
-    :param start_datetime: Início explícito, ou ``None``.
-    :param end_datetime: Fim explícito, ou ``None``.
-    :returns: A janela resolvida.
+    It reads the Prefect run context and passes the computation on. `deployment.id`
+    tells a scheduled run from a manual one: `flow_run.scheduled_start_time` gives the
+    current time outside a schedule too, and would be a false anchor.
     """
     agendada = cast("str | None", deployment.id) is not None
     janela = janela_utils.resolver(
@@ -101,15 +92,12 @@ def resolver_janela_task(start_datetime: str | None, end_datetime: str | None) -
 
 @task(retries=2, retry_delay_seconds=60)
 def buscar_ocorrencias_task(query: QueryParam, janela: Janela) -> list[Ocorrencia]:
-    """Consulta o BigQuery e normaliza as ocorrências do período.
+    """Query BigQuery and return the occurrences of the period, possibly none.
 
-    Os ``replacements`` do deployment descrevem a fonte; a janela é runtime e entra por
-    cima. Nessa ordem, um ``start_datetime`` cadastrado por engano no ``prefect.yaml``
-    é sobrescrito pelo recorte real em vez de virar argumento duplicado.
-
-    :param query: Nome do arquivo ``.sql`` e valores dos ``$placeholder`` da fonte.
-    :param janela: Recorte do relatório.
-    :returns: Ocorrências encontradas, possivelmente vazia.
+    The `replacements` of the deployment describe the source, and the window is a
+    runtime value that goes on top. In that order, a `start_datetime` set by mistake in
+    the `prefect.yaml` is replaced by the real window and does not become a duplicate
+    argument.
     """
     replacements = {
         **query["replacements"],
@@ -121,20 +109,17 @@ def buscar_ocorrencias_task(query: QueryParam, janela: Janela) -> list[Ocorrenci
 
 @task
 def buscar_ultima_ocorrencia_task(query: QueryParam, ocorrencias: list[Ocorrencia]) -> datetime | None:
-    """Descobre quando foi a última ocorrência conhecida, quando o período volta vazio.
+    """Find the time of the last known occurrence when the period comes back empty.
 
-    Só consulta o BigQuery em dia sem ocorrência: é o único dia em que o número importa,
-    e assim a varredura extra não incide nos dias em que o relatório tem conteúdo.
+    It queries BigQuery only on a day with no occurrence, the one day that the number
+    matters, so the extra scan does not run on days that have content.
 
-    A falha é engolida de propósito. Esta consulta é um diagnóstico auxiliar (D37); se
-    ela derrubasse o flow, uma indisponibilidade do BigQuery suprimiria justamente a
-    mensagem diária que o diagnóstico existe para qualificar. Sem ela o relatório sai
-    igual, só sem a linha de contexto.
+    The failure is swallowed on purpose. This query is an extra diagnostic (D37), and if
+    it stopped the flow, a BigQuery outage would hide the daily message that it
+    qualifies. Without it the report goes out the same, with no line of context.
 
-    :param query: Nome do arquivo ``.sql`` e valores dos ``$placeholder`` da fonte.
-    :param ocorrencias: Ocorrências do período.
-    :returns: Instante da última ocorrência conhecida; ``None`` quando houve ocorrência
-        no período, quando a fonte nunca registrou nenhuma ou quando a consulta falhou.
+    Return `None` when there was an occurrence in the period, when the source never had
+    one, or when the query failed.
     """
     if ocorrencias:
         return None
@@ -152,14 +137,11 @@ def buscar_ultima_ocorrencia_task(query: QueryParam, ocorrencias: list[Ocorrenci
 
 @task(retries=2, retry_delay_seconds=60)
 def enviar_email_task(janela: Janela, ocorrencias: list[Ocorrencia]) -> list[str]:
-    """Envia o relatório detalhado, quando há ocorrências.
+    """Send the detailed report when there are occurrences.
 
-    Em dia sem ocorrência não há e-mail: só o Discord sai, conforme a decisão D16.
-
-    :param janela: Recorte do relatório. :param ocorrencias: Ocorrências do período.
-    :returns: Destinatários que receberam o relatório; vazio quando não houve envio.
-    :raises pydantic.ValidationError: Se alguma das variáveis do Data Relay não estiver
-    definida.
+    A day with no occurrence has no e-mail, and only Discord goes out (D16). Return the
+    recipients that got the report, and none when nothing was sent. Raise
+    `pydantic.ValidationError` if a variable of the Data Relay is not set.
     """
     if not ocorrencias:
         logger.info("Sem ocorrências no período: e-mail não será enviado")
@@ -188,16 +170,12 @@ def enviar_discord_task(
     ambiente: str,
     ultima_ocorrencia: datetime | None,
 ) -> None:
-    """Publica o resumo diário no canal do Discord.
+    """Post the daily summary to the Discord channel.
 
-    Roda depois do e-mail e recebe os destinatários de fato notificados, para a mensagem
-    relatar o que aconteceu em vez de prometer (decisão D29).
-
-    :param janela: Recorte do relatório. :param ocorrencias: Ocorrências do período.
-    :param destinatarios: Quem recebeu o e-mail detalhado. :param ambiente: Ambiente de
-    execução, ``staging`` ou ``prod``. :param ultima_ocorrencia: Última ocorrência
-    conhecida na fonte, mostrada em dia vazio. :raises pydantic.ValidationError: Se a
-    variável do webhook não estiver definida.
+    It runs after the e-mail and gets the recipients that were really notified, so the
+    message tells what happened and does not promise (D29). `ultima_ocorrencia` is shown
+    on an empty day. Raise `pydantic.ValidationError` if the variable of the webhook is
+    not set.
     """
     mensagem = discord.montar_mensagem(
         janela=janela,

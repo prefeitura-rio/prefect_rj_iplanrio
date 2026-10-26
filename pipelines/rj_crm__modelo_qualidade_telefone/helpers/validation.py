@@ -17,7 +17,9 @@ EVENT_COLUMNS = (*FEATURES, "id_interacao", "telefone", "data_corte", "telefone_
 
 
 def validate_training(frame: pl.DataFrame) -> None:
-    """Raise `ValueError` if the training frame lacks a column, is small, or has too few examples of a class.
+    """Raise `ValueError` if the frame lacks a column, is small, or lacks a class.
+
+    It needs enough examples of each class.
 
     A class with few examples makes the stratified split and the cross-validation
     unstable.

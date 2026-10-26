@@ -49,13 +49,16 @@ TMP_DESCRIPTION = "Tmp da pipeline rj_crm__agentforce_classificacao_llm, limpa a
 
 @task
 async def ensure_tables_task(names: Names) -> None:
-    """Check that the table of the classifications and its tmp table exist, and create the one that is missing."""
+    """Check that the classification table and its tmp table exist.
+
+    Create the one that is missing.
+    """
     await to_thread(bq.ensure_tables, names.project, names.destination, names.tmp, (TABLE_DESCRIPTION, TMP_DESCRIPTION))
 
 
 @task(retries=2, retry_delay_seconds=30)
 async def extract_task(names: Names, window: Window) -> list[Session]:
-    """Read the sessions of the last days that have no classification, with the HSM that came before each.
+    """Read the sessions of the last days with no class, and the HSM before each.
 
     There are two filters of "already classified": a cheap one on the source, that may
     be 15 minutes late, and an anti-join with the destination table, that is the
@@ -77,7 +80,7 @@ async def extract_task(names: Names, window: Window) -> list[Session]:
 
 @task(retries=2, retry_delay_seconds=30)
 async def enrich_task(names: Names, sessions: list[Session]) -> list[Session]:
-    """Render the HSM text of the sessions, and mark the ones whose only message is the text of a button.
+    """Render the HSM text of the sessions, and mark those that are a button text.
 
     The buttons are the only thing that comes from the catalog of HSMs by journey,
     because the text and the variables already come with each session from the dispatch
@@ -100,7 +103,9 @@ async def enrich_task(names: Names, sessions: list[Session]) -> list[Session]:
 
 @task(retries=2, retry_delay_seconds=30)
 async def read_rules_task(names: Names, stage: str) -> list[Rule]:
-    """Read the active rules of a stage (`tema` or `motivo`) from the catalog, or none if it does not exist yet.
+    """Read the active rules of a stage (`tema` or `motivo`), or none yet.
+
+    They come from the catalog.
 
     The catalog is managed outside the pipeline, so a missing table means that there are
     no rules today.
@@ -130,7 +135,9 @@ async def read_rules_task(names: Names, stage: str) -> list[Rule]:
 
 
 async def classify_one(bifrost: Bifrost, slots: Semaphore, prompted: Prompted, model: str) -> Row | None:
-    """Ask the model about one session and return its row, or nothing and log it if the session fails.
+    """Ask the model about one session and return its row.
+
+    A failure is logged and gives nothing.
 
     A session that fails stays out of the result and is tried again at the next run,
     inside the window.
@@ -150,7 +157,7 @@ async def classify_one(bifrost: Bifrost, slots: Semaphore, prompted: Prompted, m
 
 @task
 async def classify_task(batch: list[Prompted], llm: Llm) -> list[Row]:
-    """Ask the model about each session of the batch, `max_workers` at once, and return the rows that worked."""
+    """Ask the model about each session, `max_workers` at once, and return the rows."""
     model = llm.get("model", BIFROST_MODEL)
     slots = Semaphore(llm.get("max_workers", DEFAULT_MAX_WORKERS))
 
@@ -165,7 +172,7 @@ async def classify_task(batch: list[Prompted], llm: Llm) -> list[Row]:
 
 @task(retries=3, retry_delay_seconds=[30, 60, 120])
 async def load_task(names: Names, rows: list[Row]) -> int:
-    """Add the rows to the tmp table and MERGE them into the table of the classifications by `id_sessao`.
+    """Add the rows to the tmp table and MERGE them by `id_sessao`.
 
     The MERGE writes every column, so a later step that updates only some columns must
     not reuse it. Return the rows that the MERGE touched, or 0 for no row.
@@ -200,7 +207,7 @@ async def load_task(names: Names, rows: list[Row]) -> int:
 
 @task(retries=2, retry_delay_seconds=30)
 async def read_relevant_task(names: Names) -> list[Row]:
-    """Read from the table itself, with no call to the model, the relevant sessions and their summaries."""
+    """Read the relevant sessions and their summaries, with no model call."""
     sql = render_query(__file__, "relevant_sessions", table=names.destination)
     rows = await to_thread(bq.read_rows, names.project, sql)
     logger.info("Relevant sessions read: count=%d", len(rows))
@@ -220,7 +227,7 @@ async def read_relevant_task(names: Names) -> list[Row]:
 
 @task(retries=3, retry_delay_seconds=[30, 60, 120])
 async def update_themes_task(names: Names, rows: list[Row]) -> int:
-    """Update only `tema_nome` and `causa_nome` of the sessions in the table, and no other column.
+    """Update only `tema_nome` and `causa_nome` of the sessions in the table.
 
     The tmp table needs `classificado_em` and `data_particao`, so they go as
     placeholders that the MERGE never reads.
@@ -247,7 +254,9 @@ async def update_themes_task(names: Names, rows: list[Row]) -> int:
 
 @task(retries=3, retry_delay_seconds=[30, 60, 120])
 async def propagate_task(names: Names) -> int:
-    """Copy `tema_nome` and `causa_nome` from the table to the two marts of dbt, which do not recompute on their own.
+    """Copy `tema_nome` and `causa_nome` to the two dbt marts.
+
+    They do not recompute on their own.
 
     The marts are incremental, so without it they keep the old theme until a full
     refresh. The two columns are fields of the struct `llm`, which BigQuery updates in
@@ -266,7 +275,7 @@ async def propagate_task(names: Names) -> int:
 
 @task
 async def notify_task(message: str, *, errors: bool) -> None:
-    """Post a message to the channel of the errors or of the summaries, or skip it if that channel is not set.
+    """Post a message to the errors or summaries channel, if that channel is set.
 
     A notice never fails the run.
     """

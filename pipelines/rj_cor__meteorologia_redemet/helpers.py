@@ -9,7 +9,7 @@ from pipelines.rj_cor__meteorologia_redemet.constants import SP_TZ, TIME_FORMAT
 
 
 def read_dates(first_date: str | None, last_date: str | None) -> tuple[date, date, bool]:
-    """Return the first and the last date to fetch, in UTC, and whether it is a backfill.
+    """Return the first and last date to fetch, in UTC, and whether it is a backfill.
 
     Without a first date the range is yesterday to today, and it is not a backfill.
     """
@@ -35,7 +35,7 @@ def list_stamps(first_date: date, last_date: date) -> list[str]:
 
 
 def read_observation(body: JsonValue) -> dict[str, JsonValue] | None:
-    """Return the observation of a response, or nothing if the API has none for that hour."""
+    """Return the observation of a response, or nothing if the API has none."""
     data = body.get("data") if isinstance(body, dict) else None
 
     if not isinstance(body, dict) or body.get("status") is not True or not isinstance(data, dict) or "data" not in data:
@@ -52,7 +52,7 @@ def read_temperature(text: str) -> int | None:
 
 
 def read_humidity(text: str) -> int | None:
-    """Return the humidity of `70%` as 70, or nothing if the text has no percent sign."""
+    """Return the humidity of `70%` as 70, or nothing without a percent sign."""
     return int(text[:-1]) if "%" in text else None
 
 

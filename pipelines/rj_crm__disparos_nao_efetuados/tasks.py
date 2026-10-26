@@ -12,7 +12,7 @@ from utils.tasks import notify_discord
 
 @task
 async def notify_task(message: str, *, errors: bool) -> None:
-    """Post a message to the channel of the dispatches, or to the one of the errors with `errors`.
+    """Post a message to the dispatches channel, or the errors one with `errors`.
 
     A channel that is not set gets no notice.
     """
