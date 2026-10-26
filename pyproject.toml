@@ -19,6 +19,7 @@ constraint-dependencies = [
   "dbt-bigquery==1.12.1",
   "dbt-core>=1.12.6",
   "defusedxml>=0.7.1",
+  "fastapi<0.144", # Prefect 3.8 calls Body(min_items), which later fastapi releases removed
   "gitpython==3.1.44",
   "google-api-python-client>=2.100.0",
   "google-cloud-bigquery>=3.41.0",
