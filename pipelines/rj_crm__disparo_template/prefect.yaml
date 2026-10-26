@@ -44,7 +44,7 @@ deployments:
       # Disparo recado_mobirio
       - cron: "0 9 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: oneshot-recado_mobirio
         flow_run_name: recado_mobirio
         parameters:
@@ -61,7 +61,7 @@ deployments:
       # Disparo bonus_segundo_envio
       - cron: "0 9 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: oneshot-bonus_segundo_envio
         flow_run_name: bonus_segundo_envio
         parameters:
