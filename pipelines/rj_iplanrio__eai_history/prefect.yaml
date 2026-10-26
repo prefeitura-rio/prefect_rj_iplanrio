@@ -40,9 +40,15 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_iplanrio__eai_history -- prefect flow-run execute
-        secretName: prefect-jobs-secrets-staging
+        command: uv run --package rj_iplanrio__eai_history -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
+        service_account_name: pipelines
+        env:
+          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: staging
+          INFISICAL_PATHS: /rj_iplanrio__eai_history,/gke
     schedules:
       - interval: 3600
         anchor_date: "2025-01-01T00:05:00"
@@ -66,9 +72,15 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_iplanrio__eai_history -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        command: uv run --package rj_iplanrio__eai_history -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
+        service_account_name: pipelines
+        env:
+          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: prod
+          INFISICAL_PATHS: /rj_iplanrio__eai_history,/gke
     schedules:
       - interval: 3600
         anchor_date: "2025-01-01T00:00:00"
