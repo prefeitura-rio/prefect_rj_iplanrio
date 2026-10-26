@@ -44,7 +44,7 @@ deployments:
           INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
           INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
           INFISICAL_ENVIRONMENT: staging
-          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/gke
+          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/shared
     parameters:
       strategy: nominatim
       table:
@@ -72,7 +72,7 @@ deployments:
           INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
           INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
           INFISICAL_ENVIRONMENT: prod
-          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/gke
+          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/shared
     parameters:
       strategy: nominatim
       table:
@@ -106,7 +106,7 @@ deployments:
           INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
           INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
           INFISICAL_ENVIRONMENT: staging
-          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/gke
+          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/shared
     parameters:
       strategy: fallback
       table:
@@ -134,7 +134,7 @@ deployments:
           INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
           INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
           INFISICAL_ENVIRONMENT: prod
-          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/gke
+          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/shared
     parameters:
       strategy: fallback
       table:
@@ -168,7 +168,7 @@ deployments:
           INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
           INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
           INFISICAL_ENVIRONMENT: staging
-          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/gke
+          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/shared
     parameters:
       strategy: geoapify_batch
       table:
@@ -196,7 +196,7 @@ deployments:
           INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
           INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
           INFISICAL_ENVIRONMENT: prod
-          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/gke
+          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/shared
     parameters:
       strategy: geoapify_batch
       table:

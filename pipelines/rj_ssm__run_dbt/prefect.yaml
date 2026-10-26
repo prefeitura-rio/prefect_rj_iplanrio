@@ -44,7 +44,7 @@ deployments:
           INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
           INFISICAL_PROJECT_ID: 38db61c8-a9b7-433a-899b-55218586b57b
           INFISICAL_ENVIRONMENT: staging
-          INFISICAL_PATHS: /rj_ssm__run_dbt,/gke
+          INFISICAL_PATHS: /rj_ssm__run_dbt,/shared
   - name: rj-ssm--run-dbt--prod
     tags:
       - environment:prod
@@ -68,7 +68,7 @@ deployments:
           INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
           INFISICAL_PROJECT_ID: 38db61c8-a9b7-433a-899b-55218586b57b
           INFISICAL_ENVIRONMENT: prod
-          INFISICAL_PATHS: /rj_ssm__run_dbt,/gke
+          INFISICAL_PATHS: /rj_ssm__run_dbt,/shared
     schedules:
       - interval: 86400
         anchor_date: '2023-01-01T09:00:00'

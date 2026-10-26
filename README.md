@@ -401,12 +401,12 @@ Os testes de paridade (`tests/parity/`) rodam os seis motores de verdade: `Postg
 
 - O `prefect.yaml` define o `deployment`: parâmetros, agenda, infraestrutura e `secretName`. O CI usa esse arquivo para registrar os flows. Veja a [documentação do `Prefect`](https://docs.prefect.io/v3/how-to-guides/deployments/prefect-yaml).
 - O código e as dependências só da pipeline ficam no `Dockerfile` e no `pyproject.toml` dela.
-- No `onprem-pool`, `secretName` é o `Secret` `pipelines-<pipeline>` que o job monta, e `namespace` é `pipelines-staging` ou `pipelines-prod`.
-- No `default-pool` o job lê os segredos direto do `Infisical`, sem `Secret` por pipeline no cluster. O comando é `python -m utils.secrets -- prefect flow-run execute`. O login usa o token do `ServiceAccount` do pod, e `INFISICAL_PATHS` lista as pastas do projeto `pipelines`, em ordem: `/<pipeline>`, as pastas de `/shared` e `/gke`. A primeira pasta que tem a chave vence, e uma variável do job nunca é trocada.
+- No `onprem-pool`, `namespace` é `pipelines-staging` ou `pipelines-prod`, e `secretName` é `pipelines-infisical`, o `Secret` com as credenciais de login do `Infisical`.
+- Nos dois pools o job lê os segredos direto do `Infisical`, sem `Secret` por pipeline no cluster. A pipeline `rj_iplanrio__taxirio` é a exceção. O comando é `python -m utils.secrets -- prefect flow-run execute`. O login usa o token do `ServiceAccount` do pod (`default-pool`) ou o `INFISICAL_CLIENT_ID` e o `INFISICAL_CLIENT_SECRET` do `Secret` `pipelines-infisical` (`onprem-pool`). `INFISICAL_PATHS` lista as pastas do projeto `pipelines`, em ordem: `/<pipeline>` e `/shared`. A primeira pasta que tem a chave vence, e uma variável do job nunca é trocada.
 - Os nomes usam só letras minúsculas, números e `_`:
   - pasta: `rj_<secretaria>__<pipeline>`
   - `deployment`: `rj-<secretaria>--<pipeline>--<ambiente>`, como `rj-segovi--dump-db-1746--staging`
-- `DB_USERNAME` e `DB_PASSWORD` vêm do `Secret` do `deployment`. Bancos com logins diferentes precisam de `secretName` diferentes.
+- `DB_USERNAME` e `DB_PASSWORD` vêm da pasta da pipeline no `Infisical`. Bancos com logins diferentes precisam de pipelines diferentes.
 - O `staging` e a `prod` usam o mesmo `bucket` e o mesmo projeto. Um `overwrite` manual no `staging` troca a tabela da `prod`.
 - O `staging` não tem `schedule`. Para rodar à mão, copie os `parameters` de um `schedule` da `prod`.
 - Work pools:

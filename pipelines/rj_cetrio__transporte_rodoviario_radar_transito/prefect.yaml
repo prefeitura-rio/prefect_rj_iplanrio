@@ -42,7 +42,13 @@ deployments:
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: uv run --package rj_cetrio__transporte_rodoviario_radar_transito -- prefect flow-run execute
+        command: uv run --package rj_cetrio__transporte_rodoviario_radar_transito -- python -m utils.secrets -- prefect flow-run execute
         namespace: pipelines-staging
-        secretName: pipelines-rj-cetrio--transporte-rodoviario-radar-transito
+        secretName: pipelines-infisical
         image_pull_policy: Always
+        env:
+          INFISICAL_URL: https://infisical.iplan.dados.rio
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: staging
+          INFISICAL_PATHS: /rj_cetrio__transporte_rodoviario_radar_transito,/shared
+          GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json

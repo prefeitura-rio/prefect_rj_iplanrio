@@ -717,7 +717,7 @@ O nome de um campo segue estas regras, e o `lint env` confere as duas primeiras:
 6. Um valor que não é segredo e muda com a implantação é parâmetro do `prefect.yaml`, e não variável.
 7. Não guarde credencial do Google em variável: use o ADC (workload identity).
 
-Uma variável que mais de uma pipeline lê entra em uma classe de `utils.settings` (`WetalkieSettings`, `SfmcSettings`, `DataRelaySettings`, `BifrostSettings`, `NoticeSettings`). No Infisical ela fica em `/shared/<grupo>`.
+Uma variável que mais de uma pipeline lê entra em uma classe de `utils.settings` (`WetalkieSettings`, `SfmcSettings`, `DataRelaySettings`, `BifrostSettings`, `NoticeSettings`). No Infisical ela fica na pasta `/shared`.
 
 ## 6. Padrões do Prefect 3.0
 
@@ -904,9 +904,11 @@ Use letras minúsculas e hífens apenas. O `--` duplo separa segmentos lógicos.
 
 O work pool depende do acesso de rede da pipeline. Staging e prod de uma mesma pipeline usam o mesmo pool.
 
-- `default-pool` (GKE): para a pipeline que não precisa de um banco interno. O job lê os segredos do `Infisical` na hora de rodar, com `python -m utils.secrets -- prefect flow-run execute`. O `INFISICAL_PATHS` lista as pastas do projeto `pipelines`, em ordem: `/<pipeline>`, as pastas de `/shared` e `/gke`. A primeira pasta que tem a chave vence, e uma variável do job nunca é trocada. O job usa o `ServiceAccount` `pipelines`, e não leva `namespace` nem `secretName`.
-- `onprem-pool`: para bancos e sistemas internos da `IplanRio`, que exigem VPN. O `Secret` `pipelines-<pipeline>` do namespace `pipelines-staging` ou `pipelines-prod` é sincronizado do `Infisical`.
-- `taxirio-pool`: só a pipeline `rj_iplanrio__taxirio`.
+- `default-pool` (GKE): para a pipeline que não precisa de um banco interno. O job usa o `ServiceAccount` `pipelines`, sem `namespace` nem `secretName`.
+- `onprem-pool`: para bancos e sistemas internos da `IplanRio`, que exigem VPN. O `namespace` é `pipelines-staging` ou `pipelines-prod`, e o `secretName` é sempre `pipelines-infisical`, com as credenciais de login do `Infisical`.
+- `taxirio-pool`: só a pipeline `rj_iplanrio__taxirio`, que lê um `Secret` sincronizado pelo operador do cluster dela (veja o README da pipeline).
+
+Os dois primeiros pools lêem os segredos do `Infisical` na hora de rodar, com `python -m utils.secrets -- prefect flow-run execute`. O projeto `pipelines` tem uma pasta por pipeline, com o nome dela (`/rj_secretaria__pipeline`), e uma pasta `/shared` com os segredos comuns. O `INFISICAL_PATHS` lista as pastas do job, nesta ordem: `/<pipeline>`, `/shared`. A pasta da pipeline só existe se ela tem segredos próprios. A primeira pasta que tem a chave vence, e uma variável do job nunca é trocada. Criar a pasta no `Infisical` basta para uma pipeline nova: nada muda na infraestrutura. O acesso é limitado pela convenção, e não pelo `Infisical`: cada pipeline lê as pastas que o `prefect.yaml` dela lista.
 
 ```yaml
 work_pool:
@@ -922,7 +924,7 @@ work_pool:
       INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
       INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
       INFISICAL_ENVIRONMENT: staging
-      INFISICAL_PATHS: /rj_secretaria__pipeline,/gke
+      INFISICAL_PATHS: /rj_secretaria__pipeline,/shared
 ```
 
 ```yaml
@@ -931,15 +933,21 @@ work_pool:
   work_queue_name: default
   job_variables:
     image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-    command: uv run --package rj_secretaria__pipeline -- prefect flow-run execute
+    command: uv run --package rj_secretaria__pipeline -- python -m utils.secrets -- prefect flow-run execute
     namespace: pipelines-staging
-    secretName: pipelines-rj-secretaria--pipeline
+    secretName: pipelines-infisical
     image_pull_policy: Always
+    env:
+      INFISICAL_URL: https://infisical.iplan.dados.rio
+      INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+      INFISICAL_ENVIRONMENT: staging
+      INFISICAL_PATHS: /rj_secretaria__pipeline,/shared
+      GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
 ```
 
 ### 9.3 Staging vs. prod
 
-Staging não tem a chave `schedules:`. Prod tem agendamentos, e um agendamento desligado leva `active: false`. Em um flow pronto como o `dump_database`, a tabela e a leitura ficam no `schedule`, então uma execução manual no staging copia os `parameters` de um `schedule` da prod. No `onprem-pool`, staging usa `namespace: pipelines-staging` e prod usa `namespace: pipelines-prod`, com o mesmo `secretName`. No `default-pool`, o `INFISICAL_ENVIRONMENT` troca de `staging` para `prod`. Uma pipeline desligada guarda `deployments: []` e não entra no `.allow.json`.
+Staging não tem a chave `schedules:`. Prod tem agendamentos, e um agendamento desligado leva `active: false`. Em um flow pronto como o `dump_database`, a tabela e a leitura ficam no `schedule`, então uma execução manual no staging copia os `parameters` de um `schedule` da prod. Em staging e em prod, o `INFISICAL_ENVIRONMENT` troca de `staging` para `prod`, e no `onprem-pool` o `namespace` troca de `pipelines-staging` para `pipelines-prod`. Uma pipeline desligada guarda `deployments: []` e não entra no `.allow.json`.
 
 ### 9.4 Sem comentários
 
@@ -1102,7 +1110,7 @@ deployments:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_secretaria__pipeline -- prefect flow-run execute
         namespace: pipelines-staging
-        secretName: pipelines-rj-secretaria--pipeline
+        secretName: pipelines-infisical
         image_pull_policy: Always
 
   - name: rj-secretaria--pipeline--prod
@@ -1119,7 +1127,7 @@ deployments:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_secretaria__pipeline -- prefect flow-run execute
         namespace: pipelines-prod
-        secretName: pipelines-rj-secretaria--pipeline
+        secretName: pipelines-infisical
         image_pull_policy: Always
 ```
 

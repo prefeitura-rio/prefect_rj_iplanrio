@@ -37,7 +37,7 @@ deployments:
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_iplanrio__taxirio -- prefect flow-run execute
-        secretName: prefect-jobs-secrets-staging
+        secretName: pipelines-rj-iplanrio--taxirio-staging
         image_pull_policy: Always
   - name: rj-iplanrio--taxirio--prod
     tags:
@@ -52,7 +52,7 @@ deployments:
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_iplanrio__taxirio -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        secretName: pipelines-rj-iplanrio--taxirio-prod
         image_pull_policy: Always
     schedules:
       - interval: 604800

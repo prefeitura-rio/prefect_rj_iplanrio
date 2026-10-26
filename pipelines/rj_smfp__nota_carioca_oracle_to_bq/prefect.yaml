@@ -39,10 +39,16 @@ deployments:
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: uv run --package rj_smfp__nota_carioca_oracle_to_bq -- prefect flow-run execute
+        command: uv run --package rj_smfp__nota_carioca_oracle_to_bq -- python -m utils.secrets -- prefect flow-run execute
         namespace: pipelines-staging
-        secretName: pipelines-rj-smfp--nota-carioca-oracle-to-bq
+        secretName: pipelines-infisical
         image_pull_policy: Always
+        env:
+          INFISICAL_URL: https://infisical.iplan.dados.rio
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: staging
+          INFISICAL_PATHS: /rj_smfp__nota_carioca_oracle_to_bq,/shared
+          GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
     parameters:
       database:
         type: oracle
@@ -68,10 +74,16 @@ deployments:
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: uv run --package rj_smfp__nota_carioca_oracle_to_bq -- prefect flow-run execute
+        command: uv run --package rj_smfp__nota_carioca_oracle_to_bq -- python -m utils.secrets -- prefect flow-run execute
         namespace: pipelines-prod
-        secretName: pipelines-rj-smfp--nota-carioca-oracle-to-bq
+        secretName: pipelines-infisical
         image_pull_policy: Always
+        env:
+          INFISICAL_URL: https://infisical.iplan.dados.rio
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: prod
+          INFISICAL_PATHS: /rj_smfp__nota_carioca_oracle_to_bq,/shared
+          GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
         cpu_request: '3'
         cpu_limit: '6'
         memory_request: 5Gi
