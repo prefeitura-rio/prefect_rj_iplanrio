@@ -31,6 +31,10 @@ deployments:
       - code_owner:unassigned
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_cor__precipitacao_cemaden/flow.py:rj_cor__precipitacao_cemaden
+    parameters:
+      table:
+        dataset_id: clima_pluviometro
+        table_id: taxa_precipitacao_cemaden
     work_pool:
       name: default-pool
       work_queue_name: default
