@@ -56,6 +56,17 @@ dev = [
   "pytest-xdist>=3.8.0",
 ]
 
+[tool.vulture]
+ignore_names = [
+  "error_type", # Prefect and the retry hooks call with a fixed signature
+  "trace", # same cause
+  "task_run", # same cause
+  "requested_schema", # a fake follows the signature of the real API
+  "Worksheet", # used in a `cast` string
+  "oracle_Connection", # used in a `cast` string
+]
+min_confidence = 80
+
 [tool.pytest.ini_options]
 testpaths = ["tests", "pipelines/*/tests"]
 asyncio_mode = "auto"

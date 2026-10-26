@@ -1,12 +1,13 @@
 """Keep the versions of the model in GCS, or in a folder for the tests.
 
-The layout under the root (`gs://bucket/prefix` or a path)::
+The layout under the root (`gs://bucket/prefix` or a path):
 
-    champion.json             the pointer: {"versao": "2026-10-01", "promovido_em":
-    "..."} champion_anterior.json    the pointer before it, for a rollback
-    <version>/modelo.txt      LightGBM in its native format, which survives a library
-    upgrade <version>/metadata.json   the features in the order of the model, the
-    hyperparameters and so on
+- `champion.json` is the pointer: `{"versao": "2026-10-01", "promovido_em": "..."}`.
+- `champion_anterior.json` is the pointer before it, for a rollback.
+- `<version>/modelo.txt` is LightGBM in its native format, which survives a library
+  upgrade.
+- `<version>/metadata.json` has the features in the order of the model, the
+  hyperparameters and so on.
 
 A published version is never overwritten. To promote one is to change the pointer, and
 the pointer is always the last thing written, so a failure never points to a half
