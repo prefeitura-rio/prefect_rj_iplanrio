@@ -158,6 +158,42 @@ def build_child_parameters(
     }
 
 
+def launch_key(parent_run_id: str, snapshot: Snapshot) -> str:
+    """Monta o prefixo das chaves de idempotência dos filhos: a chave de cada filho é ``<prefixo>:<tabela>``.
+
+    O SCN entra para que uma nova execução do mesmo flow run do pai (um retry pela UI repete o corpo do flow e tira
+    outra foto) nunca receba de volta filhos criados com a foto antiga. Entre as tentativas da mesma task a foto é a
+    mesma, e a chave também.
+
+    :param parent_run_id: Flow run do pai.
+    :param snapshot: Foto tirada pelo pai.
+    :returns: Prefixo ``<flow run do pai>:<SCN>``.
+    """
+    return f"{parent_run_id}:{snapshot.scn}"
+
+
+def is_final_attempt(run_count: int, retries: int) -> bool:
+    """Indica se a tentativa atual da task é a última: depois dela o Prefect não tenta de novo.
+
+    :param run_count: Número da tentativa atual (``prefect.runtime.task_run.run_count``): 1 na primeira.
+    :param retries: Quantas tentativas extras a task permite.
+    :returns: ``True`` a partir da tentativa ``retries + 1``.
+    """
+    return run_count > retries
+
+
+def will_retry(error: BaseException, final_attempt: bool) -> bool:
+    """Diz se o Prefect vai repetir a task depois desta falha, e portanto reaproveitar os filhos já criados.
+
+    O Prefect só repete exceções comuns; ``BaseException`` (SIGTERM, Ctrl+C, cancelamento) encerra a task como crash.
+
+    :param error: A falha da tentativa.
+    :param final_attempt: Se a tentativa foi a última permitida (:func:`is_final_attempt`).
+    :returns: ``True`` se haverá nova tentativa.
+    """
+    return isinstance(error, Exception) and not final_attempt
+
+
 def decide(children: Sequence[RunInfo]) -> Verdict:
     """Resume o estado dos filhos numa decisão.
 

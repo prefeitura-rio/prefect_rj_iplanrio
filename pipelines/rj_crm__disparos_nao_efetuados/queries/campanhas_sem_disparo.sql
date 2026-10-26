@@ -9,7 +9,7 @@
 -- Notas:
 -- - "Hoje" = date('America/Sao_Paulo') na execução.
 -- - O join com mensagem_ativa é pelo nome técnico do HSM: a planilha usa
---   campanha_nome (ex: smspuerperasdisparo25) e o Content Builder usa
+--   nome_hsm (ex: smspuerperasdisparo25) e o Content Builder usa
 --   meta.nome_hsm com o mesmo valor. O join é LEFT para não perder campanhas
 --   ativas cujo HSM ainda não consta no Content Builder.
 
@@ -17,8 +17,8 @@ with
     -- 1. Campanhas marcadas como ativas na planilha de controle (ambiente production)
     campanhas_ativas as (
         select
-            campanha_nome as nome_hsm,
-            nome_campanha_limpo  as nome_campanha,
+            nome_hsm,
+            nome_campanha,
             ambiente,
             id_wetalkie_hsm,
             ativo_indicador,
@@ -41,8 +41,8 @@ with
         from `rj-crm-registry.brutos_salesforce.status_disparo`
         where data_particao = current_date('America/Sao_Paulo')
           and (
-              date(envio_datahora) = current_date('America/Sao_Paulo')
-              or date(falha_datahora) = current_date('America/Sao_Paulo')
+              date(envio_meta_datahora) = current_date('America/Sao_Paulo')
+              or date(falha_meta_datahora) = current_date('America/Sao_Paulo')
           )
     ),
 

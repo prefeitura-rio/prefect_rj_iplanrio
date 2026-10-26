@@ -415,7 +415,7 @@ deployments:
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_cpfs: true
-          query_file: queries/cadunico_confirma_agendamento.sql
+          query_file: queries/smas_cadunico_confirma_agendamento.sql
 
       # SMAS - Carta PIC - Evento
       - cron: "30 17 * * *"

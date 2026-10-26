@@ -2,6 +2,7 @@
 
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from prefect import task
 from prefect.artifacts import create_progress_artifact, update_progress_artifact
@@ -19,6 +20,8 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     plan_structure,
     slot_indexes,
 )
+
+BRASILIA = ZoneInfo("America/Sao_Paulo")
 
 
 @task(cache_policy=NO_CACHE)
@@ -114,7 +117,7 @@ def plan_structure_task(
     indexes = ", ".join(index.name for index in structure.layout.indexes) or "nenhum"
     log(
         f"{table_id}: tablespace {structure.layout.tablespace or '(padrão do schema)'}, "
-        f"{describe_partitioning(structure.layout.partitioning)}, {structure.layout.inmemory or 'NO INMEMORY'}; "
+        f"{describe_partitioning(structure.layout.partitioning)}, In-Memory só na janela de meses, após a carga; "
         f"índices criados após a carga: {indexes}"
     )
     if structure.skipped_indexes:
@@ -316,11 +319,55 @@ def record_load_task(
 
 
 @task(cache_policy=NO_CACHE)
+def disable_inmemory_task(infisical_secret_path: str, table: str) -> str:
+    """Tira a tabela que vai receber a carga do In-Memory antes de esvaziá-la; retorna a tabela."""
+    inmemory.disable(config=oracle.read_oracle_config(infisical_secret_path), table=table, report=log)
+    log(f"{table}: fora do In-Memory até o fim da carga")
+    return table
+
+
+@task(cache_policy=NO_CACHE)
+def enable_inmemory_window_task(infisical_secret_path: str, table: str, window_months: int) -> list[str]:
+    """Coloca no In-Memory as partições da janela (mês corrente e ``window_months`` anteriores) e retorna quais."""
+    start = inmemory.window_start(datetime.now(BRASILIA).date(), window_months)
+    chosen = inmemory.enable_window(
+        config=oracle.read_oracle_config(infisical_secret_path), table=table, start=start, report=log
+    )
+    log(f"{table}: In-Memory nas partições a partir de {start:%m/%Y} ({len(chosen)}): {', '.join(chosen) or 'nenhuma'}")
+    return chosen
+
+
+@task(cache_policy=NO_CACHE)
+def release_inmemory_task(infisical_secret_path: str, plans: list[slots.SlotPlan], delay_seconds: int) -> list[str]:
+    """Tira do In-Memory as tabelas que saíram de uso na troca; retorna as que não puderam ser liberadas.
+
+    Espera ``delay_seconds`` para as consultas já em andamento na tabela antiga terminarem. Uma falha só gera aviso:
+    os dados já foram publicados, e a próxima carga tira a tabela do In-Memory antes de esvaziá-la.
+    """
+    tables = [plan.active for plan in plans if plan.active]
+    if not tables:
+        log("Nenhuma tabela saiu de uso nesta troca; nada a liberar no In-Memory.")
+        return []
+    log(f"Liberação do In-Memory de {tables} em {delay_seconds}s, depois da troca")
+    time.sleep(max(delay_seconds, 0))
+    config = oracle.read_oracle_config(infisical_secret_path)
+    failed = []
+    for table in tables:
+        try:
+            inmemory.disable(config=config, table=table, report=log)
+            log(f"{table}: fora do In-Memory (saiu de uso na troca)")
+        except Exception as error:  # a carga já foi publicada; a próxima carga refaz a liberação
+            failed.append(table)
+            log(f"{table}: In-Memory não liberado ({type(error).__name__}: {error})", level="warning")
+    return failed
+
+
+@task(cache_policy=NO_CACHE)
 def start_inmemory_population_task(
     infisical_secret_path: str, table: str, structure: StructurePlan, wait_minutes: int
 ) -> None:
-    """Pede ao Oracle para popular a tabela física no In-Memory, se ela usa In-Memory e a espera está ligada."""
-    if structure.layout.inmemory is None or wait_minutes <= 0:
+    """Pede ao Oracle para popular agora as partições da tabela que estão no In-Memory, se a espera está ligada."""
+    if wait_minutes <= 0:
         return
     errors = inmemory.start_population(
         config=oracle.read_oracle_config(infisical_secret_path),

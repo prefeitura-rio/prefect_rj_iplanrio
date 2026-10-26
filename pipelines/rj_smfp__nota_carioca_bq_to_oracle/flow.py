@@ -12,7 +12,9 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import DBT_DEPLOYMEN
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
     create_oracle_indexes_task,
     delete_gcs_files_task,
+    disable_inmemory_task,
     drop_oracle_indexes_task,
+    enable_inmemory_window_task,
     ensure_oracle_table_task,
     export_snapshot_task,
     gather_oracle_stats_task,
@@ -23,6 +25,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
     plan_structure_task,
     record_load_task,
     refresh_synonyms_task,
+    release_inmemory_task,
     resolve_slots_task,
     run_dbt_task,
     start_inmemory_population_task,
@@ -52,6 +55,8 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
     raw_text_encoding: Literal["base64", "hex"] = "base64",
     bigquery_quiet_minutes: int = 5,
     inmemory_wait_minutes: int = 30,
+    inmemory_window_months: int = 3,
+    inmemory_release_delay_seconds: int = 120,
     mode: Literal["full", "synonyms_only"] = "full",
     run_dbt: bool = False,
     dbt_deployment: str = DBT_DEPLOYMENT,
@@ -76,6 +81,8 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
         )
     )
     with notifier.guard():
+        if inmemory_window_months < 0:
+            raise ValueError(f"inmemory_window_months não pode ser negativo: {inmemory_window_months}")
         notifier.begin()
         dbt_finished_at = None
         if dbt_enabled:
@@ -136,7 +143,8 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
                 structure=structure,
             )
             unindexed_table = drop_oracle_indexes_task(infisical_secret_path=infisical_secret_path, table=oracle_table)
-            empty_table = truncate_oracle_table_task(infisical_secret_path=infisical_secret_path, table=unindexed_table)
+            released_table = disable_inmemory_task(infisical_secret_path=infisical_secret_path, table=unindexed_table)
+            empty_table = truncate_oracle_table_task(infisical_secret_path=infisical_secret_path, table=released_table)
             notifier.table_step(table_id, TableStep.LOAD)
             loaded_rows = load_into_oracle_task(
                 infisical_secret_path=infisical_secret_path,
@@ -183,6 +191,12 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
                 snapshot_modified=exported.last_modified,
             )
             notifier.table_step(table_id, TableStep.INMEMORY)
+            enable_inmemory_window_task(
+                infisical_secret_path=infisical_secret_path,
+                table=granted_table,
+                window_months=inmemory_window_months,
+                wait_for=[ready],
+            )
             start_inmemory_population_task(
                 infisical_secret_path=infisical_secret_path,
                 table=granted_table,
@@ -198,5 +212,8 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
         )
         notifier.enter(Step.SWAP)
         swap_synonyms_task(infisical_secret_path=infisical_secret_path, plans=populated)
+        release_inmemory_task(
+            infisical_secret_path=infisical_secret_path, plans=populated, delay_seconds=inmemory_release_delay_seconds
+        )
         for cleanup in cleanups:
             cleanup.result()
