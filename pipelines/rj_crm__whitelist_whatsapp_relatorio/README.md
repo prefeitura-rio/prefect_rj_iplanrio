@@ -5,9 +5,6 @@ que sejam avaliadas e liberadas na whitelist do WhatsApp. O destinatário do e-m
 censor, que repassa os endereços por cópia a quem de fato altera a whitelist — por isso o
 corpo traz um bloco monoespaçado pronto para copiar, com a contagem no título.
 
-Não tem relação técnica com a pipeline irmã `rj_crm__whitelist_whatsapp`: outra fonte,
-outro ciclo de vida.
-
 ## O que entrega
 
 | Canal | Conteúdo | Quando |

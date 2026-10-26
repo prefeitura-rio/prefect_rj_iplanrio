@@ -1,11 +1,9 @@
-from json import dumps
-
 import pytest
 from httpx2 import AsyncClient, HTTPStatusError, MockTransport, Request, Response
 from pydantic import JsonValue
 
 from utils.records import dig, read_token
-from utils.wetalkie import WetalkieApi, build_attendance_row
+from utils.wetalkie import WetalkieApi
 
 URL = "https://wetalkie.test"
 
@@ -100,28 +98,3 @@ async def test_an_error_status_raises_without_a_second_try() -> None:
         await api.put("x", {})
 
     assert len(calls) == 2
-
-
-def test_a_row_takes_the_ura_or_the_flow_and_keeps_the_attendance_as_json() -> None:
-    """Read the ids, the lowercase channel, the dates and the JSON of an attendance."""
-    item: dict[str, JsonValue] = {
-        "serial": 9,
-        "protocol": "P1",
-        "channel": "WHATSAPP",
-        "beginDate": "2026-01-01",
-        "endDate": "2026-01-02",
-        "ura": {"id": 4, "name": "Main"},
-    }
-
-    assert build_attendance_row(item) == {
-        "id_ura": "4",
-        "id_reply": "9",
-        "ura_name": "Main",
-        "protocol": "P1",
-        "channel": "whatsapp",
-        "begin_date": "2026-01-01",
-        "end_date": "2026-01-02",
-        "json_data": dumps(item),
-    }
-    assert build_attendance_row({"serial": 1, "flow": {"id": 2, "name": "F"}})["ura_name"] == "F"
-    assert build_attendance_row({"serial": 1})["id_ura"] is None

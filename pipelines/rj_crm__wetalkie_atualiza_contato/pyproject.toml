@@ -1,9 +1,0 @@
-[project]
-name = "rj_crm__wetalkie_atualiza_contato"
-version = "0.1.0"
-description = "Pipeline CRM Wetalkie para atualização de dados de contatos faltantes"
-dependencies = [
-    "prefect_rj_iplanrio",
-]
-[tool.uv.sources]
-prefect_rj_iplanrio = { workspace = true }

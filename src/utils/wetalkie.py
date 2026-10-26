@@ -1,14 +1,13 @@
 """A client of the Wetalkie API."""
 
-from collections.abc import Mapping, Sequence
-from json import dumps
+from collections.abc import Mapping
 from types import TracebackType
 from typing import Self, final
 
 from httpx2 import AsyncClient, Response
 from pydantic import JsonValue
 
-from .records import dig, read_json, read_token
+from .records import read_json, read_token
 from .settings import WetalkieSettings
 
 UNAUTHORIZED = 401
@@ -91,33 +90,3 @@ class WetalkieApi:
     async def put(self, path: str, body: JsonValue | None = None) -> JsonValue:
         """Send a PUT request."""
         return await self.request("PUT", path, body=body)
-
-
-def as_text(value: JsonValue) -> str | None:
-    """Return a value as text, or nothing for nothing."""
-    return None if value is None else str(value)
-
-
-def build_attendance_row(item: Mapping[str, JsonValue]) -> dict[str, str | None]:
-    """Return the row of an attendance: its ids, its dates and the attendance as JSON text.
-
-    The URA is the `ura` of the attendance, or its `flow`.
-    """
-    ura = item.get("ura") or item.get("flow")
-    channel = item.get("channel")
-
-    return {
-        "id_ura": as_text(dig(ura, "id")),
-        "id_reply": as_text(item.get("serial")),
-        "ura_name": as_text(dig(ura, "name")),
-        "protocol": as_text(item.get("protocol")),
-        "channel": channel.lower() if isinstance(channel, str) else None,
-        "begin_date": as_text(item.get("beginDate")),
-        "end_date": as_text(item.get("endDate")),
-        "json_data": dumps(item),
-    }
-
-
-def build_attendance_rows(items: Sequence[Mapping[str, JsonValue]]) -> list[dict[str, str | None]]:
-    """Return the rows of the attendances."""
-    return [build_attendance_row(item) for item in items]
