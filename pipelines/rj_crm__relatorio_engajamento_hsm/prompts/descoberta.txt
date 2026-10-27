@@ -12,6 +12,7 @@ Para cada categoria NOVA, aponte até 5 conversas DESTE lote que sejam exemplos 
 Regras:
 - SEMPRE prefira reaproveitar categoria existente se ela descrever bem o tema — não proponha nova só porque as palavras são diferentes de um exemplo anterior.
 - Só proponha categoria nova pra tema genuinamente diferente de tudo que já existe (ex.: outro benefício/programa social específico é tema diferente do que uma categoria existente já nomeia — não force nela).
+- Seja específico, sem chegar a uma categoria por conversa: na dúvida entre uma categoria ampla e duas mais específicas, prefira as específicas (ex.: "DUVIDA_VALOR_BONUS" e "DUVIDA_DATA_PAGAMENTO_BONUS", não "DUVIDA_BONUS"). Quem revisa o catálogo junta categorias parecidas depois, mas não consegue separar uma genérica demais.
 - Nome: MAIUSCULO_COM_UNDERSCORE, curto (até ~40 caracteres). Toda categoria nova vem com descrição de 1 frase, clara o bastante pra aplicá-la num lote futuro.
 - Ausência de resposta útil do cidadão (mensagem vazia, automática de terceiro, incompreensível) também é um tema — merece categoria própria (ex.: "SEM_RESPOSTA_UTIL") se ainda não existir uma cobrindo isso.
 - Cada categoria nova aparece só UMA vez na resposta, mesmo que várias conversas do lote a revelem.
