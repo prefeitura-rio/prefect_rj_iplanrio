@@ -109,17 +109,18 @@ def gera_relatorio(
             raise SolicitacaoError("Catálogo ainda não validado (nenhuma categoria com decisão Manter ou Nova)")
         print(f"[RELATORIO] {campanha}: Catálogo — {catalogo_validado.resumo()}.")
 
-    df_sessoes, total_disparos, total_engajados = extrai_conversas(
-        campanha, solicitacao.data_inicio, solicitacao.data_fim
+    df_sessoes, engajamento = extrai_conversas(
+        campanha, solicitacao.data_inicio, solicitacao.data_fim, solicitacao.fonte_disparos
     )
     if df_sessoes.empty:
-        return ResultadoSolicitacao(status_pulado("nenhuma conversa com resposta do cidadão no período"))
-    if total_engajados > params.teto_conversas and not solicitacao.liberada:
+        return ResultadoSolicitacao(status_pulado("nenhuma conversa com resposta em texto do cidadão no período"))
+    # teto conta só o que vai pra LLM: sessões com texto (reação/mídia não são classificadas)
+    if len(df_sessoes) > params.teto_conversas and not solicitacao.liberada:
         print(
-            f"[RELATORIO] {campanha}: {total_engajados} conversa(s) > teto {params.teto_conversas} — "
+            f"[RELATORIO] {campanha}: {len(df_sessoes)} conversa(s) com texto > teto {params.teto_conversas} — "
             "aguardando liberação."
         )
-        return ResultadoSolicitacao(status_aguardando(total_engajados, params.teto_conversas))
+        return ResultadoSolicitacao(status_aguardando(len(df_sessoes), params.teto_conversas))
 
     banco = None
     exemplos_descoberta: dict[str, list[str]] = {}
@@ -166,9 +167,11 @@ def gera_relatorio(
         df=df,
         descricoes=catalogo.como_dict(),
         textos_hsm=textos_hsm(df_sessoes),
-        total_disparos=total_disparos,
-        total_engajados=total_engajados,
-        sql_utilizada=sql_query_utilizada(campanha, solicitacao.data_inicio, solicitacao.data_fim),
+        engajamento=engajamento,
+        fonte_disparos=solicitacao.fonte_disparos,
+        sql_utilizada=sql_query_utilizada(
+            campanha, solicitacao.data_inicio, solicitacao.data_fim, solicitacao.fonte_disparos
+        ),
         n_exemplos_rag=0 if banco is None else len(banco.exemplos),
         categorias_sem_decisao=[] if catalogo_validado is None else catalogo_validado.pendentes,
         exemplos_descoberta=exemplos_descoberta,
