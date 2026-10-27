@@ -34,6 +34,13 @@ class StartedRun:
     url: str | None
 
 
+def flow_run_url(run_id: UUID | str) -> str | None:
+    """Return the UI link of a flow run, or nothing if `PREFECT_UI_URL` is not set."""
+    ui_url = cast("str | None", PREFECT_UI_URL.value())
+
+    return f"{ui_url.rstrip('/')}/runs/flow-run/{run_id}" if ui_url else None
+
+
 def start_deployment_run(deployment: str, parameters: dict[str, object]) -> StartedRun:
     """Create a run of the deployment `<flow>/<deployment>` as a subflow, no wait.
 
@@ -41,10 +48,8 @@ def start_deployment_run(deployment: str, parameters: dict[str, object]) -> Star
     called from sync code.
     """
     flow_run = cast("FlowRun", run_deployment(name=deployment, parameters=parameters, timeout=0, as_subflow=True))
-    ui_url = cast("str | None", PREFECT_UI_URL.value())
-    url = f"{ui_url.rstrip('/')}/runs/flow-run/{flow_run.id}" if ui_url else None
 
-    return StartedRun(id=str(flow_run.id), name=flow_run.name, url=url)
+    return StartedRun(id=str(flow_run.id), name=flow_run.name, url=flow_run_url(flow_run.id))
 
 
 class PrefectRuns:

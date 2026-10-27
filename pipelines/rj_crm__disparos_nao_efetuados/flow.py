@@ -2,9 +2,12 @@
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import cast
+from uuid import UUID
 
 from prefect import Flow, flow
 from prefect.client.schemas.objects import FlowRun, State
+from prefect.runtime import flow_run as current_run
 from toolkit.telemetry import logger
 
 from pipelines.rj_crm__disparos_nao_efetuados.constants import BILLING_PROJECT
@@ -17,6 +20,7 @@ from pipelines.rj_crm__disparos_nao_efetuados.helpers import (
 )
 from pipelines.rj_crm__disparos_nao_efetuados.tasks import notify_task, write_campaigns_task
 from utils.constants import DEFAULT_CLOUD
+from utils.runs import flow_run_url
 from utils.tasks import publish_table_in_bq, read_bq, upload_files_to_gcs
 from utils.types import Cloud, DumpMode, Table
 from utils.utils import capture_options
@@ -24,7 +28,9 @@ from utils.utils import capture_options
 
 async def notify_failure(flow: Flow[..., object], flow_run: FlowRun, state: State[object]) -> None:
     """Post a failed run to the channel of the errors, with the people to call."""
-    await notify_task(build_failure_message(flow.name, flow_run.name or "", state.name or ""), errors=True)
+    await notify_task(
+        build_failure_message(flow.name, flow_run.name or "", state.name or "", flow_run_url(flow_run.id)), errors=True
+    )
 
 
 @flow(log_prints=True, flow_run_name="{table[table_id]}", on_failure=[notify_failure])
@@ -37,15 +43,16 @@ async def rj_crm__disparos_nao_efetuados(
     goes to the channel of the errors, and a day with all of them sent goes to the
     channel of the dispatches.
     """
+    run_url = flow_run_url(cast("UUID", current_run.id))
     campaigns = await read_bq(build_query(), project=BILLING_PROJECT)
     today = format_today()
 
     if campaigns.is_empty():
         logger.info("Every active campaign sent today")
-        await notify_task(build_complete_message(today), errors=False)
+        await notify_task(build_complete_message(today, run_url), errors=False)
         return
 
-    await notify_task(build_missing_message(campaigns.to_dicts(), today), errors=True)
+    await notify_task(build_missing_message(campaigns.to_dicts(), today, run_url), errors=True)
 
     with TemporaryDirectory() as directory:
         folder = write_campaigns_task(campaigns, Path(directory))
