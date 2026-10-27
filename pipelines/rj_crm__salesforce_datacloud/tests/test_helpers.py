@@ -2,9 +2,11 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
+from google.cloud import bigquery
 from pydantic import JsonValue
 
 from pipelines.rj_crm__salesforce_datacloud.constants import FEEDS, SP_TZ
+from pipelines.rj_crm__salesforce_datacloud.helpers.bq import field_names, missing_fields
 from pipelines.rj_crm__salesforce_datacloud.helpers.messages import (
     build_feed_failure,
     build_run_failure,
@@ -13,6 +15,7 @@ from pipelines.rj_crm__salesforce_datacloud.helpers.messages import (
 )
 from pipelines.rj_crm__salesforce_datacloud.helpers.run import add_up, plan_run
 from pipelines.rj_crm__salesforce_datacloud.helpers.salesforce import as_rows
+from pipelines.rj_crm__salesforce_datacloud.helpers.schemas import SCHEMAS
 from pipelines.rj_crm__salesforce_datacloud.helpers.transform import (
     build_rows,
     clean_data_cloud_name,
@@ -314,3 +317,34 @@ def test_the_outcomes_add_up_by_group_and_the_failed_feeds_count_once() -> None:
     )
 
     assert (totals.rows, totals.failed) == ({"g1": {"a": 7}, "g2": {"b": 0}}, ["b"])
+
+
+def test_only_the_final_tables_have_the_first_load_time() -> None:
+    """Add `_first_loaded_at` to the final tables and not to the staging ones."""
+    with_field = {name for name, fields in SCHEMAS.items() if "_first_loaded_at" in set(field_names(fields))}
+
+    assert with_field == {name for name in SCHEMAS if not name.endswith("_staging")}
+
+
+@pytest.mark.parametrize(
+    ("current", "expected"),
+    [
+        pytest.param(["id", "_loaded_at"], ["_first_loaded_at"], id="a_new_field_is_missing"),
+        pytest.param(["id", "_loaded_at", "_first_loaded_at"], [], id="nothing_is_missing"),
+    ],
+)
+def test_the_missing_fields_of_a_table(current: list[str], expected: list[str]) -> None:
+    """Find the fields to add to a table that exists."""
+    wanted = [bigquery.SchemaField(name, "STRING") for name in ("id", "_loaded_at", "_first_loaded_at")]
+
+    existing = [bigquery.SchemaField(name, "STRING") for name in current]
+
+    assert field_names(missing_fields(existing, wanted)) == expected
+
+
+def test_the_merge_keeps_the_first_load_time() -> None:
+    """Fill `_first_loaded_at` on INSERT from the load time, never on UPDATE."""
+    sql = (Path(__file__).parent.parent / "queries" / "merge_staging.sql").read_text()
+
+    assert "INSERT ({{ insert_cols }}, _first_loaded_at)" in sql
+    assert "VALUES ({{ insert_vals }}, s._loaded_at)" in sql

@@ -1,6 +1,7 @@
 """The native BigQuery tables of the pipeline: creation, staging load and MERGE."""
 
 from collections.abc import Sequence
+from typing import cast
 
 from google.cloud import bigquery
 from toolkit.telemetry import logger
@@ -10,10 +11,26 @@ from pipelines.rj_crm__salesforce_datacloud.helpers.schemas import PARTITIONED_T
 from pipelines.rj_crm__salesforce_datacloud.types import Row
 
 
-def create_tables(project: str, dataset: str) -> None:
-    """Create each table that does not exist yet.
+def field_names(fields: Sequence[bigquery.SchemaField]) -> list[str]:
+    """Return the names of the fields."""
+    return [cast("str", field.name) for field in fields]
 
-    The final tables are partitioned by day and clustered.
+
+def missing_fields(
+    current: Sequence[bigquery.SchemaField], wanted: Sequence[bigquery.SchemaField]
+) -> list[bigquery.SchemaField]:
+    """Return the fields of `wanted` that `current` does not have."""
+    names = set(field_names(current))
+    missing = set(field_names(wanted)) - names
+
+    return [field for field, name in zip(wanted, field_names(wanted), strict=True) if name in missing]
+
+
+def create_tables(project: str, dataset: str) -> None:
+    """Create each table that does not exist yet, and add the new fields to the others.
+
+    The final tables are partitioned by day and clustered. A new field goes at the end
+    as NULLABLE, the only change that BigQuery takes without a new table.
     """
     client = bigquery.Client(project=project)
     dataset_ref = bigquery.DatasetReference(project, dataset)
@@ -27,7 +44,13 @@ def create_tables(project: str, dataset: str) -> None:
             )
             table.clustering_fields = PARTITIONED_TABLES[table_id]
 
-        client.create_table(table, exists_ok=True)
+        existing = client.create_table(table, exists_ok=True)
+        added = missing_fields(existing.schema, schema)
+
+        if added:
+            existing.schema = [*existing.schema, *added]
+            client.update_table(existing, ["schema"])
+            logger.info("Fields added: table=%s fields=%s", table_id, field_names(added))
 
 
 def load_staging(project: str, dataset: str, staging: str, rows: Sequence[Row]) -> int:

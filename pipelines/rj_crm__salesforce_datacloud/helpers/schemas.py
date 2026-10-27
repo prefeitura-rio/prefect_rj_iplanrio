@@ -454,6 +454,13 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
     "sfmc_whatsapp_send_event_staging": add_base_fields(list(SFMC_WHATSAPP_SEND_EVENT_FIELDS)),
 }
 
+# `_first_loaded_at` is the first time a row arrived, and only the final tables have it.
+# `_loaded_at` changes at each MERGE, so it cannot tell how late a row came. The MERGE
+# sets it on INSERT and never on UPDATE. A row from before 2026-10-15 has nothing here.
+for table_id, fields in SCHEMAS.items():
+    if not table_id.endswith("_staging"):
+        fields.append(bigquery.SchemaField("_first_loaded_at", TIMESTAMP))
+
 # Tabelas com particionamento + clustering
 PARTITIONED_TABLES: dict[str, list[str]] = {
     "ai_agent_session": ["id"],
