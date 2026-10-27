@@ -49,6 +49,7 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     COL_CONV_JUIZ_VEREDITO,
     COL_CONV_JUSTIFICATIVA,
     COL_CONV_RESUMO,
+    COL_CONV_SENTIMENTO,
     COL_JUSTIFICATIVA_AVALIACAO_BOT,
     COL_JUSTIFICATIVA_REVISAO,
     COL_REVISAO,
@@ -59,15 +60,27 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     COR_DECISAO_MANTER,
     DOCX_MIME,
     DRIVE_DOC_MIME,
+    EVENTOS_WHATSAPP_TABLE,
+    FONTE_DISPAROS_CAMPANHA,
+    FONTE_DISPAROS_HSM,
     MARCADOR_REVISADA,
+    N_EXEMPLOS_POR_SENTIMENTO,
+    N_REACOES_RELATORIO,
     OPCOES_AVALIACAO_BOT,
     OPCOES_REVISAO,
     PROJECT_ID,
     REVISAO_CERTO,
     REVISAO_ERRADO,
+    SEED_EXEMPLOS_SENTIMENTO,
+    SEND_EVENT_TABLE,
+    SENTIMENTO_NEGATIVO,
+    SENTIMENTO_POSITIVO,
+    SENTIMENTOS,
     SUFIXO_PASTA_RAPIDO,
+    TIPO_ENGAJAMENTO_TEXTO,
 )
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.discovery import SugestaoCategoria
+from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.extract import Engajamento
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.judge import metricas_por_categoria
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.drive import garante_pasta, link_pasta, upload_bytes
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.sheets import (
@@ -129,9 +142,9 @@ class DadosRelatorio:
     df: pd.DataFrame  # saída de julga_classificacoes
     descricoes: dict[str, str]  # categoria -> descrição (catálogo usado)
     textos_hsm: dict[str, str]
-    total_disparos: int
-    total_engajados: int
+    engajamento: Engajamento
     sql_utilizada: str
+    fonte_disparos: str = FONTE_DISPAROS_CAMPANHA
     n_exemplos_rag: int = 0  # exemplos revisados disponíveis no banco (0 = zero-shot)
     categorias_sem_decisao: list[str] = field(default_factory=list)
     exemplos_descoberta: dict[str, list[str]] = field(default_factory=dict)  # só relatório rápido
@@ -146,6 +159,7 @@ class DadosRelatorio:
 class Exemplo:
     conversa: str
     resumo: str
+    sentimento: str = ""
 
 
 @dataclass
@@ -181,7 +195,7 @@ def monta_categorias(dados: DadosRelatorio, n_exemplos_por_categoria: int) -> li
                 n_avaliadas=int(linha.n_avaliadas_juiz),
                 n_corretas=int(linha.n_corretas),
                 exemplos=[
-                    Exemplo(r.conversa_completa, r.resumo_gerado)
+                    Exemplo(r.conversa_completa, r.resumo_gerado, r.sentimento)
                     for r in ordenadas.head(n_exemplos_por_categoria).itertuples()
                 ],
             )
@@ -209,6 +223,7 @@ def monta_conversas_df(df: pd.DataFrame, com_revisao: bool) -> pd.DataFrame:
             COL_CONV_CATEGORIA: SEP_CELULA.join(r.categorias),
             COL_CONV_JUSTIFICATIVA: justificativa,
             COL_CONV_RESUMO: r.resumo_gerado,
+            COL_CONV_SENTIMENTO: r.sentimento,
             COL_CONV_CONVERSA: r.conversa_completa,
             COL_CONV_JUIZ_VEREDITO: r.juiz_veredito,
             COL_CONV_JUIZ_ESPERADA: SEP_CELULA.join(r.juiz_categorias_esperadas),
@@ -298,6 +313,10 @@ def observacoes(dados: DadosRelatorio) -> list[str]:
         f"Conversas em {CATEGORIA_SEM_CATALOGO} não se encaixaram em nenhuma categoria do catálogo e podem indicar "
         "um tema que ainda não tem categoria.",
     ]
+    itens.append(
+        "O sentimento (positivo, neutro ou negativo) é o tom do cidadão na conversa, atribuído pela mesma LLM da "
+        "classificação. Ele não é avaliado pelo juiz, então a precisão informada vale só para as categorias."
+    )
     if dados.sugestoes:
         itens.append(
             f"A seção 'Sugestões de novas categorias', no fim deste relatório, traz {len(dados.sugestoes)} tema(s) "
@@ -350,14 +369,19 @@ def gera_docx(dados: DadosRelatorio, categorias: list[Categoria]) -> Document:
         aviso.font.color.rgb = _COR_AVISO
 
     doc.add_heading("Resumo", level=1)
-    pct = lambda parte, todo: 100 * parte / todo if todo else 0.0  # noqa: E731
-    doc.add_paragraph(f"Sessões que receberam o HSM: {dados.total_disparos}")
+    eng = dados.engajamento
+    doc.add_paragraph(f"Sessões que receberam o HSM: {eng.total_disparos}")
     doc.add_paragraph(
-        f"Sessões com resposta do cidadão: {dados.total_engajados} "
-        f"({pct(dados.total_engajados, dados.total_disparos):.1f}% das sessões)"
+        f"Sessões com resposta do cidadão (qualquer tipo, inclusive reação): {eng.total_engajados} "
+        f"({_pct(eng.total_engajados, eng.total_disparos):.1f}% das sessões)"
     )
     doc.add_paragraph(
-        f"Conversas classificadas: {n_classificadas} ({pct(n_classificadas, dados.total_engajados):.1f}% das respostas)"
+        f"Sessões com resposta em texto (as classificadas): {eng.total_texto} "
+        f"({_pct(eng.total_texto, eng.total_disparos):.1f}% das sessões) — ver 'Tipos de engajamento'"
+    )
+    doc.add_paragraph(
+        f"Conversas classificadas: {n_classificadas} "
+        f"({_pct(n_classificadas, eng.total_texto):.1f}% das respostas em texto)"
         + (f" — {n_falhas} com falha na classificação" if n_falhas else "")
     )
     doc.add_paragraph(f"Categorias com conversas: {len(categorias)}")
@@ -369,7 +393,8 @@ def gera_docx(dados: DadosRelatorio, categorias: list[Categoria]) -> Document:
         modo = "Catálogo validado, sem exemplos (a campanha ainda não tem conversas revisadas)"
     doc.add_paragraph(f"Classificação: {modo}")
     doc.add_paragraph(
-        f"Conversas avaliadas pelo juiz: {len(julgadas)} ({pct(len(julgadas), n_classificadas):.1f}% das classificadas)"
+        f"Conversas avaliadas pelo juiz: {len(julgadas)} "
+        f"({_pct(len(julgadas), n_classificadas):.1f}% das classificadas)"
     )
     precisao = doc.add_paragraph()
     precisao.add_run("Precisão da classificação (conversas com o conjunto de categorias correto): ")
@@ -382,22 +407,30 @@ def gera_docx(dados: DadosRelatorio, categorias: list[Categoria]) -> Document:
             doc.add_paragraph(nome, style="List Bullet")
             doc.add_paragraph(style="Intense Quote").add_run(_trunca(texto))
 
+    _secao_tipos_engajamento(doc, eng)
+
     doc.add_heading("Observações importantes", level=1)
     for i, item in enumerate(observacoes(dados), start=1):
         doc.add_paragraph(f"{i}) {item}")
 
     doc.add_heading("Query utilizada na análise", level=1)
+    if dados.fonte_disparos == FONTE_DISPAROS_HSM:
+        origem = f"nos eventos de WhatsApp ({EVENTOS_WHATSAPP_TABLE} e {SEND_EVENT_TABLE})"
+    else:
+        origem = f"em {PROJECT_ID}.{CHATBOT_DATASET}.{CHATBOT_TABLE}"
     doc.add_paragraph(
-        f"Consulta em {PROJECT_ID}.{CHATBOT_DATASET}.{CHATBOT_TABLE} usada pra extrair as conversas, com os "
-        "parâmetros já substituídos pelos valores reais desta análise."
+        f"Consulta {origem} usada pra extrair as conversas, com os parâmetros já substituídos pelos valores "
+        "reais desta análise."
     )
     _adiciona_bloco_codigo(doc, dados.sql_utilizada)
+
+    _secao_sentimento(doc, classificadas)
 
     doc.add_heading("Categorias", level=1)
     tabela = doc.add_table(rows=1, cols=4)
     tabela.style = "Light Grid Accent 2"
     for cel, texto in zip(
-        tabela.rows[0].cells, ["Categoria", "Qtd.", "% das respostas", "Precisão (LLM juiz)"], strict=True
+        tabela.rows[0].cells, ["Categoria", "Qtd.", "% das respostas em texto", "Precisão (LLM juiz)"], strict=True
     ):
         cel.paragraphs[0].add_run(texto).bold = True
     for cat in categorias:
@@ -413,18 +446,19 @@ def gera_docx(dados: DadosRelatorio, categorias: list[Categoria]) -> Document:
         h.runs[0].font.color.rgb = _COR_ACCENT
         doc.add_paragraph(cat.descricao or "(sem descrição no catálogo)")
         resumo = doc.add_paragraph()
-        resumo.add_run(f"{cat.qtd} conversa(s) · {cat.pct:.1f}% das respostas · precisão: ")
+        resumo.add_run(f"{cat.qtd} conversa(s) · {cat.pct:.1f}% das respostas em texto · precisão: ")
         resumo.add_run(texto_precisao(cat.n_corretas, cat.n_avaliadas, cat.qtd)).bold = True
         if cat.exemplos:
             doc.add_paragraph().add_run("Exemplos:").bold = True
-            tabela_ex = doc.add_table(rows=1, cols=2)
+            tabela_ex = doc.add_table(rows=1, cols=3)
             tabela_ex.style = "Light Grid Accent 2"
-            for cel, texto in zip(tabela_ex.rows[0].cells, ["Conversa", "Resumo"], strict=True):
+            for cel, texto in zip(tabela_ex.rows[0].cells, ["Conversa", "Resumo", "Sentimento"], strict=True):
                 cel.paragraphs[0].add_run(texto).bold = True
             for ex in cat.exemplos:
                 linha_ex = tabela_ex.add_row().cells
                 linha_ex[0].text = _trunca(ex.conversa)
                 linha_ex[1].text = _trunca(ex.resumo) if ex.resumo else "(sem resumo)"
+                linha_ex[2].text = ex.sentimento or "-"
             doc.add_paragraph()
         else:
             doc.add_paragraph().add_run("Sem exemplo disponível.").italic = True
@@ -432,6 +466,98 @@ def gera_docx(dados: DadosRelatorio, categorias: list[Categoria]) -> Document:
     if dados.sugestoes is not None or dados.sugestoes_erro:
         _secao_sugestoes(doc, dados)
     return doc
+
+
+def _pct(parte: int, todo: int) -> float:
+    return 100 * parte / todo if todo else 0.0
+
+
+def _secao_tipos_engajamento(doc: Document, eng: Engajamento) -> None:
+    """Sessões com resposta por tipo (cada sessão em 1 tipo só, soma = total com
+    resposta) e a distribuição das reações. Só o tipo Texto vai pra classificação."""
+    doc.add_heading("Tipos de engajamento", level=1)
+    doc.add_paragraph(
+        "Cada sessão com resposta conta uma vez, no tipo mais informativo que o cidadão usou, nesta ordem: "
+        + ", ".join(eng.por_tipo)
+        + ". Ex.: quem reagiu e também escreveu conta em Texto. Assim os tipos somam o total de sessões com "
+        "resposta, e dá pra descontar os que não interessam (ex.: só reação). Texto inclui clique em botão e "
+        "escolha em menu. Só as sessões de Texto foram classificadas pela LLM; as demais aparecem apenas aqui."
+    )
+    tabela = doc.add_table(rows=1, cols=4)
+    tabela.style = "Light Grid Accent 2"
+    cabecalho = ["Tipo", "Sessões", "% das que receberam o HSM", "% das com resposta"]
+    for cel, texto in zip(tabela.rows[0].cells, cabecalho, strict=True):
+        cel.paragraphs[0].add_run(texto).bold = True
+    for tipo, qtd in [*eng.por_tipo.items(), ("Total", eng.total_engajados)]:
+        linha = tabela.add_row().cells
+        linha[0].text = tipo + (" (classificadas)" if tipo == TIPO_ENGAJAMENTO_TEXTO else "")
+        linha[1].text = str(qtd)
+        linha[2].text = f"{_pct(qtd, eng.total_disparos):.1f}%"
+        linha[3].text = f"{_pct(qtd, eng.total_engajados):.1f}%"
+    doc.add_paragraph()
+
+    if not eng.reacoes:
+        return
+    doc.add_heading("Reações", level=2)
+    total_reacoes = sum(eng.reacoes.values())
+    doc.add_paragraph(
+        f"{total_reacoes} reação(ões) ao todo, em todas as sessões com resposta (uma sessão pode ter mais de uma). "
+        "Variações de tom de pele contam como o mesmo emoji."
+    )
+    mais_comuns = eng.reacoes.most_common(N_REACOES_RELATORIO)
+    resto = total_reacoes - sum(qtd for _, qtd in mais_comuns)
+    tabela = doc.add_table(rows=1, cols=3)
+    tabela.style = "Light Grid Accent 2"
+    for cel, texto in zip(tabela.rows[0].cells, ["Reação", "Qtd.", "% das reações"], strict=True):
+        cel.paragraphs[0].add_run(texto).bold = True
+    for emoji, qtd in [*mais_comuns, *([("outras", resto)] if resto else [])]:
+        linha = tabela.add_row().cells
+        linha[0].text = emoji
+        linha[1].text = str(qtd)
+        linha[2].text = f"{_pct(qtd, total_reacoes):.1f}%"
+    doc.add_paragraph()
+
+
+def _secao_sentimento(doc: Document, classificadas: pd.DataFrame) -> None:
+    """Distribuição do sentimento do cidadão nas conversas classificadas + exemplos
+    (amostra fixa por seed) de cada sentimento."""
+    doc.add_heading("Sentimento", level=1)
+    total = len(classificadas)
+    contagem = classificadas["sentimento"].value_counts()
+    linhas = [(s, int(contagem.get(s, 0))) for s in SENTIMENTOS]
+    sem_sentimento = total - sum(qtd for _, qtd in linhas)
+    if sem_sentimento:
+        linhas.append(("Não identificado", sem_sentimento))
+    tabela = doc.add_table(rows=1, cols=3)
+    tabela.style = "Light Grid Accent 2"
+    for cel, texto in zip(tabela.rows[0].cells, ["Sentimento", "Qtd.", "% das classificadas"], strict=True):
+        cel.paragraphs[0].add_run(texto).bold = True
+    for rotulo, qtd in linhas:
+        linha = tabela.add_row().cells
+        linha[0].text = rotulo
+        linha[1].text = str(qtd)
+        linha[2].text = f"{_pct(qtd, total):.1f}%"
+    doc.add_paragraph()
+
+    for sentimento in SENTIMENTOS:
+        do_sentimento = classificadas[classificadas["sentimento"] == sentimento]
+        if do_sentimento.empty:
+            continue
+        h = doc.add_heading(sentimento, level=2)
+        h.runs[0].font.color.rgb = _COR_ACCENT
+        exemplos = do_sentimento.sample(
+            n=min(N_EXEMPLOS_POR_SENTIMENTO, len(do_sentimento)), random_state=SEED_EXEMPLOS_SENTIMENTO
+        )
+        tabela_ex = doc.add_table(rows=1, cols=3)
+        tabela_ex.style = "Light Grid Accent 2"
+        for cel, texto in zip(tabela_ex.rows[0].cells, ["Conversa", "Resumo", "Categoria(s)"], strict=True):
+            cel.paragraphs[0].add_run(texto).bold = True
+        for r in exemplos.itertuples():
+            linha = tabela_ex.add_row().cells
+            linha[0].text = _trunca(r.conversa_completa)
+            linha[1].text = _trunca(r.resumo_gerado) if r.resumo_gerado else "(sem resumo)"
+            linha[2].text = SEP_CELULA.join(r.categorias)
+        doc.add_paragraph()
 
 
 def _secao_sugestoes(doc: Document, dados: DadosRelatorio) -> None:
@@ -488,6 +614,7 @@ _LEGENDA_CONVERSAS: list[list[str]] = [
     ["categoria", "Categoria(s) atribuída(s) pela LLM, separadas por ponto e vírgula."],
     ["justificativa", "Motivo da classificação dado pela LLM."],
     ["resumo", "Resumo da conversa gerado pela LLM."],
+    ["sentimento", "Tom do cidadão na conversa, segundo a LLM: Positivo, Neutro ou Negativo."],
     ["conversa", "Texto completo da conversa com o cidadão."],
     ["juiz_veredito", "Avaliação do juiz (segunda LLM): CORRETO ou INCORRETO."],
     ["juiz_categoria_esperada", "Categoria(s) que o juiz esperava, quando INCORRETO."],
@@ -526,11 +653,16 @@ def publica_relatorio(
         COL_CONV_CATEGORIA: COR_CABECALHO_FLOW,
         COL_CONV_JUSTIFICATIVA: COR_CABECALHO_FLOW,
         COL_CONV_RESUMO: COR_CABECALHO_FLOW,
+        COL_CONV_SENTIMENTO: COR_CABECALHO_FLOW,
         COL_CONV_CONVERSA: COR_CABECALHO_FLOW,
         COL_CONV_JUIZ_VEREDITO: COR_CABECALHO_FLOW,
         COL_CONV_JUIZ_ESPERADA: COR_CABECALHO_FLOW,
         COL_CONV_JUIZ_JUSTIFICATIVA: COR_CABECALHO_FLOW,
     }
+    aplica_formatacao_condicional_por_valor(sheets, arquivo["id"], COL_CONV_SENTIMENTO, [
+        (SENTIMENTO_POSITIVO, COR_DECISAO_MANTER),
+        (SENTIMENTO_NEGATIVO, COR_DECISAO_EXCLUIR),
+    ], ate_linha=len(conversas) + 1)
     if not dados.rapido:
         n_linhas = len(conversas) + 1
         aplica_lista_suspensa(sheets, arquivo["id"], COL_REVISAO, list(OPCOES_REVISAO), ate_linha=n_linhas)

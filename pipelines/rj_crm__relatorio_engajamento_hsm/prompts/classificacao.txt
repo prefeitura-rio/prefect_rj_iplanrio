@@ -11,10 +11,11 @@ Como decidir:
 - Use os nomes exatamente como estão no catálogo.
 - Se nenhum tema central da fala do cidadão é bem descrito por alguma categoria do catálogo, responda "categorias": ["NENHUMA_DO_CATALOGO"] — não force numa categoria que não descreve bem o assunto e não invente nome novo.
 - Categorias descrevem o CONTEÚDO/INTENÇÃO da conversa, não um julgamento sobre o cidadão.
+- Sentimento: o tom do CIDADÃO na conversa como um todo — "positivo" (agradece, elogia, demonstra satisfação ou entusiasmo), "negativo" (reclama, critica, demonstra irritação, frustração) ou "neutro" (pergunta, pede informação ou responde sem tom claro). Como nas categorias, só a fala do cidadão conta: a cordialidade do agente não torna a conversa positiva. Se o tom mudar ao longo da conversa, use o que predomina no fim.
 - Nunca atribua ao cidadão um detalhe, situação, condição ou confirmação que só apareceu na fala do AGENTE — nem pra escolher a categoria, nem pro resumo. Se o agente presumiu, explicou uma regra geral ou ofereceu uma hipótese, isso não vira fato sobre o cidadão a menos que ELE tenha confirmado com as próprias palavras. Se a mensagem do cidadão for vaga ou incompleta, categoria e resumo devem refletir essa vagueza.
 
 Responda APENAS com um objeto JSON válido, sem texto antes ou depois, no formato exato:
-{"categorias": ["NOME_DA_CATEGORIA", "..."], "justificativa": "1 frase curta explicando por que a conversa se encaixa nessa(s) categoria(s)", "resumo": "1 frase resumindo o que o cidadão pediu/tratou"}
+{"categorias": ["NOME_DA_CATEGORIA", "..."], "justificativa": "1 frase curta explicando por que a conversa se encaixa nessa(s) categoria(s)", "resumo": "1 frase resumindo o que o cidadão pediu/tratou", "sentimento": "positivo | neutro | negativo"}
 
 --- CATÁLOGO DE CATEGORIAS ---
 <<CATALOGO_CATEGORIAS>>
