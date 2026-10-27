@@ -64,6 +64,16 @@ STATUS (coluna `status` do Sheet de solicitações; `link_resultado` aponta o re
   aguardando liberação: N  mais conversas que teto_conversas — ver LIBERAR ABAIXO
   erro: <motivo>           falhou; corrigir a causa e enviar o Form de novo
 
+RELATÓRIO POR HSM (só custom run)
+---------------------------------
+Com fonte_disparos="hsm", o flow NÃO lê nem grava o Sheet de solicitações: processa 1
+solicitação montada dos parâmetros hsm, data_inicio, data_fim e tipo_solicitacao. Os
+disparos e as conversas vêm direto da messaging_events_whatsapp: envios do template
+(Marketing Cloud) e mensagens do Digital Engagement do mesmo telefone até 48h depois de
+cada envio (queries/extrai_conversas_hsm.sql) — não depende da rmi_conversas.chatbot nem da
+planilha de campanhas. No Drive, o nome do HSM faz o papel da campanha (pasta, Catálogo,
+banco de exemplos). O status sai só no log; teto_conversas vale igual.
+
 LIBERAR UMA CAMPANHA ACIMA DO TETO
 ----------------------------------
 Rodar o deployment manualmente (Custom run) com campanhas_liberadas=["<campanha>"].
@@ -94,6 +104,9 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     BIFROST_MODEL,
     CONCORRENCIA_LLM,
     DRIVE_PASTA_RAIZ_ID,
+    FONTE_DISPAROS_CAMPANHA,
+    FONTE_DISPAROS_HSM,
+    FONTES_DISPAROS,
     N_EXEMPLOS_POR_CATEGORIA,
     N_EXEMPLOS_RAG,
     PISO_JUIZ_POR_CATEGORIA,
@@ -103,6 +116,8 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     TETO_CONVERSAS,
     TETO_JUIZ,
     TIPO_MATERIAL_VALIDACAO,
+    TIPO_RELATORIO_RAPIDO,
+    TIPOS_SOLICITACAO,
 )
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.material_validacao import gera_material_validacao
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.relatorio import ParametrosRelatorio, gera_relatorio
@@ -130,6 +145,32 @@ def _processa(solicitacao: Solicitacao, bifrost: BifrostClient, params: Parametr
     return gera_relatorio(solicitacao, bifrost, params)
 
 
+def _solicitacao_hsm(
+    hsm: str | None, data_inicio: str | None, data_fim: str | None, tipo_solicitacao: str, hoje: date
+) -> Solicitacao:
+    """Solicitação do modo fonte_disparos="hsm" (custom run, fora do Sheet)."""
+    if not (hsm or "").strip():
+        raise ValueError('fonte_disparos="hsm" exige o parâmetro hsm (nome do template)')
+    if not data_inicio or not data_fim:
+        raise ValueError('fonte_disparos="hsm" exige data_inicio e data_fim (AAAA-MM-DD)')
+    if tipo_solicitacao not in TIPOS_SOLICITACAO:
+        raise ValueError(f"tipo_solicitacao desconhecido: {tipo_solicitacao!r} (opções: {TIPOS_SOLICITACAO})")
+    inicio, fim = date.fromisoformat(data_inicio), date.fromisoformat(data_fim)
+    if inicio > fim:
+        raise ValueError(f"data_inicio ({inicio}) depois de data_fim ({fim})")
+    return Solicitacao(
+        linha=0,
+        carimbo="",
+        email="",
+        campanha=hsm.strip(),
+        tipo=tipo_solicitacao,
+        data_inicio=inicio,
+        data_fim=fim,
+        data_geracao=hoje,
+        fonte_disparos=FONTE_DISPAROS_HSM,
+    )
+
+
 def _categoria_status(status: str) -> str:
     """'pulado: X' -> 'pulado'; 'concluido — obs' -> 'concluido' (só pro resumo do log)."""
     return status.split(":")[0].split(" —")[0].strip()
@@ -137,6 +178,11 @@ def _categoria_status(status: str) -> str:
 
 @flow(log_prints=True)
 def rj_crm__relatorio_engajamento_hsm(  # noqa: PLR0913 — parâmetros de flow, documentados abaixo
+    fonte_disparos: str = FONTE_DISPAROS_CAMPANHA,
+    hsm: str | None = None,
+    data_inicio: str | None = None,
+    data_fim: str | None = None,
+    tipo_solicitacao: str = TIPO_RELATORIO_RAPIDO,
     campanhas_liberadas: list[str] | None = None,
     data_referencia: str | None = None,
     teto_conversas: int = TETO_CONVERSAS,
@@ -155,6 +201,17 @@ def rj_crm__relatorio_engajamento_hsm(  # noqa: PLR0913 — parâmetros de flow,
     """Processa as solicitações pendentes do Form de relatório de engajamento.
 
     Args:
+        fonte_disparos: "campanha" (padrão) = solicitações do Form, disparos pela
+            campanha na rmi_conversas.chatbot. "hsm" = só custom run: 1 relatório do
+            template em `hsm`, disparos direto dos eventos de WhatsApp, sem Sheet (ver
+            RELATÓRIO POR HSM na docstring do módulo).
+        hsm: Nome do template (ex.: "pgm_divida_ativa_cobranca_v3"). Só com
+            fonte_disparos="hsm".
+        data_inicio: Primeiro dia dos disparos, AAAA-MM-DD. Só com fonte_disparos="hsm".
+        data_fim: Último dia dos disparos, AAAA-MM-DD. Só com fonte_disparos="hsm".
+        tipo_solicitacao: Só com fonte_disparos="hsm": "Material de validação",
+            "Relatório de engajamento" (exige Catálogo validado na pasta do HSM) ou
+            "Relatório rápido (catálogo automático)" (padrão).
         campanhas_liberadas: Campanhas (nome exato do Form) cujas solicitações em
             "aguardando liberação" podem passar do teto_conversas NESTA execução. Ex.:
             ["smas_cadunico_desatualizado"]. Pedidos novos dessas campanhas não são
@@ -206,9 +263,15 @@ def rj_crm__relatorio_engajamento_hsm(  # noqa: PLR0913 — parâmetros de flow,
             "pool (mesmo secretName usado por rj_crm__agentforce_classificacao_llm)."
         )
 
+    if fonte_disparos not in FONTES_DISPAROS:
+        raise ValueError(f"fonte_disparos desconhecida: {fonte_disparos!r} (opções: {FONTES_DISPAROS})")
     hoje = date.fromisoformat(data_referencia) if data_referencia else agora_brt().date()
     run_id = flow_run.id
-    solicitacoes = carrega_solicitacoes(hoje, run_id, campanhas_liberadas or [])
+    por_hsm = fonte_disparos == FONTE_DISPAROS_HSM
+    if por_hsm:
+        solicitacoes = [_solicitacao_hsm(hsm, data_inicio, data_fim, tipo_solicitacao, hoje)]
+    else:
+        solicitacoes = carrega_solicitacoes(hoje, run_id, campanhas_liberadas or [])
     if not solicitacoes:
         print(f"[FLOW] Nenhuma solicitação a processar ({hoje}).")
         return
@@ -240,7 +303,10 @@ def rj_crm__relatorio_engajamento_hsm(  # noqa: PLR0913 — parâmetros de flow,
             print(f"[FLOW] {solicitacao.descricao()} erro inesperado:\n{traceback.format_exc()}")
             inesperados.append(f"{solicitacao.descricao()} {type(exc).__name__}: {exc}")
             resultado = ResultadoSolicitacao(status_erro(f"{type(exc).__name__}: {exc}", run_id))
-        registra_status(solicitacao, resultado.status, resultado.link)
+        if por_hsm:
+            print(f"[FLOW] {solicitacao.descricao()} status: {resultado.status} {resultado.link}".rstrip())
+        else:
+            registra_status(solicitacao, resultado.status, resultado.link)
         resumo[_categoria_status(resultado.status)] += 1
 
     print(f"[FLOW] Concluído: {dict(resumo)}.")
