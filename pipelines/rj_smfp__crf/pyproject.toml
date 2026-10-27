@@ -1,0 +1,11 @@
+[project]
+name = "rj_smfp__crf"
+version = "1.0.0"
+description = "Loads the CRF files of the SMFP (Simples and MEI periods and events) from ZIP files in a GCS bucket to BigQuery."
+dependencies = [
+    "prefect_rj_iplanrio",
+    "duckdb",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

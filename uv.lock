@@ -56,6 +56,7 @@ members = [
     "rj-sme-brutos-gestao-escolar",
     "rj-sme-educacao-basica",
     "rj-smfp-adm-instrumentos-firmados",
+    "rj-smfp-crf",
     "rj-smfp-nota-carioca-bq-to-oracle",
     "rj-smfp-nota-carioca-bq-to-oracle-validation",
     "rj-smfp-nota-carioca-oracle-to-bq",
@@ -4565,6 +4566,21 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
+
+[[package]]
+name = "rj-smfp-crf"
+version = "1.0.0"
+source = { virtual = "pipelines/rj_smfp__crf" }
+dependencies = [
+    { name = "duckdb" },
+    { name = "prefect-rj-iplanrio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "duckdb" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+]
 
 [[package]]
 name = "rj-smfp-nota-carioca-bq-to-oracle"

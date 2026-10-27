@@ -43,6 +43,7 @@
     "rj_sme__brutos_gestao_escolar",
     "rj_sme__educacao_basica",
     "rj_smfp__adm_instrumentos_firmados",
+    "rj_smfp__crf",
     "rj_smfp__nota_carioca_bq_to_oracle",
     "rj_smfp__nota_carioca_bq_to_oracle_validation",
     "rj_smfp__nota_carioca_oracle_to_bq",
