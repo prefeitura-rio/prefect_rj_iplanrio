@@ -9,7 +9,6 @@ PIPELINES = Path(__file__).parent.parent / "pipelines"
 CONVERTED = [
     "rj_cor__precipitacao_alertario_sftp",
     "rj_crm__modelo_qualidade_telefone",
-    "rj_crm__whitelist_whatsapp_relatorio",
     "rj_smfp__nota_carioca_bq_to_oracle",
     "rj_smfp__nota_carioca_bq_to_oracle_validation",
 ]

@@ -7,6 +7,7 @@
     "rj_cor__precipitacao_alertario",
     "rj_cor__precipitacao_alertario_sftp",
     "rj_crm__agentforce_classificacao_llm",
+    "rj_crm__disparo_template",
     "rj_crm__disparos_nao_efetuados",
     "rj_crm__geolocalizacao_residencia",
     "rj_crm__get_history_data",

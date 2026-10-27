@@ -26,7 +26,6 @@ members = [
     "rj-crm-run-dbt",
     "rj-crm-salesforce-api",
     "rj-crm-salesforce-datacloud",
-    "rj-crm-whitelist-whatsapp-relatorio",
     "rj-cvl-arquivo-virtual",
     "rj-cvl-osinfo",
     "rj-iplanrio-bcadastro-chcaepf",
@@ -4173,23 +4172,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "google-cloud-bigquery" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-]
-
-[[package]]
-name = "rj-crm-whitelist-whatsapp-relatorio"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_crm__whitelist_whatsapp_relatorio" }
-dependencies = [
-    { name = "google-cloud-bigquery" },
-    { name = "jinja2" },
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "google-cloud-bigquery" },
-    { name = "jinja2" },
     { name = "prefect-rj-iplanrio", editable = "." },
 ]
 
