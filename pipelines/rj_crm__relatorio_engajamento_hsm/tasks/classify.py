@@ -13,6 +13,9 @@ Few-shot (só no relatório de engajamento): cada conversa vai com os N exemplos
 revisados mais parecidos da MESMA campanha (banco do RAG, ver tasks/rag.py), comparando
 só as falas do cidadão (utils/embedding.py). Banco vazio = zero-shot.
 
+Na mesma chamada, a LLM devolve o sentimento do cidadão (config.SENTIMENTOS); valor
+inválido fica vazio, sem marcar a conversa como falha.
+
 Ordem do prompt: instruções + catálogo (iguais em todas as chamadas) primeiro, o que
 varia (HSM, exemplos, conversa) no fim — aproveita o cache de prefixo do Gemini."""
 
@@ -32,6 +35,7 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     CATEGORIA_SEM_CATALOGO,
     MAX_CHARS_EXEMPLO_RAG,
     MAX_OUTPUT_TOKENS_CONVERSA,
+    SENTIMENTOS,
     SENTINELA_SEM_CATEGORIA,
     SEP_CATEGORIAS,
 )
@@ -50,7 +54,11 @@ class ResultadoClassificacao:
     categorias: tuple[str, ...] = ()
     justificativa: str = ""
     resumo: str = ""
+    sentimento: str = ""  # um de SENTIMENTOS, ou "" se a LLM não devolveu um válido
     falha: str = ""  # motivo, se a classificação falhou (categorias vazio)
+
+
+_SENTIMENTO_POR_CHAVE = {s.lower(): s for s in SENTIMENTOS}
 
 
 def interpreta_resposta(parsed: object, catalogo: CatalogoCategorias) -> ResultadoClassificacao:
@@ -87,6 +95,7 @@ def interpreta_resposta(parsed: object, catalogo: CatalogoCategorias) -> Resulta
         categorias=tuple(validas) if validas else (CATEGORIA_SEM_CATALOGO,),
         justificativa=str(parsed.get("justificativa") or "").strip(),
         resumo=str(parsed.get("resumo") or "").strip(),
+        sentimento=_SENTIMENTO_POR_CHAVE.get(str(parsed.get("sentimento") or "").strip().lower(), ""),
     )
 
 
@@ -154,7 +163,7 @@ def classifica_conversas(
     n_exemplos_rag: int = 0,
 ) -> pd.DataFrame:
     """df_sessoes (saída de extrai_conversas) + colunas `categorias` (lista),
-    `categoria_justificativa`, `resumo_gerado` e `falha_classificacao` ("" se ok)."""
+    `categoria_justificativa`, `resumo_gerado`, `sentimento` e `falha_classificacao` ("" se ok)."""
     blocos = exemplos_por_conversa(df_sessoes, banco, n_exemplos_rag)
     prompts = [
         monta_prompt(catalogo, linha.hsm_texto, bloco, linha.conversa_completa)
@@ -177,12 +186,14 @@ def classifica_conversas(
     df["categorias"] = [list(r.categorias) for r in resultados]
     df["categoria_justificativa"] = [r.justificativa for r in resultados]
     df["resumo_gerado"] = [r.resumo for r in resultados]
+    df["sentimento"] = [r.sentimento for r in resultados]
     df["falha_classificacao"] = [r.falha for r in resultados]
 
     n_falhas = sum(1 for r in resultados if r.falha)
     por_categoria = Counter(c for r in resultados for c in r.categorias)
     print(
         f"[CLASSIFICACAO] {len(resultados) - n_falhas} classificada(s), {n_falhas} falha(s). "
-        f"Por categoria: {dict(por_categoria.most_common())}"
+        f"Por categoria: {dict(por_categoria.most_common())}. "
+        f"Por sentimento: {dict(Counter(r.sentimento or '(vazio)' for r in resultados if not r.falha))}"
     )
     return df
