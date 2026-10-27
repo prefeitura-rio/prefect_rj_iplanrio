@@ -1,0 +1,88 @@
+name: rj_smfp__nota_carioca_carga_completa
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_smfp__nota_carioca_carga_completa-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_smfp__nota_carioca_carga_completa/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-smfp--nota-carioca-carga-completa--staging
+    tags:
+      - environment:staging
+      - severity:low
+      - code_owner:fredzolio
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_smfp__nota_carioca_carga_completa/flow.py:rj_smfp__nota_carioca_carga_completa
+    concurrency_limit:
+      limit: 1
+      collision_strategy: CANCEL_NEW
+    parameters:
+      chain:
+        oracle_to_bq_deployment: rj-smfp--nota-carioca-oracle-to-bq/rj-smfp--nota-carioca-oracle-to-bq--staging
+        bq_to_oracle_deployment: rj-smfp--nota-carioca-bq-to-oracle/rj-smfp--nota-carioca-bq-to-oracle--staging
+    work_pool:
+      name: onprem-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_smfp__nota_carioca_carga_completa -- python -m utils.secrets -- prefect flow-run execute
+        namespace: pipelines-staging
+        secretName: pipelines-infisical
+        image_pull_policy: Always
+        env:
+          INFISICAL_URL: https://infisical.iplan.dados.rio
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: staging
+          INFISICAL_PATHS: /shared
+          GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
+        cpu_request: 100m
+        cpu_limit: 500m
+        memory_request: 256Mi
+        memory_limit: 512Mi
+  - name: rj-smfp--nota-carioca-carga-completa--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:fredzolio
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_smfp__nota_carioca_carga_completa/flow.py:rj_smfp__nota_carioca_carga_completa
+    concurrency_limit:
+      limit: 1
+      collision_strategy: CANCEL_NEW
+    work_pool:
+      name: onprem-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_smfp__nota_carioca_carga_completa -- python -m utils.secrets -- prefect flow-run execute
+        namespace: pipelines-prod
+        secretName: pipelines-infisical
+        image_pull_policy: Always
+        env:
+          INFISICAL_URL: https://infisical.iplan.dados.rio
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: prod
+          INFISICAL_PATHS: /shared
+          GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
+        cpu_request: 100m
+        cpu_limit: 500m
+        memory_request: 256Mi
+        memory_limit: 512Mi

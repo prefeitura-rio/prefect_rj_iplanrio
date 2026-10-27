@@ -46,6 +46,7 @@
     "rj_smfp__crf",
     "rj_smfp__nota_carioca_bq_to_oracle",
     "rj_smfp__nota_carioca_bq_to_oracle_validation",
+    "rj_smfp__nota_carioca_carga_completa",
     "rj_smfp__nota_carioca_oracle_to_bq",
     "rj_smfp__sigma",
     "rj_smi__siscob",

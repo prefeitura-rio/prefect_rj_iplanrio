@@ -1,0 +1,10 @@
+[project]
+name = "rj_smfp__nota_carioca_carga_completa"
+version = "1.0.0"
+description = "Chains the Nota Carioca loads: Oracle to BigQuery first, then BigQuery to Oracle only if the first one completes."
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
