@@ -272,3 +272,55 @@ deployments:
           options:
             columns:
               add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T21:00:00'
+        timezone: America/Sao_Paulo
+        slug: VW_BI_Avaliacao
+        parameters:
+          table:
+            dataset_id: brutos_gestao_escolar
+            table_id: VW_BI_Avaliacao
+          read:
+            query: |
+              SELECT
+                [Ano],
+                [COC],
+                [tpc_nome],
+                [tur_codigo],
+                [Reunião_Pais],
+                [Frequencia],
+                [Freq_Acumulada],
+                [Conceito],
+                [GLB],
+                [MAT],
+                [POR],
+                [CIE],
+                [GEO],
+                [HIS],
+                [EFI],
+                [ING],
+                [ESP],
+                [FRA],
+                [ALE],
+                [LE],
+                [AVI],
+                [APL],
+                [ACE],
+                [TEA],
+                [MUS],
+                [ART],
+                [cur_id],
+                [crp_id],
+                [tur_id],
+                [alu_id],
+                [mtu_id]
+              FROM GestaoEscolar.dbo.VW_BI_Avaliacao
+          dump_mode: append
+          options:
+            chunks:
+              column: Ano
+              width: 1
+              begin: 2026
+              lookback: 1
+            columns:
+              add_timestamp: true
