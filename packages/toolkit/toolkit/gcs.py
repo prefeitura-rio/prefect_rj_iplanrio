@@ -1,9 +1,10 @@
 """Google Cloud Storage operations through the S3-compatible API with HMAC keys."""
 
 from asyncio import Semaphore, gather
-from collections.abc import Coroutine, Iterable, Iterator, Mapping
+from collections.abc import Buffer, Coroutine, Iterable, Iterator, Mapping
+from io import BufferedReader, RawIOBase
 from pathlib import Path
-from typing import final
+from typing import BinaryIO, final, override
 
 from obstore import (
     delete_async,
@@ -17,7 +18,7 @@ from obstore import (
 from obstore import list as list_objects
 from obstore.store import ObjectStore, S3Store
 
-from .constants import DELETE_SPAN, UPLOAD_SPAN
+from .constants import BUFFER_SIZE, DELETE_SPAN, READ_BUFFER_BYTES, UPLOAD_SPAN
 from .settings import GcsSettings
 from .telemetry import DELETED_FILES, UPLOADED_BYTES, UPLOADED_FILES, logger, tracer
 
@@ -128,6 +129,49 @@ class ObjectReader:
     def read(self, size: int = -1, /) -> bytes:
         """Read up to `size` bytes, or all of them with a negative size."""
         return bytes(self.reader.read(None if size < 0 else size))
+
+
+@final
+class ObjectFile(RawIOBase):
+    """A seekable binary file over one object, with ranged reads."""
+
+    def __init__(self, store: ObjectStore, key: str) -> None:
+        """Open the object, with a read-ahead buffer."""
+        super().__init__()
+        self.reader = open_reader(store, key, buffer_size=READ_BUFFER_BYTES)
+
+    @override
+    def readable(self) -> bool:
+        """Return that the file reads."""
+        return True
+
+    @override
+    def seekable(self) -> bool:
+        """Return that the file seeks."""
+        return True
+
+    @override
+    def readinto(self, buffer: Buffer, /) -> int:
+        """Read up to the size of `buffer` bytes into it, and return how many."""
+        view = memoryview(buffer).cast("B")
+        data = bytes(self.reader.read(len(view)))
+        view[: len(data)] = data
+        return len(data)
+
+    @override
+    def seek(self, offset: int, whence: int = 0, /) -> int:
+        """Move to `offset`, from the start, the current place or the end."""
+        return self.reader.seek(offset, whence)
+
+    @override
+    def tell(self) -> int:
+        """Return the current place."""
+        return self.reader.tell()
+
+
+def open_file(store: ObjectStore, key: str) -> BinaryIO:
+    """Open one object as a buffered file, for a reader that takes a file."""
+    return BufferedReader(ObjectFile(store, key), buffer_size=BUFFER_SIZE)
 
 
 def read_chunks(store: ObjectStore, key: str) -> Iterator[bytes]:

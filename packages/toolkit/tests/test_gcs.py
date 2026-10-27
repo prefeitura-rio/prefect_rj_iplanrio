@@ -6,6 +6,7 @@ import pytest
 from httpx2 import put
 from hypothesis import given
 from hypothesis import strategies as st
+from obstore import put as put_object
 from obstore.store import MemoryStore, ObjectStore
 
 from toolkit import gcs
@@ -205,3 +206,21 @@ def test_object_reader_reads_the_bytes_in_chunks() -> None:
     reader = gcs.ObjectReader(store, "ds/a.bin")
 
     assert (reader.read(4), reader.read(4)) == (b"abcd", b"ef")
+
+
+@pytest.mark.parametrize(
+    ("offset", "size", "expected"),
+    [
+        pytest.param(0, 4, b"0123", id="from_the_start"),
+        pytest.param(6, 4, b"6789", id="from_the_middle"),
+        pytest.param(8, 10, b"89", id="past_the_end"),
+    ],
+)
+def test_an_object_file_reads_a_range_after_a_seek(offset, size, expected) -> None:
+    """Seek and read like a file, as a Parquet reader does."""
+    store = MemoryStore()
+    put_object(store, "k", b"0123456789")
+
+    with gcs.open_file(store, "k") as file:
+        file.seek(offset)
+        assert file.read(size) == expected

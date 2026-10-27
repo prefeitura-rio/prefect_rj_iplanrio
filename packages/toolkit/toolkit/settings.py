@@ -83,6 +83,7 @@ class GcsSettings(ToolkitSettings):
     GCS_HMAC_ACCESS_ID: str = ""
     GCS_HMAC_SECRET: SecretStr = SecretStr("")
     GCS_REGION: str = "auto"
+    GCS_TMP_BUCKET: str = ""
     GCS_USE_SSL: bool = True
 
 

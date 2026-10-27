@@ -1,10 +1,12 @@
 from datetime import UTC, date, datetime, timedelta, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from threading import Thread
 
 import pytest
 from deltalake import DeltaTable, write_deltalake
 from deltalake.exceptions import SchemaMismatchError
+from obstore import put
+from obstore.store import MemoryStore
 from pyarrow import Table
 from pyarrow import date32 as arrow_date32
 from pyarrow import int64 as arrow_int64
@@ -19,10 +21,12 @@ from toolkit.delta import (
     build_merge_predicate,
     compact,
     compute_fingerprint,
+    find_chunk_key,
     find_layout_problems,
     inspect_table,
     maintain,
     merge_chunk,
+    open_reader,
     read_known_fingerprints,
     sweep,
     write_chunk,
@@ -757,3 +761,42 @@ def test_a_merge_with_a_null_in_the_key_is_refused(uri, tmp_path, key, rows) -> 
         merge_chunk(uri, folder, MergeSpec(key=key), LedgerEntry("run:1", 1))
 
     assert not DeltaTable.is_deltatable(uri)
+
+
+@pytest.mark.parametrize(
+    ("directory", "root", "expected"),
+    [
+        pytest.param("/mnt/t/abc", "/mnt/t", "abc", id="one_level_under_the_root"),
+        pytest.param("/mnt/t/x/y", "/mnt/t", "x/y", id="two_levels_under_the_root"),
+        pytest.param("/data/z", "/mnt/t", None, id="outside_the_root"),
+        pytest.param("/mnt/t", "/mnt/t", "", id="the_root_itself"),
+    ],
+)
+def test_the_key_of_a_folder_follows_the_temp_root(directory, root, expected) -> None:
+    """Map a folder of the mount to its key in the bucket, or `None` outside it."""
+    assert find_chunk_key(PurePosixPath(directory), PurePosixPath(root)) == expected
+
+
+def test_a_chunk_in_the_temp_bucket_is_read_from_the_bucket(
+    tmp_path, monkeypatch
+) -> None:
+    """Read the Parquet file of a folder from the bucket, with no local file."""
+    source = chunk_files(tmp_path / "source", "w1", [1, 2, 3])
+    store = MemoryStore()
+    put(store, "abc/out.parquet", (source / "out.parquet").read_bytes())
+    monkeypatch.setenv("GCS_TMP_BUCKET", "tmp-bucket")
+    monkeypatch.setattr("toolkit.delta.gettempdir", lambda: str(tmp_path / "mount"))
+    monkeypatch.setattr("toolkit.delta.create_store", lambda bucket: store)
+
+    reader = open_reader(tmp_path / "mount" / "abc", None)
+
+    assert reader.read_all().column("id").to_pylist() == [1, 2, 3]
+
+
+def test_a_folder_outside_the_mount_is_read_locally(tmp_path, monkeypatch) -> None:
+    """Keep the local read when a bucket is set but the folder is off the mount."""
+    local = chunk_files(tmp_path / "local", "w1", [7, 8])
+    monkeypatch.setenv("GCS_TMP_BUCKET", "tmp-bucket")
+    monkeypatch.setattr("toolkit.delta.gettempdir", lambda: str(tmp_path / "mount"))
+
+    assert open_reader(local, None).read_all().column("id").to_pylist() == [7, 8]

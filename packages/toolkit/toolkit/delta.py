@@ -7,8 +7,10 @@ commit. The table lives in a bucket and is read through ADC, or on a local path.
 
 from collections.abc import Collection, Sequence
 from datetime import UTC, date, datetime
-from pathlib import Path
+from itertools import chain
+from pathlib import Path, PurePath
 from re import fullmatch
+from tempfile import gettempdir
 from time import sleep
 from typing import cast
 
@@ -21,6 +23,7 @@ from pyarrow import scalar as arrow_scalar
 from pyarrow import schema as arrow_schema
 from pyarrow import table as arrow_table
 from pyarrow.dataset import Dataset, dataset
+from pyarrow.parquet import ParquetFile
 
 from .chunks import LedgerEntry, hash_summary
 from .constants import (
@@ -36,6 +39,8 @@ from .constants import (
     VACUUM_RETENTION_HOURS,
 )
 from .executor.executor import Executor
+from .gcs import create_store, list_sizes, open_file
+from .settings import GcsSettings
 from .telemetry import logger
 from .types import Fingerprint, MergeReport, MergeSpec, TableReport, WriteFlags
 
@@ -73,9 +78,52 @@ def read_known_fingerprints(uri: str, ids: Sequence[str]) -> dict[str, int]:
     }
 
 
+def find_chunk_key(directory: PurePath, root: PurePath) -> str | None:
+    """Return the key of a folder in the bucket that is mounted at `root`.
+
+    A folder that is not under `root` has no key, so the caller reads it as a local one.
+    """
+    try:
+        relative = directory.relative_to(root)
+    except ValueError:
+        return None
+
+    return "" if relative == Path() else relative.as_posix()
+
+
+def open_chunk(directory: Path) -> RecordBatchReader:
+    """Stream the Parquet files of a folder.
+
+    When `GCS_TMP_BUCKET` names the bucket that is mounted as the temp folder, it reads
+    the files from the bucket with ranged requests, because a read through the mount is
+    slow for the scattered reads of Parquet. Any other folder is read from the disk.
+    """
+    bucket = GcsSettings().GCS_TMP_BUCKET
+    prefix = find_chunk_key(directory, Path(gettempdir())) if bucket else None
+
+    if prefix is not None:
+        store = create_store(bucket)
+        keys = sorted(
+            key for key in list_sizes(store, prefix) if key.endswith(".parquet")
+        )
+        if keys:
+            files = [
+                ParquetFile(open_file(store, key), pre_buffer=True) for key in keys
+            ]
+            return RecordBatchReader.from_batches(
+                files[0].schema_arrow,
+                chain.from_iterable(
+                    file.iter_batches()  # pyright: ignore[reportUnknownMemberType]  # pyarrow types it loosely
+                    for file in files
+                ),
+            )
+
+    return dataset(directory, format="parquet").scanner().to_reader()
+
+
 def open_reader(directory: Path, extracted_at: datetime | None) -> RecordBatchReader:
     """Stream the Parquet files of a folder, with `extracted_at` on each row if set."""
-    reader = dataset(directory, format="parquet").scanner().to_reader()
+    reader = open_chunk(directory)
     if extracted_at is None:
         return reader
 

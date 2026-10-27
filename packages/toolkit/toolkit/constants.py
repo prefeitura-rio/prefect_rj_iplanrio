@@ -176,6 +176,12 @@ COUNT_COLUMN: Final = "count_all"
 COMMIT_ATTEMPTS: Final = 5
 """How many times a Delta write tries again after a commit conflict."""
 
+BUFFER_SIZE: Final = 64 * 1024
+"""The size of the Python buffer over a chunk file in the temp bucket."""
+
+READ_BUFFER_BYTES: Final = 16 * 1024 * 1024
+"""How much of a chunk file in the temp bucket one ranged read buffers."""
+
 VACUUM_RETENTION_HOURS: Final = 168
 """How long replaced Delta files stay, for the queries that still read them."""
 
