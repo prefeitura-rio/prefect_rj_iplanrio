@@ -5,6 +5,7 @@ description = "Coleta dados de precipitação e meteorologia do AlertaRio via ar
 dependencies = [
     "prefect_rj_iplanrio",
     "defusedxml",
+    "duckdb",
 ]
 
 [tool.uv.sources]

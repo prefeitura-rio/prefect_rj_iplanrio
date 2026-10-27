@@ -3,6 +3,7 @@
 from asyncio import to_thread
 
 import polars as pl
+from duckdb import BinderException
 from google.api_core.exceptions import NotFound
 from prefect import task
 from toolkit.telemetry import logger
@@ -23,7 +24,9 @@ async def read_watermark_task(table: str, project: str) -> str | None:
     """Return the latest `data_medicao` of the table, or nothing if it is empty."""
     try:
         frame = await read_bq(render_query(__file__, "get_max_update", table=table), project=project)
-    except NotFound:
+    except (NotFound, BinderException) as error:
+        if isinstance(error, BinderException) and "Not found" not in str(error):
+            raise
         logger.info("The table does not exist yet: table=%s", table)
         return None
 

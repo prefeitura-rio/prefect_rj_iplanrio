@@ -3997,12 +3997,14 @@ version = "1.0.0"
 source = { virtual = "pipelines/rj_cor__precipitacao_alertario_sftp" }
 dependencies = [
     { name = "defusedxml" },
+    { name = "duckdb" },
     { name = "prefect-rj-iplanrio" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "defusedxml" },
+    { name = "duckdb" },
     { name = "prefect-rj-iplanrio", editable = "." },
 ]
 
