@@ -1,3 +1,6 @@
+from os import environ
+from pathlib import Path
+
 import pytest
 from git import Repo
 from pydantic import ValidationError
@@ -147,3 +150,46 @@ def test_regression_the_error_of_a_failed_clone_leaves_out_the_token(tmp_path) -
 
     assert error.value.__cause__ is None
     assert error.value.__suppress_context__
+
+
+PROFILES = """
+iplan:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: service-account
+      keyfile: /tmp/credentials.json
+      project: rj-iplanrio-dev
+    pr:
+      type: bigquery
+      method: service-account-json
+      project: rj-iplanrio-dev
+"""
+
+EXPECTED = PROFILES.replace("      keyfile: /tmp/credentials.json\n", "").replace(
+    "method: service-account\n", "method: oauth\n"
+)
+
+
+def test_the_profile_of_the_project_logs_in_with_the_default_credentials(
+    tmp_path, monkeypatch
+) -> None:
+    """Use a copy of the profile with `oauth` and without the key file."""
+    (tmp_path / "profiles.yml").write_text(PROFILES)
+    monkeypatch.delenv("DBT_PROFILES_DIR", raising=False)
+
+    with dbt.use_profiles(tmp_path):
+        used = (Path(environ["DBT_PROFILES_DIR"]) / "profiles.yml").read_text()
+
+    assert used == EXPECTED
+    assert "keyfile" in (tmp_path / "profiles.yml").read_text()
+    assert "DBT_PROFILES_DIR" not in environ
+
+
+def test_a_project_without_profiles_keeps_the_dbt_folder(tmp_path, monkeypatch) -> None:
+    """Leave `DBT_PROFILES_DIR` alone when the project has no profile."""
+    monkeypatch.delenv("DBT_PROFILES_DIR", raising=False)
+
+    with dbt.use_profiles(tmp_path):
+        assert "DBT_PROFILES_DIR" not in environ

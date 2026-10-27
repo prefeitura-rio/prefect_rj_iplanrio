@@ -4,14 +4,22 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from os import environ
 from pathlib import Path
+from re import sub
 from shlex import split
+from tempfile import TemporaryDirectory
 from typing import ClassVar
 from unittest.mock import patch
 
 from git import GitCommandError, Repo
 from pydantic import BaseModel, ConfigDict
 
-from .constants import COMMAND_WORDS, GITHUB_TOKEN_PLACEHOLDER, SELECTABLE
+from .constants import (
+    COMMAND_WORDS,
+    GITHUB_TOKEN_PLACEHOLDER,
+    KEY_FILE_LINE,
+    SELECTABLE,
+    SERVICE_ACCOUNT_LINE,
+)
 from .settings import GithubSettings
 from .telemetry import logger
 from .types import DbtCommand, NonEmptyString
@@ -110,14 +118,32 @@ def find_project_dir(repository_path: Path) -> Path:
     return queries_path if queries_path.is_dir() else repository_path
 
 
+def use_default_credentials(profiles: str) -> str:
+    """Return the profiles text with every key file login changed to `oauth`.
+
+    A pod has no key file. Workload Identity or `GOOGLE_APPLICATION_CREDENTIALS` gives
+    the default credentials.
+    """
+    profiles = sub(KEY_FILE_LINE, "", profiles)
+
+    return sub(SERVICE_ACCOUNT_LINE, r"\1oauth", profiles)
+
+
 @contextmanager
 def use_profiles(project_dir: Path) -> Generator[None]:
     """Point dbt at the `profiles.yml` of the project, if it has one.
 
     dbt looks in `~/.dbt` otherwise, and it refuses to run if that folder is missing.
+    The profile used is a copy that logs in with the default credentials.
     """
-    if (project_dir / "profiles.yml").exists():
-        with patch.dict(environ, {"DBT_PROFILES_DIR": str(project_dir)}):
-            yield
-    else:
+    source = project_dir / "profiles.yml"
+    if not source.exists():
         yield
+        return
+
+    with TemporaryDirectory(prefix="dbt_profiles_") as directory:
+        (Path(directory) / "profiles.yml").write_text(
+            use_default_credentials(source.read_text())
+        )
+        with patch.dict(environ, {"DBT_PROFILES_DIR": directory}):
+            yield

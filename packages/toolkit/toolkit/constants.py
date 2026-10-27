@@ -243,3 +243,6 @@ ORACLE_EXPRESSIONS: Final = {
     "DB_TYPE_XMLTYPE": ("xml", pa.string()),
 }
 """The Oracle types of a fixed form, with their expression kind and Arrow type."""
+
+KEY_FILE_LINE = r"(?m)^[ \t]*keyfile:.*\n"
+SERVICE_ACCOUNT_LINE = r"(?m)^([ \t]*method: )service-account[ \t]*$"
