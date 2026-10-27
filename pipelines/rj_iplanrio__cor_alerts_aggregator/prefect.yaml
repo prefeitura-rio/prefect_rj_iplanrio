@@ -79,6 +79,6 @@ deployments:
           INFISICAL_ENVIRONMENT: prod
           INFISICAL_PATHS: /rj_iplanrio__cor_alerts_aggregator,/shared
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
-    schedule:
+    schedules:
       - cron: "*/2 * * * *"
         timezone: America/Sao_Paulo
