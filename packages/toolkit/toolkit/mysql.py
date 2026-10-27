@@ -141,23 +141,21 @@ def plan_column(
     plan_column("preco", 246, 10, 2)  # MySQLColumn("preco", 246, decimal128(10, 2))
     ```
     """
-    if type_code in MYSQL_INTEGER_TYPES:
-        arrow: pa.DataType = pa.int64()
-    elif type_code in MYSQL_FLOAT_TYPES:
-        arrow = pa.float64()
-    elif type_code in MYSQL_DECIMAL_TYPES:
-        digits, places = precision or 0, scale or 0
-        arrow = (
-            pa.decimal128(digits, places)
-            if 0 < digits <= DECIMAL_DIGITS and 0 <= places <= digits
-            else pa.string()
-        )
-    elif type_code in MYSQL_DATE_TYPES:
-        arrow = pa.date32()
-    elif type_code in MYSQL_TIMESTAMP_TYPES:
-        arrow = pa.timestamp("us")
-    else:
-        arrow = pa.string()
+    match type_code:
+        case code if code in MYSQL_INTEGER_TYPES:
+            arrow = pa.int64()
+        case code if code in MYSQL_FLOAT_TYPES:
+            arrow = pa.float64()
+        case code if code in MYSQL_DECIMAL_TYPES:
+            digits, places = precision or 0, scale or 0
+            fits = 0 < digits <= DECIMAL_DIGITS and 0 <= places <= digits
+            arrow = pa.decimal128(digits, places) if fits else pa.string()
+        case code if code in MYSQL_DATE_TYPES:
+            arrow = pa.date32()
+        case code if code in MYSQL_TIMESTAMP_TYPES:
+            arrow = pa.timestamp("us")
+        case _:
+            arrow = pa.string()
 
     return MySQLColumn(name, type_code, arrow)
 
@@ -171,25 +169,21 @@ def convert_value(column: MySQLColumn, value: object) -> object:
     if value is None:
         return None
 
-    arrow = column.arrow
-
-    if pa.types.is_date32(arrow):
-        return (
-            value
-            if isinstance(value, date) and not isinstance(value, datetime)
-            else None
-        )
-
-    if pa.types.is_timestamp(arrow):
-        return value if isinstance(value, datetime) else None
-
-    if pa.types.is_decimal(arrow):
-        return value if isinstance(value, Decimal) else None
-
-    if pa.types.is_string(arrow):
-        return value if isinstance(value, str) else str(value)
-
-    return value
+    match column.arrow:
+        case arrow if pa.types.is_date32(arrow):
+            return (
+                value
+                if isinstance(value, date) and not isinstance(value, datetime)
+                else None
+            )
+        case arrow if pa.types.is_timestamp(arrow):
+            return value if isinstance(value, datetime) else None
+        case arrow if pa.types.is_decimal(arrow):
+            return value if isinstance(value, Decimal) else None
+        case arrow if pa.types.is_string(arrow):
+            return value if isinstance(value, str) else str(value)
+        case _:
+            return value
 
 
 def convert(rows: Sequence[Row], columns: Sequence[MySQLColumn]) -> pa.Table:
