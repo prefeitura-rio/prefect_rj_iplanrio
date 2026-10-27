@@ -33,6 +33,7 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     COL_SHEET_PROCESSADO_EM,
     COL_SHEET_STATUS,
     COL_SHEET_TIPO,
+    FONTE_DISPAROS_CAMPANHA,
     FORMATO_PROCESSADO_EM,
     FORMATOS_DATA_HORA_SHEET,
     FORMATOS_DATA_SHEET,
@@ -95,6 +96,9 @@ class Solicitacao:
     # True só pra solicitação que estava "aguardando liberação" e cuja campanha está em
     # `campanhas_liberadas` nesta execução: pode passar do TETO_CONVERSAS.
     liberada: bool = False
+    # FONTE_DISPAROS_CAMPANHA (Form) ou FONTE_DISPAROS_HSM (custom run: `campanha` é o
+    # nome do template) — ver config.py.
+    fonte_disparos: str = FONTE_DISPAROS_CAMPANHA
 
     @property
     def alvo(self) -> _Alvo:
@@ -194,7 +198,7 @@ def status_pulado(motivo: str) -> str:
 
 
 def status_aguardando(n_conversas: int, teto: int) -> str:
-    return f"{PREFIXO_STATUS_AGUARDANDO}: {n_conversas} conversas com resposta no período (teto: {teto})"
+    return f"{PREFIXO_STATUS_AGUARDANDO}: {n_conversas} conversas com resposta em texto no período (teto: {teto})"
 
 
 def aguardando_liberacao(status: str) -> bool:
