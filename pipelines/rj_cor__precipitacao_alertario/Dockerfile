@@ -1,4 +1,4 @@
-FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:latest
+FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:shared
 
 LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_rj_iplanrio
 
@@ -10,4 +10,4 @@ COPY ./packages ./packages/
 
 COPY ./pipelines/rj_cor__precipitacao_alertario ./pipelines/rj_cor__precipitacao_alertario/
 
-RUN uv sync --package rj_cor__precipitacao_alertario
+RUN uv sync --frozen --package rj_cor__precipitacao_alertario --inexact --no-dev --no-cache

@@ -42,7 +42,7 @@ deployments:
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: uv run --package rj_sme__brutos_core_sso -- python -m utils.secrets -- prefect flow-run execute
+        command: uv run --no-sync --package rj_sme__brutos_core_sso -- python -m utils.secrets -- prefect flow-run execute
         namespace: pipelines-staging
         secretName: pipelines-infisical
         image_pull_policy: Always
@@ -70,7 +70,7 @@ deployments:
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: uv run --package rj_sme__brutos_core_sso -- python -m utils.secrets -- prefect flow-run execute
+        command: uv run --no-sync --package rj_sme__brutos_core_sso -- python -m utils.secrets -- prefect flow-run execute
         namespace: pipelines-prod
         secretName: pipelines-infisical
         image_pull_policy: Always

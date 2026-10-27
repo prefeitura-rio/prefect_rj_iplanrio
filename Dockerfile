@@ -1,3 +1,9 @@
+FROM alpine:3.22 AS manifests
+
+COPY ./pipelines /pipelines
+RUN find /pipelines -type f ! -name pyproject.toml -delete \
+    && find /pipelines -type d -empty -delete
+
 FROM alpine:3.22 AS get-instant-client-step
 
 LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_rj_iplanrio
@@ -30,3 +36,12 @@ import duckdb; \
 connection = duckdb.connect(); \
 [connection.execute(f'INSTALL {name}') for name in ('postgres_scanner', 'spatial')]; \
 [connection.execute(f'INSTALL {name} FROM community') for name in ('mssql', 'bigquery', 'gsheets')]"
+
+WORKDIR /opt/prefect/prefect_rj_iplanrio
+
+COPY ./pyproject.toml ./uv.lock ./
+COPY ./src ./src/
+COPY ./packages ./packages/
+COPY --from=manifests /pipelines ./pipelines/
+
+RUN uv sync --frozen --all-packages --no-install-workspace --no-dev --no-cache

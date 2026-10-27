@@ -36,7 +36,7 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_cor__precipitacao_alertario_sftp -- python -m utils.secrets -- prefect flow-run execute
+        command: uv run --no-sync --package rj_cor__precipitacao_alertario_sftp -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
         service_account_name: pipelines
         env:
@@ -58,7 +58,7 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_cor__precipitacao_alertario_sftp -- python -m utils.secrets -- prefect flow-run execute
+        command: uv run --no-sync --package rj_cor__precipitacao_alertario_sftp -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
         service_account_name: pipelines
         env:

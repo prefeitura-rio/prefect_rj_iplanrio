@@ -36,7 +36,7 @@ deployments:
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: uv run --package rj_iplanrio__taxirio -- prefect flow-run execute
+        command: uv run --no-sync --package rj_iplanrio__taxirio -- prefect flow-run execute
         secretName: pipelines-rj-iplanrio--taxirio-staging
         image_pull_policy: Always
   - name: rj-iplanrio--taxirio--prod
@@ -51,7 +51,7 @@ deployments:
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: uv run --package rj_iplanrio__taxirio -- prefect flow-run execute
+        command: uv run --no-sync --package rj_iplanrio__taxirio -- prefect flow-run execute
         secretName: pipelines-rj-iplanrio--taxirio-prod
         image_pull_policy: Always
     schedules:

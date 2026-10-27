@@ -1,4 +1,4 @@
-FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:latest
+FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:shared
 
 LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_rj_iplanrio
 
@@ -10,4 +10,4 @@ COPY ./packages ./packages/
 
 COPY ./pipelines/rj_seconserva__infraestrutura_siscor_obras ./pipelines/rj_seconserva__infraestrutura_siscor_obras/
 
-RUN uv sync --package rj_seconserva__infraestrutura_siscor_obras
+RUN uv sync --frozen --package rj_seconserva__infraestrutura_siscor_obras --inexact --no-dev --no-cache

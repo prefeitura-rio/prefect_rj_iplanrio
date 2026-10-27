@@ -1,4 +1,4 @@
-FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:latest
+FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:shared
 
 LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_rj_iplanrio
 
@@ -10,4 +10,4 @@ COPY ./packages ./packages/
 
 COPY ./pipelines/rj_ssm__run_dbt ./pipelines/rj_ssm__run_dbt/
 
-RUN uv sync --package rj_ssm__run_dbt
+RUN uv sync --frozen --package rj_ssm__run_dbt --inexact --no-dev --no-cache

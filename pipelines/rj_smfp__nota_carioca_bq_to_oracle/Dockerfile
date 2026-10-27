@@ -4,7 +4,7 @@ RUN wget -O /tmp/instantclient-tools.zip "https://download.oracle.com/otn_softwa
     && unzip /tmp/instantclient-tools.zip -d /tmp \
     && rm /tmp/instantclient-tools.zip
 
-FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:latest
+FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:shared
 
 LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_rj_iplanrio
 
@@ -19,4 +19,4 @@ COPY ./packages ./packages/
 
 COPY ./pipelines/rj_smfp__nota_carioca_bq_to_oracle ./pipelines/rj_smfp__nota_carioca_bq_to_oracle/
 
-RUN uv sync --package rj_smfp__nota_carioca_bq_to_oracle
+RUN uv sync --frozen --package rj_smfp__nota_carioca_bq_to_oracle --inexact --no-dev --no-cache

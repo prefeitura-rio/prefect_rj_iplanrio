@@ -3,9 +3,14 @@ on:
   push:
     branches:
       - master
+      - staging/main
     paths:
       - Dockerfile
       - openssl.cnf
+      - pyproject.toml
+      - uv.lock
+      - packages/**/pyproject.toml
+      - pipelines/*/pyproject.toml
   workflow_dispatch:
     inputs:
       pipeline:
@@ -39,9 +44,10 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository }}:latest
+          tags: ghcr.io/${{ github.repository }}:${{ github.ref == 'refs/heads/master' && 'latest' || 'shared' }}
   deploy:
     name: Deploy to ${{ matrix.environment }}
+    if: github.ref == 'refs/heads/master'
     needs: build
     permissions:
       contents: read

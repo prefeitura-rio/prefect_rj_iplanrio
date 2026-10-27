@@ -1,4 +1,4 @@
-FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:latest
+FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:shared
 
 LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_rj_iplanrio
 
@@ -11,4 +11,4 @@ COPY ./packages ./packages/
 COPY ./pipelines/rj_crm__disparo_template ./pipelines/rj_crm__disparo_template/
 COPY ./pipelines/rj_smas__api_datametrica_agendamentos ./pipelines/rj_smas__api_datametrica_agendamentos/
 
-RUN uv sync --package rj_smas__api_datametrica_agendamentos
+RUN uv sync --frozen --package rj_smas__api_datametrica_agendamentos --inexact --no-dev --no-cache

@@ -52,7 +52,7 @@ deployments:
     work_queue_name: default
     job_variables:
       image: "{% raw %}{{ build-image.image_name }}:{{ build-image.tag }}{% endraw %}"
-      command: uv run --package rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }} -- prefect flow-run execute
+      command: uv run --no-sync --package rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }} -- prefect flow-run execute
       secretName: prefect-jobs-secrets-staging
       image_pull_policy: Always
 - name: rj-{{ cookiecutter.secretaria | lower }}--{{ cookiecutter.pipeline }}--prod
@@ -68,7 +68,7 @@ deployments:
     work_queue_name: default
     job_variables:
       image: "{% raw %}{{ build-image.image_name }}:{{ build-image.tag }}{% endraw %}"
-      command: uv run --package rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }} -- prefect flow-run execute
+      command: uv run --no-sync --package rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }} -- prefect flow-run execute
       secretName: prefect-jobs-secrets
       image_pull_policy: Always
   schedules:

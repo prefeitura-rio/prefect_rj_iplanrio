@@ -916,7 +916,7 @@ work_pool:
   work_queue_name: default
   job_variables:
     image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-    command: uv run --package rj_secretaria__pipeline -- python -m utils.secrets -- prefect flow-run execute
+    command: uv run --no-sync --package rj_secretaria__pipeline -- python -m utils.secrets -- prefect flow-run execute
     image_pull_policy: Always
     service_account_name: pipelines
     env:
@@ -933,7 +933,7 @@ work_pool:
   work_queue_name: default
   job_variables:
     image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-    command: uv run --package rj_secretaria__pipeline -- python -m utils.secrets -- prefect flow-run execute
+    command: uv run --no-sync --package rj_secretaria__pipeline -- python -m utils.secrets -- prefect flow-run execute
     namespace: pipelines-staging
     secretName: pipelines-infisical
     image_pull_policy: Always
@@ -1108,7 +1108,7 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_secretaria__pipeline -- prefect flow-run execute
+        command: uv run --no-sync --package rj_secretaria__pipeline -- prefect flow-run execute
         namespace: pipelines-staging
         secretName: pipelines-infisical
         image_pull_policy: Always
@@ -1125,7 +1125,7 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_secretaria__pipeline -- prefect flow-run execute
+        command: uv run --no-sync --package rj_secretaria__pipeline -- prefect flow-run execute
         namespace: pipelines-prod
         secretName: pipelines-infisical
         image_pull_policy: Always
@@ -1241,7 +1241,7 @@ Rode as verificações com `devenv --profile checks tasks run lint:all test:all`
 | Infisical                      | Serviço de segredos. As credenciais chegam ao código por variáveis de ambiente injetadas em runtime.                                                       |
 | tag                            | Metadado `chave:valor` do deployment (`environment`, `severity`, `code_owner`) ([Seção 13](#13-tags-de-pipeline)).                                         |
 | imagem / `Dockerfile`          | Cada pipeline roda em uma imagem Docker construída a partir da imagem base do repositório.                                                                 |
-| workspace e `--package`        | O repositório é um workspace do `uv`. `uv run --package <pipeline>` executa uma pipeline com as dependências dela.                                         |
+| workspace e `--package`        | O repositório é um workspace do `uv`. `uv run --no-sync --package <pipeline>` executa uma pipeline com as dependências dela.                                         |
 | staging e prod                 | Os dois ambientes. Staging não tem agendamento. Prod tem.                                                                                                  |
 | promoção                       | Mover uma função de `helpers.py` para `src/utils/` quando uma segunda pipeline precisa dela ([Seção 11](#11-srcutils--código-compartilhado-do-workspace)). |
 | pipeline de dump               | Pipeline que copia dados de um banco para o BigQuery. O template do repositório cria esse tipo.                                                            |
