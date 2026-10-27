@@ -4,6 +4,7 @@ version = "1.0.0"
 description = "Copies the Nota Carioca DFEN tables from the on-prem Oracle database to BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",
+    "oracledb",
 ]
 
 [tool.uv.sources]

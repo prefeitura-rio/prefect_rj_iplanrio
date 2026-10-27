@@ -4605,11 +4605,15 @@ name = "rj-smfp-nota-carioca-oracle-to-bq"
 version = "1.0.0"
 source = { virtual = "pipelines/rj_smfp__nota_carioca_oracle_to_bq" }
 dependencies = [
+    { name = "oracledb" },
     { name = "prefect-rj-iplanrio" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
+requires-dist = [
+    { name = "oracledb" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+]
 
 [[package]]
 name = "rj-smfp-sigma"
