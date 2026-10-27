@@ -12,7 +12,7 @@ from prefect.cache_policies import NO_CACHE
 from prefect.logging import get_logger
 from prefect.runtime import flow_run
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import DBT_POLL_SECONDS
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import BRASILIA, DBT_POLL_SECONDS
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import (
     bigquery,
     dbt,
@@ -126,7 +126,7 @@ def plan_structure_task(load: Load, table_id: str, plan: LoadPlan) -> StructureP
     indexes = ", ".join(index.name for index in structure.layout.indexes) or "nenhum"
     logger.info(
         f"{table_id}: tablespace {structure.layout.tablespace or '(padrão do schema)'}, "
-        + f"{describe_partitioning(structure.layout.partitioning)}, {structure.layout.inmemory or 'NO INMEMORY'}; "
+        + f"{describe_partitioning(structure.layout.partitioning)}, In-Memory só na janela de meses, após a carga; "
         + f"índices criados após a carga: {indexes}"
     )
     if structure.skipped_indexes:
@@ -338,17 +338,63 @@ def record_load_task(
 
 
 @task(cache_policy=NO_CACHE)
-def start_inmemory_population_task(table: str, structure: StructurePlan, load: Load) -> None:
-    """Ask Oracle to populate the physical table in the In-Memory.
+def disable_inmemory_task(table: str) -> str:
+    """Take the table that will get the load out of the In-Memory, before it is emptied.
 
-    It runs only if the table uses In-Memory and the wait is on.
+    Return the table.
     """
-    if structure.layout.inmemory is None or load.inmemory_wait_minutes <= 0:
+    inmemory.disable(config=oracle.read_oracle_config(), table=table, report=logger.info)
+    logger.info(f"{table}: fora do In-Memory até o fim da carga")
+
+    return table
+
+
+@task(cache_policy=NO_CACHE)
+def release_inmemory_task(plans: list[slots.SlotPlan], load: Load) -> list[str]:
+    """Take the tables that left use in the swap out of the In-Memory.
+
+    Return those that could not be freed. It waits for
+    `load.inmemory_release_delay_seconds`, so that the queries on the old table end.
+    A failure is only a warning: the data is published already, and the next load takes
+    the table out of the In-Memory before it empties it.
+    """
+    tables = [plan.active for plan in plans if plan.active]
+    if not tables:
+        logger.info("Nenhuma tabela saiu de uso nesta troca; nada a liberar no In-Memory.")
+        return []
+    logger.info(f"Liberação do In-Memory de {tables} em {load.inmemory_release_delay_seconds}s, depois da troca")
+    time.sleep(max(load.inmemory_release_delay_seconds, 0))
+    config = oracle.read_oracle_config()
+    failed = []
+    for table in tables:
+        try:
+            inmemory.disable(config=config, table=table, report=logger.info)
+            logger.info(f"{table}: fora do In-Memory (saiu de uso na troca)")
+        except Exception as error:  # the load is published; the next load frees it again
+            failed.append(table)
+            logger.warning(f"{table}: In-Memory não liberado ({type(error).__name__}: {error})")
+
+    return failed
+
+
+@task(cache_policy=NO_CACHE)
+def enable_inmemory_task(table: str, structure: StructurePlan, load: Load) -> None:
+    """Put the window of the table in the In-Memory, and ask Oracle to populate it.
+
+    The window is the current month and the `load.inmemory_window_months` before it, and
+    the future partitions. Oracle populates it alone with `PRIORITY HIGH`, and the
+    request only brings the start forward. It runs only if the wait is on.
+    """
+    config = oracle.read_oracle_config()
+    start = inmemory.window_start(datetime.now(BRASILIA).date(), load.inmemory_window_months)
+    chosen = inmemory.enable_window(config=config, table=table, start=start, report=logger.info)
+    logger.info(
+        f"{table}: In-Memory nas partições a partir de {start:%m/%Y} ({len(chosen)}): {', '.join(chosen) or 'nenhuma'}"
+    )
+    if load.inmemory_wait_minutes <= 0:
         return
     errors = inmemory.start_population(
-        config=oracle.read_oracle_config(),
-        table=table,
-        partitioned=structure.layout.partitioning is not None,
+        config=config, table=table, partitioned=structure.layout.partitioning is not None
     )
     logger.info(
         f"{table}: população do In-Memory iniciada" if not errors else f"{table}: população não iniciada: {errors}"

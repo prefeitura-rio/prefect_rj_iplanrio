@@ -34,6 +34,32 @@ deployments:
     concurrency_limit:
       limit: 1
       collision_strategy: ENQUEUE
+    parameters:
+      source:
+        dataset_id: nota_carioca_staging
+        table_ids:
+          - MVT_NOTAS_NACIONAIS_EXIGIVEIS
+          - MVT_NOTAS_NACIONAIS_EXIGIVEIS_DETALHES
+          - MVT_NOTAS_NACIONAIS_DETALHES
+      load:
+        sessions: 4
+        index_parallel_degree: 8
+        raw_text_encoding: hex
+      dbt:
+        enabled: true
+        parameters:
+          command: build
+          select: >-
+            mart_nota_carioca_staging__notas_nacionais_exigiveis
+            mart_nota_carioca_staging__notas_nacionais_exigiveis_detalhes
+            mart_nota_carioca_staging__notas_nacionais_detalhes
+          send_discord_report: false
+          github_repo: https://github.com/prefeitura-rio/queries-rj-iplanrio.git
+          bigquery_project: rj-iplanrio
+          target: prod
+          gcs_buckets:
+            prod: rj-iplanrio_dbt
+            dev: rj-iplanrio-dev_dbt
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -49,6 +75,10 @@ deployments:
           INFISICAL_ENVIRONMENT: staging
           INFISICAL_PATHS: /rj_smfp__nota_carioca_bq_to_oracle,/shared
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
+        cpu_request: "4"
+        cpu_limit: "6"
+        memory_request: 4Gi
+        memory_limit: 6Gi
   - name: rj-smfp--nota-carioca-bq-to-oracle--prod
     tags:
       - environment:prod
@@ -69,6 +99,7 @@ deployments:
       load:
         sessions: 4
         index_parallel_degree: 8
+        raw_text_encoding: hex
       dbt:
         enabled: true
         parameters:

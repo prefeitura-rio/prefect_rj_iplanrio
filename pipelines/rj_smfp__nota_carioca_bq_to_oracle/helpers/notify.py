@@ -28,6 +28,7 @@ from typing import Literal, final
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import (
     DiscordStatusMessage,
+    Environment,
     Warner,
     never_raises,
     resolve_webhook,
@@ -58,7 +59,8 @@ class NotifierConfig:
     for. `run_dbt` says whether dbt runs before, and `mode` is `full` or
     `synonyms_only`. `enabled=False` (`discord_notifications=false`) turns Discord off.
     `heartbeat_seconds` is the interval of the heartbeat that publishes the message
-    again, and `0` or less turns it off.
+    again, and `0` or less turns it off. `environment` is the one of the deployment:
+    staging marks the messages with `🧪 STAGING · `.
     """
 
     dataset_id: str
@@ -71,6 +73,7 @@ class NotifierConfig:
     enabled: bool
     heartbeat_seconds: float = DEFAULT_HEARTBEAT_SECONDS
     cancellations: tuple[type[BaseException], ...] = ()
+    environment: Environment = Environment.PROD
 
 
 def is_cancellation(error: BaseException, extra: tuple[type[BaseException], ...] = ()) -> bool:
@@ -116,6 +119,7 @@ class LoadNotifier:
             sessions=config.sessions,
             elapsed_seconds=0.0,
             updated_at=datetime.now(UTC),
+            staging=config.environment is Environment.STAGING,
         )
 
     @classmethod

@@ -10,13 +10,16 @@ from prefect.settings import PREFECT_API_URL, PREFECT_UI_URL
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.cleanup import raise_failures
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.dbt import should_run_dbt
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import current_environment
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_format import flow_run_url
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify import LoadNotifier, NotifierConfig
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.stages import Step, TableStep
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
     create_oracle_indexes_task,
     delete_gcs_files_task,
+    disable_inmemory_task,
     drop_oracle_indexes_task,
+    enable_inmemory_task,
     ensure_oracle_table_task,
     export_snapshot_task,
     gather_oracle_stats_task,
@@ -27,9 +30,9 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
     plan_structure_task,
     record_load_task,
     refresh_synonyms_task,
+    release_inmemory_task,
     resolve_slots_task,
     run_dbt_task,
-    start_inmemory_population_task,
     swap_synonyms_task,
     truncate_oracle_table_task,
     validate_row_count_task,
@@ -83,6 +86,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(
             mode=mode,
             enabled=discord_notifications,
             cancellations=(TerminationSignal,),
+            environment=current_environment(),
         )
     )
     with notifier.guard():
@@ -117,7 +121,9 @@ def rj_smfp__nota_carioca_bq_to_oracle(
             oracle_table = ensure_oracle_table_task(
                 source=source, table_id=table_id, table=slots.inactive, plan=plan, structure=structure
             )
-            empty_table = truncate_oracle_table_task(table=drop_oracle_indexes_task(table=oracle_table))
+            empty_table = truncate_oracle_table_task(
+                table=disable_inmemory_task(table=drop_oracle_indexes_task(table=oracle_table))
+            )
             notifier.table_step(table_id, TableStep.LOAD)
             loaded_rows = load_into_oracle_task(
                 table=empty_table, plan=plan, files=exported.files, source=source, load=load
@@ -147,11 +153,11 @@ def rj_smfp__nota_carioca_bq_to_oracle(
                 )
             )
             notifier.table_step(table_id, TableStep.INMEMORY)
-            start_inmemory_population_task(table=granted_table, structure=structure, load=load)
+            enable_inmemory_task(table=granted_table, structure=structure, load=load)
             notifier.table_done(table_id, validated_rows)
 
         notifier.enter(Step.INMEMORY_WAIT)
         populated = wait_inmemory_task(plans=loaded, load=load)
         notifier.enter(Step.SWAP)
-        swap_synonyms_task(plans=populated)
+        release_inmemory_task(plans=populated, load=load, wait_for=[swap_synonyms_task(plans=populated)])
         raise_failures(cleanups)

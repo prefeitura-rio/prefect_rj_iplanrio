@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_format import mark_staging
+
 COLOR_RUNNING = 3447003
 
 
@@ -160,7 +162,8 @@ class RunView:
     `tables` the blocks of each table, and `facts` the fields that belong to the flow.
     `eta_seconds` is the time to the end, and `None` hides the forecast. `error` and
     `failed_stage` describe a failure. `validation` is the comparison of counts for each
-    table, shown in the final message, and empty hides it.
+    table, shown in the final message, and empty hides it. `staging` is true in the
+    staging deployment: the title and the final message get the mark `🧪 STAGING · `.
     """
 
     flow_label: str
@@ -179,11 +182,12 @@ class RunView:
     error: str | None = None
     failed_stage: str | None = None
     validation: tuple[ValidationLine, ...] = ()
+    staging: bool = False
 
     @property
     def title(self) -> str:
-        """Título do embed: fluxo e dataset."""
-        return f"{self.flow_label} · {self.dataset_id}"
+        """Give the title of the embed: the flow and the dataset, marked in staging."""
+        return mark_staging(f"{self.flow_label} · {self.dataset_id}", self.staging)
 
 
 STATUS_LINE = {

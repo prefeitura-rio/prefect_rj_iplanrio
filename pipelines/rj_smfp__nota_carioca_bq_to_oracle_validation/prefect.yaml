@@ -31,6 +31,11 @@ deployments:
       - code_owner:fredzolio
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_oracle_validation/flow.py:rj_smfp__nota_carioca_bq_to_oracle_validation
+    parameters:
+      source:
+        dataset_id: nota_carioca_staging
+      options:
+        raw_text_encoding: hex
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -56,6 +61,8 @@ deployments:
     parameters:
       source:
         dataset_id: nota_carioca
+      options:
+        raw_text_encoding: hex
     work_pool:
       name: onprem-pool
       work_queue_name: default

@@ -25,6 +25,7 @@ def partitioning_clause(partitioning: Partitioning) -> str:
     bound = "VALUES LESS THAN" if partitioning.kind == "RANGE" else "VALUES"
     partitions = ",\n".join(
         f"  PARTITION {quote(partition.name)} {bound} ({partition.high_value})"
+        + (f" {partition.storage.clause}" if partition.storage else "")
         + (f" TABLESPACE {quote(partition.tablespace)}" if partition.tablespace else "")
         for partition in partitioning.partitions
     )

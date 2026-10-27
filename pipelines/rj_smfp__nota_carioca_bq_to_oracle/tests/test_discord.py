@@ -10,6 +10,8 @@ import pytest
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import discord as discord_module
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import (
     DiscordStatusMessage,
+    Environment,
+    environment_from_deployment,
     never_raises,
     resolve_webhook,
     webhook_from_env,
@@ -574,3 +576,61 @@ def test_a_missing_variable_disables_notifications(monkeypatch: pytest.MonkeyPat
 
     # When the webhook is resolved, Then there is none
     assert resolve_webhook() is None
+
+
+def embed_of(payload: dict[str, object]) -> dict[str, object]:
+    """Return the only embed of a payload."""
+    embeds = payload["embeds"]
+    assert isinstance(embeds, list)
+    assert len(embeds) == 1
+    embed = embeds[0]
+    assert isinstance(embed, dict)
+
+    return embed
+
+
+@pytest.mark.parametrize(
+    ("deployment_name", "expected"),
+    [
+        pytest.param("rj-smfp--nota-carioca-oracle-to-bq--staging", Environment.STAGING, id="a_staging_deployment"),
+        pytest.param("rj-smfp--nota-carioca-oracle-to-bq--prod", Environment.PROD, id="a_prod_deployment"),
+        pytest.param("rj-smfp--nota-carioca-oracle-to-bq--staging-copy", Environment.PROD, id="staging_in_the_middle"),
+        pytest.param("", Environment.PROD, id="an_empty_name"),
+        pytest.param(None, Environment.PROD, id="a_run_with_no_deployment"),
+    ],
+)
+def test_environment_is_staging_only_when_the_deployment_name_ends_with_staging(
+    deployment_name: str | None, expected: Environment
+) -> None:
+    """Take only a name that ends in `--staging` as staging."""
+    assert environment_from_deployment(deployment_name) is expected
+
+
+def test_staging_marks_the_embed_title_and_changes_nothing_else() -> None:
+    """Put the mark in front of the title, and leave the rest of the embed as it is."""
+    prod = embed_of(build_payload(view()))
+    staging = embed_of(build_payload(view(staging=True)))
+
+    assert prod["title"] == "Oracle → BigQuery · brutos_nota_fiscal"
+    assert staging["title"] == "🧪 STAGING · Oracle → BigQuery · brutos_nota_fiscal"
+    assert {key: value for key, value in staging.items() if key != "title"} == {
+        key: value for key, value in prod.items() if key != "title"
+    }
+
+
+@pytest.mark.parametrize(
+    ("status", "extra"),
+    [
+        pytest.param(RunStatus.SUCCESS, {}, id="success"),
+        pytest.param(RunStatus.FAILED, {"failed_stage": "Extração", "error": "boom"}, id="failure"),
+        pytest.param(RunStatus.CANCELLED, {"failed_stage": "Carga"}, id="cancel"),
+    ],
+)
+def test_staging_prefixes_every_final_announcement_line(status: RunStatus, extra: dict[str, object]) -> None:
+    """Put the mark before the final line in each final state, with mentions off."""
+    prod = build_announcement(view(status, **extra))
+    staging = build_announcement(view(status, staging=True, **extra))
+
+    assert "STAGING" not in str(prod["content"])
+    assert staging["content"] == f"🧪 STAGING · {prod['content']}"
+    assert staging["allowed_mentions"] == {"parse": []}

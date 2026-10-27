@@ -31,6 +31,10 @@ STRING_LITERAL_PATTERN = compile_pattern(r"'(?:[^']|'')*'")
 USABLE_INDEX_STATUSES = ("VALID", "N/A")
 
 
+# MAXEXTENTS UNLIMITED, as the dictionary gives it.
+UNLIMITED_EXTENTS = 2147483645
+
+
 # Valores de all_tables e all_part_tables aceitos no INMEMORY; o texto entra no DDL como
 # está.
 INMEMORY_PRIORITIES = ("NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL")
@@ -53,10 +57,50 @@ INMEMORY_DISTRIBUTES = ("AUTO", "BY ROWID RANGE", "BY PARTITION", "BY SUBPARTITI
 INMEMORY_DUPLICATES = ("NO DUPLICATE", "DUPLICATE", "DUPLICATE ALL")
 
 
-# Toda tabela carregada vai para o In-Memory, com as opções das MVT_ originais. A
-# cláusula tem todas as opções, como o dicionário as devolve; sem DISTRIBUTE e
-# DUPLICATE, a tabela criada seria vista como divergente e recriada.
+# A tabela carregada nasce NO INMEMORY. Depois da carga, só as partições da janela
+# recebem esta cláusula, com as opções das MVT_ originais (helpers/inmemory.py), e a
+# tabela sai do In-Memory inteira quando deixa de ser a tabela em uso.
 LOADED_TABLE_INMEMORY = "INMEMORY PRIORITY HIGH MEMCOMPRESS FOR QUERY HIGH DISTRIBUTE AUTO NO DUPLICATE"
+
+
+@dataclass(frozen=True)
+class PartitionStorage:
+    """The segment creation and `STORAGE` of a partition, as in `all_tab_partitions`.
+
+    A parameter is `None` when the partition does not declare it: a partition with a
+    deferred segment and no `STORAGE`. `segment_created` is true if the segment exists
+    (`SEGMENT CREATION IMMEDIATE`, or a partition with rows). `max_extents` is
+    `UNLIMITED_EXTENTS` for `MAXEXTENTS UNLIMITED`.
+    """
+
+    segment_created: bool
+    initial: int | None = None
+    next: int | None = None
+    min_extents: int | None = None
+    max_extents: int | None = None
+    pct_increase: int | None = None
+
+    @property
+    def parameters(self) -> tuple[int | None, ...]:
+        """Give the five `STORAGE` parameters, in the order of `names` of `clause`."""
+        return (self.initial, self.next, self.min_extents, self.max_extents, self.pct_increase)
+
+    @property
+    def declared(self) -> bool:
+        """Tell whether the partition declares any `STORAGE` parameter."""
+        return any(value is not None for value in self.parameters)
+
+    @property
+    def clause(self) -> str:
+        """Give the `SEGMENT CREATION` and `STORAGE` of the partition for the DDL."""
+        text = f"SEGMENT CREATION {'IMMEDIATE' if self.segment_created else 'DEFERRED'}"
+        names = ("INITIAL", "NEXT", "MINEXTENTS", "MAXEXTENTS", "PCTINCREASE")
+        options = [
+            f"{name} {'UNLIMITED' if name == 'MAXEXTENTS' and value == UNLIMITED_EXTENTS else value}"
+            for name, value in zip(names, self.parameters, strict=True)
+            if value is not None
+        ]
+        return f"{text} STORAGE ({' '.join(options)})" if options else text
 
 
 @dataclass(frozen=True)
@@ -64,12 +108,13 @@ class TablePartition:
     """A partition declared on the table, as in `all_tab_partitions`.
 
     `high_value` is the limit of the partition in the text of the dictionary, such as
-    `TO_DATE(' 2026-01-01 00:00:00', ...)`.
+    `TO_DATE(' 2026-01-01 00:00:00', ...)`. `storage` is `None` if it was not read.
     """
 
     name: str
     high_value: str
     tablespace: str | None
+    storage: PartitionStorage | None = None
 
     @property
     def description(self) -> str:

@@ -15,17 +15,20 @@ is a secret and never goes to the log.
 
 import time
 from collections.abc import Callable, Mapping
+from enum import StrEnum
 from functools import wraps
 from logging import INFO, WARNING, getLogger
 from threading import Lock
-from typing import final
+from typing import cast, final
 
 import httpx2
+from prefect.runtime import deployment
 from toolkit.telemetry import logger
 
 from utils.records import dig, read_json
 from utils.settings import NoticeSettings
 
+STAGING_DEPLOYMENT_SUFFIX = "--staging"
 WEBHOOK_ENV = "DISCORD_WEBHOOK_URL"
 TIMEOUT_SECONDS = 10.0
 DEFAULT_MIN_INTERVAL_SECONDS = 20.0
@@ -93,6 +96,35 @@ def never_raises[**P](func: Callable[P, None]) -> Callable[P, None]:
             warn(f"Notificação do Discord falhou em {func.__name__}: {type(error).__name__}: {error}")
 
     return wrapper
+
+
+class Environment(StrEnum):
+    """The environment of the running deployment, which marks the messages."""
+
+    PROD = "prod"
+    STAGING = "staging"
+
+
+def environment_from_deployment(name: str | None) -> Environment:
+    """Give the environment of a deployment by its name.
+
+    A name that ends in `--staging` is staging. Any other name, and a run with no
+    deployment, is production.
+    """
+    return Environment.STAGING if name and name.endswith(STAGING_DEPLOYMENT_SUFFIX) else Environment.PROD
+
+
+def current_environment() -> Environment:
+    """Give the environment of the deployment of this flow run, and log it.
+
+    A local run, with no deployment, is production. The webhook of each environment is
+    in the secrets of that environment, so only the mark depends on this.
+    """
+    name = cast("str | None", deployment.name)
+    environment = environment_from_deployment(name)
+    info(f"Ambiente das notificações do Discord: {environment} (deployment {name or 'nenhum'}).")
+
+    return environment
 
 
 def webhook_from_env() -> str | None:

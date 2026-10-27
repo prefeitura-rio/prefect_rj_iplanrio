@@ -13,6 +13,16 @@ ELLIPSIS = "…"
 SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600
 KILOBYTE = 1024
+STAGING_MARK = "🧪 STAGING · "
+
+
+def mark_staging(text: str, staging: bool) -> str:
+    """Mark the text as coming from staging, so that nobody takes it for production.
+
+    `text` is the title of the embed or a single line. In staging, the text gets
+    `🧪 STAGING · ` before it, and in production it stays as it came.
+    """
+    return f"{STAGING_MARK}{text}" if staging else text
 
 
 def clip(text: str, limit: int) -> str:

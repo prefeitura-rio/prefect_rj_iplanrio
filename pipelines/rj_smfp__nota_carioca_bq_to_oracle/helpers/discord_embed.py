@@ -18,6 +18,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_format import 
     format_percent,
     format_short_duration,
     format_stamp,
+    mark_staging,
     progress_bar,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import (
@@ -235,4 +236,4 @@ def build_announcement(view: RunView) -> dict[str, object]:
             text = f"⚪ {name} cancelado na etapa {stage} após {took}{link}"
         case RunStatus.RUNNING:
             raise ValueError("A mensagem final só existe depois do término da execução.")
-    return {"content": clip(text, CONTENT_LIMIT), "allowed_mentions": dict(NO_MENTIONS)}
+    return {"content": clip(mark_staging(text, view.staging), CONTENT_LIMIT), "allowed_mentions": dict(NO_MENTIONS)}

@@ -1,15 +1,36 @@
-"""Populate the In-Memory of the table just loaded, so the swap finds data in memory."""
+"""The In-Memory of the loaded tables.
 
-from collections.abc import Callable
+The physical table is born `NO INMEMORY`. After the load, only the partitions of the
+window (the current month, the `months` before it and the future ones) get
+`LOADED_TABLE_INMEMORY` and are populated before the swap. The rest of the history
+stays on disk. After the swap, the table that left use goes back to `NO INMEMORY` and
+frees its memory.
+
+The `ALTER` follows the job of the DBA (`DFEN.PRC_ROLL_IMCS_NACIONAL`): a short
+`DDL_LOCK_TIMEOUT` for each attempt, and a new attempt with a wait after `ORA-00054`. It
+never kills a session.
+"""
+
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import date
 from time import monotonic, sleep
+from typing import cast
 
 import oracledb
 
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import (
+    DDL_ATTEMPTS,
+    DDL_LOCK_TIMEOUT_SECONDS,
+    DDL_RETRY_SECONDS,
+    RESOURCE_BUSY,
+    UPPER_BOUND_PATTERN,
+)
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import OracleConfig, connect
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_ddl import assert_managed_existing_table
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_query import QUERIES_ANCHOR, to_int
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_read import fetch_rows
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import LOADED_TABLE_INMEMORY
 from utils.utils import render_query
 
 
@@ -139,3 +160,141 @@ def wait_for_population(
                 )
                 return False
             sleep(poll_seconds)
+
+
+def window_start(today: date, months: int) -> date:
+    """Return the first day of the In-Memory window: `months` before `today`'s month.
+
+    `months` is how many months before the current one stay in the In-Memory, and `0`
+    keeps only the current month. Raise `ValueError` if it is negative.
+    """
+    if months < 0:
+        raise ValueError(f"A janela de In-Memory não pode ser negativa: {months}")
+    index = today.year * 12 + today.month - 1 - months
+
+    return date(index // 12, index % 12 + 1, 1)
+
+
+def partition_upper_bound(high_value: str) -> date | None:
+    """Read the date of the upper bound of a `RANGE` partition.
+
+    Return nothing for `MAXVALUE` or a bound that is not a date.
+    """
+    found = UPPER_BOUND_PATTERN.search(high_value)
+
+    return date(int(found[1]), int(found[2]), int(found[3])) if found else None
+
+
+def in_window(high_value: str, start: date) -> bool:
+    """Tell whether a partition has data from `start` on, so it enters the In-Memory.
+
+    A partition whose bound is not a date (`MAXVALUE`, a key that is not a time) enters,
+    so that data that may be recent never stays out of the In-Memory.
+    """
+    bound = partition_upper_bound(high_value)
+
+    return bound is None or bound > start
+
+
+def oracle_code(error: oracledb.DatabaseError) -> int | None:
+    """Return the number of an Oracle error, such as 54 for `ORA-00054`, if any."""
+    return cast("int | None", getattr(cast("object", error.args[0]), "code", None))
+
+
+def execute_ddl(
+    cursor: oracledb.Cursor,
+    statement: str,
+    report: Callable[[str], None],
+    attempts: int = DDL_ATTEMPTS,
+    retry_seconds: float = DDL_RETRY_SECONDS,
+) -> None:
+    """Run a `DDL`, and try again while the object is busy (`ORA-00054`).
+
+    Each attempt waits for the lock only for the `DDL_LOCK_TIMEOUT` of the session.
+    Between attempts the queue is free and the application goes on. `report` gets the
+    messages of a new attempt. Raise `oracledb.DatabaseError` for any other error, or
+    when the attempts end.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            cursor.execute(statement)
+        except oracledb.DatabaseError as error:
+            if oracle_code(error) != RESOURCE_BUSY or attempt == attempts:
+                raise
+            report(
+                f"Objeto ocupado (ORA-00054), tentativa {attempt}/{attempts}; nova tentativa em {retry_seconds:.0f}s"
+            )
+            sleep(retry_seconds)
+        else:
+            return
+
+
+def prepare_ddl(cursor: oracledb.Cursor, schema: str, table: str) -> None:
+    """Check that the table belongs to the pipeline and set the lock timeout."""
+    assert_managed_existing_table(cursor, schema, table)
+    cursor.execute(render_query(QUERIES_ANCHOR, "set_ddl_lock_timeout", seconds=DDL_LOCK_TIMEOUT_SECONDS))
+
+
+def disable(config: OracleConfig, table: str, report: Callable[[str], None]) -> None:
+    """Take the whole table out of the In-Memory, the table and all its partitions.
+
+    It frees the memory of the table. `report` gets the messages of a new attempt.
+    Raise `PermissionError` if the table does not exist or does not belong to the
+    pipeline, and `oracledb.DatabaseError` if the `ALTER` fails.
+    """
+    with connect(config) as connection, connection.cursor() as cursor:
+        prepare_ddl(cursor, config.schema, table)
+        statement = render_query(
+            QUERIES_ANCHOR, "alter_table_inmemory", schema=config.schema, table=table, clause="NO INMEMORY"
+        )
+        execute_ddl(cursor, statement, report)
+
+
+def select_window(partitions: Sequence[dict[str, object]], start: date) -> list[str]:
+    """Pick, among the partitions of the table, those that stay in the In-Memory.
+
+    The rows are from `all_tab_partitions`, with `partition_name` and `high_value`.
+    Return the names in the order received.
+    """
+    return [str(row["partition_name"]) for row in partitions if in_window(str(row["high_value"]), start)]
+
+
+def enable_window(
+    config: OracleConfig,
+    table: str,
+    start: date,
+    report: Callable[[str], None],
+    clause: str = LOADED_TABLE_INMEMORY,
+) -> list[str]:
+    """Put only the partitions of the window in the In-Memory, and leave the rest out.
+
+    A table with no partitions goes in whole. `table` is the physical table, just
+    loaded and not yet in use, and `clause` is the `INMEMORY` clause of the partitions.
+    Return the partitions that went in, or the table itself if it has no partitions.
+    Raise `PermissionError` if the table does not exist or does not belong to the
+    pipeline, and `oracledb.DatabaseError` if an `ALTER` fails.
+    """
+    binds = {"owner": config.schema, "table_name": table}
+    with connect(config) as connection, connection.cursor() as cursor:
+        prepare_ddl(cursor, config.schema, table)
+        partitions = fetch_rows(cursor, "get_table_partitions", binds)
+        if not partitions:
+            statement = render_query(
+                QUERIES_ANCHOR, "alter_table_inmemory", schema=config.schema, table=table, clause=clause
+            )
+            execute_ddl(cursor, statement, report)
+
+            return [table]
+        chosen = select_window(partitions, start)
+        for partition in chosen:
+            statement = render_query(
+                QUERIES_ANCHOR,
+                "alter_partition_inmemory",
+                schema=config.schema,
+                table=table,
+                partition=partition,
+                clause=clause,
+            )
+            execute_ddl(cursor, statement, report)
+
+        return chosen

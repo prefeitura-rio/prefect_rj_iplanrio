@@ -13,13 +13,13 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models impor
     INMEMORY_DISTRIBUTES,
     INMEMORY_DUPLICATES,
     INMEMORY_PRIORITIES,
-    LOADED_TABLE_INMEMORY,
     SNAPSHOT_INDEX_PREFIX,
     SUPPORTED_INDEX_TYPES,
     SUPPORTED_PARTITIONING,
     IndexDefinition,
     IndexExpression,
     Partitioning,
+    PartitionStorage,
     StructurePlan,
     TableLayout,
     TablePartition,
@@ -34,9 +34,9 @@ def partitioning_from_dictionary(
     `table_row` is the row of `all_part_tables` (`partitioning_type`,
     `subpartitioning_type` and `interval`). `key_columns` are the columns of
     `all_part_key_columns`, in order. `partition_rows` are the rows of
-    `all_tab_partitions` (`partition_name`, `high_value`, `tablespace_name` and
-    `interval`), in order. Return the partitioning, without the partitions that
-    `INTERVAL` created.
+    `all_tab_partitions` (`partition_name`, `high_value`, `tablespace_name`, `interval`
+    and, if read, `segment_created` and the `STORAGE` parameters), in order. Return the
+    partitioning, without the partitions that `INTERVAL` created.
     """
     interval = str(table_row["interval"]).strip() if table_row["interval"] else None
     partitions = tuple(
@@ -44,6 +44,7 @@ def partitioning_from_dictionary(
             name=str(row["partition_name"]),
             high_value=str(row["high_value"]).strip(),
             tablespace=None if row["tablespace_name"] is None else str(row["tablespace_name"]),
+            storage=partition_storage_from_dictionary(row),
         )
         for row in partition_rows
         if row["interval"] != "YES"
@@ -53,6 +54,30 @@ def partitioning_from_dictionary(
     if subpartitioning not in (None, "NONE"):
         kind = f"{kind}-{subpartitioning}"
     return Partitioning(kind=kind, key_columns=tuple(key_columns), interval=interval, partitions=partitions)
+
+
+def partition_storage_from_dictionary(row: dict[str, object]) -> PartitionStorage | None:
+    """Read the segment creation and the `STORAGE` of a row of `all_tab_partitions`.
+
+    The row has `segment_created`, `initial_extent`, `next_extent`, `min_extent`,
+    `max_extent` and `pct_increase`. Return `None` if it has no `segment_created`.
+    """
+    segment_created = row.get("segment_created")
+    if segment_created is None:
+        return None
+
+    def number(key: str) -> int | None:
+        value = row.get(key)
+        return None if value is None else int(str(value))
+
+    return PartitionStorage(
+        segment_created=segment_created == "YES",
+        initial=number("initial_extent"),
+        next=number("next_extent"),
+        min_extents=number("min_extent"),
+        max_extents=number("max_extent"),
+        pct_increase=number("pct_increase"),
+    )
 
 
 def inmemory_option(row: dict[str, object], key: str, allowed: tuple[str, ...]) -> str | None:
@@ -143,8 +168,10 @@ def index_from_dictionary(row: dict[str, object], columns: list[str]) -> IndexDe
 def plan_structure(template: TableLayout, loaded_columns: list[str], index_prefix: str) -> StructurePlan:
     """Define the structure of the loaded table from the original table.
 
-    The tablespace and the partitioning are copied, and the table always goes to the
-    In-Memory (`LOADED_TABLE_INMEMORY`). The indexes are copied with the name
+    The tablespace and the partitioning are copied. The table is born `NO INMEMORY`: the
+    partitions of the window enter the In-Memory after the load
+    (`LOADED_TABLE_INMEMORY`, `helpers/inmemory.py`). The indexes are copied with the
+    name
     `<prefix><original name>`, except the `I_SNAP$` of materialized views. Return the
     structure of the loaded table and the indexes of the original that were not copied.
     Raise `NotImplementedError` if the load does not support the partitioning or an
@@ -187,7 +214,7 @@ def plan_structure(template: TableLayout, loaded_columns: list[str], index_prefi
         tablespace=template.tablespace,
         partitioning=partitioning,
         indexes=tuple(indexes),
-        inmemory=LOADED_TABLE_INMEMORY,
+        inmemory=None,
     )
     return StructurePlan(layout=layout, skipped_indexes=tuple(skipped))
 
@@ -230,4 +257,25 @@ def layout_differences(existing: TableLayout, expected: TableLayout) -> list[str
     wanted_partitions = {partition.description for partition in wanted.partitions}
     differences += [f"partição a mais: {text}" for text in sorted(found_partitions - wanted_partitions)]
     differences += [f"partição ausente: {text}" for text in sorted(wanted_partitions - found_partitions)]
+    found_storage = {partition.name: partition.storage for partition in found.partitions}
+    for partition in wanted.partitions:
+        storage = found_storage.get(partition.name)
+        if partition.name in found_storage and not storage_matches(storage, partition.storage):
+            current = storage.clause if storage else "(não lido)"
+            wanted_clause = partition.storage.clause if partition.storage else "(não lido)"
+            differences.append(f"storage da partição {partition.name}: {current} → {wanted_clause}")
     return differences
+
+
+def storage_matches(existing: PartitionStorage | None, expected: PartitionStorage | None) -> bool:
+    """Tell whether the partition has the segment and `STORAGE` of the original.
+
+    Only what the original declares counts: for a deferred original with no `STORAGE`,
+    the segment of the existing one depends only on whether it has rows, and that is not
+    a difference.
+    """
+    if expected is None or not expected.declared:
+        return True
+    if existing is None or existing.parameters != expected.parameters:
+        return False
+    return existing.segment_created or not expected.segment_created

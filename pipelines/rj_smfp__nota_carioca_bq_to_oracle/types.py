@@ -26,7 +26,9 @@ class Load:
     `template_schema` is the schema of the original tables, which defaults to the schema
     of the login. `excluded_columns` are columns of the original that the new table does
     not get. `sessions` is the number of SQL*Loader sessions. The waits are in minutes:
-    `0` turns the In-Memory wait off.
+    `0` turns the In-Memory wait off. `inmemory_window_months` is how many months before
+    the current one stay in the In-Memory, and `inmemory_release_delay_seconds` is the
+    wait before the table that left use goes out of it.
     """
 
     template_schema: str | None = None
@@ -37,6 +39,8 @@ class Load:
     raw_text_encoding: RawTextEncoding = "base64"
     bigquery_quiet_minutes: int = 5
     inmemory_wait_minutes: int = 30
+    inmemory_window_months: int = 3
+    inmemory_release_delay_seconds: int = 120
 
 
 @dataclass(frozen=True)

@@ -3,6 +3,7 @@
 from re import compile as compile_pattern
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import OracleColumn
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import storage_matches
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import (
     USABLE_INDEX_STATUSES,
     IndexDefinition,
@@ -76,8 +77,10 @@ def short_bound(high_value: str) -> str:
     return f"< {match.group(1)}" if match else high_value
 
 
-def describe_partition(partition: TablePartition | None) -> str:
+def describe_partition(partition: TablePartition | None, with_storage: bool = False) -> str:
     """Describe the limit and the tablespace of a partition.
+
+    With `with_storage`, add the segment creation and the `STORAGE`, if they were read.
 
     ```text
     < 2026-02-01 00:00:00 em DFEN_BIG_DATA
@@ -87,7 +90,24 @@ def describe_partition(partition: TablePartition | None) -> str:
     """
     if partition is None:
         return "(ausente)"
-    return short_bound(partition.high_value) + (f" em {partition.tablespace}" if partition.tablespace else "")
+    text = short_bound(partition.high_value) + (f" em {partition.tablespace}" if partition.tablespace else "")
+
+    return text + (f" · {partition.storage.clause}" if with_storage and partition.storage else "")
+
+
+def same_partition(expected: TablePartition, loaded: TablePartition | None) -> tuple[bool, bool]:
+    """Compare a partition of the original with the loaded one, as the load does.
+
+    The load uses the same rule to create the table again. Return whether the two
+    match, and whether the difference, if any, is only in the segment or the `STORAGE`.
+    """
+    if loaded is None:
+        return False, False
+    if (loaded.high_value, loaded.tablespace) != (expected.high_value, expected.tablespace):
+        return False, False
+    matches = storage_matches(loaded.storage, expected.storage)
+
+    return matches, not matches
 
 
 def compare_partitions(expected: Partitioning | None, actual: Partitioning | None) -> list[list[str]]:
@@ -105,8 +125,16 @@ def compare_partitions(expected: Partitioning | None, actual: Partitioning | Non
     found = {partition.name: partition for partition in actual.partitions} if actual else {}
     for position, partition in enumerate(wanted, start=1):
         loaded = found.pop(partition.name, None)
-        status = STATUS_OK if loaded == partition else STATUS_DIVERGE
-        rows.append([str(position), partition.name, describe_partition(partition), describe_partition(loaded), status])
+        matches, storage_only = same_partition(partition, loaded)
+        rows.append(
+            [
+                str(position),
+                partition.name,
+                describe_partition(partition, storage_only),
+                describe_partition(loaded, storage_only),
+                STATUS_OK if matches else STATUS_DIVERGE,
+            ]
+        )
     rows += [
         ["+", name, "(ausente)", describe_partition(partition), STATUS_DIVERGE] for name, partition in found.items()
     ]

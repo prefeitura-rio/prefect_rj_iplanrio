@@ -11,7 +11,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import discord as disc
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import oracle, sqlldr, sqlldr_progress
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import ExportedFile
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import LoadPlan
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import DiscordStatusMessage
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import DiscordStatusMessage, Environment
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import format_validation_line
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import (
     COLOR_CANCELLED,
@@ -68,9 +68,12 @@ def make(
     tables: tuple[str, ...] = ("A", "B"),
     run_dbt: bool = False,
     mode: Literal["full", "synonyms_only"] = "full",
+    environment: Environment = Environment.PROD,
 ) -> LoadNotifier:
     """Make."""
-    config = NotifierConfig("nota_carioca_staging", None, "nota_carioca_staging", tables, 2, run_dbt, mode, True)
+    config = NotifierConfig(
+        "nota_carioca_staging", None, "nota_carioca_staging", tables, 2, run_dbt, mode, True, environment=environment
+    )
     message = (
         DiscordStatusMessage("https://discord.example/api/webhooks/1/t", transport=discord.transport)
         if discord
@@ -452,3 +455,23 @@ def test_load_task_feeds_the_active_notifier_without_receiving_it(monkeypatch: p
     # Then the tick reached the table state
     assert rows == 5
     assert notifier.state.tables["A"].load == snap
+
+
+@pytest.mark.parametrize(
+    ("environment", "marked"),
+    [
+        pytest.param(Environment.STAGING, True, id="staging"),
+        pytest.param(Environment.PROD, False, id="prod"),
+    ],
+)
+def test_the_environment_marks_the_messages_of_staging_only(environment: Environment, marked: bool) -> None:
+    """Put `STAGING` before the title and the final line in staging, not in prod."""
+    discord = Discord()
+    notifier = make(discord, environment=environment)
+
+    with notifier.guard():
+        notifier.begin()
+
+    assert discord.embeds
+    assert all(str(embed["title"]).startswith("🧪 STAGING · ") is marked for embed in discord.embeds)
+    assert discord.standalone[0].startswith("🧪 STAGING · ") is marked

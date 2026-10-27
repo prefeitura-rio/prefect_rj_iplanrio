@@ -89,7 +89,8 @@ class RunState:
     `dbt_seconds` is the duration of dbt, when it is done. `error` is the message of a
     failure, and `failed_step` the step where the run stopped (failure or cancel).
     `step_elapsed_seconds` is how long the current stage (the step and, for the tables,
-    the stage of the table) has been going on.
+    the stage of the table) has been going on. `staging` is true in the staging
+    deployment, and its messages get the mark `🧪 STAGING · `.
     """
 
     dataset_id: str
@@ -108,6 +109,7 @@ class RunState:
     error: str | None = None
     failed_step: Step | None = None
     step_elapsed_seconds: float = 0.0
+    staging: bool = False
 
 
 def stage_key(state: RunState) -> tuple[Step, str | None, TableStep | None]:
@@ -324,4 +326,5 @@ def build_view(state: RunState) -> RunView:
             if state.status is not RunStatus.RUNNING and state.mode == "full"
             else ()
         ),
+        staging=state.staging,
     )
