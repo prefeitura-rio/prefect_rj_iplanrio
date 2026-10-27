@@ -269,9 +269,6 @@ max-doc-length = 88 # a docstring or a comment line holds up to 88 columns, as t
 "src/utils/delta.py" = [
   "TID251",
 ] # it types the store that toolkit.gcs creates
-"pipelines/rj_iplanrio__sisbicho_images/helpers.py" = [
-  "TID251",
-] # it types the store that toolkit.gcs creates
 "pipelines/rj_crm__modelo_qualidade_telefone/**" = [
   "TID251",
 ] # the bucket of the models is in rj-crm-registry, which the HMAC key of toolkit.gcs cannot read

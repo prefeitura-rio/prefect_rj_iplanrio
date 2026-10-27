@@ -10,24 +10,18 @@ resolution-markers = [
 [manifest]
 members = [
     "prefect-rj-iplanrio",
-    "rj-cetrio-ocr-radar",
-    "rj-cetrio-transporte-rodoviario-radar-transito",
     "rj-cgm-osinfo-rh",
     "rj-cor-meteorologia-inmet",
     "rj-cor-meteorologia-redemet",
     "rj-cor-meteorologia-redemet-estacoes",
     "rj-cor-precipitacao-alertario",
     "rj-cor-precipitacao-alertario-sftp",
-    "rj-cor-precipitacao-cemaden",
-    "rj-cor-precipitacao-inea",
-    "rj-cor-precipitacao-websirene",
     "rj-crm-agentforce-classificacao-llm",
     "rj-crm-disparo-template",
     "rj-crm-disparos-nao-efetuados",
     "rj-crm-geolocalizacao-residencia",
     "rj-crm-get-history-data",
     "rj-crm-modelo-qualidade-telefone",
-    "rj-crm-relatorio-cvl",
     "rj-crm-relatorio-engajamento-hsm",
     "rj-crm-run-dbt",
     "rj-crm-salesforce-api",
@@ -35,7 +29,6 @@ members = [
     "rj-crm-whitelist-whatsapp-relatorio",
     "rj-cvl-arquivo-virtual",
     "rj-cvl-osinfo",
-    "rj-iplanrio-alertario-previsao-24h",
     "rj-iplanrio-bcadastro-chcaepf",
     "rj-iplanrio-bcadastro-chcno",
     "rj-iplanrio-bcadastro-chcnpj",
@@ -48,35 +41,26 @@ members = [
     "rj-iplanrio-run-dbt",
     "rj-iplanrio-sici",
     "rj-iplanrio-sicop",
-    "rj-iplanrio-sisbicho-images",
     "rj-iplanrio-taxirio",
     "rj-iplanrio-vigia-urbano",
     "rj-pgm-divida-ativa",
     "rj-pic-disparos-email",
     "rj-rmi-run-dbt",
     "rj-seconserva-infraestrutura-siscor-obras",
-    "rj-segovi-dump-db-1746",
     "rj-segur-forca-municipal",
     "rj-setur-turismo-fluxo-visitantes",
     "rj-smas-api-datametrica-agendamentos",
     "rj-smas-cadunico",
-    "rj-smas-disparo-cadunico",
-    "rj-smas-disparo-pic",
     "rj-smdue-dump-db-sislic",
     "rj-sme-brutos-core-sso",
     "rj-sme-brutos-gestao-escolar",
     "rj-sme-educacao-basica",
     "rj-smfp-adm-instrumentos-firmados",
-    "rj-smfp-atividade-economica",
-    "rj-smfp-dump-db-ergon",
-    "rj-smfp-iptu-inadimplentes",
     "rj-smfp-nota-carioca-bq-to-oracle",
     "rj-smfp-nota-carioca-bq-to-oracle-validation",
     "rj-smfp-nota-carioca-oracle-to-bq",
-    "rj-smfp-porte-empresa",
     "rj-smfp-sigma",
     "rj-smi-siscob",
-    "rj-sms-sisreg-disparo-lembretes",
     "rj-ssm-run-dbt",
     "toolkit",
 ]
@@ -2615,25 +2599,6 @@ wheels = [
 ]
 
 [[package]]
-name = "opencv-python-headless"
-version = "5.0.0.93"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/1d/99/76b7c80252aa83c1af16393454aafd125a0287101afe8deb0a6821af0e30/opencv_python_headless-5.0.0.93.tar.gz", hash = "sha256:b82f9831daab90b725c7c1ee1b36cb5732c367096ac76d119e64e14eb70d5f3c", size = 81817738, upload-time = "2026-07-02T07:01:06.039Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/53/7c/8c8097891c509d98cd128493835c95631c80be6a8f37ed9d25716c2e16f1/opencv_python_headless-5.0.0.93-cp37-abi3-macosx_13_0_arm64.whl", hash = "sha256:030ca5e0837a2963ab36ef896baa9767eb8d2b83353fb28af5a521e40dd8756f", size = 48322581, upload-time = "2026-07-02T05:50:34.207Z" },
-    { url = "https://files.pythonhosted.org/packages/90/8c/eab2ad388c3cbab2a350c10c2ef19ce6bd099240afc31789032c996bab52/opencv_python_headless-5.0.0.93-cp37-abi3-macosx_14_0_x86_64.whl", hash = "sha256:1e55af3abfb462eeeabe5c775f12bdb36216d8a93a3583d69e6bd6e1d6ba7d00", size = 34782894, upload-time = "2026-07-02T05:51:39.856Z" },
-    { url = "https://files.pythonhosted.org/packages/ec/78/afca939f40ffe2b2380bfa86f812b2f7d4acc5a27b27dc41b49cad7ce7b4/opencv_python_headless-5.0.0.93-cp37-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:10818d91510e05c04568ae12b5cd120779c70c01bf897b001a6221fe430df80f", size = 36521085, upload-time = "2026-07-02T06:55:24.429Z" },
-    { url = "https://files.pythonhosted.org/packages/2b/97/8170e9819764c47e436c130d3ff6cfb73b58f923eae9d3a03d8982b04aec/opencv_python_headless-5.0.0.93-cp37-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:09a872a157c1376ab922a69bbf22f9a95bcc7b658a9d8b436a60212b02b2eeb4", size = 56563598, upload-time = "2026-07-02T06:55:47.355Z" },
-    { url = "https://files.pythonhosted.org/packages/3a/98/1a28a7101e31801042b3098871a74b76c61581d328ef40774ff4edb53a56/opencv_python_headless-5.0.0.93-cp37-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:840bd717c21e5c11cadadc022a823315ea417f961213d06b4df010e019eb16f4", size = 39648433, upload-time = "2026-07-02T06:56:04.255Z" },
-    { url = "https://files.pythonhosted.org/packages/9b/21/f6ef335f6e65724aa78b8d792b48d40a48c381715f1e62f5a5049e09d07e/opencv_python_headless-5.0.0.93-cp37-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:ed709fdf9aa0bd1f2ed8549e71d19449b03a675bb581eb292285f6861953be37", size = 61204038, upload-time = "2026-07-02T06:56:41.823Z" },
-    { url = "https://files.pythonhosted.org/packages/d0/8f/b8756467ea991449a293797f6b3fa80fcfdd29598a0a60d1cd5715b96e61/opencv_python_headless-5.0.0.93-cp37-abi3-win32.whl", hash = "sha256:c6bcd96b185975ea240d22cfdb15a1f6d080cc95264cfbe2621f21bb144d89b9", size = 35411237, upload-time = "2026-07-02T05:50:12.901Z" },
-    { url = "https://files.pythonhosted.org/packages/b8/88/763b967f7efd7226b82c9fae16d560cba049b1f0c036647e65c610fd636e/opencv_python_headless-5.0.0.93-cp37-abi3-win_amd64.whl", hash = "sha256:829717b6a95554f273e49e357cee3b3a2a26b6f4842fbc1bed2b45bdd8f87e0e", size = 43825962, upload-time = "2026-07-02T05:50:09.627Z" },
-]
-
-[[package]]
 name = "openlocationcode"
 version = "1.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3964,28 +3929,6 @@ wheels = [
 ]
 
 [[package]]
-name = "rj-cetrio-ocr-radar"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_cetrio__ocr_radar" }
-dependencies = [
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
-
-[[package]]
-name = "rj-cetrio-transporte-rodoviario-radar-transito"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_cetrio__transporte_rodoviario_radar_transito" }
-dependencies = [
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
-
-[[package]]
 name = "rj-cgm-osinfo-rh"
 version = "1.0.0"
 source = { virtual = "pipelines/rj_cgm__osinfo_rh" }
@@ -4062,43 +4005,6 @@ requires-dist = [
     { name = "defusedxml" },
     { name = "prefect-rj-iplanrio", editable = "." },
 ]
-
-[[package]]
-name = "rj-cor-precipitacao-cemaden"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_cor__precipitacao_cemaden" }
-dependencies = [
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
-
-[[package]]
-name = "rj-cor-precipitacao-inea"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_cor__precipitacao_inea" }
-dependencies = [
-    { name = "openpyxl" },
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "openpyxl" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-]
-
-[[package]]
-name = "rj-cor-precipitacao-websirene"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_cor__precipitacao_websirene" }
-dependencies = [
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-crm-agentforce-classificacao-llm"
@@ -4211,17 +4117,6 @@ requires-dist = [
 ]
 
 [[package]]
-name = "rj-crm-relatorio-cvl"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_crm__relatorio_cvl" }
-dependencies = [
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
-
-[[package]]
 name = "rj-crm-relatorio-engajamento-hsm"
 version = "1.0.0"
 source = { virtual = "pipelines/rj_crm__relatorio_engajamento_hsm" }
@@ -4315,21 +4210,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
-
-[[package]]
-name = "rj-iplanrio-alertario-previsao-24h"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_iplanrio__alertario_previsao_24h" }
-dependencies = [
-    { name = "defusedxml" },
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "defusedxml" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-]
 
 [[package]]
 name = "rj-iplanrio-bcadastro-chcaepf"
@@ -4488,21 +4368,6 @@ dependencies = [
 requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
-name = "rj-iplanrio-sisbicho-images"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_iplanrio__sisbicho_images" }
-dependencies = [
-    { name = "opencv-python-headless" },
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "opencv-python-headless", specifier = ">=4.10.0" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-]
-
-[[package]]
 name = "rj-iplanrio-taxirio"
 version = "1.0.0"
 source = { virtual = "pipelines/rj_iplanrio__taxirio" }
@@ -4569,17 +4434,6 @@ requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 name = "rj-seconserva-infraestrutura-siscor-obras"
 version = "1.0.0"
 source = { virtual = "pipelines/rj_seconserva__infraestrutura_siscor_obras" }
-dependencies = [
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
-
-[[package]]
-name = "rj-segovi-dump-db-1746"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_segovi__dump_db_1746" }
 dependencies = [
     { name = "prefect-rj-iplanrio" },
 ]
@@ -4656,28 +4510,6 @@ requires-dist = [
 ]
 
 [[package]]
-name = "rj-smas-disparo-cadunico"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_smas__disparo_cadunico" }
-dependencies = [
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
-
-[[package]]
-name = "rj-smas-disparo-pic"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_smas__disparo_pic" }
-dependencies = [
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
-
-[[package]]
 name = "rj-smdue-dump-db-sislic"
 version = "1.0.0"
 source = { virtual = "pipelines/rj_smdue__dump_db_sislic" }
@@ -4733,39 +4565,6 @@ dependencies = [
 requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
-name = "rj-smfp-atividade-economica"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_smfp__atividade_economica" }
-dependencies = [
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
-
-[[package]]
-name = "rj-smfp-dump-db-ergon"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_smfp__dump_db_ergon" }
-dependencies = [
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
-
-[[package]]
-name = "rj-smfp-iptu-inadimplentes"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_smfp__iptu_inadimplentes" }
-dependencies = [
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
-
-[[package]]
 name = "rj-smfp-nota-carioca-bq-to-oracle"
 version = "1.0.0"
 source = { virtual = "pipelines/rj_smfp__nota_carioca_bq_to_oracle" }
@@ -4811,17 +4610,6 @@ dependencies = [
 requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
-name = "rj-smfp-porte-empresa"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_smfp__porte_empresa" }
-dependencies = [
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
-
-[[package]]
 name = "rj-smfp-sigma"
 version = "1.0.0"
 source = { virtual = "pipelines/rj_smfp__sigma" }
@@ -4836,17 +4624,6 @@ requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 name = "rj-smi-siscob"
 version = "1.0.0"
 source = { virtual = "pipelines/rj_smi__siscob" }
-dependencies = [
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
-
-[[package]]
-name = "rj-sms-sisreg-disparo-lembretes"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_sms__sisreg_disparo_lembretes" }
 dependencies = [
     { name = "prefect-rj-iplanrio" },
 ]
