@@ -26,6 +26,7 @@ from toolkit.mysql import (
     build_predicates,
     build_source_sql,
     convert,
+    decode_legacy,
     plan_column,
     quote,
 )
@@ -504,3 +505,36 @@ async def test_the_engine_runs_a_statement_and_a_query_as_dataframes(
 
     assert connection.log[0] == ("SET @a = %s", [1])
     assert [frame.shape for frame in frames] == [(2, 4)]
+
+
+@pytest.mark.parametrize(
+    ("data", "expected"),
+    [
+        pytest.param("ação".encode(), "ação", id="utf8"),
+        pytest.param(
+            "ação".encode("latin-1"), "ação", id="latin1_bytes_in_a_utf8_column"
+        ),
+        pytest.param(b"pre\x93co\x94", "pre\u201cco\u201d", id="windows_1252_quotes"),
+        pytest.param(b"a\x9db", "a\x9db", id="a_byte_that_only_latin1_holds"),
+        pytest.param(b"", "", id="empty"),
+    ],
+)
+def test_a_legacy_text_is_read_as_utf8_then_windows_1252_then_latin1(
+    data: bytes, expected: str
+) -> None:
+    """Decode what is UTF-8 as UTF-8, and the other bytes without failing."""
+    assert decode_legacy(data) == (expected, len(data))
+    assert data.decode("mysql_legacy") == expected
+
+
+async def test_the_legacy_charset_connects_as_utf8_and_decodes_the_rows_itself(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ask the server for UTF-8 and give the connection the legacy codec."""
+    connection = connect_to(monkeypatch)
+
+    async with MySQL.connect(CONN, "legacy"):
+        pass
+
+    assert connection.seen["charset"] == "utf8"  # pyright: ignore[reportAttributeAccessIssue]
+    assert connection._encoding == "mysql_legacy"  # pyright: ignore[reportAttributeAccessIssue]

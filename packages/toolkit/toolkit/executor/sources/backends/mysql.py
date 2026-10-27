@@ -15,7 +15,8 @@ from ..protocols import DBConn
 class MySQLSource(Registered):
     """A MySQL database. `charset` is the character set of the connection.
 
-    It is `utf8mb4` by default, and a MySQL 5.0 or 5.1 needs `utf8` or `latin1`.
+    It is `utf8mb4` by default, and a MySQL 5.0 or 5.1 needs `utf8` or `latin1`, or
+    `legacy` for a column that holds Latin-1 bytes under a `utf8` declaration.
     `batch_size` is the rows of one fetch.
     """
 

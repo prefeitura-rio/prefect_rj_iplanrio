@@ -4,9 +4,15 @@ The DuckDB `mysql_scanner` forces `utf8mb4`, which MySQL 5.0 and 5.1 do not know
 This reader uses `aiomysql` with the character set of the connection, and reads a
 table or a query in batches. The `MySQLEngine` of `executor/engines/mysql.py` wraps
 it.
+
+A column of an old database may declare `utf8` and hold bytes of Latin-1, written by an
+application that did not convert them. A strict `utf8` or `latin1` connection fails on
+such a row. The character set `legacy` reads each text as UTF-8 and, if that fails, as
+Windows-1252 and then Latin-1, so no row fails.
 """
 
-from collections.abc import AsyncGenerator, Sequence
+from codecs import CodecInfo, register
+from collections.abc import AsyncGenerator, Buffer, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -25,6 +31,8 @@ from .constants import (
     MYSQL_DECIMAL_TYPES,
     MYSQL_FLOAT_TYPES,
     MYSQL_INTEGER_TYPES,
+    MYSQL_LEGACY_CHARSET,
+    MYSQL_LEGACY_CODEC,
     MYSQL_TIMESTAMP_TYPES,
 )
 from .executor.constants import DEFAULT_BATCH_SIZE
@@ -63,6 +71,44 @@ class MySQLColumn:
     name: str
     type_code: int
     arrow: pa.DataType
+
+
+def decode_legacy(data: Buffer, errors: str = "strict") -> tuple[str, int]:
+    """Decode a text that may be UTF-8, Windows-1252 or Latin-1, in that order.
+
+    Latin-1 holds every byte, so this never fails. `errors` is ignored, as the decoding
+    does not fail.
+
+    ```python
+    decode_legacy("ação".encode())  # ("ação", 6)
+    decode_legacy("ação".encode("latin-1"))  # ("ação", 4)
+    ```
+    """
+    del errors
+    raw = bytes(data)
+
+    for encoding in ("utf-8", "cp1252"):
+        try:
+            return raw.decode(encoding), len(raw)
+        except UnicodeDecodeError:
+            continue
+
+    return raw.decode("latin-1"), len(raw)
+
+
+def find_legacy_codec(name: str) -> CodecInfo | None:
+    """Give the codec `MYSQL_LEGACY_CODEC` to Python, and nothing for another name."""
+    if name != MYSQL_LEGACY_CODEC:
+        return None
+
+    def encode(text: str, errors: str = "strict") -> tuple[bytes, int]:
+        """Encode as UTF-8."""
+        return text.encode("utf-8", errors), len(text)
+
+    return CodecInfo(encode, decode_legacy, name=MYSQL_LEGACY_CODEC)
+
+
+register(find_legacy_codec)
 
 
 def quote(name: str) -> str:
@@ -267,15 +313,25 @@ class MySQL:
     @classmethod
     @asynccontextmanager
     async def connect(cls, conn: DBConn, charset: str) -> AsyncGenerator[Self]:
-        """Open a connection with the character set of the data, and close it."""
+        """Open a connection with the character set of the data, and close it.
+
+        With `legacy` the server sends UTF-8, and each text is decoded with
+        `decode_legacy`.
+        """
+        legacy = charset == MYSQL_LEGACY_CHARSET
         connection = await mysql_connect(
             host=conn.hostname,
             port=conn.port,
             user=conn.user,
             password=conn.password,
             db=conn.database,
-            charset=charset,
+            charset="utf8" if legacy else charset,
         )
+
+        if legacy:
+            connection._encoding = (
+                MYSQL_LEGACY_CODEC  # the only way to set the codec of the rows
+            )
 
         try:
             yield cls(connection=connection)

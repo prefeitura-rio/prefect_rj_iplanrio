@@ -182,6 +182,12 @@ VACUUM_RETENTION_HOURS: Final = 168
 FILTER_FORBIDDEN: Final = (";", "--", "/*")
 """The marks that a filter may not hold, so that it stays one predicate."""
 
+MYSQL_LEGACY_CHARSET: Final = "legacy"
+"""The `charset` of a MySQL that holds text in more than one encoding in one column."""
+
+MYSQL_LEGACY_CODEC: Final = "mysql_legacy"
+"""The codec that reads such a text: UTF-8, else Windows-1252, else Latin-1."""
+
 MYSQL_BATCH_ROWS: Final = 50_000
 """The rows of one fetch from a MySQL, so a chunk never sits whole in memory."""
 

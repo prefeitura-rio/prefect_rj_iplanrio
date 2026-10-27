@@ -38,7 +38,7 @@ deployments:
         port: 3306
         database: arquivovirtualprd
         options:
-          charset: utf8
+          charset: legacy
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -68,7 +68,7 @@ deployments:
         port: 3306
         database: arquivovirtualprd
         options:
-          charset: utf8
+          charset: legacy
     work_pool:
       name: onprem-pool
       work_queue_name: default
