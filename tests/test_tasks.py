@@ -167,14 +167,17 @@ async def test_dbt_runs_deps_then_the_command_in_the_cloned_project(fake_runner,
 async def test_regression_the_profile_of_the_repository_is_used_when_it_has_one(
     fake_runner, tmp_path, has_profile
 ) -> None:
-    """Regression: dbt ignored the `profiles.yml` of the repository."""
+    """Regression: dbt ignored the `profiles.yml` of the repository.
+
+    dbt reads a copy of it that logs in with the default credentials.
+    """
     if has_profile:
         (tmp_path / "queries" / "profiles.yml").write_text("p: {}\n")
 
     await run_dbt.fn(DbtRun(repository="https://example.invalid/q.git"))
 
     [runner] = fake_runner.instances
-    assert (runner.settings.profiles_dir == tmp_path / "queries") is has_profile
+    assert runner.settings.profiles_dir.name.startswith("dbt_profiles_") is has_profile
     assert "DBT_PROFILES_DIR" not in environ
 
 
