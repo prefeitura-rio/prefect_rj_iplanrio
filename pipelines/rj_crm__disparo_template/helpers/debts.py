@@ -14,12 +14,15 @@ from pydantic import JsonValue, TypeAdapter
 from toolkit.telemetry import logger
 
 from pipelines.rj_crm__disparo_template.constants import (
+    DEBTS_ALERT_RATE,
+    DEBTS_ALERT_SAMPLE,
     DEBTS_FIELDS,
     DEBTS_OUTPUT,
     DEBTS_TIMEOUT,
     DEBTS_TRIES,
     ESCAPED_FIELDS,
 )
+from utils.dispatch import post_notice
 from utils.records import read_json
 
 type Pause = Callable[[float], Awaitable[None]]
@@ -77,6 +80,19 @@ def format_debts(debts: JsonValue) -> str | None:
     return "\n".join(lines)
 
 
+def is_failing(failures: int, asked: int) -> bool:
+    """Tell whether the failures of the API reached the share that needs an alert."""
+    return asked >= DEBTS_ALERT_SAMPLE and failures / asked >= DEBTS_ALERT_RATE
+
+
+def failure_alert(failures: int, asked: int) -> str:
+    """Return the notice of a high rate of CPFs that the API did not answer."""
+    return (
+        "⚠️ **consulta_debitos: alta taxa de falha na API de dívida ativa**\n"
+        f"📊 {failures}/{asked} CPFs sem retorno ({failures / asked:.0%})"
+    )
+
+
 async def fetch_debts(
     client: AsyncClient, cpf: str, url: str, pause: Pause = sleep, tries: int = DEBTS_TRIES
 ) -> Mapping[str, JsonValue] | None:
@@ -131,7 +147,8 @@ async def enrich_with_debts(
 ) -> pl.DataFrame:
     """Add the debts to the frame, one request for each CPF.
 
-    CPFs with no confirmed debt are dropped.
+    CPFs with no confirmed debt are dropped. One alert goes to the channel of the errors
+    when the share of CPFs without an answer reaches `DEBTS_ALERT_RATE`.
 
     A CPF whose request failed, or whose answer does not confirm a debt
     (`api_resposta_sucesso` not true), leaves the frame. The columns of `DEBTS_OUTPUT`
@@ -142,11 +159,19 @@ async def enrich_with_debts(
     )
     logger.info("Debts asked: cpfs=%d", len(cpfs))
     rows: list[dict[str, str | None]] = []
+    failures = 0
+    alerted = False
 
-    for cpf in cpfs:
+    for asked, cpf in enumerate(cpfs, start=1):
         response = await fetch_debts(client, cpf, url, pause)
 
         if response is None or not is_success(response.get("api_resposta_sucesso")):
+            failures += 1
+
+            if not alerted and is_failing(failures, asked):
+                await post_notice(failure_alert(failures, asked), errors=True)
+                alerted = True
+
             continue
 
         rows.append({**build_row(cpf, response), cpf_column: cpf})

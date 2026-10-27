@@ -96,7 +96,7 @@ deployments:
             columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo", "id_autuacao"]
       - cron: "0 11 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: daily-cvl-pesquisa1746-unificado
         flow_run_name: cvl-pesquisa1746
         parameters:
@@ -392,11 +392,11 @@ deployments:
             replacements: {"days_ahead_placeholder": 2, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2", "intervalo_filtro_disparados": 1, "id_hsm_legado_placeholder": 101}
             dispatched:
             drop_duplicate_cpfs: true
-            query_file: queries/cadunico_confirma_agendamento.sql
+            query_file: queries/smas_cadunico_confirma_agendamento.sql
           delivery:
             data_extension: whatsapp_cadunico_
             columns: ["nome_sobrenome", "unidade_cras", "data", "hora", "endereco"]
-      - cron: "0 12 * * *"
+      - cron: "10 09 * * *"
         timezone: America/Sao_Paulo
         active: false
         slug: daily-smas-cartaopic-evento
@@ -409,9 +409,9 @@ deployments:
             dataset_id: brutos_salesforce
             table_id: disparos_efetuados
           audience:
-            replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfanciaprodv27", "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 184}
+            replacements: {"nome_hsm_placeholder": "'smascartaoprimeirainfanciaprodv27','smas_cartaoprimeirainfancia_prod_v10'", "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 184}
             dispatched:
-            drop_duplicate_cpfs: false
+            drop_duplicate_cpfs: true
             drop_failed_phones: false
             query_file: queries/smas_cartaopic_evento.sql
           delivery:
@@ -431,9 +431,8 @@ deployments:
             table_id: disparos_efetuados
           audience:
             replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfancialembreteprodv4", "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 185}
-            dispatched:
-            drop_duplicate_cpfs: false
+            drop_duplicate_cpfs: true
             query_file: queries/smas_cartaopic_lembrete.sql
           delivery:
             data_extension: whatsapp_smas_cartaopic_lembrete
-            columns: ["nome_sobrenome", "endereco", "data", "horario"]
+            columns: ["nome_sobrenome", "endereco", "dia", "horario"]

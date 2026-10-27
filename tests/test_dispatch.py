@@ -2,11 +2,13 @@ from datetime import date
 
 import pytest
 
+from utils import dispatch
 from utils.dispatch import (
     decide_switch,
     format_query,
     is_active,
     no_destinations_notice,
+    post_notice,
     read_expiration,
     skip_weekends,
 )
@@ -143,3 +145,35 @@ def test_the_notices_name_the_campaign() -> None:
     assert "[TESTE]" in no_destinations_notice("c", test_mode=True, today=WEDNESDAY)
     assert "[TESTE]" not in no_destinations_notice("c", test_mode=False, today=WEDNESDAY)
     assert "2026-07-15" in no_destinations_notice("c", test_mode=False, today=WEDNESDAY)
+
+
+def test_the_notice_of_a_stopped_campaign_has_its_readable_name_and_its_key() -> None:
+    """Call the campaign by the name of the sheet, with the key of the HSM."""
+    switch = decide_switch({"ativo": "0", "nome_campanha": "Puérperas"}, "hsm_x", "production", WEDNESDAY)
+
+    assert "Puérperas (`hsm_x`)" in (switch.notice or "")
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        pytest.param("https://prefect/runs/1", "\n🔗 **Link:** https://prefect/runs/1", id="a_run_with_a_link"),
+        pytest.param(None, "\n🔗 **Link:** URL indisponível", id="a_run_without_a_link"),
+    ],
+)
+async def test_a_notice_ends_with_the_link_of_the_run(
+    monkeypatch: pytest.MonkeyPatch, url: str | None, expected: str
+) -> None:
+    """Add the link of the flow run to each notice."""
+    posted: list[str] = []
+
+    async def post_discord(_webhook: str, message: str) -> None:
+        posted.append(message)
+
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord/hook")
+    monkeypatch.setattr(dispatch, "post_discord", post_discord)
+    monkeypatch.setattr(dispatch, "current_run_url", lambda: url)
+
+    await post_notice("hello")
+
+    assert posted == ["hello" + expected]

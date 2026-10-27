@@ -8,6 +8,7 @@ from uuid import UUID
 from prefect import get_client
 from prefect.client.schemas.objects import FlowRun
 from prefect.deployments import run_deployment
+from prefect.runtime import flow_run as current_flow_run
 from prefect.settings import PREFECT_UI_URL
 from prefect.states import Cancelling
 
@@ -39,6 +40,13 @@ def flow_run_url(run_id: UUID | str) -> str | None:
     ui_url = cast("str | None", PREFECT_UI_URL.value())
 
     return f"{ui_url.rstrip('/')}/runs/flow-run/{run_id}" if ui_url else None
+
+
+def current_run_url() -> str | None:
+    """Return the UI link of the flow run that is running, if there is one."""
+    run_id = cast("str | None", current_flow_run.id)
+
+    return flow_run_url(run_id) if run_id else None
 
 
 def start_deployment_run(deployment: str, parameters: dict[str, object]) -> StartedRun:

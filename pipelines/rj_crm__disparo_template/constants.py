@@ -25,8 +25,12 @@ TEST_CHECK_INTERVAL: Final = 2
 TEST_MAX_WAIT: Final = 8
 TEST_MATERIALIZATION_WAIT: Final = 5
 DEBTS_URL: Final = "https://services.pref.rio/mcp/consulta_debitos"
-DEBTS_TIMEOUT: Final = 15.0
+DEBTS_TIMEOUT: Final = 90.0
 DEBTS_TRIES: Final = 3
+DEBTS_ALERT_RATE: Final = 0.30
+"""The share of failed CPFs that raises an alert."""
+DEBTS_ALERT_SAMPLE: Final = 50
+"""The CPFs asked before the share counts, so that a small sample gives no alarm."""
 ESCAPED_FIELDS: Final = ("lista_cdas", "lista_guias", "dicionario_itens", "itens_informados")
 """The debt fields that SFMC reads as JSON with the inner quotes escaped."""
 DEBTS_FIELDS: Final = (

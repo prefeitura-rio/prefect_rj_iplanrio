@@ -6,11 +6,14 @@ import pytest
 from httpx2 import ConnectError, Response
 from pydantic import JsonValue
 
+from pipelines.rj_crm__disparo_template.helpers import debts
 from pipelines.rj_crm__disparo_template.helpers.debts import (
     enrich_with_debts,
     escape_json,
+    failure_alert,
     fetch_debts,
     format_debts,
+    is_failing,
     is_success,
 )
 from pipelines.rj_crm__disparo_template.helpers.notices import (
@@ -230,3 +233,45 @@ def test_the_success_notice_says_the_try_and_has_a_masked_example() -> None:
 def test_a_fifth_of_the_sends_with_a_status_confirms_the_dispatch(count: int, total: int, expected: bool) -> None:
     """Compare the count with a fifth of the total."""
     assert is_confirmed(count, total) is expected
+
+
+@pytest.mark.parametrize(
+    ("failures", "asked", "expected"),
+    [
+        pytest.param(10, 49, False, id="a_small_sample_gives_no_alarm"),
+        pytest.param(14, 50, False, id="below_the_rate"),
+        pytest.param(15, 50, True, id="at_the_rate_after_the_sample"),
+        pytest.param(100, 100, True, id="every_cpf_failed"),
+    ],
+)
+def test_the_failures_of_the_api_raise_an_alert_from_a_rate(failures: int, asked: int, expected: bool) -> None:
+    """Alert at 30% of failures, but only after 50 CPFs."""
+    assert is_failing(failures, asked) is expected
+
+
+def test_the_alert_says_how_many_cpfs_got_no_answer() -> None:
+    """Give the count and the share."""
+    assert "15/50 CPFs sem retorno (30%)" in failure_alert(15, 50)
+
+
+async def test_one_alert_goes_out_when_the_api_fails_for_many_cpfs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Post one notice to the errors channel, however many CPFs fail after the rate."""
+    sent: list[tuple[str, bool]] = []
+
+    async def post_notice(message: str, *, errors: bool = False) -> None:
+        sent.append((message, errors))
+
+    async def fetch_nothing(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(debts, "post_notice", post_notice)
+    monkeypatch.setattr(debts, "fetch_debts", fetch_nothing)
+    frame = pl.DataFrame({"cpf": [str(number) for number in range(60)], "telefone": ["a"] * 60})
+    client, _ = make_client()
+
+    enriched = await enrich_with_debts(frame, "cpf", URL, client)
+
+    assert enriched.is_empty()
+    assert len(sent) == 1
+    assert sent[0][1] is True
+    assert "50/50 CPFs sem retorno (100%)" in sent[0][0]

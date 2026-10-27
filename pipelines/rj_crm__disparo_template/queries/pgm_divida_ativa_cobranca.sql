@@ -23,7 +23,7 @@ SELECT
 FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf
 WHERE pf.telefone.principal.qualidade = 'VALIDO'
     AND pf.telefone.principal.estrategia_envio != "NÃO ENVIAR"
-    AND pf.telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
+    AND pf.telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR", "EVITAR")
     AND pf.telefone.principal.tipo = "CELULAR"
     AND pf.telefone.principal.valor IS NOT NULL
     AND pf.menor_idade IS FALSE
@@ -132,10 +132,10 @@ GROUP BY 1
 elegiveis_divida_ativa AS (
 SELECT *
 FROM per_cpf
-WHERE soma_divida_total <= 6000
+WHERE soma_divida_total <= 30000
     AND esta_pagando = FALSE
     AND idade <= 80
-    AND dt_ultima_cda >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 MONTH)
+    AND dt_ultima_cda >= '2021-01-01'
 ),
 
 -- ===================== 1.4) RANDOMIZAÇÃO DETERMINÍSTICA =====================
@@ -207,9 +207,9 @@ FROM (
         ROW_NUMBER() OVER (ORDER BY ordem_sorteio) AS rn
     FROM tmp_grupos
 )
--- WHERE rn <= (
---     -- sobe 100 por semana desde 2026-08-15 (inclusive)
---     DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE('2026-08-15'), WEEK) + 1
+WHERE rn <= (
+    -- sobe 100 por semana desde 2026-09-20 (inclusive)
+    DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE('2026-09-20'), WEEK)
 
 --     -- -- sobe 100 por dia útil desde 2026-09-01 (inclusive)
 --     -- -- dias úteis desde start_date (inclusivo: start_date = dia 1)
@@ -217,5 +217,5 @@ FROM (
 --     -- - DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE('2026-09-01'), WEEK)        -- remove domingos
 --     -- - DATE_DIFF(DATE_ADD(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 1 DAY), DATE_ADD(DATE('2026-08-19'), INTERVAL 1 DAY), WEEK)  -- remove sábados
 --     -- + 1  -- start_date conta como dia 1
--- ) * 100
-LIMIT cast({limit_placeholder} as int64);
+) * 100
+-- LIMIT cast({limit_placeholder} as int64);

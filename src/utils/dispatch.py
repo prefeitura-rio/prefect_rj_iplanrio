@@ -7,6 +7,7 @@ from typing import Final
 
 from toolkit.telemetry import logger
 
+from .runs import current_run_url
 from .settings import NoticeSettings
 from .utils import post_discord
 
@@ -17,6 +18,7 @@ SUNDAY: Final = 6
 WEEKEND: Final = (SATURDAY, SUNDAY)
 DAYS_AHEAD_KEY: Final = "days_ahead_placeholder"
 CONTROL_SHEET: Final = "https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/"
+UNKNOWN_URL: Final = "URL indisponível"
 MENTIONS: Final = "<@821121576455634955> <@1458456241683824744> <@302518123066556426>"
 """The people that the notices of a stopped dispatch call."""
 
@@ -102,6 +104,11 @@ def read_expiration(raw: object) -> date | None:
         return None
 
 
+def label_campaign(row: Mapping[str, object], campaign: str) -> str:
+    """Return the readable name of a campaign from the control sheet, with its key."""
+    return f"{row.get('nome_campanha') or campaign} (`{campaign}`)"
+
+
 def decide_switch(row: Mapping[str, object] | None, campaign: str, environment: str, today: date) -> Switch:
     """Decide from the row of the control sheet whether a campaign may run today.
 
@@ -121,7 +128,7 @@ def decide_switch(row: Mapping[str, object] | None, campaign: str, environment: 
         return Switch(
             False,
             f"{MENTIONS}\nPrefect flow run desativado em {CONTROL_SHEET}!\n"
-            + f"📋 **Campanha:** {campaign}\n💻 **Ambiente:** {environment}\n"
+            + f"📋 **Campanha:** {label_campaign(row, campaign)}\n💻 **Ambiente:** {environment}\n"
             + "Desligue o scheduler no prefect ou mude o status para ativo para reativar o fluxo.",
         )
 
@@ -131,7 +138,7 @@ def decide_switch(row: Mapping[str, object] | None, campaign: str, environment: 
         return Switch(
             False,
             f"{MENTIONS}\nPrefect flow run atingiu a data limite em {CONTROL_SHEET}!\n"
-            + f"📋 **Campanha:** {campaign}\n💻 **Ambiente:** {environment}\n"
+            + f"📋 **Campanha:** {label_campaign(row, campaign)}\n💻 **Ambiente:** {environment}\n"
             + f"📆 **Data limite do disparo:** {expiration}\nDesligue o scheduler no prefect ou altere a data limite.",
         )
 
@@ -149,8 +156,10 @@ def no_destinations_notice(campaign: str, *, test_mode: bool, today: date) -> st
 async def post_notice(message: str, *, errors: bool = False) -> None:
     """Post a message to the channel of the dispatches, or to the one of the errors.
 
-    The channel is a setting. With no webhook, the notice is only logged.
+    The channel is a setting. With no webhook, the notice is only logged. A link to the
+    flow run ends the message.
     """
+    message = f"{message}\n🔗 **Link:** {current_run_url() or UNKNOWN_URL}"
     settings = NoticeSettings()
     webhook = (settings.DISCORD_ERRORS_WEBHOOK_URL if errors else settings.DISCORD_WEBHOOK_URL).get_secret_value()
 

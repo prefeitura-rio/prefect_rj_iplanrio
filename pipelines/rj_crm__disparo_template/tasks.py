@@ -28,7 +28,6 @@ from pipelines.rj_crm__disparo_template.constants import (
 )
 from pipelines.rj_crm__disparo_template.helpers.clock import now, today
 from pipelines.rj_crm__disparo_template.helpers.debts import enrich_with_debts
-from pipelines.rj_crm__disparo_template.helpers.discord import post_notice
 from pipelines.rj_crm__disparo_template.helpers.frames import (
     apply_filters,
     build_csv,
@@ -52,7 +51,7 @@ from pipelines.rj_crm__disparo_template.helpers.sftp import SftpTarget, upload
 from pipelines.rj_crm__disparo_template.settings import SftpSettings
 from pipelines.rj_crm__disparo_template.types import Audience, Campaign, Csv, Delivered, Delivery, Report
 from utils import dispatch as dispatch_module
-from utils.dispatch import Switch, decide_switch, no_destinations_notice
+from utils.dispatch import Switch, decide_switch, no_destinations_notice, post_notice
 from utils.tasks import publish_table_in_bq, read_bq, run_dbt, upload_files_to_gcs, write_records
 from utils.types import Cloud, DumpOptions, Table
 from utils.utils import capture_time, render_query
