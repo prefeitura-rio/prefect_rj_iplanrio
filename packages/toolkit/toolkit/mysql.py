@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
+from re import sub
 from typing import Self, cast
 
 import pyarrow as pa
@@ -32,7 +33,7 @@ from .executor.requests import Table as TableOrigin
 from .executor.sources.protocols import DBConn
 from .executor.types import Origin
 from .telemetry import logger
-from .types import Bind, QueryParams
+from .types import Bind, QueryParams, QueryValue
 
 DECIMAL_DIGITS = 38
 """The digits of the widest `decimal128`."""
@@ -99,6 +100,26 @@ def build_source_sql(origin: Origin) -> tuple[str, bool]:
             return f"({text.strip().removesuffix(';').rstrip()}\n) AS `source`", False
         case _:
             raise UnsupportedRequestError("MySQLEngine", origin)
+
+
+def bind_params(
+    sql: str, params: QueryParams | None
+) -> tuple[str, list[QueryValue] | None]:
+    """Return the SQL and the parameters in the form that `aiomysql` takes.
+
+    With no parameters the driver must not format the SQL, so a `LIKE 'a%'` in a native
+    query stays as it is, and the parameters are `None`. With parameters it formats the
+    SQL with `%`, so each `%` that is not a `%s` placeholder is doubled.
+
+    ```python
+    bind_params("SELECT 'a%'", None)  # ("SELECT 'a%'", None)
+    bind_params("n LIKE 'a%' AND id = %s", [1])  # ("n LIKE 'a%%' AND id = %s", [1])
+    ```
+    """
+    if not params:
+        return sql, None
+
+    return sub(r"%(?!s)", "%%", sql), list(params)
 
 
 def build_predicates(
@@ -264,7 +285,7 @@ class MySQL:
     async def execute(self, sql: str, *, params: QueryParams | None = None) -> None:
         """Run one SQL statement. The params bind by position with `%s`."""
         async with self.connection.cursor() as cursor:
-            await cursor.execute(sql, list(params or []))
+            await cursor.execute(*bind_params(sql, params))
 
     async def query(
         self,
@@ -280,7 +301,7 @@ class MySQL:
         before the next call.
         """
         async with self.connection.cursor(SSCursor) as cursor:
-            await cursor.execute(sql, list(params or []))
+            await cursor.execute(*bind_params(sql, params))
             columns = [
                 plan_column(item[0], item[1], item[4], item[5])
                 for item in cursor.description or []

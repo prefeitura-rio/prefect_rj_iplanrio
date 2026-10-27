@@ -22,6 +22,7 @@ from toolkit.mysql import (
     ChunkRead,
     MySQL,
     MySQLColumn,
+    bind_params,
     build_predicates,
     build_source_sql,
     convert,
@@ -48,7 +49,7 @@ class FakeCursor:
 
     def __init__(
         self,
-        log: list[tuple[str, list[object]]],
+        log: list[tuple[str, list[object] | None]],
         rows: Sequence[tuple[object, ...]],
         description: tuple[tuple[object, ...], ...],
     ) -> None:
@@ -70,7 +71,7 @@ class FakeCursor:
         """Close nothing."""
         del error_type, error, trace
 
-    async def execute(self, sql: str, params: list[object]) -> None:
+    async def execute(self, sql: str, params: list[object] | None = None) -> None:
         """Keep the SQL and its parameters."""
         self.log.append((sql, params))
 
@@ -93,7 +94,7 @@ class FakeConnection:
         """Keep the rows and their description, and start open."""
         self.rows = rows
         self.description = description
-        self.log: list[tuple[str, list[object]]] = []
+        self.log: list[tuple[str, list[object] | None]] = []
         self.closed = False
 
     def cursor(self, kind: object = None) -> FakeCursor:
@@ -315,7 +316,7 @@ async def test_the_engine_describes_the_origin_from_an_empty_read(
         "nome": "VARCHAR",
     }
     assert connection.log == [
-        ("\n-- noqa: disable=PRS\nSELECT *\nFROM `app`.`orders`\nWHERE 1 = 0\n", [])
+        ("\n-- noqa: disable=PRS\nSELECT *\nFROM `app`.`orders`\nWHERE 1 = 0\n", None)
     ]
 
 
@@ -342,6 +343,41 @@ async def test_the_engine_writes_the_chunk_as_parquet_with_its_filter(
     assert pq.read_table(target).num_rows == 2
 
 
+@pytest.mark.parametrize(
+    ("sql", "params", "expected_sql", "expected_params"),
+    [
+        pytest.param(
+            "SELECT 'a%'", None, "SELECT 'a%'", None, id="no_params_keeps_the_percent"
+        ),
+        pytest.param(
+            "SELECT 'a%'", [], "SELECT 'a%'", None, id="empty_params_are_none"
+        ),
+        pytest.param(
+            "n LIKE 'a%' AND id = %s",
+            [1],
+            "n LIKE 'a%%' AND id = %s",
+            [1],
+            id="params_double_the_percent",
+        ),
+        pytest.param(
+            "id >= %s AND id < %s",
+            [1, 2],
+            "id >= %s AND id < %s",
+            [1, 2],
+            id="placeholders_stay",
+        ),
+    ],
+)
+def test_the_percent_of_a_native_query_survives_the_driver(
+    sql: str,
+    params: list[int] | None,
+    expected_sql: str,
+    expected_params: list[int] | None,
+) -> None:
+    """Send the SQL untouched with no params, and double the percents when it binds."""
+    assert bind_params(sql, params) == (expected_sql, expected_params)
+
+
 def test_a_chunk_read_is_not_empty_by_default() -> None:
     """Read rows unless the read says it is empty."""
     assert ChunkRead("t").empty is False
@@ -359,7 +395,7 @@ async def test_the_engine_reads_the_whole_origin_in_dataframes(
 
     assert [frame.height for frame in frames] == [1, 1]
     assert connection.log == [
-        ("\n-- noqa: disable=PRS\nSELECT *\nFROM `app`.`orders`\n\n", [])
+        ("\n-- noqa: disable=PRS\nSELECT *\nFROM `app`.`orders`\n\n", None)
     ]
 
 
@@ -412,7 +448,7 @@ async def test_the_probe_compares_the_count_and_the_highest_value_of_the_chunk(
     assert "MAX(`dia`) AS last" in sql
     assert "FROM `app`.`orders`" in sql
     assert "WHERE `dia` >= 100 AND `dia` < 200" in sql
-    assert params == []
+    assert params is None
 
 
 @pytest.mark.parametrize(
