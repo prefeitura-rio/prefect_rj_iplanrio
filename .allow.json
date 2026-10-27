@@ -53,5 +53,7 @@
     "rj_smi__siscob",
     "rj_ssm__run_dbt"
   ],
-  "prod": []
+  "prod": [
+    "rj_cor__meteorologia_inmet"
+  ]
 }
