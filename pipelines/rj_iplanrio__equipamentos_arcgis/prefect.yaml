@@ -39,12 +39,31 @@ deployments:
         command: uv run --no-sync --package rj_iplanrio__equipamentos_arcgis -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
         service_account_name: pipelines
+        finished_job_ttl: 600
+        pod_annotations:
+          gke-gcsfuse/volumes: 'true'
+        resources:
+          requests:
+            ephemeral-storage: 1Gi
+          limits:
+            ephemeral-storage: 4Gi
+        volume_mounts:
+          - name: tmp
+            mountPath: /tmp
+        volumes:
+          - name: tmp
+            csi:
+              driver: gcsfuse.csi.storage.gke.io
+              volumeAttributes:
+                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
+                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
         env:
           INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
           INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
           INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
           INFISICAL_ENVIRONMENT: staging
           INFISICAL_PATHS: /shared
+          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
   - name: rj-iplanrio--equipamentos-arcgis--prod
     tags:
       - environment:prod
@@ -60,12 +79,31 @@ deployments:
         command: uv run --no-sync --package rj_iplanrio__equipamentos_arcgis -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
         service_account_name: pipelines
+        finished_job_ttl: 600
+        pod_annotations:
+          gke-gcsfuse/volumes: 'true'
+        resources:
+          requests:
+            ephemeral-storage: 1Gi
+          limits:
+            ephemeral-storage: 4Gi
+        volume_mounts:
+          - name: tmp
+            mountPath: /tmp
+        volumes:
+          - name: tmp
+            csi:
+              driver: gcsfuse.csi.storage.gke.io
+              volumeAttributes:
+                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
+                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
         env:
           INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
           INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
           INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
           INFISICAL_ENVIRONMENT: prod
           INFISICAL_PATHS: /shared
+          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     schedules:
       - interval: 86400
         anchor_date: '2025-07-15T00:00:00'
