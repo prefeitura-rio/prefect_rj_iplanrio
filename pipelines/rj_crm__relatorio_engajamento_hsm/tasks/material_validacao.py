@@ -149,9 +149,11 @@ def gera_material_validacao(
             existente.get("webViewLink", link_pasta(pasta_id)),
         )
 
-    df_sessoes, _, total_engajados = extrai_conversas(campanha, solicitacao.data_inicio, solicitacao.data_fim)
+    df_sessoes, _ = extrai_conversas(
+        campanha, solicitacao.data_inicio, solicitacao.data_fim, solicitacao.fonte_disparos
+    )
     if df_sessoes.empty:
-        return ResultadoSolicitacao(status_pulado("nenhuma conversa com resposta do cidadão no período"))
+        return ResultadoSolicitacao(status_pulado("nenhuma conversa com resposta em texto do cidadão no período"))
 
     catalogo = CatalogoCategorias()
     exemplos = descobre_categorias(df_sessoes, bifrost, catalogo, tamanho_lote_descoberta, teto_amostra_descoberta)
@@ -185,6 +187,6 @@ def gera_material_validacao(
     sem_exemplo = [nome for nome, ids in exemplos.items() if not ids]
     print(
         f"[VALIDACAO] {campanha}: Catálogo com {len(catalogo.como_dict())} categoria(s) a partir de "
-        f"{total_engajados} conversa(s)" + (f"; sem exemplo: {sem_exemplo}" if sem_exemplo else "") + "."
+        f"{len(df_sessoes)} conversa(s)" + (f"; sem exemplo: {sem_exemplo}" if sem_exemplo else "") + "."
     )
     return ResultadoSolicitacao(STATUS_CONCLUIDO, link_pasta(pasta_id))
