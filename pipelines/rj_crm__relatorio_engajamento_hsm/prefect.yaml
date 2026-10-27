@@ -11,12 +11,18 @@
 # Liberar uma campanha acima do teto de conversas: Custom run deste deployment com
 #   campanhas_liberadas: ["<campanha>"]
 #
+# Relatório de 1 HSM, fora do Form (disparos e conversas direto dos eventos de WhatsApp):
+# Custom run com fonte_disparos: hsm, hsm: "<nome_do_template>", data_inicio/data_fim
+# (AAAA-MM-DD) e tipo_solicitacao (padrão: relatório rápido).
+#
 # Credenciais no secret do work pool (mesmo secretName de rj_crm__agentforce_classificacao_llm):
 #   BF_KEY                        : API key do gateway Bifrost
 #   BASEDOSDADOS_CREDENTIALS_PROD : a service account dele precisa de
 #       - Editor na pasta "Relatórios de Engajamento" do Drive (config.DRIVE_PASTA_RAIZ_ID)
 #       - Editor no Sheet de solicitações (config.SOLICITACOES_SHEET_ID)
 #       - leitura em rj-crm-registry.rmi_conversas.chatbot
+#       - leitura em rj-crm-registry.brutos_salesforce_staging.messaging_events_whatsapp e
+#         .sfmc_whatsapp_send_event (só fonte_disparos="hsm", ver flow.py)
 #       - criar tabela / insert / delete em rj-crm-registry.brutos_salesforce
 #         (banco de exemplos do RAG: config.RAG_TABLE, criada pelo flow se não existir)
 #
