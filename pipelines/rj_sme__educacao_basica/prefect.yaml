@@ -251,6 +251,7 @@ deployments:
               column: Ano
               width: 1
               begin: 2020
+              end: 2030
               lookback: 1
             columns:
               add_timestamp: true
