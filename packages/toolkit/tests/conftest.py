@@ -15,7 +15,7 @@ from typing import ClassVar, Self, override
 import pytest
 from deltalake import DeltaTable
 from git import Actor, Repo
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import BadRequest, NotFound
 from polars import DataFrame
 from pyarrow import Schema, Table, decimal128
 from pyarrow import array as arrow_array
@@ -350,9 +350,19 @@ class FakeBigQueryClient:
 class FakeBigQueryTables:
     """A BigQuery client that holds one table and records what a sync does to it."""
 
-    def __init__(self, table_type: str | None, source_format: str | None) -> None:
-        """Hold a table of the type and format, or none."""
+    def __init__(
+        self,
+        table_type: str | None,
+        source_format: str | None,
+        *,
+        refuses_update: bool = False,
+    ) -> None:
+        """Hold a table of the type and format, or none.
+
+        With `refuses_update` an update fails as BigQuery does when the schema changed.
+        """
         self.calls: list[str] = []
+        self.refuses_update = refuses_update
         self.existing = (
             None
             if table_type is None
@@ -380,12 +390,17 @@ class FakeBigQueryTables:
         self.calls.append("create")
 
     def update_table(self, table: object, fields: list[str], **options: object) -> None:
-        """Record an update."""
+        """Record an update, and fail if the table refuses it."""
         self.calls.append("update")
+
+        if self.refuses_update:
+            raise BadRequest(
+                "Both autodetect schema is requested and a schema is provided"
+            )
 
 
 @pytest.fixture
-def fake_bigquery_tables() -> Callable[[str | None, str | None], FakeBigQueryTables]:
+def fake_bigquery_tables() -> Callable[..., FakeBigQueryTables]:
     """Return a function that builds a fake BigQuery client with one table."""
     return FakeBigQueryTables
 

@@ -70,6 +70,19 @@ async def test_a_delta_table_replaces_an_external_table_of_another_format(
     assert client.calls == calls
 
 
+async def test_a_delta_table_that_refuses_the_refresh_is_created_again(
+    fake_bigquery_tables,
+) -> None:
+    """Replace the table over the Delta table when BigQuery refuses the refresh."""
+    client = fake_bigquery_tables("EXTERNAL", "DELTA_LAKE", refuses_update=True)
+
+    await BigQuery(client=client).sync_delta_table(
+        "p.d.t", "gcs://b/staging/d/t", "p.us.conn"
+    )
+
+    assert client.calls == ["update", "delete", "create"]
+
+
 async def test_a_delta_table_never_replaces_a_native_table(
     fake_bigquery_tables,
 ) -> None:

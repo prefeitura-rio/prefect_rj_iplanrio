@@ -6,7 +6,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from typing import Self
 
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import BadRequest, NotFound
 from google.cloud.bigquery import (
     Client,
     ExternalConfig,
@@ -72,6 +72,8 @@ class BigQuery:
         A Delta table needs a BigLake connection. BigQuery detects the schema, so a
         refresh picks up a new column. An external table of another format (CSV or
         Parquet from an older dump) cannot become a Delta table, so it is replaced.
+        BigQuery may refuse a refresh when the schema changed a lot, and then the table
+        is replaced too, which loses nothing because it holds no rows.
         Raise `ValueError` for a native table, because its rows live only in BigQuery.
         """
         config = ExternalConfig("DELTA_LAKE")
@@ -96,16 +98,23 @@ class BigQuery:
 
             current = existing.external_data_configuration
 
-            if current is None or current.source_format != "DELTA_LAKE":
-                self.client.delete_table(table)
-                external = Table(table)
-                external.external_data_configuration = config
-                self.client.create_table(external)
-                return
+            if current is not None and current.source_format == "DELTA_LAKE":
+                existing.external_data_configuration = config
 
-            existing.external_data_configuration = config
-            self.client.update_table(
-                existing, ["external_data_configuration"], autodetect_schema=True
-            )
+                try:
+                    self.client.update_table(
+                        existing,
+                        ["external_data_configuration"],
+                        autodetect_schema=True,
+                    )
+                except BadRequest:
+                    pass
+                else:
+                    return
+
+            self.client.delete_table(table)
+            external = Table(table)
+            external.external_data_configuration = config
+            self.client.create_table(external)
 
         await to_thread(run)
