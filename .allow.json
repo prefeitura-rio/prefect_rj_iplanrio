@@ -54,6 +54,7 @@
     "rj_ssm__run_dbt"
   ],
   "prod": [
-    "rj_cor__meteorologia_inmet"
+    "rj_cor__meteorologia_inmet",
+    "rj_iplanrio__sici"
   ]
 }
