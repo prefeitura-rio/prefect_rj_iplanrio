@@ -4,7 +4,7 @@ import pytest
 from deltalake import DeltaTable
 from fixtures import ItemData, ItemDict, ItemModel
 from httpx2 import Response
-from polars import Float64, Int64, String, read_parquet
+from polars import Datetime, Float64, Int64, String, read_parquet
 from pydantic import ValidationError
 from toolkit.executor.requests import Files
 from toolkit.executor.sources.backends.files import FilesSource
@@ -66,6 +66,30 @@ def test_parquet_keeps_a_text_that_looks_like_a_date_as_text(tmp_path) -> None:
 
     assert frame.schema == {"day": String, "count": Int64, "ratio": Float64, "gap": String}
     assert frame["day"].to_list() == ["2026-10-22 20:00:00", "2026-10-22 21:00:00"]
+
+
+@pytest.mark.parametrize(
+    ("rows", "types", "expected"),
+    [
+        pytest.param(
+            [{"t": "2026-10-22 20:00:00", "x": None}],
+            {"t": Datetime("us"), "x": Float64},
+            {"t": Datetime("us"), "x": Float64},
+            id="a_column_of_nulls_takes_its_type",
+        ),
+        pytest.param(
+            [{"t": "2026-10-22 20:00:00", "x": "1.5"}],
+            {"x": Float64},
+            {"t": String, "x": Float64},
+            id="a_type_changes_only_its_column",
+        ),
+    ],
+)
+def test_parquet_gives_the_columns_the_types_that_are_asked(tmp_path, rows, types, expected) -> None:
+    """Fix the type of a column, so that it does not depend on the values of the run."""
+    folder = write_parquet(rows, tmp_path, types)
+
+    assert read_parquet(folder / "records.parquet").schema == expected
 
 
 async def test_json_lines_load_as_rows_and_nested_values_stay_nested(tmp_path) -> None:

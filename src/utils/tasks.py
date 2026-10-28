@@ -10,7 +10,7 @@ from typing import cast
 from zoneinfo import ZoneInfo
 
 from httpx2 import AsyncClient
-from polars import DataFrame, Float64, Int64, String
+from polars import DataFrame, DataType, Float64, Int64, String
 from prefect import task
 from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
 from psycopg.sql import Literal
@@ -338,13 +338,18 @@ async def write_records(records: Sequence[Mapping[str, JsonValue]], folder: Path
 
 
 @task
-async def write_parquet_records(records: Sequence[Mapping[str, JsonValue]], folder: Path) -> Path:
+async def write_parquet_records(
+    records: Sequence[Mapping[str, JsonValue]],
+    folder: Path,
+    types: Mapping[str, DataType | type[DataType]] | None = None,
+) -> Path:
     """Write records as a Parquet file in a folder, and return the folder.
 
     The folder is ready for `upload_files_to_gcs` with `source_format="parquet"`. A text
-    that looks like a date stays text, which JSON lines do not keep.
+    that looks like a date stays text, which JSON lines do not keep. `types` fixes the
+    type of the named columns.
     """
-    return await to_thread(write_parquet, records, folder)
+    return await to_thread(write_parquet, records, folder, types)
 
 
 @task

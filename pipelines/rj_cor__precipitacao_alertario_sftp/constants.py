@@ -3,6 +3,8 @@
 from typing import Final
 from zoneinfo import ZoneInfo
 
+from polars import DataType, Datetime, Float64, String
+
 SP_TZ: Final = ZoneInfo("America/Sao_Paulo")
 FILE_PATTERN: Final = r"Chuvas_(\d{14})"
 """The part of the name of a file with the time of the reading, as `YYYYMMDDHHMMSS`."""
@@ -32,3 +34,19 @@ METEOROLOGICAL_ATTRIBUTES: Final = {
     "dirvento": "direcao_vento",
 }
 """The weather attributes of the XML, with their names in the table."""
+PLUVIOMETRIC_TYPES: Final[dict[str, DataType | type[DataType]]] = {
+    "id_estacao": String,
+    "data_medicao": Datetime("us"),
+    **dict.fromkeys(
+        (name for name in PLUVIOMETRIC_ATTRIBUTES.values() if name not in ("id_estacao", "data_medicao")), Float64
+    ),
+}
+"""The types of the pluviometric table, fixed so that a run cannot change them."""
+METEOROLOGICAL_TYPES: Final[dict[str, DataType | type[DataType]]] = {
+    "id_estacao": String,
+    "data_medicao": Datetime("us"),
+    **dict.fromkeys(
+        (name for name in METEOROLOGICAL_ATTRIBUTES.values() if name not in ("id_estacao", "data_medicao")), Float64
+    ),
+}
+"""The types of the weather table, fixed so that a run cannot change them."""

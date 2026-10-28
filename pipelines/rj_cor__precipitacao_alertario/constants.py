@@ -2,6 +2,8 @@
 
 from typing import Final
 
+from polars import DataType, Datetime, Float64, String
+
 TIME_FORMAT: Final = "%d/%m/%Y - %H:%M:%S"
 MISSING: Final = ("ND", "-")
 """The texts that the page writes where there is no reading."""
@@ -34,3 +36,19 @@ METEOROLOGICAL_COLUMNS: Final = {
     "Vel. do Vento (Km/h)": "velocidade_vento",
     "Dir. do Vento (°)": "direcao_vento",
 }
+PLUVIOMETRIC_TYPES: Final[dict[str, DataType | type[DataType]]] = {
+    "id_estacao": String,
+    "data_medicao": Datetime("us"),
+    **dict.fromkeys(
+        (name for name in PLUVIOMETRIC_COLUMNS.values() if name not in ("id_estacao", "data_medicao")), Float64
+    ),
+}
+"""The types of the pluviometric table, fixed so that a run cannot change them."""
+METEOROLOGICAL_TYPES: Final[dict[str, DataType | type[DataType]]] = {
+    "id_estacao": String,
+    "data_medicao": Datetime("us"),
+    **dict.fromkeys(
+        (name for name in METEOROLOGICAL_COLUMNS.values() if name not in ("id_estacao", "data_medicao")), Float64
+    ),
+}
+"""The types of the weather table, fixed so that a run cannot change them."""

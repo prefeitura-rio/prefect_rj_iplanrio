@@ -6,7 +6,7 @@ from json import dumps
 from pathlib import Path
 
 from httpx2 import Response
-from polars import DataFrame, Null, String, col
+from polars import DataFrame, DataType, Datetime, Expr, Null, String, col
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from .constants import (
@@ -76,16 +76,32 @@ def write_json_lines(records: Sequence[Mapping[str, JsonValue]], folder: Path) -
     return folder
 
 
-def write_parquet(records: Sequence[Mapping[str, JsonValue]], folder: Path) -> Path:
+def cast_column(name: str, dtype: DataType | type[DataType], current: DataType | type[DataType]) -> Expr:
+    """Return the column cast to `dtype`, and a text of a time parsed as one."""
+    if current == String and dtype == Datetime:
+        return col(name).str.to_datetime(time_unit="us")
+
+    return col(name).cast(dtype)
+
+
+def write_parquet(
+    records: Sequence[Mapping[str, JsonValue]],
+    folder: Path,
+    types: Mapping[str, DataType | type[DataType]] | None = None,
+) -> Path:
     """Write the records as a Parquet file in a folder, and return the folder.
 
     DuckDB guesses the type of a JSON text, and reads `2026-10-22 20:00:00` as a
     timestamp. A Parquet file keeps a text as text, a number as a number, and a column
-    of only nulls as text.
+    of only nulls as text. `types` casts the named columns, so that their type does not
+    change with the values of a run.
     """
     frame = DataFrame(list(records), infer_schema_length=None)
     nulls = [name for name, dtype in frame.schema.items() if dtype == Null]
-    frame.with_columns(col(name).cast(String) for name in nulls).write_parquet(folder / "records.parquet")
+    frame = frame.with_columns(col(name).cast(String) for name in nulls)
+    frame.with_columns(
+        cast_column(name, dtype, frame.schema[name]) for name, dtype in (types or {}).items()
+    ).write_parquet(folder / "records.parquet")
 
     return folder
 

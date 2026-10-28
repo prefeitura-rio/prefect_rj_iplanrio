@@ -5,10 +5,11 @@ from tempfile import TemporaryDirectory
 
 from prefect import flow
 
+from pipelines.rj_cor__precipitacao_alertario.constants import METEOROLOGICAL_TYPES, PLUVIOMETRIC_TYPES
 from pipelines.rj_cor__precipitacao_alertario.tasks import fetch_readings_task
 from utils.constants import DEFAULT_CLOUD
 from utils.hooks import notify_failure
-from utils.tasks import publish_table_in_bq, upload_files_to_gcs, write_records
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs, write_parquet_records
 from utils.types import Cloud, DumpMode, Table
 from utils.utils import capture_options
 
@@ -29,18 +30,21 @@ async def rj_cor__precipitacao_alertario(
     """
     pluviometric_rows, meteorological_rows = await fetch_readings_task()
 
-    for table, rows in ((pluviometric, pluviometric_rows), (meteorological, meteorological_rows)):
+    for table, rows, types in (
+        (pluviometric, pluviometric_rows, PLUVIOMETRIC_TYPES),
+        (meteorological, meteorological_rows, METEOROLOGICAL_TYPES),
+    ):
         if table is None or not rows:
             continue
 
         with TemporaryDirectory() as directory:
-            folder = await write_records(rows, Path(directory))
+            folder = await write_parquet_records(rows, Path(directory), types)
             await upload_files_to_gcs(
                 folder,
                 table,
                 bucket=cloud["bucket"],
                 dump_mode=dump_mode,
-                source_format="json",
+                source_format="parquet",
                 options=capture_options(dump_mode),
             )
 
