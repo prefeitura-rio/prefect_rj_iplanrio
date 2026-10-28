@@ -140,51 +140,56 @@ deployments:
             dataset_id: brutos_educacao_basica
             table_id: aluno_historico
           read:
-            query: |
-              SELECT
-                [Ano],
-                [Matricula],
-                [Nome],
-                [Sexo],
-                [Naturalidade],
-                [Nacionalidade],
-                [Endereco],
-                [Bairro],
-                [CEP],
-                [Filiacao_1],
-                [Filiacao_1_Profissão],
-                [Filiacao_1_Escolaridade],
-                [Filiacao_2],
-                [Filiacao_2_Profissão],
-                [Filiacao_2_Escolaridade],
-                [Mora_com_Filiacao],
-                [CPF],
-                [NIS_Aluno],
-                [NIS_Resp],
-                [Raça_Cor],
-                [Cod_def],
-                [Deficiência],
-                [Tipo_Transporte],
-                [Tempo_Deslocamento],
-                [Regressa_Sozinho],
-                [Religião],
-                [Bolsa_Familia],
-                [CFC],
-                [Territorios_Sociais],
-                [Clube_Escolar],
-                [Nucleo_Artes],
-                [Mais_Educacao],
-                [DataNascimento],
-                [Idade_Atual],
-                [Idade_3112],
-                [Situacao],
-                [Cod_Ult_Mov],
-                [Ult_Movimentação],
-                [Tot_Aluno],
-                [alu_id]
-              FROM GestaoEscolar.dbo.VW_BI_Aluno_Todos_lgpd
+            table: dbo.VW_BI_Aluno_Todos_lgpd
           dump_mode: append
           options:
+            chunks:
+              column: Ano
+              width: 1
+              begin: 2026
+              end: 2030
+              lookback: 1
+            select:
+              - Ano
+              - Matricula
+              - Nome
+              - Sexo
+              - Naturalidade
+              - Nacionalidade
+              - Endereco
+              - Bairro
+              - CEP
+              - Filiacao_1
+              - Filiacao_1_Profissão
+              - Filiacao_1_Escolaridade
+              - Filiacao_2
+              - Filiacao_2_Profissão
+              - Filiacao_2_Escolaridade
+              - Mora_com_Filiacao
+              - CPF
+              - NIS_Aluno
+              - NIS_Resp
+              - Raça_Cor
+              - Cod_def
+              - Deficiência
+              - Tipo_Transporte
+              - Tempo_Deslocamento
+              - Regressa_Sozinho
+              - Religião
+              - Bolsa_Familia
+              - CFC
+              - Territorios_Sociais
+              - Clube_Escolar
+              - Nucleo_Artes
+              - Mais_Educacao
+              - DataNascimento
+              - Idade_Atual
+              - Idade_3112
+              - Situacao
+              - Cod_Ult_Mov
+              - Ult_Movimentação
+              - Tot_Aluno
+              - alu_id
             columns:
               add_timestamp: true
       - interval: 86400
@@ -196,14 +201,19 @@ deployments:
             dataset_id: brutos_educacao_basica
             table_id: aluno_turma
           read:
-            query: |
-              SELECT
-                [Ano],
-                [tur_id],
-                [alu_id]
-              FROM GestaoEscolar.dbo.VW_BI_Aluno_Turma
+            table: dbo.VW_BI_Aluno_Turma
           dump_mode: append
           options:
+            chunks:
+              column: Ano
+              width: 1
+              begin: 2026
+              end: 2030
+              lookback: 1
+            select:
+              - Ano
+              - tur_id
+              - alu_id
             columns:
               add_timestamp: true
       - interval: 86400
@@ -250,7 +260,7 @@ deployments:
             chunks:
               column: Ano
               width: 1
-              begin: 2020
+              begin: 2026
               end: 2030
               lookback: 1
             columns:
@@ -264,32 +274,37 @@ deployments:
             dataset_id: brutos_educacao_basica
             table_id: coc
           read:
-            query: |
-              SELECT
-                [Ano] AS Ano,
-                [CRE] AS CRE,
-                [Unidade] AS Unidade,
-                [Grupamento] AS Grupamento,
-                [Turma] AS Turma,
-                [Turno] AS Turno,
-                [COC] AS COC,
-                [Turmas] AS Turmas,
-                [Alunos] AS Alunos,
-                [Masculinos] AS Masculinos,
-                [Femininos] AS Femininos,
-                [Não_Def] AS Nao_Def,
-                [Def] AS Def,
-                [Masculinos_Não_Def] AS Masculinos_Nao_Def,
-                [Masculinos_Def] AS Masculinos_Def,
-                [Femininos_Não_Def] AS Femininos_Nao_Def,
-                [Femininos_Def] AS Femininos_Def,
-                [Vagas] AS Vagas,
-                [capacidade] AS capacidade,
-                [tur_id] AS tur_id,
-                [pft_capacidade] AS pft_capacidade
-              FROM GestaoEscolar.dbo.VW_BI_Aluno_Turma_com_COC0
+            table: dbo.VW_BI_Aluno_Turma_com_COC0
           dump_mode: append
           options:
+            chunks:
+              column: Ano
+              width: 1
+              begin: 2026
+              end: 2030
+              lookback: 1
+            select:
+              - Ano
+              - CRE
+              - Unidade
+              - Grupamento
+              - Turma
+              - Turno
+              - COC
+              - Turmas
+              - Alunos
+              - Masculinos
+              - Femininos
+              - Não_Def
+              - Def
+              - Masculinos_Não_Def
+              - Masculinos_Def
+              - Femininos_Não_Def
+              - Femininos_Def
+              - Vagas
+              - capacidade
+              - tur_id
+              - pft_capacidade
             columns:
               add_timestamp: true
       - interval: 86400
@@ -368,7 +383,7 @@ deployments:
             chunks:
               column: dataInicio
               width: month
-              begin: '2016-02-01'
+              begin: '2026-01-01'
               lookback: 12
             columns:
               add_timestamp: true
@@ -387,7 +402,7 @@ deployments:
             chunks:
               column: Data_mov
               width: month
-              begin: '2025-01-01'
+              begin: '2026-01-01'
               lookback: 12
             columns:
               add_timestamp: true
