@@ -57,6 +57,8 @@ deployments:
           filter_duplicated_phones: false
           filter_duplicated_cpfs: false
           filter_failed_phones: true
+          batch_size: 10000
+          batch_sleep_minutes: 5
           query_file: queries/sma/bonus_servidores/recado_dia_servidor.sql
       # Disparo recado_mobirio
       - cron: "0 9 * * *"
