@@ -121,8 +121,13 @@ def drop_repeats(records: Sequence[Mapping[str, str | float | None]]) -> list[Ma
 
 
 def list_new_files(bucket_name: str, prefix: str, watermark: str | None) -> list[str]:
-    """List the XML files of the landing zone that come after the watermark."""
-    names = list(list_sizes(create_store(bucket_name), prefix))
+    """List the XML files of the landing zone that come after the watermark.
+
+    `prefix` may end in the start of a name, as `nimbus/Chuvas_`. The store lists a
+    prefix as a folder, so the listing reads the folder and keeps the names that match.
+    """
+    folder = prefix.rpartition("/")[0]
+    names = [name for name in list_sizes(create_store(bucket_name), folder) if name.startswith(prefix)]
 
     return keep_new_files(names, read_watermark(watermark))
 

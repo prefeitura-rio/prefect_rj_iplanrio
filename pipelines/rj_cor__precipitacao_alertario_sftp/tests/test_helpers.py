@@ -6,6 +6,7 @@ from pipelines.rj_cor__precipitacao_alertario_sftp.constants import SP_TZ
 from pipelines.rj_cor__precipitacao_alertario_sftp.helpers import (
     drop_repeats,
     keep_new_files,
+    list_new_files,
     parse_float,
     parse_xml,
     read_file_time,
@@ -66,6 +67,25 @@ def test_only_the_xml_files_after_the_watermark_are_new() -> None:
     ]
     assert read_watermark("") is None
     assert read_watermark("bad") is None
+
+
+def test_the_listing_of_a_name_prefix_reads_the_folder_and_keeps_the_names(monkeypatch) -> None:
+    """List the folder of the prefix, because a store lists a prefix as a folder."""
+    keys = [
+        "nimbus/Chuvas_20260717100000.xml",
+        "nimbus/novo_layout/Chuvas_20260717100000.xml",
+        "nimbus/novo_layout/Chuvas_20260717130000.xml",
+        "nimbus/novo_layout/other.xml",
+    ]
+    monkeypatch.setattr("pipelines.rj_cor__precipitacao_alertario_sftp.helpers.create_store", lambda _bucket: None)
+    monkeypatch.setattr(
+        "pipelines.rj_cor__precipitacao_alertario_sftp.helpers.list_sizes",
+        lambda _store, folder: {key: 1 for key in keys if key.startswith(folder.rstrip("/") + "/")},
+    )
+
+    assert list_new_files("bucket", "nimbus/novo_layout/Chuvas_", "2026-07-17 12:00:00") == [
+        "nimbus/novo_layout/Chuvas_20260717130000.xml"
+    ]
 
 
 def test_the_xml_gives_a_rain_reading_for_each_station_and_a_weather_reading_for_the_met_ones() -> None:
