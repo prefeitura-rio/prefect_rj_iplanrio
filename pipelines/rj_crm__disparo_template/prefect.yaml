@@ -44,7 +44,7 @@ deployments:
       # Disparo recado dia servidor
       - cron: "0 19 * * *"
         timezone: America/Sao_Paulo
-        active: active
+        active: false
         slug: oneshot-recado_dia_servidor
         flow_run_name: recado_dia_servidor
         parameters:
