@@ -49,7 +49,7 @@ deployments:
         flow_run_name: recado_dia_servidor
         parameters:
           flow_environment: staging
-          campaign_name: recado_dia_do_servidor
+          campaign_name: recado_dia_do_servidor_v3
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           data_extension_filename: whatsapp_sma_dia_servidor_2026
