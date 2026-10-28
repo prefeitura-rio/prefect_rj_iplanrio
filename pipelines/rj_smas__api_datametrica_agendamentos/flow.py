@@ -58,5 +58,5 @@ async def rj_smas__api_datametrica_agendamentos(
         logger.info("Dispatch off: date=%s", target)
         return
 
-    table_name = f"{cloud['project']}.{table['dataset_id']}.{table['table_id']}"
+    table_name = f"{cloud['project']}.{table['dataset_id']}_staging.{table['table_id']}"
     await trigger_dispatch_task(build_dispatch_parameters(table_name, (target - today).days))

@@ -36,7 +36,7 @@ filtra_disparados AS (
     LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo` sd
         ON sd.cpf = segmentacao_original.cpf
         AND sd.nome_hsm = '{{ hsm_name }}'
-        AND sd.envio_datahora >= DATETIME_SUB(
+        AND sd.processado_datahora >= DATETIME_SUB(
             CURRENT_DATETIME('America/Sao_Paulo'),
             INTERVAL {{ dispatched_days }} DAY
         )
