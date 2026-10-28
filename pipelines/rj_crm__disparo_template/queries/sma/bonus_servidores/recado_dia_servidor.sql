@@ -6,14 +6,14 @@ WITH cpfs AS (
 ), -- total na base 126413, com telefones válidos 117551
 telefones AS (
   SELECT pf.cpf, 'principal' AS origem_registro, 0 AS ordem, pf.telefone.principal AS t
-  FROM `rj-rmi-dev.staging__rmi_dados_mestres.pessoa_fisica` pf
+  FROM `rj-crm-registry-dev.rmi_dados_mestres.pessoa_fisica_temp` pf
   WHERE pf.telefone.principal.valor IS NOT NULL
   AND pf.menor_idade IS FALSE
     AND pf.obito.indicador IS FALSE
     AND pf.telefone.principal.estrategia_envio != "NÃO ENVIAR"
   UNION ALL
   SELECT pf.cpf, 'alternativo', 1 + off, alt
-  FROM `rj-rmi-dev.staging__rmi_dados_mestres.pessoa_fisica` pf,
+  FROM `rj-crm-registry-dev.rmi_dados_mestres.pessoa_fisica_temp` pf,
     UNNEST(pf.telefone.alternativo) alt WITH OFFSET off
     where pf.menor_idade IS FALSE
     AND pf.obito.indicador IS FALSE
