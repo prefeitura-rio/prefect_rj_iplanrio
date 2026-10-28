@@ -223,6 +223,7 @@ max-doc-length = 88 # a docstring or a comment line holds up to 88 columns, as t
 ] # a task takes flat keyword parameters, so a deployment can set each one
 "src/utils/flows.py" = ["PLR0913"] # same cause, for a flow
 "pipelines/rj_smfp__nota_carioca_oracle_to_bq/flow.py" = ["PLR0913"] # same cause: it wraps `dump_database`
+"pipelines/rj_smas__api_datametrica_agendamentos/flow.py" = ["PLR0913"] # same cause, for a flow
 "src/utils/hooks.py" = [
   "ARG001",
 ] # Prefect calls a retry check and a hook with a fixed signature, and these use some of the arguments only
