@@ -91,6 +91,11 @@ def find_chunk_key(directory: PurePath, root: PurePath) -> str | None:
     return "" if relative == Path() else relative.as_posix()
 
 
+def is_hidden(relative: str) -> bool:
+    """Return whether a part of a path starts with `_` or `.`, as a local read skips."""
+    return any(part.startswith(("_", ".")) for part in relative.split("/") if part)
+
+
 def open_chunk(directory: Path) -> RecordBatchReader:
     """Stream the Parquet files of a folder.
 
@@ -104,7 +109,9 @@ def open_chunk(directory: Path) -> RecordBatchReader:
     if prefix is not None:
         store = create_store(bucket)
         keys = sorted(
-            key for key in list_sizes(store, prefix) if key.endswith(".parquet")
+            key
+            for key in list_sizes(store, prefix)
+            if key.endswith(".parquet") and not is_hidden(key.removeprefix(prefix))
         )
         if keys:
             files = [

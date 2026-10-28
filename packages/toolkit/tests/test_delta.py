@@ -793,6 +793,22 @@ def test_a_chunk_in_the_temp_bucket_is_read_from_the_bucket(
     assert reader.read_all().column("id").to_pylist() == [1, 2, 3]
 
 
+def test_a_staged_file_in_the_temp_bucket_is_not_read(tmp_path, monkeypatch) -> None:
+    """Skip the files under a folder that starts with `_`, as a local read does."""
+    source = chunk_files(tmp_path / "source", "w1", [1, 2, 3])
+    raw = (source / "out.parquet").read_bytes()
+    store = MemoryStore()
+    put(store, "abc/out.parquet", raw)
+    put(store, "abc/_stage/mysql.parquet", raw)
+    monkeypatch.setenv("GCS_TMP_BUCKET", "tmp-bucket")
+    monkeypatch.setattr("toolkit.delta.gettempdir", lambda: str(tmp_path / "mount"))
+    monkeypatch.setattr("toolkit.delta.create_store", lambda bucket: store)
+
+    reader = open_reader(tmp_path / "mount" / "abc", None)
+
+    assert reader.read_all().column("id").to_pylist() == [1, 2, 3]
+
+
 def test_a_folder_outside_the_mount_is_read_locally(tmp_path, monkeypatch) -> None:
     """Keep the local read when a bucket is set but the folder is off the mount."""
     local = chunk_files(tmp_path / "local", "w1", [7, 8])
