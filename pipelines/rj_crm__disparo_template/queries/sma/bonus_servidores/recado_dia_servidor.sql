@@ -48,3 +48,4 @@ final as (
 )
 
 select * from final
+where telefone not in ('5511984677798', '5521980375732', '5511996280345', '5521989190512')
