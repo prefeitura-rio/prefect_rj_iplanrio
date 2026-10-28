@@ -33,7 +33,7 @@ async def rj_cor__precipitacao_alertario_sftp(
     """
     settings = Settings()
     watermark = max_date_bigquery or await read_watermark_task(
-        f"{cloud['project']}.{pluviometric['dataset_id']}.{pluviometric['table_id']}", cloud["project"]
+        f"{cloud['project']}.{pluviometric['dataset_id']}_staging.{pluviometric['table_id']}", cloud["project"]
     )
     xml_files = await fetch_files_task(settings.NIMBUS_BUCKET_NAME, settings.NIMBUS_PREFIX, watermark)
 
