@@ -60,6 +60,7 @@
     "rj_cvl__osinfo",
     "rj_iplanrio__dados_mestres",
     "rj_iplanrio__sici",
+    "rj_pgm__divida_ativa",
     "rj_smas__api_datametrica_agendamentos",
     "rj_smfp__crf"
   ]
