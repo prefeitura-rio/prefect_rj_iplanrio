@@ -25,6 +25,7 @@ async def rj_smas__api_datametrica_agendamentos(
     dump_mode: DumpMode = "append",
     dbt: DbtRun | None = None,
     date: str | None = None,
+    dispatch: bool = True,
 ) -> None:
     """Load the Cadastro Único appointments of the Datametrica API to BigQuery.
 
@@ -33,7 +34,7 @@ async def rj_smas__api_datametrica_agendamentos(
     The date is `date`, or two days ahead, or four on Thursday and Friday, and nothing
     on a weekend. With `dbt` a dbt command runs after the publish. The run ends by
     starting the dispatch flow of the reminders for that date, which sends real
-    messages.
+    messages, unless `dispatch` is false. A run that tests the table sets it false.
     """
     today = today_in_sao_paulo()
     target = read_target_date(today, date)
@@ -52,6 +53,10 @@ async def rj_smas__api_datametrica_agendamentos(
 
     if dbt:
         await run_dbt(dbt)
+
+    if not dispatch:
+        logger.info("Dispatch off: date=%s", target)
+        return
 
     table_name = f"{cloud['project']}.{table['dataset_id']}.{table['table_id']}"
     await trigger_dispatch_task(build_dispatch_parameters(table_name, (target - today).days))
