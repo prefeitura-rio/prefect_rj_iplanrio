@@ -56,6 +56,7 @@
   "prod": [
     "rj_cor__meteorologia_inmet",
     "rj_iplanrio__dados_mestres",
-    "rj_iplanrio__sici"
+    "rj_iplanrio__sici",
+    "rj_smfp__crf"
   ]
 }
