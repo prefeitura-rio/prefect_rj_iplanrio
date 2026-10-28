@@ -6,7 +6,13 @@ from json import loads
 
 from pydantic import JsonValue
 
-from pipelines.rj_smas__api_datametrica_agendamentos.constants import LONG_AHEAD, SP_TZ, USER_AGENT, WEEKEND
+from pipelines.rj_smas__api_datametrica_agendamentos.constants import (
+    LONG_AHEAD,
+    NO_APPOINTMENT,
+    SP_TZ,
+    USER_AGENT,
+    WEEKEND,
+)
 from utils.utils import render_query
 
 FIELDS = {
@@ -58,15 +64,20 @@ def build_headers(token: str, proxy_token: str) -> dict[str, str]:
 
 
 def read_records(data: JsonValue) -> Sequence[JsonValue]:
-    """Return the records of the answer of the API, which must be a list.
+    """Return the records of the answer of the API, which is a list.
 
-    An empty list is a day with no appointment. Anything else, as an object with a
-    `message`, is an error of the API with a 200 status, so raise `ValueError`.
+    A date with no appointment may come as an empty list or as an object with the
+    message `NO_APPOINTMENT`, and both give no record. Any other answer is an error of
+    the API with a 200 status, so raise `ValueError`.
     """
     if isinstance(data, list):
         return data
 
     detail = data.get("message") if isinstance(data, dict) else None
+
+    if isinstance(detail, str) and detail.startswith(NO_APPOINTMENT):
+        return []
+
     keys = sorted(data) if isinstance(data, dict) else []
     raise ValueError(f"The API did not send a list: type={type(data).__name__} keys={keys} message={str(detail)[:200]}")
 

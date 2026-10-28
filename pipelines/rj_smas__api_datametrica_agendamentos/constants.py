@@ -13,3 +13,5 @@ Other days look two.
 """
 DISPATCH_DEPLOYMENT: Final = "rj-crm--disparo-template-sf/rj-crm--disparo-template-sf--prod"
 USER_AGENT: Final = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+NO_APPOINTMENT: Final = "Nenhum agendamento encontrado"
+"""The start of the message that the API sends for a date with no appointment."""

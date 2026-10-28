@@ -88,6 +88,11 @@ def test_the_dispatch_parameters_carry_the_query_for_the_table_and_the_days() ->
     [
         pytest.param([{"id": 1}], [{"id": 1}], id="a_list_is_the_records"),
         pytest.param([], [], id="an_empty_list_is_no_appointment"),
+        pytest.param(
+            {"data_consultada": "2026-10-30", "message": "Nenhum agendamento encontrado para a data informada."},
+            [],
+            id="the_message_for_a_date_with_no_appointment",
+        ),
     ],
 )
 def test_a_list_is_the_records(data: JsonValue, expected: JsonValue) -> None:
