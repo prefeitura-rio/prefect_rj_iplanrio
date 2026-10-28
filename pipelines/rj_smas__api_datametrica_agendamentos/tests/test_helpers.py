@@ -1,4 +1,5 @@
 from datetime import date
+from re import escape
 
 import pytest
 from pydantic import JsonValue
@@ -7,6 +8,7 @@ from pipelines.rj_smas__api_datametrica_agendamentos.helpers import (
     build_dispatch_parameters,
     build_headers,
     build_rows,
+    read_records,
     read_target_date,
 )
 
@@ -79,3 +81,30 @@ def test_the_dispatch_parameters_carry_the_query_for_the_table_and_the_days() ->
     assert "nome_hsm = 'confirma_agendamento_cadunico_prod_v2'" in query
     assert parameters["test_mode"] is False
     assert "{{" not in query
+
+
+@pytest.mark.parametrize(
+    ("data", "expected"),
+    [
+        pytest.param([{"id": 1}], [{"id": 1}], id="a_list_is_the_records"),
+        pytest.param([], [], id="an_empty_list_is_no_appointment"),
+    ],
+)
+def test_a_list_is_the_records(data: JsonValue, expected: JsonValue) -> None:
+    """Return the records of a list as they are."""
+    assert read_records(data) == expected
+
+
+@pytest.mark.parametrize(
+    ("data", "message"),
+    [
+        pytest.param({"message": "Too many requests"}, "Too many requests", id="an_object_with_a_message"),
+        pytest.param({"status": 500}, "keys=['status']", id="an_object_with_no_message"),
+        pytest.param("<html>blocked</html>", "str", id="a_text"),
+        pytest.param(None, "NoneType", id="nothing"),
+    ],
+)
+def test_an_answer_that_is_not_a_list_is_an_error_and_not_an_empty_day(data: JsonValue, message: str) -> None:
+    """Fail on an error body, so that it never passes as a day with no appointment."""
+    with pytest.raises(ValueError, match=escape(message)):
+        read_records(data)

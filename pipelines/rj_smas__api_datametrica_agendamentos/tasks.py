@@ -8,14 +8,17 @@ from pydantic import JsonValue
 from toolkit.telemetry import logger
 
 from pipelines.rj_smas__api_datametrica_agendamentos.constants import DISPATCH_DEPLOYMENT
-from pipelines.rj_smas__api_datametrica_agendamentos.helpers import build_headers, build_rows
+from pipelines.rj_smas__api_datametrica_agendamentos.helpers import build_headers, build_rows, read_records
 from pipelines.rj_smas__api_datametrica_agendamentos.settings import Settings
 from utils.tasks import request_json
 
 
-@task
+@task(retries=2, retry_delay_seconds=120)
 async def fetch_appointments_task(target_date: date) -> list[dict[str, JsonValue]]:
-    """Fetch the appointments of a date from the Datametrica API, via a Brazil proxy."""
+    """Fetch the appointments of a date from the Datametrica API, via a Brazil proxy.
+
+    An answer that is not a list fails the task, and the task tries again twice.
+    """
     settings = Settings()
     url = (
         settings.DATAMETRICA_URL
@@ -29,8 +32,7 @@ async def fetch_appointments_task(target_date: date) -> list[dict[str, JsonValue
         headers=build_headers(settings.DATAMETRICA_TOKEN.get_secret_value(), settings.PROXY_TOKEN.get_secret_value()),
         timeout=30,
     )
-    records = data if isinstance(data, list) else []
-    rows = build_rows(records)
+    rows = build_rows(read_records(data))
     logger.info("Appointments fetched: date=%s count=%d", target_date, len(rows))
 
     return rows

@@ -57,6 +57,20 @@ def build_headers(token: str, proxy_token: str) -> dict[str, str]:
     }
 
 
+def read_records(data: JsonValue) -> Sequence[JsonValue]:
+    """Return the records of the answer of the API, which must be a list.
+
+    An empty list is a day with no appointment. Anything else, as an object with a
+    `message`, is an error of the API with a 200 status, so raise `ValueError`.
+    """
+    if isinstance(data, list):
+        return data
+
+    detail = data.get("message") if isinstance(data, dict) else None
+    keys = sorted(data) if isinstance(data, dict) else []
+    raise ValueError(f"The API did not send a list: type={type(data).__name__} keys={keys} message={str(detail)[:200]}")
+
+
 def build_rows(records: Sequence[JsonValue]) -> list[dict[str, JsonValue]]:
     """Return the appointments as rows with the fields of the table.
 
