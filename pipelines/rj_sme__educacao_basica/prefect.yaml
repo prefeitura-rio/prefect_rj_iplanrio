@@ -248,6 +248,12 @@ deployments:
               FROM GestaoEscolar.dbo.VW_BI_Avaliacao
           dump_mode: append
           options:
+            chunks:
+              column: Ano
+              width: 1
+              begin: 2020
+              lookback: 1
+            concurrency: 3
             columns:
               add_timestamp: true
       - interval: 86400
