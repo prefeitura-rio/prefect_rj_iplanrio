@@ -252,7 +252,6 @@ deployments:
               width: 1
               begin: 2020
               lookback: 1
-            concurrency: 3
             columns:
               add_timestamp: true
       - interval: 86400
