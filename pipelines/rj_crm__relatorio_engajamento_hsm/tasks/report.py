@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Monta e publica os arquivos de uma rodada de relatório, numa subpasta nova da pasta
 da campanha (nunca substitui uma rodada anterior — ela pode ter uma planilha revisada):
 
@@ -60,9 +59,7 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     COR_DECISAO_MANTER,
     DOCX_MIME,
     DRIVE_DOC_MIME,
-    EVENTOS_WHATSAPP_TABLE,
     FONTE_DISPAROS_CAMPANHA,
-    FONTE_DISPAROS_HSM,
     MARCADOR_REVISADA,
     N_EXEMPLOS_POR_SENTIMENTO,
     N_REACOES_RELATORIO,
@@ -72,7 +69,6 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     REVISAO_CERTO,
     REVISAO_ERRADO,
     SEED_EXEMPLOS_SENTIMENTO,
-    SEND_EVENT_TABLE,
     SENTIMENTO_NEGATIVO,
     SENTIMENTO_POSITIVO,
     SENTIMENTOS,
@@ -370,7 +366,7 @@ def gera_docx(dados: DadosRelatorio, categorias: list[Categoria]) -> Document:
 
     doc.add_heading("Resumo", level=1)
     eng = dados.engajamento
-    doc.add_paragraph(f"Sessões que receberam o HSM: {eng.total_disparos}")
+    doc.add_paragraph(f"Sessões com o agente ligadas ao HSM: {eng.total_disparos}")
     doc.add_paragraph(
         f"Sessões com resposta do cidadão (qualquer tipo, inclusive reação): {eng.total_engajados} "
         f"({_pct(eng.total_engajados, eng.total_disparos):.1f}% das sessões)"
@@ -414,12 +410,8 @@ def gera_docx(dados: DadosRelatorio, categorias: list[Categoria]) -> Document:
         doc.add_paragraph(f"{i}) {item}")
 
     doc.add_heading("Query utilizada na análise", level=1)
-    if dados.fonte_disparos == FONTE_DISPAROS_HSM:
-        origem = f"nos eventos de WhatsApp ({EVENTOS_WHATSAPP_TABLE} e {SEND_EVENT_TABLE})"
-    else:
-        origem = f"em {PROJECT_ID}.{CHATBOT_DATASET}.{CHATBOT_TABLE}"
     doc.add_paragraph(
-        f"Consulta {origem} usada pra extrair as conversas, com os parâmetros já substituídos pelos valores "
+        f"Consulta em {PROJECT_ID}.{CHATBOT_DATASET}.{CHATBOT_TABLE} usada pra extrair as conversas, com os parâmetros já substituídos pelos valores "
         "reais desta análise."
     )
     _adiciona_bloco_codigo(doc, dados.sql_utilizada)
