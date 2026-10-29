@@ -4,8 +4,8 @@ Não importa o Prefect: ``tasks.py`` injeta as ações (disparar, pausar, confer
 fluxo é só uma casca em volta de :func:`run_chain`.
 """
 
-from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 
 from pipelines.rj_smfp__nota_carioca_carga_completa.utils.discord_format import format_duration
 from pipelines.rj_smfp__nota_carioca_carga_completa.utils.guard import ActiveRunsError
@@ -50,15 +50,45 @@ class Step:
     :param label: Nome nas mensagens (``Oracle → BigQuery``).
     :param deployment: ``<flow>/<deployment>``.
     :param timeout_seconds: Quanto esperar o término antes de desistir de esperar (não cancela o filho).
+    :param parameters: Parâmetros do flow run filho, por cima dos padrões do deployment; vazio usa só os padrões.
     """
 
     label: str
     deployment: str
     timeout_seconds: int
+    parameters: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.timeout_seconds <= 0:
             raise ValueError(f"O tempo limite de {self.label} precisa ser positivo, veio {self.timeout_seconds} s.")
+
+
+@dataclass(frozen=True)
+class ExportManifest:
+    """Onde o ``bq_to_oracle`` grava o manifesto do export preservado.
+
+    :param bucket: Bucket do export (``gcs_bucket`` do ``bq_to_oracle``).
+    :param dataset_id: Dataset de origem (``dataset_id`` do ``bq_to_oracle``).
+    """
+
+    bucket: str
+    dataset_id: str
+
+    def uri(self, flow_run_id: str) -> str:
+        """URI do manifesto de um flow run do ``bq_to_oracle``: ``gs://<bucket>/<dataset>/<flow_run_id>/manifesto.json``."""
+        return f"gs://{self.bucket}/{self.dataset_id}/{flow_run_id}/manifesto.json"
+
+
+@dataclass(frozen=True)
+class PostgresLoad:
+    """O passo que carrega no Postgres o export preservado pelo segundo passo.
+
+    :param step: Deployment do carregador; ``manifesto_uri`` é preenchido com o manifesto do flow run do segundo passo.
+    :param manifest: Onde o segundo passo grava o manifesto.
+    """
+
+    step: Step
+    manifest: ExportManifest
 
 
 @dataclass(frozen=True)
@@ -67,14 +97,16 @@ class ChainPlan:
 
     :param first: Roda primeiro.
     :param second: Roda só se o primeiro concluir.
-    :param pause_seconds: Espera entre os dois.
-    :param tags: Tags dos dois flow runs filhos.
+    :param pause_seconds: Espera entre os passos.
+    :param tags: Tags dos flow runs filhos.
+    :param postgres: Roda por último, só se o segundo concluir, com o manifesto dele; ``None`` não carrega o Postgres.
     """
 
     first: Step
     second: Step
     pause_seconds: int
     tags: tuple[str, ...]
+    postgres: PostgresLoad | None = None
 
     def __post_init__(self) -> None:
         if self.pause_seconds < 0:
@@ -123,22 +155,36 @@ class _Chain:
         self._actions = actions
 
     def run(self) -> None:
-        """Trava, primeiro, pausa, trava do segundo, segundo; avisa o Discord a cada passo."""
+        """Trava, primeiro, pausa, trava do segundo, segundo e, se houver, o mesmo para o Postgres; avisa o Discord."""
         plan, actions = self._plan, self._actions
         started = actions.clock()
+        postgres = plan.postgres
         self._ensure_idle(plan.first, NOT_STARTED)
         self._ensure_idle(plan.second, NOT_STARTED)
-        actions.log(f"Carga completa: {plan.first.label}, depois {plan.second.label}.")
-        actions.notify(f"🔗 Carga completa iniciada: {plan.first.label}, depois {plan.second.label}")
+        if postgres is not None:
+            self._ensure_idle(postgres.step, NOT_STARTED)
+        labels = [plan.first.label, plan.second.label, *([postgres.step.label] if postgres is not None else [])]
+        actions.log(f"Carga completa: {', depois '.join(labels)}.")
+        actions.notify(f"🔗 Carga completa iniciada: {', depois '.join(labels)}")
         self._run_step(plan.first, skipped=plan.second)
-        actions.log(f"{plan.first.label} concluído; {plan.second.label} começa em {plan.pause_seconds} s.")
-        actions.notify(f"⏭️ {plan.first.label} concluído; {plan.second.label} começa em {plan.pause_seconds} s")
-        actions.pause(plan.pause_seconds)
+        self._pause_between(plan.first, plan.second)
         self._ensure_idle(plan.second, f"Carga completa interrompida ({plan.first.label} concluído)")
-        self._run_step(plan.second, skipped=None)
+        second = self._run_step(plan.second, skipped=postgres.step if postgres is not None else None)
+        if postgres is not None:
+            self._pause_between(plan.second, postgres.step)
+            self._ensure_idle(postgres.step, f"Carga completa interrompida ({plan.second.label} concluído)")
+            manifest = {"manifesto_uri": postgres.manifest.uri(second.run_id)}
+            self._run_step(replace(postgres.step, parameters=manifest), skipped=None)
         took = format_duration(actions.clock() - started)
         actions.log(f"Carga completa concluída em {took}.")
         actions.notify(f"✅ Carga completa concluída em {took}")
+
+    def _pause_between(self, done: Step, next_step: Step) -> None:
+        """Avisa que ``done`` concluiu e espera a pausa antes de ``next_step``."""
+        seconds = self._plan.pause_seconds
+        self._actions.log(f"{done.label} concluído; {next_step.label} começa em {seconds} s.")
+        self._actions.notify(f"⏭️ {done.label} concluído; {next_step.label} começa em {seconds} s")
+        self._actions.pause(seconds)
 
     def _ensure_idle(self, step: Step, headline: str) -> None:
         """Confere que o deployment está livre; senão para a cadeia com o ``headline`` na mensagem."""
@@ -151,11 +197,12 @@ class _Chain:
                 f"⛔ {headline}: {step.label} já tem execução ativa ({who})",
             ) from error
 
-    def _run_step(self, step: Step, skipped: Step | None) -> None:
+    def _run_step(self, step: Step, skipped: Step | None) -> ChildRun:
         """Dispara o deployment, espera, registra o filho com o link e para a cadeia se ele não concluiu.
 
         :param step: Deployment a rodar.
         :param skipped: O passo que deixa de ser disparado se este não concluir; ``None`` no último.
+        :returns: O filho concluído.
         """
         actions = self._actions
         actions.log(
@@ -166,6 +213,7 @@ class _Chain:
         actions.log(f"{step.label}: flow run {child.name} em {child.state_name}{' ' + url if url else ''}")
         if child.state_type != COMPLETED_STATE:
             raise self._unfinished(step, child, skipped)
+        return child
 
     def _unfinished(self, step: Step, child: ChildRun, skipped: Step | None) -> ChainStoppedError:
         """Monta a parada por um filho que terminou mal ou que ainda corria quando o tempo limite acabou."""

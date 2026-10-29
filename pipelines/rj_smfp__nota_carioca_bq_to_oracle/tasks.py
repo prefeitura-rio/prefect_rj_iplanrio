@@ -11,7 +11,16 @@ from prefect.runtime import flow_run
 
 from iplanrio.pipelines_utils.logging import log
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import DBT_POLL_SECONDS
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery, dbt, inmemory, oracle, runs, slots, sqlldr
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import (
+    bigquery,
+    dbt,
+    inmemory,
+    manifest,
+    oracle,
+    runs,
+    slots,
+    sqlldr,
+)
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import LoadPlan, RawTextEncoding, build_load_plan
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify import current as current_notifier
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
@@ -260,6 +269,22 @@ def delete_gcs_files_task(project: str, bucket: str, files: list[bigquery.Export
     """
     bigquery.delete_blobs(project=project, bucket=bucket, blob_names=[exported.name for exported in files])
     log(f"Removidos {len(files)} arquivos temporários de gs://{bucket}")
+
+
+@task(cache_policy=NO_CACHE)
+def write_export_manifest_task(
+    project: str, bucket: str, dataset_id: str, flow_run_id: str, snapshot: dict[str, bigquery.TableSnapshot]
+) -> str:
+    """Grava no GCS o manifesto do export preservado, para o carregador do Postgres, e retorna o URI dele.
+
+    Roda só com ``preservar_export_para_postgres``, depois da troca dos sinônimos: um manifesto só existe para uma
+    foto que o Oracle já serve.
+    """
+    name = manifest.manifest_object_name(dataset_id, flow_run_id)
+    bigquery.upload_text(project, bucket, name, manifest.to_json(manifest.build_manifest(flow_run_id, snapshot)))
+    uri = f"gs://{bucket}/{name}"
+    log(f"Export preservado para o Postgres; manifesto em {uri}")
+    return uri
 
 
 @task(cache_policy=NO_CACHE)

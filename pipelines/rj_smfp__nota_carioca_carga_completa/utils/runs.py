@@ -3,7 +3,7 @@
 Único módulo de ``utils/`` que importa o Prefect; toda a decisão fica em ``guard.py`` e ``chain.py``.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import cast
 from uuid import UUID
 
@@ -92,16 +92,21 @@ def list_deployment_runs(deployment: str) -> list[ActiveRun]:
     return [to_active_run(flow_run) for flow_run in flow_runs]
 
 
-def run_and_wait(deployment: str, timeout_seconds: int, tags: Sequence[str]) -> ChildRun:
+def run_and_wait(
+    deployment: str, timeout_seconds: int, tags: Sequence[str], parameters: Mapping[str, object] | None = None
+) -> ChildRun:
     """Cria o flow run do deployment como subflow do atual e espera o término ou o tempo limite.
 
-    Sem parâmetros: valem os padrões do deployment. No tempo limite o filho NÃO é cancelado.
+    Os parâmetros do deployment valem, e ``parameters`` os sobrepõe; sem ``parameters`` só valem os do deployment. No
+    tempo limite o filho NÃO é cancelado.
 
     :param deployment: ``<flow>/<deployment>``.
     :param timeout_seconds: Quanto esperar o término.
     :param tags: Tags do flow run criado.
+    :param parameters: Parâmetros que sobrepõem os do deployment; vazio ou ``None`` não envia nenhum.
     :returns: O filho no último estado lido (final, ou ainda ativo se o tempo limite acabou).
     """
+    overrides = {"parameters": dict(parameters)} if parameters else {}
     # Em contexto síncrono ``run_deployment`` devolve o FlowRun; a anotação do Prefect só enxerga a corrotina.
     flow_run = cast(
         FlowRun,
@@ -111,6 +116,7 @@ def run_and_wait(deployment: str, timeout_seconds: int, tags: Sequence[str]) -> 
             poll_interval=POLL_SECONDS,
             as_subflow=True,
             tags=list(tags),
+            **overrides,
         ),
     )
     return to_child_run(flow_run)

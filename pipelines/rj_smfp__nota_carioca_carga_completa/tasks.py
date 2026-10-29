@@ -29,13 +29,13 @@ def ensure_idle_task(deployment: str) -> None:
 
 @task(cache_policy=NO_CACHE)
 def run_deployment_task(step: Step, tags: Sequence[str]) -> ChildRun:
-    """Dispara o deployment (padrões do deployment) como subflow e espera o término ou o tempo limite.
+    """Dispara o deployment como subflow e espera o término ou o tempo limite.
 
-    :param step: Deployment e tempo limite.
+    :param step: Deployment, tempo limite e os parâmetros que sobrepõem os padrões do deployment.
     :param tags: Tags do flow run criado.
     :returns: O flow run filho no último estado lido.
     """
-    return runs.run_and_wait(step.deployment, step.timeout_seconds, tags)
+    return runs.run_and_wait(step.deployment, step.timeout_seconds, tags, step.parameters)
 
 
 @task(cache_policy=NO_CACHE)
