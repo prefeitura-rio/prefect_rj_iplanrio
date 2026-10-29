@@ -1,0 +1,77 @@
+name: rj_smfp__nota_carioca_extracao_xml
+prefect-version: 3.4.3
+
+build:
+- prefect.deployments.steps.run_shell_script:
+    id: get-commit-hash
+    script: git rev-parse --short HEAD
+    stream_output: false
+- prefect_docker.deployments.steps.build_docker_image:
+    id: build-image
+    requires: prefect-docker>=0.6.5
+    image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+    tag: "rj_smfp__nota_carioca_extracao_xml-{{ get-commit-hash.stdout }}"
+    dockerfile: pipelines/rj_smfp__nota_carioca_extracao_xml/Dockerfile
+
+push:
+- prefect_docker.deployments.steps.push_docker_image:
+    requires: prefect-docker>=0.6.5
+    image_name: "{{ build-image.image_name }}"
+    tag: "{{ build-image.tag }}"
+
+pull:
+- prefect.deployments.steps.set_working_directory:
+    directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+# Staging: chama o webservice de homologação (notacariocahom) e acompanha a tarefa no Oracle de homologação (o segredo
+# /db-oracle-nota-fiscal de staging). O Discord posta no canal de staging, com o marcador 🧪 STAGING.
+- name: rj-smfp--nota-carioca-extracao-xml--staging
+  tags:
+  - environment:staging
+  - severity:low
+  - code_owner:fredzolio
+  version: "{{ build-image.tag }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_extracao_xml/flow.py:rj_smfp__nota_carioca_extracao_xml
+  # Uma extração por vez (o webservice também recusa uma segunda com Conflict).
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  # Sem schedule: roda como primeiro passo da carga completa (ou manual).
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_extracao_xml -- prefect flow-run execute
+      secretName: prefect-jobs-secrets-staging
+      image_pull_policy: Always
+      # O pod só chama o webservice e consulta TAREFAS a cada minuto; a extração roda na aplicação.
+      cpu_request: "100m"
+      cpu_limit: "500m"
+      memory_request: 256Mi
+      memory_limit: 512Mi
+# Prod: chama o webservice de produção e acompanha a tarefa no Oracle de produção.
+- name: rj-smfp--nota-carioca-extracao-xml--prod
+  tags:
+  - environment:prod
+  - severity:medium
+  - code_owner:fredzolio
+  version: "{{ get-commit-hash.stdout }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_extracao_xml/flow.py:rj_smfp__nota_carioca_extracao_xml
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  # Sem schedule: a agenda das 17h é da carga completa, que dispara esta extração primeiro.
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_extracao_xml -- prefect flow-run execute
+      secretName: prefect-jobs-secrets
+      image_pull_policy: Always
+      cpu_request: "100m"
+      cpu_limit: "500m"
+      memory_request: 256Mi
+      memory_limit: 512Mi
