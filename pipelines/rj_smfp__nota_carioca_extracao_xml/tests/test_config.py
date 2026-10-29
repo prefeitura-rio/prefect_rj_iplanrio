@@ -10,23 +10,23 @@ from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.discord import Environme
 PREFECT_YAML = Path(__file__).resolve().parents[1] / "prefect.yaml"
 
 
-def test_secret_env_key_follows_the_iplanrio_convention_for_the_infisical_folder() -> None:
-    assert (
-        secret_env_key("/db-oracle-nota-fiscal", "NOTA_CARIOCA_ROTINAS_TOKEN")
-        == "DB_ORACLE_NOTA_FISCAL__NOTA_CARIOCA_ROTINAS_TOKEN"
-    )
+def test_secret_env_key_follows_the_naming_of_the_oracle_keys_in_the_infisical_folder() -> None:
+    assert secret_env_key("/db-oracle-nota-fiscal", "DB_HOST") == "DB_ORACLE_NOTA_FISCAL__DB_HOST"
 
 
-def test_read_token_reads_the_variable_of_the_folder() -> None:
-    environ = {"DB_ORACLE_NOTA_FISCAL__NOTA_CARIOCA_ROTINAS_TOKEN": "  abc  "}
+def test_read_token_reads_the_key_with_the_name_stored_in_infisical() -> None:
+    # O InfisicalSecret do Prefect copia cada chave com o nome literal; o token foi gravado sem prefixo de pasta.
+    environ = {"NOTA_CARIOCA_ROTINAS_TOKEN": "  abc  ", "DB_ORACLE_NOTA_FISCAL__NOTA_CARIOCA_ROTINAS_TOKEN": "outro"}
 
-    assert read_token("/db-oracle-nota-fiscal", environ) == "abc"
+    assert read_token(environ) == "abc"
 
 
-@pytest.mark.parametrize("environ", [{}, {"DB_ORACLE_NOTA_FISCAL__NOTA_CARIOCA_ROTINAS_TOKEN": " "}])
+@pytest.mark.parametrize(
+    "environ", [{}, {"NOTA_CARIOCA_ROTINAS_TOKEN": " "}, {"DB_ORACLE_NOTA_FISCAL__NOTA_CARIOCA_ROTINAS_TOKEN": "x"}]
+)
 def test_read_token_fails_explicitly_when_missing(environ: dict[str, str]) -> None:
-    with pytest.raises(ValueError, match="DB_ORACLE_NOTA_FISCAL__NOTA_CARIOCA_ROTINAS_TOKEN"):
-        read_token("/db-oracle-nota-fiscal", environ)
+    with pytest.raises(ValueError, match="NOTA_CARIOCA_ROTINAS_TOKEN"):
+        read_token(environ)
 
 
 def test_resolve_url_uses_homologation_in_staging_and_production_in_prod() -> None:

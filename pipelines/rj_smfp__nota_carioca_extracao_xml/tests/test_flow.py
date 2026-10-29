@@ -6,7 +6,7 @@ from prefect.testing.utilities import prefect_test_harness
 
 from pipelines.rj_smfp__nota_carioca_extracao_xml import flow as flow_module
 
-TOKEN_ENV = "DB_ORACLE_NOTA_FISCAL__NOTA_CARIOCA_ROTINAS_TOKEN"
+TOKEN_ENV = "NOTA_CARIOCA_ROTINAS_TOKEN"
 
 
 @pytest.fixture(scope="module", autouse=True)
