@@ -181,3 +181,40 @@ def test_staging_notifier_stays_silent_without_a_staging_webhook_even_if_prod_ha
 
     # Then: nada vai ao canal de prod
     assert requests == []
+
+
+def test_alert_notifier_mentions_the_roles_and_allows_only_those_mentions() -> None:
+    # Given: um notificador de alerta com os cargos a mencionar
+    requests: list[httpx.Request] = []
+    alert = make_notifier(
+        True, resolve=lambda: URL, transport=recording_transport(requests), mention_role_ids=("111", "222")
+    )
+
+    # When: posta a parada da carga
+    alert("⛔ Carga completa interrompida: Extração XML terminou em Failed")
+
+    # Then: o texto começa pelas menções e só esses cargos podem ser notificados
+    assert json.loads(requests[0].content) == {
+        "content": "<@&111> <@&222> ⛔ Carga completa interrompida: Extração XML terminou em Failed",
+        "allowed_mentions": {"parse": [], "roles": ["111", "222"]},
+    }
+
+
+def test_alert_notifier_marks_staging_after_the_mentions() -> None:
+    requests: list[httpx.Request] = []
+    alert = make_notifier(
+        True,
+        Environment.STAGING,
+        resolve=lambda: STAGING_URL,
+        transport=recording_transport(requests),
+        mention_role_ids=("111",),
+    )
+
+    alert("⛔ parada")
+
+    assert json.loads(requests[0].content)["content"] == "<@&111> 🧪 STAGING · ⛔ parada"
+
+
+def test_notifier_rejects_role_ids_that_are_not_numbers() -> None:
+    with pytest.raises(ValueError, match="cargo"):
+        make_notifier(True, resolve=lambda: URL, mention_role_ids=("nota-carioca",))
