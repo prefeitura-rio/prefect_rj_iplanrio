@@ -71,12 +71,14 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
         return
 
     campaign_name = flow_run.parameters.get("campaign_name", "N/A")
+    run_url = flow_run.ui_url or "URL indisponível"
 
     message = f"""
     <@821121576455634955> <@1458456241683824744> <@302518123066556426>
     Prefect flow run failed in PRODUCTION! 🚨
     📋 **Campanha:** {campaign_name}
     ⚠️ **Mensagem:** {state.message}
+    🔗 **Link:** {run_url}
     """
     send_discord_notification(webhook_url, message)
 

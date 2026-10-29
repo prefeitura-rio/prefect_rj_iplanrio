@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Constantes da pipeline de relatório de engajamento por campanha (ver flow.py)."""
 
 from __future__ import annotations
@@ -26,10 +25,11 @@ N_EXEMPLOS_POR_CATEGORIA = 5
 # Classificação: 1 chamada de LLM por conversa, com até esse número de chamadas em
 # paralelo (limite pra não estourar o rate limit do Bifrost).
 CONCORRENCIA_LLM = 8
-# Teto de conversas com resposta num relatório (engajamento ou rápido). Acima disso o
-# relatório NÃO é gerado: a solicitação fica "aguardando liberação" até alguém rodar o
-# flow com a campanha em `campanhas_liberadas` — controle explícito do uso de LLM.
-TETO_CONVERSAS = 2000
+# Teto de conversas com resposta em texto (as que vão pra LLM) num relatório (engajamento
+# ou rápido). Acima disso o relatório NÃO é gerado: a solicitação fica "aguardando
+# liberação" até alguém rodar o flow com a campanha em `campanhas_liberadas` — controle
+# explícito do uso de LLM.
+TETO_CONVERSAS = 5000
 # Teto de conversas avaliadas pelo juiz. Só faz diferença numa campanha liberada acima
 # de TETO_CONVERSAS: aí o juiz avalia uma amostra estratificada por categoria (piso de
 # PISO_JUIZ_POR_CATEGORIA por categoria, o resto proporcional ao tamanho).
@@ -42,19 +42,61 @@ LOTES_SEM_NOVIDADE_LIMITE = 5
 N_EXEMPLOS_DESCOBERTA = 5
 SEED_DESCOBERTA = 42
 
-# CUSTOMER fica de fora de propósito — é cópia crua da 1ª resposta do cidadão que
-# AI_AGENT_CIDADAO já repete com timestamp de processamento (mantê-la duplicaria a fala).
-FONTES_CONVERSA = ["HSM", "AI_AGENT_CIDADAO", "AI_AGENT_AGENTE"]
-# Uma sessão (id_sessao_48h) dura até 48h: a extração busca mensagens até esse número
-# de dias depois da data de fim, pra sessão do último dia vir inteira (ver
-# queries/extrai_conversas.sql).
-DIAS_SESSAO = 2
+# De onde vêm os disparos de cada solicitação (parâmetro fonte_disparos do flow):
+#   "campanha" (padrão, Form): disparos da rmi_conversas.chatbot por hsm.nome_campanha;
+#   "hsm"      (só custom run): por hsm.nome_hsm.
+# A conversa é a mesma nos dois: as sessões receptivas ligadas ao disparo
+# (queries/extrai_conversas.sql).
+FONTE_DISPAROS_CAMPANHA = "campanha"
+FONTE_DISPAROS_HSM = "hsm"
+FONTES_DISPAROS = (FONTE_DISPAROS_CAMPANHA, FONTE_DISPAROS_HSM)
 ROTULO_FONTE = {"HSM": "HSM", "AI_AGENT_CIDADAO": "CIDADÃO", "AI_AGENT_AGENTE": "AGENTE"}
+
+# Tipo de engajamento: msg_tipo cru do WhatsApp (coluna das queries) -> tipo do relatório.
+# Nulo conta como texto. Tipo cru fora do mapa vira TIPO_ENGAJAMENTO_OUTRO.
+TIPO_ENGAJAMENTO_TEXTO = "Texto"
+TIPO_ENGAJAMENTO_REACAO = "Reação"
+TIPO_ENGAJAMENTO_OUTRO = "Outro"
+TIPO_ENGAJAMENTO_POR_MSG_TIPO = {
+    "text": TIPO_ENGAJAMENTO_TEXTO,
+    "button": TIPO_ENGAJAMENTO_TEXTO,  # clique em botão do HSM
+    "interactive": TIPO_ENGAJAMENTO_TEXTO,  # escolha em menu/lista
+    "audio": "Áudio",
+    "image": "Imagem",
+    "video": "Vídeo",
+    "document": "Documento",
+    "contacts": "Contato",
+    "sticker": "Figurinha",
+    "reaction": TIPO_ENGAJAMENTO_REACAO,
+}
+# Cada sessão engajada conta 1 vez, no 1º tipo desta ordem que o cidadão usou — assim os
+# tipos somam o total de engajados. Só as sessões de texto vão pra LLM classificar.
+ORDEM_TIPO_ENGAJAMENTO = [
+    TIPO_ENGAJAMENTO_TEXTO,
+    "Áudio",
+    "Imagem",
+    "Vídeo",
+    "Documento",
+    "Contato",
+    TIPO_ENGAJAMENTO_OUTRO,
+    "Figurinha",
+    TIPO_ENGAJAMENTO_REACAO,
+]
+N_REACOES_RELATORIO = 10  # emojis listados na distribuição de reações (o resto vira "outras")
 # O que a LLM responde quando nenhuma categoria do catálogo descreve a conversa...
 SENTINELA_SEM_CATEGORIA = "NENHUMA_DO_CATALOGO"
 # ...e como isso aparece no relatório/planilha: uma "categoria" própria, sinal pra
 # secretaria criar categoria Nova na revisão.
 CATEGORIA_SEM_CATALOGO = "SEM_CATEGORIA_NO_CATALOGO"
+# Sentimento do CIDADÃO na conversa, devolvido pela LLM junto com as categorias (mesma
+# chamada). Valor fora da lista fica vazio, sem derrubar a classificação; o juiz não
+# avalia sentimento. Ordem = ordem no relatório.
+SENTIMENTO_POSITIVO = "Positivo"
+SENTIMENTO_NEUTRO = "Neutro"
+SENTIMENTO_NEGATIVO = "Negativo"
+SENTIMENTOS = (SENTIMENTO_POSITIVO, SENTIMENTO_NEUTRO, SENTIMENTO_NEGATIVO)
+N_EXEMPLOS_POR_SENTIMENTO = 3  # exemplos de conversa por sentimento no relatório
+SEED_EXEMPLOS_SENTIMENTO = 42
 # Resposta de 1 conversa (classificação) é curta: categorias + 2 frases.
 MAX_OUTPUT_TOKENS_CONVERSA = 1024
 # Corte de cada exemplo revisado no prompt da classificação (o few-shot não precisa da
@@ -186,6 +228,7 @@ OPCOES_AVALIACAO_BOT = (AVALIACAO_BOT_BOA, AVALIACAO_BOT_REGULAR, AVALIACAO_BOT_
 # Demais colunas de conversas_classificadas (mesmos nomes do material de exemplo).
 COL_CONV_JUSTIFICATIVA = "justificativa"
 COL_CONV_RESUMO = "resumo"
+COL_CONV_SENTIMENTO = "sentimento"
 COL_CONV_JUIZ_VEREDITO = "juiz_veredito"
 COL_CONV_JUIZ_ESPERADA = "juiz_categoria_esperada"
 COL_CONV_JUIZ_JUSTIFICATIVA = "juiz_justificativa"

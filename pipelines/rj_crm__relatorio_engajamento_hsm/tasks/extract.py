@@ -1,8 +1,10 @@
-# -*- coding: utf-8 -*-
 """Extrai e reconstrói as conversas de uma campanha num período (1 solicitação)."""
 
 from __future__ import annotations
 
+import re
+from collections import Counter
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
@@ -13,10 +15,15 @@ from prefect import task
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     CHATBOT_DATASET,
     CHATBOT_TABLE,
-    DIAS_SESSAO,
-    FONTES_CONVERSA,
+    FONTE_DISPAROS_CAMPANHA,
+    FONTE_DISPAROS_HSM,
+    ORDEM_TIPO_ENGAJAMENTO,
     PROJECT_ID,
     ROTULO_FONTE,
+    TIPO_ENGAJAMENTO_OUTRO,
+    TIPO_ENGAJAMENTO_POR_MSG_TIPO,
+    TIPO_ENGAJAMENTO_REACAO,
+    TIPO_ENGAJAMENTO_TEXTO,
 )
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.bigquery import get_bq_client
 
@@ -35,38 +42,63 @@ COLUNAS_SESSOES = [
     "conversa_completa",
 ]
 
+_RE_REACAO = re.compile(r"^\[reação: (.+)\]$")
+# tom de pele e seletor de variação: 👍🏻 e 👍 contam como a mesma reação
+_RE_MODIFICADOR_EMOJI = re.compile("[\U0001F3FB-\U0001F3FF\uFE0F]")
+_SELETOR_EMOJI = "\uFE0F"
+_INICIO_BLOCO_EMOJI = 0x1F000  # abaixo disso, símbolo que sem o seletor vira texto (❤ U+2764)
 
-def _monta_sql(campanha_expr: str, data_inicio_expr: str, data_fim_expr: str, fontes_expr: str) -> str:
+
+@dataclass
+class Engajamento:
+    """Contagens das sessões da extração, pro relatório. por_tipo: sessões engajadas
+    por tipo de engajamento — exclusivo (ver config.ORDEM_TIPO_ENGAJAMENTO), soma =
+    total_engajados. reacoes: emoji -> nº de reações (mensagens) nas sessões engajadas."""
+
+    total_disparos: int = 0
+    por_tipo: dict[str, int] = field(default_factory=dict)
+    reacoes: Counter = field(default_factory=Counter)
+
+    @property
+    def total_engajados(self) -> int:
+        return sum(self.por_tipo.values())
+
+    @property
+    def total_texto(self) -> int:
+        """Sessões com fala em texto do cidadão — as únicas que vão pra LLM."""
+        return self.por_tipo.get(TIPO_ENGAJAMENTO_TEXTO, 0)
+
+
+def _monta_sql(filtro_expr: str, data_inicio_expr: str, data_fim_expr: str, fonte_disparos: str) -> str:
     return _SQL_TEMPLATE.format(
-        project=PROJECT_ID,
-        dataset=CHATBOT_DATASET,
-        table=CHATBOT_TABLE,
-        campanha=campanha_expr,
+        tabela_chatbot=f"{PROJECT_ID}.{CHATBOT_DATASET}.{CHATBOT_TABLE}",
+        campo_disparo="nome_hsm" if fonte_disparos == FONTE_DISPAROS_HSM else "nome_campanha",
+        filtro=filtro_expr,
         data_inicio=data_inicio_expr,
         data_fim=data_fim_expr,
-        dias_sessao=DIAS_SESSAO,
-        fontes=fontes_expr,
     )
 
 
-def sql_query_utilizada(campanha: str, data_inicio: date, data_fim: date) -> str:
+def sql_query_utilizada(
+    campanha: str, data_inicio: date, data_fim: date, fonte_disparos: str = FONTE_DISPAROS_CAMPANHA
+) -> str:
     """Mesma consulta de _busca_mensagens, com parâmetros já substituídos por valor
     literal — só pra exibir no relatório final como referência (nunca roda contra o BQ)."""
     campanha_literal = "'" + str(campanha).replace("'", "''") + "'"
-    fontes_literal = "(" + ", ".join(f"'{f}'" for f in FONTES_CONVERSA) + ")"
-    return _monta_sql(
-        campanha_literal, f"date '{data_inicio.isoformat()}'", f"date '{data_fim.isoformat()}'", fontes_literal
-    )
+    inicio_literal, fim_literal = f"date '{data_inicio.isoformat()}'", f"date '{data_fim.isoformat()}'"
+    return _monta_sql(campanha_literal, inicio_literal, fim_literal, fonte_disparos)
 
 
-def _busca_mensagens(client: bigquery.Client, campanha: str, data_inicio: date, data_fim: date) -> pd.DataFrame:
-    sql = _monta_sql("@campanha", "@data_inicio", "@data_fim", "unnest(@fontes)")
+def _busca_mensagens(
+    client: bigquery.Client, campanha: str, data_inicio: date, data_fim: date, fonte_disparos: str
+) -> pd.DataFrame:
+    """`campanha` é o nome da campanha ou, com FONTE_DISPAROS_HSM, o nome do template."""
+    sql = _monta_sql("@filtro", "@data_inicio", "@data_fim", fonte_disparos)
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
-            bigquery.ScalarQueryParameter("campanha", "STRING", campanha),
+            bigquery.ScalarQueryParameter("filtro", "STRING", campanha),
             bigquery.ScalarQueryParameter("data_inicio", "DATE", data_inicio),
             bigquery.ScalarQueryParameter("data_fim", "DATE", data_fim),
-            bigquery.ArrayQueryParameter("fontes", "STRING", FONTES_CONVERSA),
         ]
     )
     return client.query(sql, job_config=job_config).to_dataframe()
@@ -78,7 +110,23 @@ def _primeiro_preenchido(serie: pd.Series):
     return valores.iloc[0] if not valores.empty else None
 
 
-def _monta_conversas(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, int, int]:
+def _tipo_engajamento(msg_tipo) -> str:
+    if pd.isna(msg_tipo) or not str(msg_tipo).strip():
+        return TIPO_ENGAJAMENTO_TEXTO
+    return TIPO_ENGAJAMENTO_POR_MSG_TIPO.get(str(msg_tipo).strip().lower(), TIPO_ENGAJAMENTO_OUTRO)
+
+
+def _emoji_reacao(texto) -> str:
+    texto = "" if pd.isna(texto) else str(texto).strip()
+    casamento = _RE_REACAO.match(texto)
+    emoji = _RE_MODIFICADOR_EMOJI.sub("", casamento.group(1) if casamento else texto)
+    # símbolo antigo (ex.: ❤ U+2764) sem o seletor aparece como texto no Docs: devolve
+    if len(emoji) == 1 and ord(emoji) < _INICIO_BLOCO_EMOJI:
+        emoji += _SELETOR_EMOJI
+    return emoji or "(sem emoji)"
+
+
+def _monta_conversas(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, Engajamento]:
     """Agrupa mensagens por id_sessao_48h em 1 conversa formatada. `conversa_completa`
     NÃO inclui a fala 'HSM: ...' — o texto do HSM vai à parte em `hsm_texto` (por
     sessão: uma campanha pode ter mais de um HSM, e cada sessão guarda o que recebeu)
@@ -88,18 +136,27 @@ def _monta_conversas(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, int, int]:
     nome_hsm/nome_campanha vêm da linha da fala HSM quando existe (é ela que carrega o
     struct `hsm`); senão, do primeiro valor preenchido da sessão.
 
-    Só entram no df quem teve PELO MENOS 1 fala do cidadão; total_disparos/
-    total_engajados cobrem TODAS as sessões da campanha no período, pra calcular a taxa
-    de engajamento no relatório final."""
+    Só entram no df as sessões com PELO MENOS 1 fala em texto do cidadão (texto, botão
+    ou menu) — as únicas que vão pra LLM; a conversa leva também as demais falas
+    (reação, mídia) como contexto. O Engajamento cobre TODAS as sessões do período: as
+    só de reação/mídia entram nas contagens por tipo do relatório, sem classificação."""
     if df_raw.empty:
-        return pd.DataFrame(columns=COLUNAS_SESSOES), 0, 0
+        return pd.DataFrame(columns=COLUNAS_SESSOES), Engajamento()
 
     df_raw = df_raw.sort_values(["id_sessao_48h", "msg_data"])
-    total_disparos = df_raw["id_sessao_48h"].nunique()
+    engajamento = Engajamento(total_disparos=df_raw["id_sessao_48h"].nunique())
+    por_tipo: Counter = Counter()
 
     linhas = []
     for id_sessao_48h, grupo in df_raw.groupby("id_sessao_48h", sort=False):
-        if not (grupo["msg_fonte"] == "AI_AGENT_CIDADAO").any():
+        falas_cidadao = grupo[grupo["msg_fonte"] == "AI_AGENT_CIDADAO"]
+        if falas_cidadao.empty:
+            continue
+        tipos = set(falas_cidadao["msg_tipo"].map(_tipo_engajamento))
+        por_tipo[next(t for t in ORDEM_TIPO_ENGAJAMENTO if t in tipos)] += 1
+        reacoes = falas_cidadao[falas_cidadao["msg_tipo"].map(_tipo_engajamento) == TIPO_ENGAJAMENTO_REACAO]
+        engajamento.reacoes.update(reacoes["msg_texto"].map(_emoji_reacao))
+        if TIPO_ENGAJAMENTO_TEXTO not in tipos:
             continue
         hsm_rows = grupo[grupo["msg_fonte"] == "HSM"]
         origem_hsm = hsm_rows if not hsm_rows.empty else grupo
@@ -123,8 +180,8 @@ def _monta_conversas(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, int, int]:
             }
         )
 
-    df_sessoes = pd.DataFrame(linhas, columns=COLUNAS_SESSOES)
-    return df_sessoes, total_disparos, len(df_sessoes)
+    engajamento.por_tipo = {t: por_tipo[t] for t in ORDEM_TIPO_ENGAJAMENTO if por_tipo[t]}
+    return pd.DataFrame(linhas, columns=COLUNAS_SESSOES), engajamento
 
 
 def textos_hsm(df_sessoes: pd.DataFrame) -> dict[str, str]:
@@ -150,17 +207,22 @@ def textos_hsm_prompt(df_sessoes: pd.DataFrame) -> str:
 
 
 @task(log_prints=True)
-def extrai_conversas(campanha: str, data_inicio: date, data_fim: date) -> tuple[pd.DataFrame, int, int]:
-    """Sessões engajadas da campanha no período (1 linha por sessão, colunas em
-    COLUNAS_SESSOES), total de sessões que receberam HSM e total com resposta do cidadão."""
+def extrai_conversas(
+    campanha: str, data_inicio: date, data_fim: date, fonte_disparos: str = FONTE_DISPAROS_CAMPANHA
+) -> tuple[pd.DataFrame, Engajamento]:
+    """Sessões com fala em texto do cidadão no período (1 linha por sessão, colunas em
+    COLUNAS_SESSOES — o que vai pra LLM) e as contagens de engajamento de todas as sessões.
+    Com fonte_disparos = FONTE_DISPAROS_HSM, `campanha` é o nome do template e cada
+    disparo vira uma sessão (ver queries/extrai_conversas.sql)."""
     client = get_bq_client()
-    print(f"[EXTRACAO] {campanha}: buscando sessões de {data_inicio} a {data_fim}...")
-    df_raw = _busca_mensagens(client, campanha, data_inicio, data_fim)
-    df_sessoes, total_disparos, total_engajados = _monta_conversas(df_raw)
-    taxa = 100 * total_engajados / total_disparos if total_disparos else 0.0
+    print(f"[EXTRACAO] {campanha} (por {fonte_disparos}): buscando sessões de {data_inicio} a {data_fim}...")
+    df_raw = _busca_mensagens(client, campanha, data_inicio, data_fim, fonte_disparos)
+    df_sessoes, engajamento = _monta_conversas(df_raw)
+    taxa = 100 * engajamento.total_engajados / engajamento.total_disparos if engajamento.total_disparos else 0.0
     n_hsms = len(textos_hsm(df_sessoes))
     print(
-        f"[EXTRACAO] {campanha}: {total_disparos} sessão(ões) com disparo, {total_engajados} engajada(s) "
-        f"({taxa:.1f}%), {n_hsms} HSM(s) distinto(s)."
+        f"[EXTRACAO] {campanha}: {engajamento.total_disparos} sessão(ões) com disparo, "
+        f"{engajamento.total_engajados} engajada(s) ({taxa:.1f}%) — por tipo: {engajamento.por_tipo}; "
+        f"{len(df_sessoes)} com texto vão pra classificação; {n_hsms} HSM(s) distinto(s)."
     )
-    return df_sessoes, total_disparos, total_engajados
+    return df_sessoes, engajamento
