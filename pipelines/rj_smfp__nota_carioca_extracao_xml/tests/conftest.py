@@ -1,6 +1,23 @@
+import os
+
 import pytest
 
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils import discord
+
+# O servidor temporário do Prefect (SQLite) falha com "database is locked" (no cliente, httpx.ReadError) quando os
+# serviços de fundo dele escrevem ao mesmo tempo que o flow; nenhum teste precisa deles. Vale antes do harness subir.
+for _service in (
+    "CANCELLATION_CLEANUP",
+    "EVENT_PERSISTER",
+    "FOREMAN",
+    "LATE_RUNS",
+    "PAUSE_EXPIRATIONS",
+    "REPOSSESSOR",
+    "SCHEDULER",
+    "TASK_RUN_RECORDER",
+    "TRIGGERS",
+):
+    os.environ.setdefault(f"PREFECT_SERVER_SERVICES_{_service}_ENABLED", "false")
 
 
 def _no_secret_block(name: str) -> str:
