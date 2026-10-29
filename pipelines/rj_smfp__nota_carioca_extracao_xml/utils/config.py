@@ -1,0 +1,107 @@
+"""Configuração lida do ambiente: token do webservice, conexão do Oracle e endereço do webservice.
+
+O Infisical entra no pod como variáveis de ambiente pela convenção da lib ``iplanrio``: a pasta
+``/db-oracle-nota-fiscal`` e a chave ``DB_HOST`` viram ``DB_ORACLE_NOTA_FISCAL__DB_HOST``. Prod e staging usam a mesma
+pasta, cada um com o segredo do seu ambiente (staging = homologação).
+"""
+
+import os
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import assert_never
+
+from pipelines.rj_smfp__nota_carioca_extracao_xml.constants import TOKEN_KEY, URL_PROD, URL_STAGING
+from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.discord import Environment
+
+
+@dataclass(frozen=True)
+class OracleConfig:
+    """Conexão com o Oracle da aplicação, só para ler ``NFSE_OWNER.TAREFAS``.
+
+    :param user: Usuário do banco.
+    :param password: Senha do usuário (fora do ``repr``).
+    :param host: Host ou IP do banco.
+    :param port: Porta do listener.
+    :param service_name: Service name do banco.
+    """
+
+    user: str
+    password: str = field(repr=False)
+    host: str
+    port: str
+    service_name: str
+
+    @property
+    def dsn(self) -> str:
+        """DSN no formato easy connect (``host:porta/service``)."""
+        return f"{self.host}:{self.port}/{self.service_name}"
+
+
+def secret_env_key(infisical_secret_path: str, key: str) -> str:
+    """Nome da variável de ambiente de uma chave do Infisical (``/db-oracle-x`` + ``K`` → ``DB_ORACLE_X__K``).
+
+    :param infisical_secret_path: Pasta do segredo no Infisical.
+    :param key: Nome da chave.
+    :returns: Nome da variável de ambiente.
+    """
+    prefix = infisical_secret_path.upper().replace("-", "_").replace("/", "")
+    return f"{prefix}__{key}"
+
+
+def _required(infisical_secret_path: str, key: str, environ: Mapping[str, str] | None) -> str:
+    name = secret_env_key(infisical_secret_path, key)
+    value = (environ if environ is not None else os.environ).get(name, "").strip()
+    if not value:
+        raise ValueError(
+            f"Variável {name} ausente ou vazia (chave {key} da pasta {infisical_secret_path} do Infisical)."
+        )
+    return value
+
+
+def read_token(infisical_secret_path: str, environ: Mapping[str, str] | None = None) -> str:
+    """Lê o token do webservice (chave ``NOTA_CARIOCA_ROTINAS_TOKEN``).
+
+    :param infisical_secret_path: Pasta do segredo no Infisical.
+    :param environ: Variáveis de ambiente; o padrão é ``os.environ``.
+    :returns: O token, sem espaços nas pontas.
+    :raises ValueError: Se a variável estiver ausente ou vazia.
+    """
+    return _required(infisical_secret_path, TOKEN_KEY, environ)
+
+
+def read_oracle_config(infisical_secret_path: str, environ: Mapping[str, str] | None = None) -> OracleConfig:
+    """Lê a conexão do Oracle da mesma pasta do Infisical que o ``oracle_to_bq`` usa.
+
+    :param infisical_secret_path: Pasta do segredo no Infisical.
+    :param environ: Variáveis de ambiente; o padrão é ``os.environ``.
+    :returns: A configuração da conexão.
+    :raises ValueError: Se alguma variável estiver ausente ou vazia.
+    """
+    return OracleConfig(
+        user=_required(infisical_secret_path, "DB_USERNAME", environ),
+        password=_required(infisical_secret_path, "DB_PASSWORD", environ),
+        host=_required(infisical_secret_path, "DB_HOST", environ),
+        port=_required(infisical_secret_path, "DB_PORT", environ),
+        service_name=_required(infisical_secret_path, "DB_SERVICE_NAME", environ),
+    )
+
+
+def resolve_url(url: str | None, environment: Environment) -> str:
+    """Endereço do webservice: o informado (só ``https``) ou o do ambiente (staging = homologação).
+
+    :param url: Endereço informado no parâmetro do flow, ou ``None``.
+    :param environment: Ambiente do deployment.
+    :returns: O endereço do ``RotinasAutomaticas.asmx``.
+    :raises ValueError: Se o endereço informado não for ``https``.
+    """
+    if url:
+        if not url.startswith("https://"):
+            raise ValueError(f"O endereço do webservice precisa ser https, veio {url!r}.")
+        return url
+    match environment:
+        case Environment.PROD:
+            return URL_PROD
+        case Environment.STAGING:
+            return URL_STAGING
+        case unreachable:
+            assert_never(unreachable)

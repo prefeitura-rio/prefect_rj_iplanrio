@@ -7,8 +7,8 @@ import pytest
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.tasks_db import TaskRow
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.wait import (
     Clock,
-    ExtractionFailed,
-    ExtractionTimedOut,
+    ExtractionFailedError,
+    ExtractionTimedOutError,
     Limits,
     wait_for_task,
     wait_until_idle,
@@ -128,7 +128,7 @@ def test_wait_for_task_fails_when_the_task_ends_without_success(final: TaskRow, 
     store = FakeStore(tasks=[row(1), final])
     sink = Sink()
 
-    with pytest.raises(ExtractionFailed) as error:
+    with pytest.raises(ExtractionFailedError) as error:
         wait(store, FakeClock(), sink)
 
     assert f"tarefa {TASK}" in str(error.value)
@@ -139,7 +139,7 @@ def test_wait_for_task_fails_when_the_task_ends_without_success(final: TaskRow, 
 def test_wait_for_task_failure_carries_the_task_summary() -> None:
     store = FakeStore(tasks=[row(3, FINISHED, summary="Falha ao gravar notas: ORA-00001")])
 
-    with pytest.raises(ExtractionFailed, match="Falha ao gravar notas: ORA-00001"):
+    with pytest.raises(ExtractionFailedError, match="Falha ao gravar notas: ORA-00001"):
         wait(store, FakeClock(), Sink())
 
 
@@ -148,7 +148,7 @@ def test_wait_for_task_times_out_at_the_deadline_without_touching_the_task() -> 
     clock = FakeClock()
     limits = Limits(poll_seconds=60, deadline_seconds=300, stale_hours=6, idle_checks=2, progress_every_seconds=1800)
 
-    with pytest.raises(ExtractionTimedOut) as error:
+    with pytest.raises(ExtractionTimedOutError) as error:
         wait(store, clock, Sink(), limits)
 
     assert clock.now <= 300
@@ -199,5 +199,5 @@ def test_wait_until_idle_times_out_while_something_keeps_running() -> None:
     store = FakeStore(running_sets=[[post]])
     limits = Limits(poll_seconds=60, deadline_seconds=180, stale_hours=6, idle_checks=2, progress_every_seconds=1800)
 
-    with pytest.raises(ExtractionTimedOut, match="tarefa 134200"):
+    with pytest.raises(ExtractionTimedOutError, match="tarefa 134200"):
         idle(store, FakeClock(), Sink(), limits)

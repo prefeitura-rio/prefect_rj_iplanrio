@@ -4,7 +4,7 @@ import pytest
 from pipelines.rj_smfp__nota_carioca_extracao_xml.constants import SOAP_ACTION, SOAP_NAMESPACE
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.soap import (
     Decision,
-    ExtractionRefused,
+    ExtractionRefusedError,
     Outcome,
     RoutineResponse,
     WebserviceError,
@@ -127,7 +127,7 @@ def test_decide_maps_the_answers_that_let_the_chain_go_on(response: RoutineRespo
     ],
 )
 def test_decide_refuses_errors_and_inconsistent_answers(response: RoutineResponse, expected: str) -> None:
-    with pytest.raises(ExtractionRefused, match=expected):
+    with pytest.raises(ExtractionRefusedError, match=expected):
         decide(response)
 
 

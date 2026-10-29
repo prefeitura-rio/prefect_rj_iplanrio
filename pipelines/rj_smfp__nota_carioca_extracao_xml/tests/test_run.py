@@ -5,9 +5,9 @@ from datetime import datetime
 import pytest
 
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.run import ExtractionServices, run_extraction
-from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.soap import ExtractionRefused, RoutineResponse
+from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.soap import ExtractionRefusedError, RoutineResponse
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.tasks_db import TaskRow
-from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.wait import Clock, ExtractionFailed, Limits
+from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.wait import Clock, ExtractionFailedError, Limits
 
 STARTED = datetime(2026, 10, 29, 17, 0, 5)
 FINISHED = datetime(2026, 10, 29, 18, 2, 0)
@@ -126,7 +126,7 @@ def test_refused_answer_stops_before_reading_the_oracle() -> None:
     world = World(answers=[RoutineResponse("Unauthorized", "Token inválido", 0)])
     notes: list[str] = []
 
-    with pytest.raises(ExtractionRefused, match="Token inválido"):
+    with pytest.raises(ExtractionRefusedError, match="Token inválido"):
         run_extraction(world.services(notes), LIMITS)
 
     assert world.events == ["call"]
@@ -140,7 +140,7 @@ def test_failed_task_is_announced_and_raised_without_waiting_for_idle() -> None:
     )
     notes: list[str] = []
 
-    with pytest.raises(ExtractionFailed):
+    with pytest.raises(ExtractionFailedError):
         run_extraction(world.services(notes), LIMITS)
 
     assert "running" not in world.events
