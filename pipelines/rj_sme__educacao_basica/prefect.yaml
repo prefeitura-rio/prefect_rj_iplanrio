@@ -227,44 +227,40 @@ deployments:
             dataset_id: brutos_educacao_basica
             table_id: avaliacao
           read:
-            table: dbo.VW_BI_Avaliacao
+            query: |
+              SELECT
+                [Ano],
+                [COC],
+                [tpc_nome],
+                [tur_codigo],
+                [Reunião_Pais],
+                [Frequencia],
+                [Conceito],
+                [GLB],
+                [MAT],
+                [POR],
+                [CIE],
+                [GEO],
+                [HIS],
+                [EFI],
+                [ING],
+                [ESP],
+                [FRA],
+                [ALE],
+                [AVI],
+                [APL],
+                [ACE],
+                [TEA],
+                [MUS],
+                [cur_id],
+                [crp_id],
+                [tur_id],
+                [alu_id],
+                [mtu_id]
+              FROM GestaoEscolar.dbo.VW_BI_Avaliacao
+              WHERE Ano >= 2026
           dump_mode: append
           options:
-            select:
-              - Ano
-              - COC
-              - tpc_nome
-              - tur_codigo
-              - Reunião_Pais
-              - Frequencia
-              - Conceito
-              - GLB
-              - MAT
-              - POR
-              - CIE
-              - GEO
-              - HIS
-              - EFI
-              - ING
-              - ESP
-              - FRA
-              - ALE
-              - AVI
-              - APL
-              - ACE
-              - TEA
-              - MUS
-              - cur_id
-              - crp_id
-              - tur_id
-              - alu_id
-              - mtu_id
-            chunks:
-              column: Ano
-              width: 1
-              begin: 2026
-              end: 2030
-              lookback: 1
             columns:
               add_timestamp: true
       - interval: 86400
