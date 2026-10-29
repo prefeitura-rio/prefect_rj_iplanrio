@@ -26,6 +26,9 @@ _BOOL = bigquery.enums.SqlTypeNames.BOOLEAN
 _INT64 = bigquery.enums.SqlTypeNames.INT64
 
 SCHEMA: list[bigquery.SchemaField] = [
+    # id_sessao_receptivo da fct_chatbot (id_mensagem da 1ª mensagem da sessão: message_id
+    # do SFMC ou wamid) — é por ele que o dbt devolve o struct llm. As linhas antigas, com
+    # o UUID da sessão do Agentforce, ficam: servem a fct_chatbot_v2 até ela ser desligada.
     bigquery.SchemaField("id_sessao", _STRING, mode="REQUIRED"),
     bigquery.SchemaField("telefone", _STRING),
     bigquery.SchemaField("cpf", _STRING),

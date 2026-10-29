@@ -36,10 +36,7 @@ from pipelines.rj_crm__agentforce_classificacao_llm.tasks.classify import (
     monta_dataframe_final,
     monta_prompts,
 )
-from pipelines.rj_crm__agentforce_classificacao_llm.tasks.extract import (
-    enriquece_com_catalogo_hsm,
-    extrai_sessoes_nao_classificadas,
-)
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.extract import extrai_sessoes_nao_classificadas
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import (
     carrega_classificacoes,
     ensure_destino_table,
@@ -63,9 +60,7 @@ def rj_crm__agentforce_classificacao_llm(
     dest_tmp_table_id: str = C.DEST_TMP_TABLE_ID.value,
     taxonomia_regras_table_id: str = C.TAXONOMIA_REGRAS_TABLE_ID.value,
     source_table: str = C.SOURCE_TABLE.value,
-    hsm_catalog_table: str = C.HSM_CATALOG_TABLE.value,
     lookback_days: int = C.LOOKBACK_DAYS.value,
-    hsm_max_dias_antes: int = C.HSM_MAX_DIAS_ANTES.value,
     bifrost_base_url: str = C.BIFROST_BASE_URL.value,
     bifrost_model: str = C.BIFROST_MODEL.value,
     max_workers: int = C.MAX_WORKERS.value,
@@ -148,13 +143,12 @@ def rj_crm__agentforce_classificacao_llm(
     )
 
     # 2. Extrai sessões pendentes (janela fixa + pré-filtro por llm.classificacao_datahora
-    #    + anti-join final contra o destino) e enriquece com HSM
+    #    + anti-join final contra o destino), já com o HSM ligado pelo dbt
     df_sessoes = extrai_sessoes_nao_classificadas(
         project_id=project_id,
         source_table=source_table,
         destino_full_table_id=destino_full_table_id,
         lookback_days=lookback_days,
-        hsm_max_dias_antes=hsm_max_dias_antes,
     )
     n_extraidas = len(df_sessoes)
 
@@ -163,12 +157,8 @@ def rj_crm__agentforce_classificacao_llm(
         notify_resumo(n_extraidas=0, n_pre_classificadas=0, n_classificadas_llm=0, n_falhas=0, linhas_carregadas=0)
         return
 
-    df_enriquecido = enriquece_com_catalogo_hsm(
-        df_sessoes=df_sessoes, project_id=project_id, hsm_catalog_table=hsm_catalog_table
-    )
-
     # 3. Monta os prompts (com_hsm / sem_hsm) e separa as pré-classificadas por regra
-    df_prompts, df_pre_classificadas = monta_prompts(df_enriquecido)
+    df_prompts, df_pre_classificadas = monta_prompts(df_sessoes)
 
     # 4. Catálogo de regras de tema/motivo — carregado antes da classificação porque
     #    tanto o passo 5 (pré-classificadas) quanto o passo 6 (LLM, lote a lote)

@@ -43,8 +43,10 @@ _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 # mensagens_usuario_concatenadas (só cidadão) NÃO está aqui — não persiste nem vai
 # pro prompt, é redundante com conversa_completa (cidadão + agente, rotulado), que a
 # substituiu como contexto pra LLM; mensagens_usuario_concatenadas continua existindo
-# só internamente em df_enriquecido, usada por _resposta_e_botao_atrasado e pelo
-# filtro tem_conversa em monta_prompts.
+# só internamente no dataframe da extração, usada pelo filtro tem_conversa em
+# monta_prompts. jornada_nome/id_jornada/hsm_envio_datahora vêm nulos desde que a
+# sessão passou a ser id_sessao_receptivo (o HSM fica em id_disparo_hsm), e hsm_texto
+# é o texto renderizado pelo dbt (receptivo_hsm_texto_renderizado).
 _COLUNAS_METADADO_SESSAO = [
     "id_sessao", "telefone", "cpf", "nome_cidadao", "sessao_inicio_datahora",
     "sessao_fim_datahora", "jornada_nome", "id_jornada", "id_disparo_hsm", "hsm_envio_datahora",

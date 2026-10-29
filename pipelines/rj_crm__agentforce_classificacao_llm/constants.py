@@ -16,14 +16,11 @@ class ClassificacaoConstants(Enum):
     BQ_PROJECT_ID = "rj-crm-registry"
 
     # --- Fonte ---
-    # View consolidada de sessões do Agentforce — já é a verdade por trás de
-    # ai_agent_session/ai_agent_interaction (fonte do pipeline rj_crm__salesforce_datacloud).
-    # Não fazemos checagem extra de completude aqui: se `fim_datahora` está preenchido,
-    # consideramos a sessão pronta pra classificar.
-    SOURCE_TABLE = "rj-crm-registry.rmi_conversas.v2_chatbot_conversas"
-    # Catálogo de HSMs por jornada, usado para enriquecer a sessão com o texto do HSM
-    # e decidir se a sessão é uma "resposta atrasada a botão" (não vai pra LLM).
-    HSM_CATALOG_TABLE = "rj-crm-registry.intermediario_crm_whatsapp.v2_atividades_enriquecidas_hsm"
+    # Perna Salesforce da fct_chatbot (fct_chatbot_salesforce, uma linha por mensagem) —
+    # a query agrupa por id_sessao_receptivo, a sessão do agente calculada no dbt, que já
+    # traz o HSM ligado a ela com o texto renderizado (ver cabeçalho de
+    # queries/extract_sessoes.sql). Sessão encerrada = 2 h sem mensagem.
+    SOURCE_TABLE = "rj-crm-registry.rmi_conversas.chatbot_salesforce"
 
     # --- Destino ---
     # Mesmo dataset das tabelas ai_agent_session/ai_agent_interaction (brutos_salesforce),
@@ -59,14 +56,12 @@ class ClassificacaoConstants(Enum):
     # Janela fixa de busca — sem parametrização/watermark por decisão de projeto: dois
     # filtros de "já classificada" garantem idempotência (pré-filtro barato por
     # llm.classificacao_datahora na fonte + anti-join contra a tabela destino como garantia
-    # final, que cobre o desincronismo de até 15min entre nossa gravação e o fct_chatbot_v2
+    # final, que cobre o desincronismo de até 15min entre nossa gravação e o chatbot
     # reprocessar — ver queries/extract_sessoes.sql); a janela fixa só limita quanto
     # histórico é reescaneado a cada execução. Sessão que fica sem classificar por mais de
     # LOOKBACK_DAYS (pipeline fora do ar por muito tempo) não é mais pega automaticamente —
     # risco aceito, mitigado por alerta de falha.
     LOOKBACK_DAYS = 7
-    # Janela de busca por HSM anterior à sessão (mesmo valor do notebook original)
-    HSM_MAX_DIAS_ANTES = 7
 
     # --- LLM (Bifrost / Gemini) ---
     BIFROST_BASE_URL = "https://bifrost.iplan.dados.rio"
@@ -85,7 +80,7 @@ class ClassificacaoConstants(Enum):
     # tempo de LLM, e o "raio de perda" fica pequeno.
     TAMANHO_LOTE_CARGA = 500
 
-    # Valores de `classificacao` (exposta como escopo_hsm_tipo no fct_chatbot_v2) —
+    # Valores de `classificacao` (exposta como llm.relacao_hsm_tipo no chatbot) —
     # a coluna cobre TODA sessão, não só a que passou pelo prompt com_hsm:
     #   DENTRO_DO_ESCOPO / FORA_DO_ESCOPO / MISTO -> classificado pela LLM (tem HSM)
     #   SEM_HSM_ASSOCIADO                          -> não tem HSM pra comparar; LLM
