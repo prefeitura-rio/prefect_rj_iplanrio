@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Flow — Relatório de Engajamento por campanha de WhatsApp (HSM).
 
@@ -68,9 +67,8 @@ RELATÓRIO POR HSM (só custom run)
 ---------------------------------
 Com fonte_disparos="hsm", o flow NÃO lê nem grava o Sheet de solicitações: processa 1
 solicitação montada dos parâmetros hsm, data_inicio, data_fim e tipo_solicitacao. Os
-disparos e as conversas vêm direto da messaging_events_whatsapp: envios do template
-(Marketing Cloud) e mensagens do Digital Engagement do mesmo telefone até 48h depois de
-cada envio (queries/extrai_conversas_hsm.sql) — não depende da rmi_conversas.chatbot nem da
+disparos são filtrados por hsm.nome_hsm em vez de hsm.nome_campanha, na mesma
+rmi_conversas.chatbot e com a mesma query (queries/extrai_conversas.sql) — não depende da
 planilha de campanhas. No Drive, o nome do HSM faz o papel da campanha (pasta, Catálogo,
 banco de exemplos). O status sai só no log; teto_conversas vale igual.
 
@@ -203,7 +201,7 @@ def rj_crm__relatorio_engajamento_hsm(  # noqa: PLR0913 — parâmetros de flow,
     Args:
         fonte_disparos: "campanha" (padrão) = solicitações do Form, disparos pela
             campanha na rmi_conversas.chatbot. "hsm" = só custom run: 1 relatório do
-            template em `hsm`, disparos direto dos eventos de WhatsApp, sem Sheet (ver
+            template em `hsm`, disparos pelo nome do HSM, sem Sheet (ver
             RELATÓRIO POR HSM na docstring do módulo).
         hsm: Nome do template (ex.: "pgm_divida_ativa_cobranca_v3"). Só com
             fonte_disparos="hsm".
