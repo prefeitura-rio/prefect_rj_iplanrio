@@ -11,7 +11,7 @@ from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.config import read_oracl
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.discord import Environment
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.notify import make_notifier
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.run import ExtractionServices, run_extraction
-from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.soap import RoutineResponse, call_extraction
+from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.soap import RoutineResponse, build_tls_context, call_extraction
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.tasks_db import OracleTaskStore
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.wait import Clock, Limits
 
@@ -39,7 +39,7 @@ def run_extraction_task(  # noqa: PLR0913, PLR0917
     store = OracleTaskStore(read_oracle_config(infisical_secret_path))
     notify = make_notifier(discord_notifications, environment)
     log(f"Extração XML: webservice {url} (proxy {proxy_url or 'nenhum'}); acompanhamento em NFSE_OWNER.TAREFAS.")
-    with httpx.Client(proxy=proxy_url, follow_redirects=False) as client:
+    with httpx.Client(proxy=proxy_url, verify=build_tls_context(), follow_redirects=False) as client:
 
         def call() -> RoutineResponse:
             return call_extraction(client, url, token)

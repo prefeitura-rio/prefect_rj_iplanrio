@@ -7,6 +7,7 @@ A operação só dispara a extração em segundo plano e devolve na hora ``Rotin
 outro código = erro. O token nunca aparece em log nem em erro.
 """
 
+import ssl
 import time
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
@@ -23,6 +24,12 @@ from pipelines.rj_smfp__nota_carioca_extracao_xml.constants import REQUEST_ELEME
 SOAP_ENVELOPE_NAMESPACE = "http://schemas.xmlsoap.org/soap/envelope/"
 REQUEST_TIMEOUT_SECONDS = 60.0
 SNIPPET_LIMIT = 300
+# Cifras padrão do Python (só com forward secrecy) mais as duas AES-GCM com troca de chaves RSA: o servidor da Nota
+# Carioca só negocia TLS 1.2 com AES256-GCM-SHA384, que o padrão exclui (o handshake era cortado com EOF/reset).
+TLS_CIPHERS = (
+    "@SECLEVEL=2:ECDH+AESGCM:ECDH+CHACHA20:ECDH+AES:DHE+AES:AES256-GCM-SHA384:AES128-GCM-SHA256"
+    ":!aNULL:!eNULL:!aDSS:!SHA1:!AESCCM"
+)
 
 
 class WebserviceError(RuntimeError):
@@ -65,6 +72,16 @@ class Decision:
 
     outcome: Outcome
     task_id: int
+
+
+def build_tls_context() -> ssl.SSLContext:
+    """Contexto TLS do webservice: verificação de certificado e de hostname padrão, com as cifras RSA-GCM aceitas.
+
+    :returns: O contexto para o ``httpx.Client`` (``verify=``).
+    """
+    context = ssl.create_default_context()
+    context.set_ciphers(TLS_CIPHERS)
+    return context
 
 
 def build_envelope(token: str) -> str:
