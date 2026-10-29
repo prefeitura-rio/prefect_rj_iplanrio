@@ -52,6 +52,7 @@ deployments:
           INFISICAL_ENVIRONMENT: staging
           INFISICAL_PATHS: /rj_sme__educacao_basica,/shared
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
+          DB_QUERY_TIMEOUT_SECONDS: '14400'
   - name: rj-sme--educacao-basica--prod
     tags:
       - environment:prod
@@ -80,6 +81,7 @@ deployments:
           INFISICAL_ENVIRONMENT: prod
           INFISICAL_PATHS: /rj_sme__educacao_basica,/shared
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
+          DB_QUERY_TIMEOUT_SECONDS: '14400'
     schedules:
       - interval: 86400
         anchor_date: '2022-01-01T22:00:00'
