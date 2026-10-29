@@ -24,7 +24,7 @@ from ...settings import DuckDBSettings
 from ...telemetry import logger
 from ...types import Columns, QueryParams, TemplateValue
 from ...utils import filter_conditions
-from ..constants import ALIAS, DEFAULT_BATCH_SIZE, SECRET
+from ..constants import ALIAS, DEFAULT_BATCH_SIZE, MSSQL_METADATA_ONLY, SECRET
 from ..probe import build_native_chunk, quote_native
 from ..render import render_template
 from ..requests import (
@@ -286,8 +286,15 @@ class DuckDBEngine(Engine):
         return require_origin(self.source)
 
     async def describe_origin(self, origin: Origin) -> dict[str, str]:
-        """Return the columns of any origin, read without its rows."""
-        sql = render_template("duckdb/describe_source", build_origin_values(origin))
+        """Return the columns of any origin, read without its rows.
+
+        A SQL Server query runs in full when DuckDB binds it, and a heavy view answers
+        no column until its first row, so the query carries `SET FMTONLY ON` here.
+        """
+        values = build_origin_values(origin)
+        if isinstance(origin, Query) and origin.dialect == "mssql":
+            values["query"] = Literal(f"{MSSQL_METADATA_ONLY}{origin.text}")
+        sql = render_template("duckdb/describe_source", values)
         columns: dict[str, str] = {}
 
         async for dataframe in self.query(sql):

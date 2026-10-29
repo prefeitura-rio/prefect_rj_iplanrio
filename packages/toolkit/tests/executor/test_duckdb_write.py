@@ -10,7 +10,7 @@ from pyarrow.parquet import read_table, write_table
 
 from toolkit.chunks import NULL_CHUNK, Chunk, Rows
 from toolkit.executor.engines.duckdb import DuckDBEngine
-from toolkit.executor.requests import Changes, Files
+from toolkit.executor.requests import Changes, Files, Query
 from toolkit.executor.sources.backends.files import FilesSource
 
 DAY = Chunk("2024-03-01", date(2024, 3, 1), date(2024, 3, 2))
@@ -111,6 +111,31 @@ async def test_describe_gives_the_name_and_the_type_of_each_column(
         "dia": "DATE",
         "status": "VARCHAR",
     }
+
+
+@pytest.mark.parametrize(
+    ("dialect", "prefixed"),
+    [
+        pytest.param("mssql", True, id="sql-server-answers-the-columns-only"),
+        pytest.param("postgres", False, id="other-sources-keep-the-query"),
+    ],
+)
+async def test_describe_of_a_native_query_is_metadata_only_for_sql_server(
+    duckdb_memory, monkeypatch, dialect, prefixed
+) -> None:
+    """Prefix the query of SQL Server, so a heavy view does not run in full."""
+    seen: list[str] = []
+
+    async def query(sql, **_):
+        seen.append(sql)
+        return
+        yield
+
+    monkeypatch.setattr(duckdb_memory, "query", query, raising=False)
+
+    await duckdb_memory.describe_origin(Query("SELECT 1 AS x", dialect))
+
+    assert ("SET FMTONLY ON;" in seen[0]) is prefixed
 
 
 async def test_an_origin_that_duckdb_cannot_read_is_refused(
