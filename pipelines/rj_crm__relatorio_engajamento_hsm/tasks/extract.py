@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Extrai e reconstrói as conversas de uma campanha num período (1 solicitação)."""
 
 from __future__ import annotations
@@ -16,16 +15,11 @@ from prefect import task
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     CHATBOT_DATASET,
     CHATBOT_TABLE,
-    DIAS_SESSAO,
-    EVENTOS_WHATSAPP_TABLE,
     FONTE_DISPAROS_CAMPANHA,
     FONTE_DISPAROS_HSM,
-    FONTES_CONVERSA,
-    JANELA_RESPOSTA_HSM_HORAS,
     ORDEM_TIPO_ENGAJAMENTO,
     PROJECT_ID,
     ROTULO_FONTE,
-    SEND_EVENT_TABLE,
     TIPO_ENGAJAMENTO_OUTRO,
     TIPO_ENGAJAMENTO_POR_MSG_TIPO,
     TIPO_ENGAJAMENTO_REACAO,
@@ -35,7 +29,6 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.utils.bigquery import get_bq_cl
 
 _QUERIES_DIR = Path(__file__).resolve().parent.parent / "queries"
 _SQL_TEMPLATE = (_QUERIES_DIR / "extrai_conversas.sql").read_text(encoding="utf-8")
-_SQL_TEMPLATE_HSM = (_QUERIES_DIR / "extrai_conversas_hsm.sql").read_text(encoding="utf-8")
 
 COLUNAS_SESSOES = [
     "id_sessao_48h",
@@ -76,28 +69,13 @@ class Engajamento:
         return self.por_tipo.get(TIPO_ENGAJAMENTO_TEXTO, 0)
 
 
-def _monta_sql(campanha_expr: str, data_inicio_expr: str, data_fim_expr: str, fontes_expr: str) -> str:
+def _monta_sql(filtro_expr: str, data_inicio_expr: str, data_fim_expr: str, fonte_disparos: str) -> str:
     return _SQL_TEMPLATE.format(
-        project=PROJECT_ID,
-        dataset=CHATBOT_DATASET,
-        table=CHATBOT_TABLE,
-        campanha=campanha_expr,
+        tabela_chatbot=f"{PROJECT_ID}.{CHATBOT_DATASET}.{CHATBOT_TABLE}",
+        campo_disparo="nome_hsm" if fonte_disparos == FONTE_DISPAROS_HSM else "nome_campanha",
+        filtro=filtro_expr,
         data_inicio=data_inicio_expr,
         data_fim=data_fim_expr,
-        dias_sessao=DIAS_SESSAO,
-        fontes=fontes_expr,
-    )
-
-
-def _monta_sql_hsm(hsm_expr: str, data_inicio_expr: str, data_fim_expr: str) -> str:
-    return _SQL_TEMPLATE_HSM.format(
-        tabela_eventos=EVENTOS_WHATSAPP_TABLE,
-        tabela_send_event=SEND_EVENT_TABLE,
-        hsm=hsm_expr,
-        data_inicio=data_inicio_expr,
-        data_fim=data_fim_expr,
-        dias_sessao=DIAS_SESSAO,
-        horas_janela=JANELA_RESPOSTA_HSM_HORAS,
     )
 
 
@@ -108,33 +86,19 @@ def sql_query_utilizada(
     literal — só pra exibir no relatório final como referência (nunca roda contra o BQ)."""
     campanha_literal = "'" + str(campanha).replace("'", "''") + "'"
     inicio_literal, fim_literal = f"date '{data_inicio.isoformat()}'", f"date '{data_fim.isoformat()}'"
-    if fonte_disparos == FONTE_DISPAROS_HSM:
-        return _monta_sql_hsm(campanha_literal, inicio_literal, fim_literal)
-    fontes_literal = "(" + ", ".join(f"'{f}'" for f in FONTES_CONVERSA) + ")"
-    return _monta_sql(campanha_literal, inicio_literal, fim_literal, fontes_literal)
+    return _monta_sql(campanha_literal, inicio_literal, fim_literal, fonte_disparos)
 
 
 def _busca_mensagens(
     client: bigquery.Client, campanha: str, data_inicio: date, data_fim: date, fonte_disparos: str
 ) -> pd.DataFrame:
-    if fonte_disparos == FONTE_DISPAROS_HSM:
-        sql = _monta_sql_hsm("@hsm", "@data_inicio", "@data_fim")
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter("hsm", "STRING", campanha),
-                bigquery.ScalarQueryParameter("data_inicio", "DATE", data_inicio),
-                bigquery.ScalarQueryParameter("data_fim", "DATE", data_fim),
-            ]
-        )
-        return client.query(sql, job_config=job_config).to_dataframe()
-
-    sql = _monta_sql("@campanha", "@data_inicio", "@data_fim", "unnest(@fontes)")
+    """`campanha` é o nome da campanha ou, com FONTE_DISPAROS_HSM, o nome do template."""
+    sql = _monta_sql("@filtro", "@data_inicio", "@data_fim", fonte_disparos)
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
-            bigquery.ScalarQueryParameter("campanha", "STRING", campanha),
+            bigquery.ScalarQueryParameter("filtro", "STRING", campanha),
             bigquery.ScalarQueryParameter("data_inicio", "DATE", data_inicio),
             bigquery.ScalarQueryParameter("data_fim", "DATE", data_fim),
-            bigquery.ArrayQueryParameter("fontes", "STRING", FONTES_CONVERSA),
         ]
     )
     return client.query(sql, job_config=job_config).to_dataframe()
@@ -249,7 +213,7 @@ def extrai_conversas(
     """Sessões com fala em texto do cidadão no período (1 linha por sessão, colunas em
     COLUNAS_SESSOES — o que vai pra LLM) e as contagens de engajamento de todas as sessões.
     Com fonte_disparos = FONTE_DISPAROS_HSM, `campanha` é o nome do template e cada
-    disparo vira uma sessão (ver queries/extrai_conversas_hsm.sql)."""
+    disparo vira uma sessão (ver queries/extrai_conversas.sql)."""
     client = get_bq_client()
     print(f"[EXTRACAO] {campanha} (por {fonte_disparos}): buscando sessões de {data_inicio} a {data_fim}...")
     df_raw = _busca_mensagens(client, campanha, data_inicio, data_fim, fonte_disparos)
