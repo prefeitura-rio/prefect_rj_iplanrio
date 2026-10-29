@@ -43,8 +43,10 @@ deployments:
     extracao_xml_deployment: rj-smfp--nota-carioca-extracao-xml/rj-smfp--nota-carioca-extracao-xml--staging
     oracle_to_bq_deployment: rj-smfp--nota-carioca-oracle-to-bq/rj-smfp--nota-carioca-oracle-to-bq--staging
     bq_to_oracle_deployment: rj-smfp--nota-carioca-bq-to-oracle/rj-smfp--nota-carioca-bq-to-oracle--staging
-    # Cargos mencionados nas paradas (ids do Discord: nota-carioca e infra), os mesmos da prod.
-    discord_alert_role_ids: []
+    # Cargos mencionados nas paradas (ids do Discord), os mesmos da prod: nota-carioca e infra.
+    discord_alert_role_ids:
+    - "1558828140166647901"
+    - "903644455582695494"
   work_pool:
     name: onprem-pool
     work_queue_name: default
@@ -79,8 +81,10 @@ deployments:
     timezone: America/Sao_Paulo
     active: true
   parameters:
-    # Cargos mencionados nas paradas (ids do Discord: nota-carioca e infra).
-    discord_alert_role_ids: []
+    # Cargos mencionados nas paradas (ids do Discord): nota-carioca e infra.
+    discord_alert_role_ids:
+    - "1558828140166647901"
+    - "903644455582695494"
   work_pool:
     name: onprem-pool
     work_queue_name: default

@@ -171,5 +171,4 @@ def test_both_environments_mention_the_same_alert_roles() -> None:
 
     staging = found["rj-smfp--nota-carioca-carga-completa--staging"]["parameters"]["discord_alert_role_ids"]
     prod = found["rj-smfp--nota-carioca-carga-completa--prod"]["parameters"]["discord_alert_role_ids"]
-    assert staging == prod
-    assert all(str(role).isdigit() for role in prod)
+    assert staging == prod == ["1558828140166647901", "903644455582695494"]
