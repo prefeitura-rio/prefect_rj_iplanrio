@@ -67,11 +67,13 @@ class Decision:
     task_id: int
 
 
-def build_envelope(token: str, mode: int) -> str:
+def build_envelope(token: str) -> str:
     """Monta o envelope SOAP 1.1 da operação, com o token escapado.
 
+    O WSDL (produção e homologação) declara só ``token``: a operação ``...Automatico`` fixa o modo no servidor, e o modo
+    da extração só é validado no .NET, sem efeito.
+
     :param token: Token do webservice (lista ``wsNotaNacionalToken`` da aplicação).
-    :param mode: Modo de execução (0 automático, 1 manual).
     :returns: O XML do envelope.
     """
     return (
@@ -80,7 +82,6 @@ def build_envelope(token: str, mode: int) -> str:
         "<soap:Body>"
         f'<{REQUEST_ELEMENT} xmlns="{SOAP_NAMESPACE}">'
         f"<token>{escape(token)}</token>"
-        f"<mode>{int(mode)}</mode>"
         f"</{REQUEST_ELEMENT}>"
         "</soap:Body>"
         "</soap:Envelope>"
@@ -166,7 +167,6 @@ def call_extraction(  # noqa: PLR0913
     client: httpx.Client,
     url: str,
     token: str,
-    mode: int,
     *,
     attempts: int = 3,
     backoff_seconds: float = 30.0,
@@ -177,7 +177,6 @@ def call_extraction(  # noqa: PLR0913
     :param client: Cliente HTTP.
     :param url: Endereço do ``RotinasAutomaticas.asmx`` do ambiente.
     :param token: Token do webservice.
-    :param mode: Modo de execução.
     :param attempts: Tentativas para falhas de transporte.
     :param backoff_seconds: Espera antes da tentativa ``n+1`` = ``backoff_seconds * n``.
     :param sleep: Função de espera (os testes passam uma falsa).
@@ -185,7 +184,7 @@ def call_extraction(  # noqa: PLR0913
     :raises WebserviceError: Se nenhuma tentativa conectar, ou se a resposta não for legível.
     """
     headers = {"Content-Type": "text/xml; charset=utf-8", "SOAPAction": f'"{SOAP_ACTION}"'}
-    body = build_envelope(token, mode).encode("utf-8")
+    body = build_envelope(token).encode("utf-8")
     last: httpx.TransportError | None = None
     for attempt in range(1, attempts + 1):
         try:

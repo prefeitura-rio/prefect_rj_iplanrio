@@ -9,8 +9,9 @@ REQUEST_ELEMENT = f"{OPERATION}Request"
 SOAP_ACTION = f"{SOAP_NAMESPACE}/{OPERATION}"
 URL_PROD = "https://notacarioca.rio.gov.br/intranet/RotinasAutomaticas.asmx"
 URL_STAGING = "https://notacariocahom.rio.gov.br/intranet/RotinasAutomaticas.asmx"
-# ``mode`` do webservice: 0 = automático, 1 = manual (NotaNacional.vb). A operação é disparada como manual.
-MANUAL_MODE = 1
+# Os pods do k3s levam "connection reset" ao chamar a intranet direto; pelo squid do cluster (Service proxy/proxy) o
+# webservice responde, em produção e em homologação.
+PROXY_URL = "http://proxy.proxy.svc.cluster.local:3128"
 
 # Pasta do Infisical com o Oracle (chaves DB_ORACLE_NOTA_FISCAL__*); cada ambiente tem o seu valor (staging =
 # homologação).

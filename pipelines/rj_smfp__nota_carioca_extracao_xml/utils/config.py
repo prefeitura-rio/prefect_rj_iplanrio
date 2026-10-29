@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import assert_never
 
-from pipelines.rj_smfp__nota_carioca_extracao_xml.constants import TOKEN_KEY, URL_PROD, URL_STAGING
+from pipelines.rj_smfp__nota_carioca_extracao_xml.constants import PROXY_URL, TOKEN_KEY, URL_PROD, URL_STAGING
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.discord import Environment
 
 
@@ -87,6 +87,23 @@ def read_oracle_config(infisical_secret_path: str, environ: Mapping[str, str] | 
         port=_required(infisical_secret_path, "DB_PORT", environ),
         service_name=_required(infisical_secret_path, "DB_SERVICE_NAME", environ),
     )
+
+
+def resolve_proxy(proxy_url: str | None) -> str | None:
+    """Proxy HTTP da chamada ao webservice: ``None`` usa o squid do cluster; vazio chama direto.
+
+    :param proxy_url: Valor do parâmetro do flow.
+    :returns: A URL do proxy, ou ``None`` para chamar sem proxy.
+    :raises ValueError: Se o proxy informado não for ``http://`` ou ``https://``.
+    """
+    if proxy_url is None:
+        return PROXY_URL
+    value = proxy_url.strip()
+    if not value:
+        return None
+    if not value.startswith(("http://", "https://")):
+        raise ValueError(f"O proxy precisa ser http:// ou https://, veio {proxy_url!r}.")
+    return value
 
 
 def resolve_url(url: str | None, environment: Environment) -> str:

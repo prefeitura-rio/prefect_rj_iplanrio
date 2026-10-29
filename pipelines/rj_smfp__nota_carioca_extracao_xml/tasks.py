@@ -19,7 +19,7 @@ from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.wait import Clock, Limit
 @task(cache_policy=NO_CACHE)
 def run_extraction_task(  # noqa: PLR0913, PLR0917
     url: str,
-    mode: int,
+    proxy_url: str | None,
     infisical_secret_path: str,
     limits: Limits,
     discord_notifications: bool,
@@ -28,7 +28,7 @@ def run_extraction_task(  # noqa: PLR0913, PLR0917
     """Lê token e Oracle do ambiente (falha antes de qualquer chamada se faltarem) e roda a extração.
 
     :param url: Endereço do ``RotinasAutomaticas.asmx`` do ambiente.
-    :param mode: Modo de execução do webservice.
+    :param proxy_url: Proxy HTTP da chamada (squid do cluster), ou ``None`` para chamar direto.
     :param infisical_secret_path: Pasta do Infisical com o Oracle.
     :param limits: Ritmo e limites do acompanhamento.
     :param discord_notifications: ``False`` desliga o Discord.
@@ -38,11 +38,11 @@ def run_extraction_task(  # noqa: PLR0913, PLR0917
     token = read_token()
     store = OracleTaskStore(read_oracle_config(infisical_secret_path))
     notify = make_notifier(discord_notifications, environment)
-    log(f"Extração XML: webservice {url}, modo {mode}; acompanhamento em NFSE_OWNER.TAREFAS.")
-    with httpx.Client(follow_redirects=False) as client:
+    log(f"Extração XML: webservice {url} (proxy {proxy_url or 'nenhum'}); acompanhamento em NFSE_OWNER.TAREFAS.")
+    with httpx.Client(proxy=proxy_url, follow_redirects=False) as client:
 
         def call() -> RoutineResponse:
-            return call_extraction(client, url, token, mode)
+            return call_extraction(client, url, token)
 
         services = ExtractionServices(
             call=call,
