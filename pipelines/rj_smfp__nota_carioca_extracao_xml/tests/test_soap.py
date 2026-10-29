@@ -1,3 +1,5 @@
+import ssl
+
 import httpx
 import pytest
 
@@ -9,6 +11,7 @@ from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.soap import (
     RoutineResponse,
     WebserviceError,
     build_envelope,
+    build_tls_context,
     call_extraction,
     decide,
     parse_response,
@@ -197,3 +200,15 @@ def test_call_extraction_does_not_retry_an_answer_of_the_webservice() -> None:
         call_extraction(client_with(httpx.MockTransport(handler)), URL, TOKEN, attempts=3, sleep=lambda _s: None)
 
     assert calls["n"] == 1
+
+
+def test_tls_context_accepts_the_rsa_gcm_ciphers_of_the_nota_carioca_server_and_still_verifies() -> None:
+    # O servidor só negocia TLS 1.2 com troca de chaves RSA (AES256-GCM-SHA384), que o padrão do Python exclui.
+    context = build_tls_context()
+
+    names = {cipher["name"] for cipher in context.get_ciphers()}
+    assert {"AES256-GCM-SHA384", "AES128-GCM-SHA256"} <= names
+    assert "ECDHE-RSA-AES256-GCM-SHA384" in names
+    assert not any("CBC" in name or name.endswith("-SHA") for name in names if name.startswith("AES"))
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname

@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+import ssl
 
 import httpx
 import pytest
@@ -59,3 +60,6 @@ def test_flow_calls_the_webservice_through_the_cluster_proxy(monkeypatch: pytest
         flow_module.rj_smfp__nota_carioca_extracao_xml(discord_notifications=False)
 
     assert seen["proxy"] == "http://proxy.proxy.svc.cluster.local:3128"
+    verify = seen["verify"]
+    assert isinstance(verify, ssl.SSLContext)
+    assert "AES256-GCM-SHA384" in {cipher["name"] for cipher in verify.get_ciphers()}
