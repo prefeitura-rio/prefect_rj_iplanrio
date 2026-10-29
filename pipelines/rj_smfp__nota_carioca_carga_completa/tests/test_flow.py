@@ -1,15 +1,13 @@
 from collections.abc import Iterator, Sequence
+from pathlib import Path
 
 import pytest
+import yaml
 from prefect import tags
 from prefect.testing.utilities import prefect_test_harness
 
 from pipelines.rj_smfp__nota_carioca_carga_completa import flow as flow_module
 from pipelines.rj_smfp__nota_carioca_carga_completa import tasks as tasks_module
-from pathlib import Path
-
-import yaml
-
 from pipelines.rj_smfp__nota_carioca_carga_completa.constants import (
     BQ_TO_ORACLE_DEPLOYMENT,
     EXTRACTION_DEPLOYMENT,

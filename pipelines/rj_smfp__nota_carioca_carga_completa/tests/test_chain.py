@@ -439,7 +439,9 @@ def test_run_chain_triggers_nothing_when_the_extraction_is_busy_at_start() -> No
         run_chain(FULL_PLAN, world.actions())
 
     assert world.of_kind("run") == []
-    assert world.alerts() == ["⛔ Carga completa não iniciada: Extração XML já tem execução ativa (manual-run (Running))"]
+    assert world.alerts() == [
+        "⛔ Carga completa não iniciada: Extração XML já tem execução ativa (manual-run (Running))"
+    ]
 
 
 def test_run_chain_does_not_run_oracle_to_bq_when_it_became_busy_after_the_extraction() -> None:

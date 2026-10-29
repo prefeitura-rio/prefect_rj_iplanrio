@@ -24,8 +24,8 @@ pull:
     directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-# Staging: encadeia os deployments de staging (datasets *_staging e Oracle de homologação) com os mesmos tempos limite
-# e a mesma pausa da prod. O Discord posta no canal de staging, com o marcador 🧪 STAGING (o ambiente vem do nome do
+# Staging: encadeia os deployments de staging (extração XML na homologação, datasets *_staging e Oracle de homologação)
+# com os mesmos tempos limite e a mesma pausa da prod. O Discord posta no canal de staging, com o marcador 🧪 STAGING (o ambiente vem do nome do
 # deployment, terminado em --staging).
 - name: rj-smfp--nota-carioca-carga-completa--staging
   tags:
@@ -40,8 +40,11 @@ deployments:
     collision_strategy: CANCEL_NEW
   # Sem schedule: o disparo é manual ou pelo bot do Discord.
   parameters:
+    extracao_xml_deployment: rj-smfp--nota-carioca-extracao-xml/rj-smfp--nota-carioca-extracao-xml--staging
     oracle_to_bq_deployment: rj-smfp--nota-carioca-oracle-to-bq/rj-smfp--nota-carioca-oracle-to-bq--staging
     bq_to_oracle_deployment: rj-smfp--nota-carioca-bq-to-oracle/rj-smfp--nota-carioca-bq-to-oracle--staging
+    # Cargos mencionados nas paradas (ids do Discord: nota-carioca e infra), os mesmos da prod.
+    discord_alert_role_ids: []
   work_pool:
     name: onprem-pool
     work_queue_name: default
@@ -55,7 +58,8 @@ deployments:
       cpu_limit: "500m"
       memory_request: 256Mi
       memory_limit: 512Mi
-# Prod: encadeia os deployments de prod (os padrões dos parâmetros do flow) e opera sobre dados reais.
+# Prod: encadeia os deployments de prod (os padrões dos parâmetros do flow: extração XML, Oracle → BigQuery e
+# BigQuery → Oracle) e opera sobre dados reais.
 - name: rj-smfp--nota-carioca-carga-completa--prod
   tags:
   - environment:prod
@@ -68,7 +72,15 @@ deployments:
   concurrency_limit:
     limit: 1
     collision_strategy: CANCEL_NEW
-  # Sem schedule: o disparo é manual ou pelo bot do Discord (tags disparo:discord e discord-user:<id>).
+  # Todo dia às 17h (horário do Rio), e também manual ou pelo bot do Discord (tags disparo:discord e
+  # discord-user:<id>). O limite de concorrência descarta um disparo enquanto outra carga completa estiver rodando.
+  schedules:
+  - cron: "0 17 * * *"
+    timezone: America/Sao_Paulo
+    active: true
+  parameters:
+    # Cargos mencionados nas paradas (ids do Discord: nota-carioca e infra).
+    discord_alert_role_ids: []
   work_pool:
     name: onprem-pool
     work_queue_name: default
