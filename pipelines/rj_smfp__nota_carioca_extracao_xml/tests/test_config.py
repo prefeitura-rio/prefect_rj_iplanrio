@@ -3,8 +3,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from pipelines.rj_smfp__nota_carioca_extracao_xml.constants import URL_PROD, URL_STAGING
-from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.config import read_token, resolve_url, secret_env_key
+from pipelines.rj_smfp__nota_carioca_extracao_xml.constants import PROXY_URL, URL_PROD, URL_STAGING
+from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.config import (
+    read_token,
+    resolve_proxy,
+    resolve_url,
+    secret_env_key,
+)
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.discord import Environment
 
 PREFECT_YAML = Path(__file__).resolve().parents[1] / "prefect.yaml"
@@ -63,3 +68,16 @@ def test_prefect_yaml_uses_the_secret_of_each_environment() -> None:
     prod = found["rj-smfp--nota-carioca-extracao-xml--prod"]["work_pool"]
     assert staging["job_variables"]["secretName"] == "prefect-jobs-secrets-staging"
     assert prod["job_variables"]["secretName"] == "prefect-jobs-secrets"
+
+
+def test_resolve_proxy_uses_the_cluster_squid_by_default() -> None:
+    # Os pods do k3s levam reset ao chamar a intranet direto; pelo squid do cluster o webservice responde.
+    assert resolve_proxy(None) == PROXY_URL == "http://proxy.proxy.svc.cluster.local:3128"
+
+
+def test_resolve_proxy_can_be_disabled_or_replaced() -> None:
+    assert resolve_proxy("") is None
+    assert resolve_proxy("  ") is None
+    assert resolve_proxy("http://outro:3128") == "http://outro:3128"
+    with pytest.raises(ValueError, match="proxy"):
+        resolve_proxy("socks5://x:1080")

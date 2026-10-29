@@ -37,3 +37,25 @@ def test_flow_refuses_a_non_https_url_before_reading_the_environment(monkeypatch
 
     with pytest.raises(ValueError, match="https"):
         flow_module.rj_smfp__nota_carioca_extracao_xml(url="http://x/a.asmx", discord_notifications=False)
+
+
+class ClientCaptured(RuntimeError):
+    pass
+
+
+def test_flow_calls_the_webservice_through_the_cluster_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(TOKEN_ENV, "t")
+    for key in ("DB_USERNAME", "DB_PASSWORD", "DB_HOST", "DB_PORT", "DB_SERVICE_NAME"):
+        monkeypatch.setenv(f"DB_ORACLE_NOTA_FISCAL__{key}", "x")
+    seen: dict[str, object] = {}
+
+    def capture(*_args: object, **kwargs: object) -> httpx.Client:
+        seen.update(kwargs)
+        raise ClientCaptured
+
+    monkeypatch.setattr(httpx, "Client", capture)
+
+    with pytest.raises(ClientCaptured):
+        flow_module.rj_smfp__nota_carioca_extracao_xml(discord_notifications=False)
+
+    assert seen["proxy"] == "http://proxy.proxy.svc.cluster.local:3128"

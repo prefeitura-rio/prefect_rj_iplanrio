@@ -38,12 +38,13 @@ ACCEPTED = soap_response(
 )
 
 
-def test_build_envelope_sends_token_escaped_and_mode_in_the_request_element() -> None:
-    envelope = build_envelope("a<b&c>", 1)
+def test_build_envelope_sends_only_the_escaped_token_as_the_wsdl_defines() -> None:
+    # O WSDL de produção e o de homologação declaram só ``token`` nesta operação (o modo é fixo no servidor).
+    envelope = build_envelope("a<b&c>")
 
     assert f'<ExtrairDocumentosFiscaisNacionaisAutomaticoRequest xmlns="{SOAP_NAMESPACE}">' in envelope
     assert "<token>a&lt;b&amp;c&gt;</token>" in envelope
-    assert "<mode>1</mode>" in envelope
+    assert "<mode>" not in envelope
 
 
 def test_parse_response_reads_status_message_and_task_of_the_soap_body() -> None:
@@ -142,7 +143,7 @@ def test_call_extraction_posts_soap_with_the_action_header_and_reads_the_answer(
         seen.append(request)
         return httpx.Response(200, text=ACCEPTED, headers={"content-type": XML})
 
-    response = call_extraction(client_with(httpx.MockTransport(handler)), URL, TOKEN, 1, sleep=lambda _s: None)
+    response = call_extraction(client_with(httpx.MockTransport(handler)), URL, TOKEN, sleep=lambda _s: None)
 
     assert response.task_id == 134191
     assert len(seen) == 1
@@ -151,7 +152,7 @@ def test_call_extraction_posts_soap_with_the_action_header_and_reads_the_answer(
     assert str(request.url) == URL
     assert request.headers["SOAPAction"] == f'"{SOAP_ACTION}"'
     assert request.headers["content-type"].startswith("text/xml")
-    assert b"<mode>1</mode>" in request.content
+    assert b"<mode>" not in request.content
 
 
 def test_call_extraction_retries_connection_errors_and_then_succeeds() -> None:
@@ -165,7 +166,7 @@ def test_call_extraction_retries_connection_errors_and_then_succeeds() -> None:
         return httpx.Response(200, text=ACCEPTED, headers={"content-type": XML})
 
     response = call_extraction(
-        client_with(httpx.MockTransport(handler)), URL, TOKEN, 1, attempts=3, backoff_seconds=30, sleep=slept.append
+        client_with(httpx.MockTransport(handler)), URL, TOKEN, attempts=3, backoff_seconds=30, sleep=slept.append
     )
 
     assert response.status_code == "Accepted"
@@ -178,7 +179,7 @@ def test_call_extraction_gives_up_without_leaking_the_token() -> None:
         raise httpx.ConnectTimeout("tempo esgotado", request=request)
 
     with pytest.raises(WebserviceError) as error:
-        call_extraction(client_with(httpx.MockTransport(handler)), URL, TOKEN, 1, attempts=2, sleep=lambda _s: None)
+        call_extraction(client_with(httpx.MockTransport(handler)), URL, TOKEN, attempts=2, sleep=lambda _s: None)
 
     assert "2 tentativas" in str(error.value)
     assert URL in str(error.value)
@@ -193,6 +194,6 @@ def test_call_extraction_does_not_retry_an_answer_of_the_webservice() -> None:
         return httpx.Response(200, text="<html><title>Requisição Negada</title></html>", headers={"content-type": "text/html"})
 
     with pytest.raises(WebserviceError, match="Requisição Negada"):
-        call_extraction(client_with(httpx.MockTransport(handler)), URL, TOKEN, 1, attempts=3, sleep=lambda _s: None)
+        call_extraction(client_with(httpx.MockTransport(handler)), URL, TOKEN, attempts=3, sleep=lambda _s: None)
 
     assert calls["n"] == 1
