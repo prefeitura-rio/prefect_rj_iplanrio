@@ -12,8 +12,10 @@ URL_STAGING = "https://notacariocahom.rio.gov.br/intranet/RotinasAutomaticas.asm
 # ``mode`` do webservice: 0 = automático, 1 = manual (NotaNacional.vb). A operação é disparada como manual.
 MANUAL_MODE = 1
 
-# Pasta do Infisical com o Oracle e o token do webservice; cada ambiente tem o seu valor (staging = homologação).
+# Pasta do Infisical com o Oracle (chaves DB_ORACLE_NOTA_FISCAL__*); cada ambiente tem o seu valor (staging =
+# homologação).
 INFISICAL_SECRET_PATH = "/db-oracle-nota-fiscal"
+# Token do webservice: chega ao pod com o nome literal da chave no Infisical (sem prefixo de pasta).
 TOKEN_KEY = "NOTA_CARIOCA_ROTINAS_TOKEN"
 
 # NFSE_OWNER.TAREFAS (Tarefa.vb: eTarefaTipo e eTarefaStatus).

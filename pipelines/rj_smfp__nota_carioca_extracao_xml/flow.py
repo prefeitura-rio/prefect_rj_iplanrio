@@ -9,8 +9,8 @@ acompanha a extração em curso; ``OK`` sem tarefa (nada pendente) segue direto.
 que impede a carga completa de seguir.
 
 O ambiente vem do nome do deployment: staging chama a homologação (``notacariocahom``) e lê o Oracle de homologação;
-prod chama a produção. Token (``NOTA_CARIOCA_ROTINAS_TOKEN``) e Oracle vêm da pasta ``/db-oracle-nota-fiscal`` do
-Infisical. O flow nunca escreve no Oracle e nunca interrompe a tarefa da aplicação, nem no tempo limite.
+prod chama a produção. Token (variável ``NOTA_CARIOCA_ROTINAS_TOKEN``) e Oracle (``DB_ORACLE_NOTA_FISCAL__*``) vêm do
+Infisical do Prefect. O flow nunca escreve no Oracle e nunca interrompe a tarefa da aplicação, nem no tempo limite.
 """
 
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
@@ -44,7 +44,7 @@ def rj_smfp__nota_carioca_extracao_xml(  # noqa: PLR0913, PLR0917
 
     :param url: Endereço do ``RotinasAutomaticas.asmx``; vazio usa o do ambiente (staging = homologação).
     :param mode: ``mode`` do webservice (0 automático, 1 manual).
-    :param infisical_secret_path: Pasta do Infisical com o token e o Oracle.
+    :param infisical_secret_path: Pasta do Infisical com o Oracle.
     :param poll_seconds: Intervalo entre consultas a ``NFSE_OWNER.TAREFAS``.
     :param timeout_hours: Tempo máximo, da chamada até a liberação; no limite o flow falha e a tarefa segue no Oracle.
     :param stale_hours: Horas em execução a partir das quais uma tarefa 46/48 é tratada como travada (como na guarda).

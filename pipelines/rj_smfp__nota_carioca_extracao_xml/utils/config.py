@@ -1,8 +1,9 @@
 """Configuração lida do ambiente: token do webservice, conexão do Oracle e endereço do webservice.
 
-O Infisical entra no pod como variáveis de ambiente pela convenção da lib ``iplanrio``: a pasta
-``/db-oracle-nota-fiscal`` e a chave ``DB_HOST`` viram ``DB_ORACLE_NOTA_FISCAL__DB_HOST``. Prod e staging usam a mesma
-pasta, cada um com o segredo do seu ambiente (staging = homologação).
+O ``InfisicalSecret`` do Prefect copia cada chave do projeto (recursivo) para o pod com o nome literal da chave. As
+chaves do Oracle já são gravadas com o prefixo da pasta no nome, na convenção da lib ``iplanrio`` (``/db-oracle-x`` +
+``DB_HOST`` → ``DB_ORACLE_X__DB_HOST``); o token do webservice foi gravado como ``NOTA_CARIOCA_ROTINAS_TOKEN``, sem
+prefixo. Prod e staging usam as mesmas chaves, cada um com o valor do seu ambiente (staging = homologação).
 """
 
 import os
@@ -58,15 +59,17 @@ def _required(infisical_secret_path: str, key: str, environ: Mapping[str, str] |
     return value
 
 
-def read_token(infisical_secret_path: str, environ: Mapping[str, str] | None = None) -> str:
-    """Lê o token do webservice (chave ``NOTA_CARIOCA_ROTINAS_TOKEN``).
+def read_token(environ: Mapping[str, str] | None = None) -> str:
+    """Lê o token do webservice da variável ``NOTA_CARIOCA_ROTINAS_TOKEN`` (nome literal da chave no Infisical).
 
-    :param infisical_secret_path: Pasta do segredo no Infisical.
     :param environ: Variáveis de ambiente; o padrão é ``os.environ``.
     :returns: O token, sem espaços nas pontas.
     :raises ValueError: Se a variável estiver ausente ou vazia.
     """
-    return _required(infisical_secret_path, TOKEN_KEY, environ)
+    value = (environ if environ is not None else os.environ).get(TOKEN_KEY, "").strip()
+    if not value:
+        raise ValueError(f"Variável {TOKEN_KEY} ausente ou vazia (chave {TOKEN_KEY} do Infisical do Prefect).")
+    return value
 
 
 def read_oracle_config(infisical_secret_path: str, environ: Mapping[str, str] | None = None) -> OracleConfig:

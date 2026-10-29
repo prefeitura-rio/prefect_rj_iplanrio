@@ -29,13 +29,13 @@ def run_extraction_task(  # noqa: PLR0913, PLR0917
 
     :param url: Endereço do ``RotinasAutomaticas.asmx`` do ambiente.
     :param mode: Modo de execução do webservice.
-    :param infisical_secret_path: Pasta do Infisical com o token e o Oracle.
+    :param infisical_secret_path: Pasta do Infisical com o Oracle.
     :param limits: Ritmo e limites do acompanhamento.
     :param discord_notifications: ``False`` desliga o Discord.
     :param environment: Ambiente do deployment (webhook e marcador de staging).
     :returns: Resumo do que aconteceu.
     """
-    token = read_token(infisical_secret_path)
+    token = read_token()
     store = OracleTaskStore(read_oracle_config(infisical_secret_path))
     notify = make_notifier(discord_notifications, environment)
     log(f"Extração XML: webservice {url}, modo {mode}; acompanhamento em NFSE_OWNER.TAREFAS.")
