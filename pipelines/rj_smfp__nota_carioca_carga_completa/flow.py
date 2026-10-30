@@ -6,6 +6,8 @@ Oracle → BigQuery e BigQuery → Oracle. Cada passo só roda se o anterior ter
 dos parâmetros são os deployments de prod; o deployment de staging passa os de staging. Cada filho usa os parâmetros
 padrão do próprio deployment (o mesmo que um disparo rápido) e é ligado a este run como subflow. O pod só espera: o
 trabalho roda nos pods dos filhos. O deployment de prod roda todo dia às 17h (America/Sao_Paulo) e também pelo bot.
+Se o pod deste orquestrador for encerrado (SIGTERM), o Prefect reenvia o mesmo flow run: ele recomeça, acha os filhos
+que já disparou, não repete os passos concluídos e volta a esperar o que ficou rodando.
 O ambiente (prod ou staging) vem do nome deste deployment e só escolhe o webhook e o marcador das mensagens do Discord.
 Se qualquer parte não concluir, o orquestrador falha, os passos seguintes não são disparados e o alerta no Discord
 menciona os cargos de ``discord_alert_role_ids``; um filho que ainda corria quando o tempo limite acabou NÃO é
@@ -28,7 +30,13 @@ from pipelines.rj_smfp__nota_carioca_carga_completa.constants import (
     ORACLE_TO_BQ_LABEL,
     SECONDS_PER_HOUR,
 )
-from pipelines.rj_smfp__nota_carioca_carga_completa.tasks import ensure_idle_task, pause_task, run_deployment_task
+from pipelines.rj_smfp__nota_carioca_carga_completa.tasks import (
+    ensure_idle_task,
+    find_own_child_task,
+    pause_task,
+    run_deployment_task,
+    wait_for_child_task,
+)
 from pipelines.rj_smfp__nota_carioca_carga_completa.utils.chain import (
     ChainActions,
     ChainPlan,
@@ -68,12 +76,15 @@ def rj_smfp__nota_carioca_carga_completa(  # noqa: PLR0913, PLR0917
         extraction=extraction,
     )
     environment = current_environment()
+    current_run_id = str(flow_run.id) if flow_run.id else None
     actions = ChainActions(
         run=run_deployment_task,
         ensure_idle=ensure_idle_task,
         pause=pause_task,
         notify=make_notifier(discord_notifications, environment),
         alert=make_notifier(discord_notifications, environment, mention_role_ids=tuple(discord_alert_role_ids or ())),
+        find_own=lambda step: find_own_child_task(step, current_run_id),
+        wait=wait_for_child_task,
         log=log,
         link=run_link,
         clock=time.monotonic,
