@@ -206,3 +206,13 @@ def test_restarted_flow_waits_for_its_own_running_step_instead_of_failing(fake_p
     assert fake_prefect.waited == [("id-bq-run", 8 * 3600)]
     assert len(fake_prefect.parents) == 3
     assert all(parent for parent in fake_prefect.parents)
+
+
+@pytest.mark.parametrize(
+    "name", ["rj-smfp--nota-carioca-carga-completa--prod", "rj-smfp--nota-carioca-carga-completa--staging"]
+)
+def test_orchestrator_pod_is_guaranteed_so_it_is_evicted_last(name: str) -> None:
+    variables = deployments()[name]["work_pool"]["job_variables"]
+
+    assert variables["cpu_request"] == variables["cpu_limit"]
+    assert variables["memory_request"] == variables["memory_limit"]
