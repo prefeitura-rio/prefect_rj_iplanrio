@@ -100,6 +100,8 @@ class ChainActions:
     :param pause: Espera os segundos dados.
     :param notify: Posta uma linha avulsa no Discord; nunca levanta exceção.
     :param alert: Posta a parada no Discord mencionando os cargos de alerta; nunca levanta exceção.
+    :param find_own: O filho que este flow run já disparou no deployment do passo (antes de um reinício), ou ``None``.
+    :param wait: Espera um filho já existente terminar ou o tempo limite do passo; devolve o último estado lido.
     :param log: Escreve no log do Prefect.
     :param link: Link de um flow run na UI, ou ``None``.
     :param clock: Relógio monotônico em segundos.
@@ -110,6 +112,8 @@ class ChainActions:
     pause: Callable[[int], None]
     notify: Callable[[str], None]
     alert: Callable[[str], None]
+    find_own: Callable[[Step], ChildRun | None]
+    wait: Callable[[Step, ChildRun], ChildRun]
     log: Callable[[str], None]
     link: Callable[[str], str | None]
     clock: Callable[[], float]
@@ -135,23 +139,44 @@ class _Chain:
         self._actions = actions
 
     def run(self) -> None:
-        """Trava de todos, depois cada passo: pausa e trava antes de cada um a partir do segundo; avisa o Discord."""
+        """Filhos já disparados por este run, trava dos demais e cada passo; retoma depois de um reinício.
+
+        Depois de um SIGTERM o Prefect reenvia o mesmo flow run, que recomeça do início. Os passos que este run já
+        concluiu não rodam de novo, o que ficou rodando é esperado (sem trava contra o próprio filho) e só os passos
+        ainda não disparados passam pela trava e são disparados.
+        """
         plan, actions = self._plan, self._actions
         steps = plan.steps
         started = actions.clock()
+        own = {step.deployment: actions.find_own(step) for step in steps}
         for step in steps:
-            self._ensure_idle(step, NOT_STARTED)
+            if own[step.deployment] is None:
+                self._ensure_idle(step, NOT_STARTED)
         sequence = ", depois ".join(step.label for step in steps)
         actions.log(f"Carga completa: {sequence}.")
-        actions.notify(f"🔗 Carga completa iniciada: {sequence}")
+        if any(own.values()):
+            found = ", ".join(f"{step.label} ({child.state_name})" for step in steps if (child := own[step.deployment]))
+            actions.log(f"Retomada depois de um reinício do orquestrador; filhos deste run já disparados: {found}.")
+            actions.notify(
+                f"🔁 Carga completa retomada depois de um reinício do orquestrador: {found}; os passos concluídos não "
+                "rodam de novo"
+            )
+        else:
+            actions.notify(f"🔗 Carga completa iniciada: {sequence}")
+        previous: Step | None = None
         for index, step in enumerate(steps):
-            if index > 0:
-                previous = steps[index - 1]
+            existing = own[step.deployment]
+            if existing is not None and existing.state_type == COMPLETED_STATE:
+                actions.log(f"{step.label}: já {step.done} antes do reinício (flow run {existing.name}).")
+                previous = step
+                continue
+            if existing is None and previous is not None:
                 actions.log(f"{previous.label} {previous.done}; {step.label} começa em {plan.pause_seconds} s.")
                 actions.notify(f"⏭️ {previous.label} {previous.done}; {step.label} começa em {plan.pause_seconds} s")
                 actions.pause(plan.pause_seconds)
                 self._ensure_idle(step, f"Carga completa interrompida ({previous.label} {previous.done})")
-            self._run_step(step, skipped=steps[index + 1 :])
+            self._run_step(step, skipped=steps[index + 1 :], existing=existing)
+            previous = step
         took = format_duration(actions.clock() - started)
         actions.log(f"Carga completa concluída em {took}.")
         actions.notify(f"✅ Carga completa concluída em {took}")
@@ -167,17 +192,28 @@ class _Chain:
                 f"⛔ {headline}: {step.label} já tem execução ativa ({who})",
             ) from error
 
-    def _run_step(self, step: Step, skipped: Sequence[Step]) -> None:
-        """Dispara o deployment, espera, registra o filho com o link e para a cadeia se ele não concluiu.
+    def _run_step(self, step: Step, skipped: Sequence[Step], existing: ChildRun | None = None) -> None:
+        """Dispara o deployment (ou espera o filho que já existe), registra o filho e para a cadeia se ele não concluiu.
 
         :param step: Deployment a rodar.
         :param skipped: Os passos que deixam de ser disparados se este não concluir; vazio no último.
+        :param existing: Filho que este run disparou antes de um reinício e que ainda não concluiu, ou ``None``.
         """
         actions = self._actions
-        actions.log(
-            f"Disparando {step.label} ({step.deployment}); espera de até {format_duration(step.timeout_seconds)}."
-        )
-        child = actions.run(step, self._plan.tags)
+        limit = format_duration(step.timeout_seconds)
+        if existing is None:
+            actions.log(f"Disparando {step.label} ({step.deployment}); espera de até {limit}.")
+            child = actions.run(step, self._plan.tags)
+        elif existing.state_type in FINISHED_STATES:
+            child = existing
+        else:
+            url = actions.link(existing.run_id)
+            actions.log(f"Retomando a espera de {step.label}: flow run {existing.name} em {existing.state_name}.")
+            actions.notify(
+                f"⏳ Retomando a espera de {step.label} (flow run {existing.name}, {existing.state_name}) depois do "
+                f"reinício{' · <' + url + '>' if url else ''}"
+            )
+            child = actions.wait(step, existing)
         url = actions.link(child.run_id)
         actions.log(f"{step.label}: flow run {child.name} em {child.state_name}{' ' + url if url else ''}")
         if child.state_type != COMPLETED_STATE:

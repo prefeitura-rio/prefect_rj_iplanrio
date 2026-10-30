@@ -32,6 +32,17 @@ class FakePrefect:
         self.outcomes = outcomes
         self.active: dict[str, list[runs.ActiveRun]] = {}
         self.launched: list[tuple[str, int, Sequence[str]]] = []
+        self.own: dict[str, ChildRun] = {}
+        self.parents: list[str | None] = []
+        self.waited: list[tuple[str, int]] = []
+
+    def find_own_child(self, deployment: str, parent_run_id: str | None) -> ChildRun | None:
+        self.parents.append(parent_run_id)
+        return self.own.get(deployment)
+
+    def wait_for_run(self, run_id: str, timeout_seconds: int) -> ChildRun:
+        self.waited.append((run_id, timeout_seconds))
+        return ChildRun(run_id=run_id, name="waited", state_type="COMPLETED", state_name="Completed")
 
     def list_deployment_runs(self, deployment: str) -> list[runs.ActiveRun]:
         return self.active.get(deployment, [])
@@ -56,6 +67,8 @@ def fake_prefect(monkeypatch: pytest.MonkeyPatch) -> FakePrefect:
     )
     monkeypatch.setattr(runs, "list_deployment_runs", fake.list_deployment_runs)
     monkeypatch.setattr(runs, "run_and_wait", fake.run_and_wait)
+    monkeypatch.setattr(runs, "find_own_child", fake.find_own_child)
+    monkeypatch.setattr(runs, "wait_for_run", fake.wait_for_run)
     monkeypatch.setattr(tasks_module.time, "sleep", lambda _seconds: None)
     return fake
 
@@ -172,3 +185,34 @@ def test_both_environments_mention_the_same_alert_roles() -> None:
     staging = found["rj-smfp--nota-carioca-carga-completa--staging"]["parameters"]["discord_alert_role_ids"]
     prod = found["rj-smfp--nota-carioca-carga-completa--prod"]["parameters"]["discord_alert_role_ids"]
     assert staging == prod == ["1558828140166647901", "903644455582695494"]
+
+
+def test_restarted_flow_waits_for_its_own_running_step_instead_of_failing(fake_prefect: FakePrefect) -> None:
+    # Given: o run foi reenviado depois de um SIGTERM; os dois primeiros filhos dele concluíram e o terceiro roda
+    fake_prefect.own = {
+        EXTRACTION_DEPLOYMENT: child("xml-run", "COMPLETED", "Completed"),
+        ORACLE_TO_BQ_DEPLOYMENT: child("oracle-run", "COMPLETED", "Completed"),
+        BQ_TO_ORACLE_DEPLOYMENT: child("bq-run", "RUNNING", "Running"),
+    }
+    fake_prefect.active[BQ_TO_ORACLE_DEPLOYMENT] = [
+        runs.ActiveRun("id-bq-run", "bq-run", "RUNNING", "Running", expected_start_time=None)
+    ]
+
+    # When: o flow roda de novo
+    flow_module.rj_smfp__nota_carioca_carga_completa(discord_notifications=False)
+
+    # Then: nada é disparado de novo, espera o próprio filho com o tempo limite do passo e procura pelos filhos deste run
+    assert fake_prefect.launched == []
+    assert fake_prefect.waited == [("id-bq-run", 8 * 3600)]
+    assert len(fake_prefect.parents) == 3
+    assert all(parent for parent in fake_prefect.parents)
+
+
+@pytest.mark.parametrize(
+    "name", ["rj-smfp--nota-carioca-carga-completa--prod", "rj-smfp--nota-carioca-carga-completa--staging"]
+)
+def test_orchestrator_pod_is_guaranteed_so_it_is_evicted_last(name: str) -> None:
+    variables = deployments()[name]["work_pool"]["job_variables"]
+
+    assert variables["cpu_request"] == variables["cpu_limit"]
+    assert variables["memory_request"] == variables["memory_limit"]
