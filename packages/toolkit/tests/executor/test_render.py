@@ -1,3 +1,4 @@
+import re
 from datetime import date
 
 import duckdb
@@ -149,6 +150,34 @@ def test_the_text_decoder_passes_what_is_not_windows_1252_text(value, expected) 
     [(answer,)] = connection.execute(f"SELECT utf8_text({value})").fetchall()
 
     assert answer == expected
+
+
+@pytest.mark.parametrize(
+    ("hex_bytes", "valid"),
+    [
+        pytest.param("41", True, id="ascii"),
+        pytest.param("C381", True, id="two_bytes"),
+        pytest.param("F09F9880", True, id="four_bytes"),
+        pytest.param("C181", False, id="overlong_two_bytes"),
+        pytest.param("E080AF", False, id="overlong_three_bytes"),
+        pytest.param("EDA080", False, id="surrogate"),
+        pytest.param("F4908080", False, id="above_the_last_code_point"),
+        pytest.param("C1", False, id="cut_sequence"),
+    ],
+)
+def test_the_text_decoder_keeps_only_text_that_duckdb_accepts_as_utf8(
+    hex_bytes, valid
+) -> None:
+    """Decode an overlong form as Windows-1252 instead of keeping it."""
+    sql = render_template("duckdb/create_utf8_text", {})
+    pattern = re.search(r"'(\(\?:[^']*\)\*)'", sql)
+    assert pattern
+
+    [(matched,)] = duckdb.connect().execute(
+        "SELECT regexp_full_match(?, ?)", [hex_bytes, pattern.group(1)]
+    ).fetchall()
+
+    assert matched is valid
 
 
 @pytest.mark.parametrize(
