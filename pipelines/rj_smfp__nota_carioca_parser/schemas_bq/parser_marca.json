@@ -1,0 +1,14 @@
+[
+  {
+    "name": "versao_parser",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Versão do parser."
+  },
+  {
+    "name": "ultimo_nsu",
+    "type": "INT64",
+    "mode": "REQUIRED",
+    "description": "Todo NSU do índice até este valor foi processado e carregado por esta versão (só avança depois de todos os loads do lote)."
+  }
+]
