@@ -173,9 +173,11 @@ def test_the_text_decoder_keeps_only_text_that_duckdb_accepts_as_utf8(
     pattern = re.search(r"'(\(\?:[^']*\)\*)'", sql)
     assert pattern
 
-    [(matched,)] = duckdb.connect().execute(
-        "SELECT regexp_full_match(?, ?)", [hex_bytes, pattern.group(1)]
-    ).fetchall()
+    [(matched,)] = (
+        duckdb.connect()
+        .execute("SELECT regexp_full_match(?, ?)", [hex_bytes, pattern.group(1)])
+        .fetchall()
+    )
 
     assert matched is valid
 
