@@ -228,37 +228,41 @@ deployments:
             table_id: avaliacao
           read:
             query: |
-              SELECT
-                [Ano],
-                [COC],
-                [tpc_nome],
-                [tur_codigo],
-                [Reunião_Pais],
-                [Frequencia],
-                [Conceito],
-                [GLB],
-                [MAT],
-                [POR],
-                [CIE],
-                [GEO],
-                [HIS],
-                [EFI],
-                [ING],
-                [ESP],
-                [FRA],
-                [ALE],
-                [AVI],
-                [APL],
-                [ACE],
-                [TEA],
-                [MUS],
-                [cur_id],
-                [crp_id],
-                [tur_id],
-                [alu_id],
-                [mtu_id]
-              FROM GestaoEscolar.dbo.VW_BI_Avaliacao
-              WHERE Ano >= 2026
+              WITH aad0ed8f AS (
+                SELECT
+                  [Ano],
+                  [COC],
+                  [tpc_nome],
+                  [tur_codigo],
+                  [Reunião_Pais],
+                  [Frequencia],
+                  [Conceito],
+                  [GLB],
+                  [MAT],
+                  [POR],
+                  [CIE],
+                  [GEO],
+                  [HIS],
+                  [EFI],
+                  [ING],
+                  [ESP],
+                  [FRA],
+                  [ALE],
+                  [AVI],
+                  [APL],
+                  [ACE],
+                  [TEA],
+                  [MUS],
+                  [cur_id],
+                  [crp_id],
+                  [tur_id],
+                  [alu_id],
+                  [mtu_id]
+                FROM GestaoEscolar.dbo.VW_BI_Avaliacao
+              )
+              SELECT * FROM aad0ed8f
+              WHERE CONVERT(DATE, CAST(Ano AS VARCHAR)) >= '2026'
+                AND CONVERT(DATE, CAST(Ano AS VARCHAR)) <= '2030'
           dump_mode: append
           options:
             columns:
