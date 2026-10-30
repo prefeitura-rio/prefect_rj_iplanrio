@@ -81,3 +81,13 @@ def test_resolve_proxy_can_be_disabled_or_replaced() -> None:
     assert resolve_proxy("http://outro:3128") == "http://outro:3128"
     with pytest.raises(ValueError, match="proxy"):
         resolve_proxy("socks5://x:1080")
+
+
+@pytest.mark.parametrize(
+    "name", ["rj-smfp--nota-carioca-extracao-xml--prod", "rj-smfp--nota-carioca-extracao-xml--staging"]
+)
+def test_extraction_pod_is_guaranteed_so_it_is_evicted_last(name: str) -> None:
+    variables = deployments()[name]["work_pool"]["job_variables"]
+
+    assert variables["cpu_request"] == variables["cpu_limit"]
+    assert variables["memory_request"] == variables["memory_limit"]
