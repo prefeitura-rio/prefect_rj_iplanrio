@@ -41,6 +41,62 @@ deployments:
       filter_duplicated_phones: false
       filter_duplicated_cpfs: true
     schedules:
+      # Disparo recado dia servidor
+      - cron: "0 19 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-recado_dia_servidor
+        flow_run_name: recado_dia_servidor
+        parameters:
+          flow_environment: staging
+          campaign_name: recado_dia_do_servidor_v3
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          data_extension_filename: whatsapp_sma_dia_servidor_2026
+          de_columns: []
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: false
+          filter_failed_phones: true
+          batch_size: 10000
+          batch_sleep_minutes: 5
+          query_file: queries/sma/bonus_servidores/recado_dia_servidor.sql
+      # Disparo recado_mobirio
+      - cron: "0 9 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-recado_mobirio
+        flow_run_name: recado_mobirio
+        parameters:
+          flow_environment: staging
+          campaign_name: recado_mobirio_pref_rio_bonus_v1
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          data_extension_filename: whatsapp_sma_mobirio_bonus_2026
+          de_columns: ["nome_servidor"]
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: false
+          filter_failed_phones: true
+          query_file: queries/sma/bonus_servidores/bonus_mobi_rio.sql
+      # Disparo bonus_segundo_envio
+      - cron: "0 9 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-bonus_segundo_envio
+        flow_run_name: bonus_segundo_envio
+        parameters:
+          flow_environment: staging
+          campaign_name: recado_servidores_pref_rio_14
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          data_extension_filename: whatsapp_sma_servidores_ar_2026
+          de_columns: ["nome_servidor"]
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: false
+          filter_failed_phones: true
+          batch_size: 10000
+          batch_sleep_minutes: 5
+          query_file: queries/sma/bonus_servidores/bonus_servidores_segundo_envio.sql
+
       # Disparo infrequência escolar (SME)
       - cron: "0 15 * * *"
         timezone: America/Sao_Paulo
