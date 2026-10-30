@@ -64,6 +64,10 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_iplanrio__czrm_salesforce_datacloud -- prefect flow-run execute
+        # `-staging` é o padrão do repo (README, seção "Configuração de secrets", e
+        # STYLEGUIDE §9.3: "Staging usa prefect-jobs-secrets-staging"), o mesmo das
+        # demais pipelines. A instrução "Both deployments MUST use secretName:
+        # prefect-jobs-secrets" do .coderabbit.yaml (linha 193) está desatualizada.
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
     parameters:

@@ -98,8 +98,10 @@ def extrair(session: dict, dlo: str, filtro: str, order_by: str, tabela: str = "
             break
         offset += PAGE_SIZE
         if offset >= MAX_ROWS:
-            logger.warning("[DC] %s: limite de segurança (%s linhas) atingido", tabela or dlo, MAX_ROWS)
-            break
+            raise RuntimeError(
+                f"[DC] {tabela or dlo}: limite de segurança de {MAX_ROWS} linhas atingido — "
+                "a carga ficaria incompleta. Use modo='reprocessar' por dia para esse volume."
+            )
 
     logger.info("[DC] %s: %d linhas em %d página(s)", tabela or dlo, len(linhas), pagina)
     return pd.DataFrame(linhas, columns=colunas) if linhas else pd.DataFrame(columns=colunas)

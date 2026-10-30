@@ -72,6 +72,7 @@ class SchemaTabela:
     campos: tuple[bigquery.SchemaField, ...]
     datas: tuple[str, ...]
     colunas: tuple[str, ...]
+    datas_date: tuple[str, ...] = ()
 
     @property
     def campos_finais(self) -> list[bigquery.SchemaField]:
@@ -99,6 +100,7 @@ def montar(
     booleanas = booleanas or []
     campos: list[bigquery.SchemaField] = []
     datas: list[str] = []
+    datas_date: list[str] = []
     vistos: set[str] = set()
 
     for coluna in colunas_dlo:
@@ -118,6 +120,8 @@ def montar(
 
         if tipo_bq == _TIMESTAMP:
             datas.append(nome)
+        if tipo_bq == _DATE:
+            datas_date.append(nome)
         if nome in ("_loaded_at", "data_criacao", "data_atualizacao"):
             raise ValueError(f"a DLO tem uma coluna que colide com controle: '{nome}'.")
         campos.append(bigquery.SchemaField(nome, tipo_bq))
@@ -134,4 +138,5 @@ def montar(
         campos=tuple(campos),
         datas=tuple(datas),
         colunas=tuple(c.name for c in campos),
+        datas_date=tuple(datas_date),
     )

@@ -68,8 +68,12 @@ def transformar(
 
     agora = agora or datetime.now(tz=timezone.utc)
 
-    df = df.loc[:, ~df.columns.duplicated()].copy()
+    df = df.copy()
     df.columns = [nome_final(c, tabela.renomear) for c in df.columns]
+    # Deduplica DEPOIS de renomear: nomes brutos diferentes podem cair no mesmo
+    # nome final (ex.: 'Foo__c' e 'ssot__Foo__c' -> 'foo'). Fica a primeira
+    # ocorrência, igual ao que utils/schema.py:montar faz.
+    df = df.loc[:, ~df.columns.duplicated()].copy()
 
     controle = {"_loaded_at", "data_criacao", "data_atualizacao"}
     permitidas = (set(schema.colunas) - controle) | {"created_date", "system_modstamp"}
@@ -85,6 +89,12 @@ def transformar(
     for coluna in schema.datas:
         if coluna in df.columns:
             df[coluna] = pd.to_datetime(df[coluna], errors="coerce", utc=True, format="ISO8601")
+
+    # Colunas DATE (sem hora) viram datetime.date — o schema é descoberto em
+    # runtime, então uma DLO pode passar a devolver coluna 'Date' a qualquer run.
+    for coluna in schema.datas_date:
+        if coluna in df.columns:
+            df[coluna] = pd.to_datetime(df[coluna], errors="coerce").dt.date
 
     df = _converter_booleanas(df, tabela.booleanas)
 
