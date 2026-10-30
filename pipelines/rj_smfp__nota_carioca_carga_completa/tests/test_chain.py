@@ -51,6 +51,8 @@ class World:
     run_tags: list[Sequence[str]] = field(default_factory=list)
     now: float = 0.0
     paused: bool = False
+    own: dict[str, ChildRun] = field(default_factory=dict)
+    waited: dict[str, ChildRun] = field(default_factory=dict)
 
     def run(self, step: Step, tags: Sequence[str]) -> ChildRun:
         self.events.append(("run", step.deployment, str(step.timeout_seconds)))
@@ -60,6 +62,15 @@ class World:
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
+
+    def find_own(self, step: Step) -> ChildRun | None:
+        self.events.append(("own", step.deployment))
+        return self.own.get(step.deployment)
+
+    def wait(self, step: Step, child_run: ChildRun) -> ChildRun:
+        self.events.append(("wait", step.deployment, child_run.run_id))
+        self.now += BQ_DONE_SECONDS
+        return self.waited.get(step.deployment, child(child_run.name, *COMPLETED))
 
     def ensure_idle(self, deployment: str) -> None:
         self.events.append(("guard", deployment))
@@ -91,6 +102,8 @@ class World:
             pause=self.pause,
             notify=self.notify,
             alert=self.alert,
+            find_own=self.find_own,
+            wait=self.wait,
             log=self.log,
             link=self.link,
             clock=lambda: self.now,
@@ -135,7 +148,7 @@ def test_run_chain_runs_second_after_pause_when_first_completes() -> None:
     run_chain(PLAN, world.actions())
 
     # Then: confere os dois, dispara o primeiro, pausa 30 s, reconfere só o segundo e dispara o segundo
-    assert [event for event in world.events if event[0] not in {"log", "notify", "alert"}] == [
+    assert [event for event in world.events if event[0] not in {"log", "notify", "alert", "own"}] == [
         ("guard", ORACLE_TO_BQ_DEPLOYMENT),
         ("guard", BQ_TO_ORACLE_DEPLOYMENT),
         ("run", ORACLE_TO_BQ_DEPLOYMENT, str(4 * 3600)),
@@ -382,7 +395,7 @@ def test_run_chain_with_extraction_runs_it_first_and_each_next_step_after_a_paus
     run_chain(FULL_PLAN, world.actions())
 
     # Then: confere os três, roda a extração, pausa, reconfere e roda cada próximo passo
-    assert [event for event in world.events if event[0] not in {"log", "notify", "alert"}] == [
+    assert [event for event in world.events if event[0] not in {"log", "notify", "alert", "own"}] == [
         ("guard", EXTRACTION_DEPLOYMENT),
         ("guard", ORACLE_TO_BQ_DEPLOYMENT),
         ("guard", BQ_TO_ORACLE_DEPLOYMENT),
@@ -475,3 +488,103 @@ def test_run_chain_alerts_unexpected_errors() -> None:
         run_chain(FULL_PLAN, world.actions())
 
     assert world.alerts() == ["⛔ Carga completa interrompida por erro: RuntimeError: API fora do ar"]
+
+
+RUNNING = ("RUNNING", "Running")
+
+
+def test_run_chain_asks_for_its_own_children_of_every_step_before_anything() -> None:
+    world = World(all_three(child("xml-run", *COMPLETED)))
+
+    run_chain(FULL_PLAN, world.actions())
+
+    assert world.events[:3] == [
+        ("own", EXTRACTION_DEPLOYMENT),
+        ("own", ORACLE_TO_BQ_DEPLOYMENT),
+        ("own", BQ_TO_ORACLE_DEPLOYMENT),
+    ]
+    assert world.of_kind("wait") == []
+
+
+def test_restarted_chain_waits_for_its_running_step_without_alert_or_new_trigger() -> None:
+    # Given: o orquestrador reiniciou (SIGTERM) com a extração e o Oracle → BigQuery já concluídos e o BigQuery → Oracle
+    # dele ainda rodando
+    world = World(all_three(child("xml-run", *COMPLETED)))
+    world.own = {
+        EXTRACTION_DEPLOYMENT: child("xml-run", *COMPLETED),
+        ORACLE_TO_BQ_DEPLOYMENT: child("oracle-run", *COMPLETED),
+        BQ_TO_ORACLE_DEPLOYMENT: child("bq-run", *RUNNING),
+    }
+
+    # When: roda a cadeia de novo
+    run_chain(FULL_PLAN, world.actions())
+
+    # Then: não dispara nada, não confere a trava contra os próprios filhos, só espera o BigQuery → Oracle e conclui
+    assert world.of_kind("run") == []
+    assert world.of_kind("guard") == []
+    assert world.of_kind("pause") == []
+    assert world.of_kind("wait") == [("wait", BQ_TO_ORACLE_DEPLOYMENT, "id-bq-run")]
+    assert world.alerts() == []
+    notes = world.notifications()
+    assert notes[0].startswith("🔁 Carga completa retomada depois de um reinício do orquestrador")
+    assert any(note.startswith("⏳ Retomando a espera de BigQuery → Oracle") and "bq-run" in note for note in notes)
+    assert notes[-1].startswith("✅ Carga completa concluída em ")
+
+
+def test_restarted_chain_starts_the_next_step_when_the_restart_happened_between_steps() -> None:
+    # Given: só a extração deste run existe (o reinício veio durante a pausa)
+    world = World(all_three(child("xml-run", *COMPLETED)))
+    world.own = {EXTRACTION_DEPLOYMENT: child("xml-run", *COMPLETED)}
+
+    run_chain(FULL_PLAN, world.actions())
+
+    assert world.runs() == [ORACLE_TO_BQ_DEPLOYMENT, BQ_TO_ORACLE_DEPLOYMENT]
+    assert [event[1] for event in world.of_kind("guard")] == [
+        ORACLE_TO_BQ_DEPLOYMENT,
+        BQ_TO_ORACLE_DEPLOYMENT,
+        ORACLE_TO_BQ_DEPLOYMENT,
+        BQ_TO_ORACLE_DEPLOYMENT,
+    ]
+    assert "⏭️ Extração XML concluída; Oracle → BigQuery começa em 30 s" in world.notifications()
+    assert world.alerts() == []
+
+
+@pytest.mark.parametrize(("state_type", "state_name"), [("FAILED", "Failed"), ("CRASHED", "Crashed")])
+def test_restarted_chain_stops_when_its_own_step_had_not_completed(state_type: str, state_name: str) -> None:
+    world = World(all_three(child("xml-run", *COMPLETED)))
+    world.own = {
+        EXTRACTION_DEPLOYMENT: child("xml-run", *COMPLETED),
+        ORACLE_TO_BQ_DEPLOYMENT: child("oracle-run", state_type, state_name),
+    }
+
+    with pytest.raises(ChainStoppedError, match=f"Oracle → BigQuery terminou em {state_name}"):
+        run_chain(FULL_PLAN, world.actions())
+
+    assert world.of_kind("run") == []
+    assert "BigQuery → Oracle não foi disparado" in world.alerts()[0]
+
+
+def test_restarted_chain_stops_when_the_resumed_wait_ends_without_completion() -> None:
+    world = World(all_three(child("xml-run", *COMPLETED)))
+    world.own = {
+        EXTRACTION_DEPLOYMENT: child("xml-run", *COMPLETED),
+        ORACLE_TO_BQ_DEPLOYMENT: child("oracle-run", *COMPLETED),
+        BQ_TO_ORACLE_DEPLOYMENT: child("bq-run", *RUNNING),
+    }
+    world.waited = {BQ_TO_ORACLE_DEPLOYMENT: child("bq-run", "FAILED", "Failed")}
+
+    with pytest.raises(ChainStoppedError, match="BigQuery → Oracle terminou em Failed"):
+        run_chain(FULL_PLAN, world.actions())
+
+    assert world.alerts()[0].startswith("⛔ Carga completa interrompida: BigQuery → Oracle terminou em Failed")
+
+
+def test_restarted_chain_still_refuses_a_step_busy_with_a_run_that_is_not_its_own() -> None:
+    world = World(all_three(child("xml-run", *COMPLETED)))
+    world.own = {EXTRACTION_DEPLOYMENT: child("xml-run", *COMPLETED)}
+    world.busy[BQ_TO_ORACLE_DEPLOYMENT] = [busy_run()]
+
+    with pytest.raises(ChainStoppedError, match="Carga completa não iniciada"):
+        run_chain(FULL_PLAN, world.actions())
+
+    assert world.of_kind("run") == []
