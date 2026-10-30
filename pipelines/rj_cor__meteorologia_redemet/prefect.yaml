@@ -117,5 +117,3 @@ deployments:
             dataset_id: clima_estacao_meteorologica
             table_id: meteorologia_redemet
           dump_mode: merge
-          first_date:
-          last_date:
