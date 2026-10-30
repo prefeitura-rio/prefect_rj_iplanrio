@@ -81,6 +81,7 @@ members = [
     "rj-smfp-atividade-economica",
     "rj-smfp-dump-db-ergon",
     "rj-smfp-iptu-inadimplentes",
+    "rj-smfp-nota-carioca-adn",
     "rj-smfp-nota-carioca-bq-to-oracle",
     "rj-smfp-nota-carioca-bq-to-oracle-validation",
     "rj-smfp-nota-carioca-carga-completa",
@@ -5443,6 +5444,37 @@ dependencies = [
 requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
+name = "rj-smfp-nota-carioca-adn"
+version = "1.0.0"
+source = { virtual = "pipelines/rj_smfp__nota_carioca_adn" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "google-cloud-bigquery" },
+    { name = "google-cloud-storage" },
+    { name = "httpx" },
+    { name = "oracledb" },
+    { name = "prefect-rj-iplanrio" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "testcontainers" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cryptography", specifier = ">=46.0.0" },
+    { name = "google-cloud-bigquery", specifier = ">=3.41.0" },
+    { name = "google-cloud-storage", specifier = ">=2.10.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "oracledb", specifier = ">=4.0.1" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "testcontainers", specifier = ">=4.13.0" }]
+
+[[package]]
 name = "rj-smfp-nota-carioca-bq-to-oracle"
 version = "1.0.0"
 source = { virtual = "pipelines/rj_smfp__nota_carioca_bq_to_oracle" }
@@ -5993,6 +6025,22 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/47/c6/ee486fd809e357697ee8a44d3d69222b344920433d3b6666ccd9b374630c/tenacity-9.1.4.tar.gz", hash = "sha256:adb31d4c263f2bd041081ab33b498309a57c77f9acf2db65aadf0898179cf93a", size = 49413, upload-time = "2026-02-07T10:45:33.841Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl", hash = "sha256:6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55", size = 28926, upload-time = "2026-02-07T10:45:32.24Z" },
+]
+
+[[package]]
+name = "testcontainers"
+version = "4.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "docker" },
+    { name = "python-dotenv" },
+    { name = "typing-extensions" },
+    { name = "urllib3" },
+    { name = "wrapt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4b/13/2cc466bddf26d0085f30a2b2bd56b7f8708b54a54db833eec97c5c69129b/testcontainers-4.15.0.tar.gz", hash = "sha256:085cde086337632e19002719460b7b80bbab2bdd51bb3ea04f77d0de96504706", size = 95340, upload-time = "2026-07-24T23:08:01.731Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/7e/424aac8b355597835deb333e757a0e94b5ccf38ad00f07fe6ed1f4e17c88/testcontainers-4.15.0-py3-none-any.whl", hash = "sha256:8796c14e76604031ad39cf0ed3b8e9806283a1fbf5270965c2b1c594caa31b74", size = 160771, upload-time = "2026-07-24T23:08:00.13Z" },
 ]
 
 [[package]]
