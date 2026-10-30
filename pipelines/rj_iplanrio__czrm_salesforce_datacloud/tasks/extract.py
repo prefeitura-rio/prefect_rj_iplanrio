@@ -21,11 +21,11 @@ from pipelines.rj_iplanrio__czrm_salesforce_datacloud.constants import (
     PAGE_SIZE,
     TIMEOUT,
 )
+from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.log import logger_da_pipeline
 from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.queries import ler_query
 from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.retry import so_erro_temporario
-from prefect_rj_iplanrio.logging import get_logger
 
-logger = get_logger(__name__)
+logger = logger_da_pipeline(__name__)
 
 
 def _consulta(session: dict, sql: str) -> dict:

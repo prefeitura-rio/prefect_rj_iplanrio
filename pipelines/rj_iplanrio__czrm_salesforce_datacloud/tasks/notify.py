@@ -18,9 +18,9 @@ from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.discord import (
     mensagem_falha_tabela,
     mensagem_resumo,
 )
-from prefect_rj_iplanrio.logging import get_logger
+from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.log import logger_da_pipeline
 
-logger = get_logger(__name__)
+logger = logger_da_pipeline(__name__)
 
 
 def _enviar(mensagem: str) -> None:

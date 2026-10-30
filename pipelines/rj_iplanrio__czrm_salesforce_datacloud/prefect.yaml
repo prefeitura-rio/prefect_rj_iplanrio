@@ -70,6 +70,9 @@ deployments:
         # prefect-jobs-secrets" do .coderabbit.yaml (linha 193) está desatualizada.
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
+        env:
+          # Sem isto o Prefect ignora os loggers da pipeline e só WARNING+ aparece.
+          PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_iplanrio__czrm_salesforce_datacloud
     parameters:
       origem: staging
       dry_run: true
@@ -92,6 +95,9 @@ deployments:
         command: uv run --package rj_iplanrio__czrm_salesforce_datacloud -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
+        env:
+          # Sem isto o Prefect ignora os loggers da pipeline e só WARNING+ aparece.
+          PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_iplanrio__czrm_salesforce_datacloud
     parameters:
       origem: prod
       project_id: rj-iplanrio

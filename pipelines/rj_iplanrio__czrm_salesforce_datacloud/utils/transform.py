@@ -20,11 +20,11 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.log import logger_da_pipeline
 from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.schema import SchemaTabela, nome_final
 from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.tabelas import Tabela
-from prefect_rj_iplanrio.logging import get_logger
 
-logger = get_logger(__name__)
+logger = logger_da_pipeline(__name__)
 
 SP = ZoneInfo("America/Sao_Paulo")
 

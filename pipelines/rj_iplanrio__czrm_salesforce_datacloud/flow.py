@@ -47,6 +47,7 @@ from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.janela import (
     fmt_janela,
     janelas_do_run,
 )
+from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.log import logger_da_pipeline
 from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.schema import SchemaTabela, montar
 from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.tabelas import (
     TABELAS,
@@ -55,9 +56,8 @@ from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.tabelas import (
     Tabela,
 )
 from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.transform import transformar
-from prefect_rj_iplanrio.logging import get_logger
 
-logger = get_logger(__name__)
+logger = logger_da_pipeline(__name__)
 
 Modo = Literal["hora", "dia", "reconciliacao", "carga_inicial"]
 
