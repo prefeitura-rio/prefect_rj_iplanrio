@@ -56,9 +56,10 @@ deployments:
       secretName: prefect-jobs-secrets-staging
       image_pull_policy: Always
       # O pod só espera os filhos (consulta a API do Prefect); a carga roda nos pods deles.
-      cpu_request: "100m"
-      cpu_limit: "500m"
-      memory_request: 256Mi
+      # Requests iguais aos limits (QoS Guaranteed): é o último pod a ser despejado quando o nó fica sem memória.
+      cpu_request: "250m"
+      cpu_limit: "250m"
+      memory_request: 512Mi
       memory_limit: 512Mi
 # Prod: encadeia os deployments de prod (os padrões dos parâmetros do flow: extração XML, Oracle → BigQuery e
 # BigQuery → Oracle) e opera sobre dados reais.
@@ -94,7 +95,8 @@ deployments:
       secretName: prefect-jobs-secrets
       image_pull_policy: Always
       # O pod só espera os filhos (consulta a API do Prefect); a carga roda nos pods deles.
-      cpu_request: "100m"
-      cpu_limit: "500m"
-      memory_request: 256Mi
+      # Requests iguais aos limits (QoS Guaranteed): é o último pod a ser despejado quando o nó fica sem memória.
+      cpu_request: "250m"
+      cpu_limit: "250m"
+      memory_request: 512Mi
       memory_limit: 512Mi
