@@ -1,0 +1,45 @@
+# Configuração das tabelas extraídas do Data Cloud.
+#
+# Uma entrada por tabela. Todas passam pelo mesmo caminho (flow.py):
+# descobrir colunas -> extrair -> transformar -> staging + MERGE.
+#
+# Campos:
+#   nome            : tabela destino no BQ (a staging é '<nome>_staging')
+#   grupo           : rótulo no resumo/logs
+#   dlo             : nome da DLO em cada org de origem (qa/staging/prod)
+#   primary_key     : chave do MERGE, em snake_case (padrão: id)
+#   order_by        : coluna usada na paginação por LIMIT/OFFSET (nome na DLO)
+#   coluna_modificacao : coluna de controle de alteração da DLO (padrão acima)
+#   renomear        : mapa coluna_normalizada -> nome_final. Serve para tirar o
+#                     '_c' que o Data Cloud deixa no lugar de '__c'
+#                     (ex.: 'Data_Fechamento__c' -> 'data_fechamento_c')
+#   booleanas       : colunas que chegam como texto 'true'/'false' e viram BOOL
+#   cluster         : campos de clustering da tabela final
+
+- nome: account
+  grupo: Cadastro
+  dlo:
+    qa: CZRM2236_Account__dll
+    staging: Account_Home__dll
+    prod: Account_Home__dll
+  order_by: Id__c
+  booleanas: [is_deleted]
+
+- nome: work_order
+  grupo: Ordens de serviço
+  dlo:
+    qa: CZRM2236_WorkOrder__dll
+    staging: WorkOrder_Home__dll
+    prod: WorkOrder_Home__dll
+  order_by: Id__c
+  cluster: [status]
+  renomear:
+    assigned_uo_c: assigned_uo
+    categoria_c: categoria
+    data_fechamento_c: data_fechamento
+    main_organizational_unit_c: main_organizational_unit
+    neighborhood_c: neighborhood
+    origin_c: origin
+    protocolo_hyperlink_c: protocolo_hyperlink
+    service_c: service
+    sla_target_date_c: sla_target_date

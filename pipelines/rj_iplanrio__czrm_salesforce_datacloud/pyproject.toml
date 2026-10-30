@@ -1,0 +1,16 @@
+[project]
+name = "rj_iplanrio__czrm_salesforce_datacloud"
+version = "1.0.0"
+description = "Ingere objetos do CZRM (Salesforce) via Data Cloud para tabelas brutas no BigQuery, com atualização a cada 15 minutos e upsert por MERGE."
+dependencies = [
+    "prefect_rj_iplanrio",
+    "google-cloud-bigquery>=3.11.0",
+    "prefect==3.4.9",
+    "prefect-docker>=0.6.5",
+    "requests>=2.31.0",
+    "pandas>=2.0.0",
+    "pyyaml>=6.0",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

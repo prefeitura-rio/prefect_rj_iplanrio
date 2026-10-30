@@ -1,0 +1,134 @@
+# CZRM (Salesforce) Data Cloud -> BigQuery
+#
+# Entrypoint: flow.py:rj_iplanrio__czrm_salesforce_datacloud
+#
+# Dois deployments, mesmo código:
+#   --staging : sem schedule, dry_run=True. Valida extração/transformação
+#               contra a org escolhida sem escrever nada.
+#   --prod    : schedules de 15min / diário / semanal. Escreve em
+#               rj-iplanrio.brutos_czrm_salesforce_staging.
+#
+# A primeira carga é manual (modo=carga_inicial). Os schedules de prod sobem
+# com active: false para não escrever antes da validação; o PR seguinte liga.
+#
+# Credenciais (Infisical, projeto prefect-jobs, pasta czrm-salesforce), um
+# jogo por org de origem — viram <PASTA>__SF_DC_<ORIGEM>_<CHAVE> no secret:
+#   SF_DC_QA_CLIENT_ID / _CLIENT_SECRET / _INSTANCE_URL / _DATASPACE
+#   SF_DC_STAGING_...
+#   SF_DC_PROD_...
+#
+# DLOs (ver tabelas.yaml): o Account vem de CZRM2236_Account na QA e de
+# Account_Home em staging/prod; o WorkOrder de CZRM2236_WorkOrder e
+# WorkOrder_Home. O nome do DLO é detalhe do ambiente; o contrato (tabela,
+# colunas em snake_case, tipos) é o mesmo nas três orgs.
+
+name: rj_iplanrio__czrm_salesforce_datacloud
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_iplanrio__czrm_salesforce_datacloud-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_iplanrio__czrm_salesforce_datacloud/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  # -----------------------------------------------------------------------
+  # Staging: validação manual, sem schedule, sem escrita por padrão
+  # -----------------------------------------------------------------------
+  - name: rj-iplanrio--czrm-salesforce-datacloud--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:brunomesquitac
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_iplanrio__czrm_salesforce_datacloud/flow.py:rj_iplanrio__czrm_salesforce_datacloud
+    work_pool:
+      name: onprem-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__czrm_salesforce_datacloud -- prefect flow-run execute
+        # `-staging` é o padrão do repo (README, seção "Configuração de secrets", e
+        # STYLEGUIDE §9.3: "Staging usa prefect-jobs-secrets-staging"), o mesmo das
+        # demais pipelines. A instrução "Both deployments MUST use secretName:
+        # prefect-jobs-secrets" do .coderabbit.yaml (linha 193) está desatualizada.
+        secretName: prefect-jobs-secrets-staging
+        image_pull_policy: Always
+        env:
+          # Sem isto o Prefect ignora os loggers da pipeline e só WARNING+ aparece.
+          PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_iplanrio__czrm_salesforce_datacloud
+    parameters:
+      origem: staging
+      dry_run: true
+
+  # -----------------------------------------------------------------------
+  # Produção
+  # -----------------------------------------------------------------------
+  - name: rj-iplanrio--czrm-salesforce-datacloud--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:brunomesquitac
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_iplanrio__czrm_salesforce_datacloud/flow.py:rj_iplanrio__czrm_salesforce_datacloud
+    work_pool:
+      name: onprem-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__czrm_salesforce_datacloud -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+        env:
+          # Sem isto o Prefect ignora os loggers da pipeline e só WARNING+ aparece.
+          PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_iplanrio__czrm_salesforce_datacloud
+    parameters:
+      origem: prod
+      project_id: rj-iplanrio
+      dataset_id: brutos_czrm_salesforce_staging
+    # Impede duas janelas de escrever na mesma tabela ao mesmo tempo
+    # (o de 15min pode estar rodando quando o diário dispara).
+    concurrency_limit:
+      limit: 1
+      collision_strategy: ENQUEUE
+    schedules:
+      # Passe quente: janela rolante de 1h a cada 15min. A sobreposição de 1h
+      # faz um tick perdido ser coberto pelos três seguintes.
+      # Nasce DESLIGADO: ligar só depois da carga inicial validada.
+      - cron: "*/15 * * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: czrm-salesforce-15min
+        parameters:
+          modo: hora
+      # Passe frio diário: reconcilia o dia que acabou de fechar.
+      - cron: "15 0 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: czrm-salesforce-diario
+        parameters:
+          modo: dia
+      # Passe frio semanal: 7 dias, para o que o Data Cloud ingeriu com atraso
+      # (SystemModstamp é o relógio da origem, não o da chegada).
+      - cron: "0 3 * * 0"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: czrm-salesforce-semanal
+        parameters:
+          modo: reconciliacao
