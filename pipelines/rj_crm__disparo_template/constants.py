@@ -4,7 +4,7 @@ from typing import Final
 
 from utils.types import Table
 
-BILLING_PROJECT: Final = "rj-crm-registry"
+BILLING_PROJECT: Final = "rj-iplanrio"
 DEFAULT_CAMPAIGN: Final = "template"
 DEFAULT_TABLE: Final = Table(dataset_id="brutos_wetalkie", table_id="disparos_efetuados")
 TIMEZONE: Final = "America/Sao_Paulo"

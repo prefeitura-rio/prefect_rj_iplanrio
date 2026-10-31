@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from pipelines.rj_crm__geolocalizacao_residencia.types import Step
 
 SP_TZ: Final = ZoneInfo("America/Sao_Paulo")
-BILLING_PROJECT: Final = "rj-crm-registry"
+BILLING_PROJECT: Final = "rj-iplanrio"
 DEFAULT_MAX_CONCURRENT: Final = 500
 """The most requests at one time to the Nominatim server."""
 DEFAULT_SLEEP_SECONDS: Final = 1.1
