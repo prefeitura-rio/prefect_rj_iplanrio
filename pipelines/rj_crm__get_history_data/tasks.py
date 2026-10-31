@@ -8,11 +8,9 @@ from prefect import task
 from toolkit.telemetry import logger
 
 from pipelines.rj_crm__get_history_data.constants import (
-    DATASET_ID,
     FINAL_TABLE_ID,
     HTTP_TIMEOUT,
     MERGE_KEYS,
-    PROJECT_ID,
     TMP_TABLE_ID,
 )
 from pipelines.rj_crm__get_history_data.helpers import bq
@@ -96,19 +94,21 @@ async def extract_task(token: str, soap_uri: str, rest_uri: str, extension: Exte
 
 
 @task(retries=2, retry_delay_seconds=60)
-async def load_task(rows: list[Row], window_days: int) -> int:
+async def load_task(rows: list[Row], window_days: int, project_id: str, dataset_id: str) -> int:
     """Keep the rows of the window, replace the tmp table with them, and MERGE it.
 
     The MERGE goes into the final table.
 
     The MERGE updates the rows with the same key and inserts the new ones, and it never
-    deletes from the final table. Return the rows that the MERGE touched.
+    deletes from the final table. A NULL key matches a NULL key through `COALESCE` and
+    `=`, because `IS NOT DISTINCT FROM` makes BigQuery join every row with every row.
+    Return the rows that the MERGE touched.
     """
     recent = filter_recent(rows, window_days, datetime.now(UTC))
-    tmp = f"{PROJECT_ID}.{DATASET_ID}.{TMP_TABLE_ID}"
-    target = f"{PROJECT_ID}.{DATASET_ID}.{FINAL_TABLE_ID}"
-    await to_thread(bq.ensure_tables, PROJECT_ID, DATASET_ID, [TMP_TABLE_ID, FINAL_TABLE_ID])
-    await to_thread(bq.replace_table, PROJECT_ID, tmp, recent)
+    tmp = f"{project_id}.{dataset_id}.{TMP_TABLE_ID}"
+    target = f"{project_id}.{dataset_id}.{FINAL_TABLE_ID}"
+    await to_thread(bq.ensure_tables, project_id, dataset_id, [TMP_TABLE_ID, FINAL_TABLE_ID])
+    await to_thread(bq.replace_table, project_id, tmp, recent)
     sql = render_query(
         __file__,
         "merge_history",
@@ -118,7 +118,7 @@ async def load_task(rows: list[Row], window_days: int) -> int:
         columns=bq.COLUMNS,
         update_columns=[column for column in bq.COLUMNS if column not in MERGE_KEYS],
     )
-    touched = await to_thread(bq.run_merge, PROJECT_ID, sql)
+    touched = await to_thread(bq.run_merge, project_id, sql)
     logger.info("MERGE done: target=%s rows=%d", target, touched)
 
     return touched

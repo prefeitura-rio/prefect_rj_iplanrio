@@ -116,10 +116,10 @@ deployments:
         active: true
         slug: qualidade-telefone-score-3dias
         parameters:
-          modo: score
+          mode: score
       - cron: "0 3 1 * *"
         timezone: America/Sao_Paulo
         active: true
         slug: qualidade-telefone-retreino-mensal
         parameters:
-          modo: retreino
+          mode: retrain
