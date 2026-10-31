@@ -54,7 +54,7 @@ async def rj_iplanrio__cor_alerts_aggregator(
     window = rules.get("window_minutes", DEFAULT_WINDOW_MINUTES)
 
     async with concurrency(CONCURRENCY_LIMIT, occupy=1):
-        alerts = await fetch_alerts_task(cloud["project"], window)
+        alerts = await fetch_alerts_task(cloud, window)
         clusters = group_alerts(alerts, rules.get("radius_meters", DEFAULT_RADIUS_METERS))
         now = datetime.now(SP_TZ)
         ready = []

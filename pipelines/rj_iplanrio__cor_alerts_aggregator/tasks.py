@@ -6,9 +6,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import uuid4
 
-from google.api_core.exceptions import NotFound
 from httpx2 import HTTPError
 from prefect import task
+from toolkit.delta import table_exists
 from toolkit.telemetry import logger
 
 from pipelines.rj_iplanrio__cor_alerts_aggregator.constants import (
@@ -24,13 +24,14 @@ from pipelines.rj_iplanrio__cor_alerts_aggregator.helpers.cor_api import open_ev
 from pipelines.rj_iplanrio__cor_alerts_aggregator.helpers.sheets import update_sheet
 from pipelines.rj_iplanrio__cor_alerts_aggregator.settings import Settings
 from pipelines.rj_iplanrio__cor_alerts_aggregator.types import Alert, Cluster, Row, Sheet
+from utils.delta import Destination
 from utils.tasks import publish_table_in_bq, read_bq, upload_files_to_gcs, write_records
 from utils.types import Cloud, Table
 from utils.utils import capture_options, render_query
 
 
 @task(retries=2, retry_delay_seconds=10)
-async def fetch_alerts_task(project: str, window_minutes: int) -> list[Alert]:
+async def fetch_alerts_task(cloud: Cloud, window_minutes: int) -> list[Alert]:
     """Read the alerts of the last minutes that no group has sent.
 
     It reads the allowed neighborhoods.
@@ -38,20 +39,20 @@ async def fetch_alerts_task(project: str, window_minutes: int) -> list[Alert]:
     The sent table is the one of this pipeline. Before its first run the table does not
     exist, and every alert in the window is pending.
     """
+    project = cloud["project"]
     values = {
         "history_table": f"{project}.{DATASET_ID}.{HISTORY_TABLE_ID}",
         "window_minutes": window_minutes,
         "neighborhoods": list(ALLOWED_NEIGHBORHOODS),
     }
+    sent = Destination(cloud["bucket"], DATASET_ID, SENT_TABLE_ID)
     sent_table = f"{project}.{DATASET_ID}.{SENT_TABLE_ID}"
 
-    try:
-        frame = await read_bq(
-            render_query(__file__, "pending_alerts", sent_table=sent_table, **values), project=project
-        )
-    except NotFound:
+    if not await to_thread(table_exists, sent.uri):
         logger.info("The sent table does not exist yet: table=%s", sent_table)
-        frame = await read_bq(render_query(__file__, "pending_alerts", sent_table="", **values), project=project)
+        sent_table = ""
+
+    frame = await read_bq(render_query(__file__, "pending_alerts", sent_table=sent_table, **values), project=project)
 
     alerts = read_alerts(frame.to_dicts())
     logger.info("Pending alerts read: count=%d", len(alerts))
