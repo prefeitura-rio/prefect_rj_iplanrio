@@ -69,13 +69,18 @@
     "rj_iplanrio__dados_mestres",
     "rj_iplanrio__equipamentos_arcgis",
     "rj_iplanrio__sici",
+    "rj_iplanrio__sicop",
     "rj_iplanrio__sisbicho_images",
+    "rj_iplanrio__vigia_urbano",
     "rj_pgm__divida_ativa",
     "rj_seconserva__infraestrutura_siscor_obras",
     "rj_smas__api_datametrica_agendamentos",
+    "rj_smdue__dump_db_sislic",
     "rj_sme__brutos_gestao_escolar",
     "rj_sme__educacao_basica",
     "rj_smfp__adm_instrumentos_firmados",
-    "rj_smfp__crf"
+    "rj_smfp__crf",
+    "rj_smfp__sigma",
+    "rj_smi__siscob"
   ]
 }
