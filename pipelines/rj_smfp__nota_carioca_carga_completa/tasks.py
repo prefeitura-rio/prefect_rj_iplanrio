@@ -11,6 +11,7 @@ from prefect.client.schemas.filters import (
     FlowRunFilter,
     FlowRunFilterDeploymentId,
     FlowRunFilterId,
+    FlowRunFilterParentFlowRunId,
     FlowRunFilterState,
     FlowRunFilterStateType,
 )
@@ -19,8 +20,9 @@ from prefect.deployments import arun_deployment
 from toolkit.telemetry import logger
 
 from pipelines.rj_smfp__nota_carioca_carga_completa.constants import FINISHED_STATES, POLL_SECONDS
+from pipelines.rj_smfp__nota_carioca_carga_completa.helpers.chain import item_tag, missing_positions, position_of
 from pipelines.rj_smfp__nota_carioca_carga_completa.helpers.guard import blocking_runs, describe_blocking
-from pipelines.rj_smfp__nota_carioca_carga_completa.types import ActiveRun, ActiveRunsError, ChildRun
+from pipelines.rj_smfp__nota_carioca_carga_completa.types import ActiveRun, ActiveRunsError, ChildRun, Step
 from utils.dispatch import post_notice
 from utils.runs import flow_run_url
 
@@ -46,7 +48,7 @@ def to_child_run(flow_run: FlowRun) -> ChildRun:
     """Turn a flow run of Prefect into a child run of the chain."""
     state_type, state_name = state_of(flow_run)
 
-    return ChildRun(str(flow_run.id), str(flow_run.name), state_type, state_name)
+    return ChildRun(str(flow_run.id), str(flow_run.name), state_type, state_name, position_of(flow_run.tags or ()))
 
 
 async def list_deployment_runs(deployment: str) -> list[ActiveRun]:
@@ -100,25 +102,49 @@ async def wait_children(ids: Sequence[UUID], poll: float = POLL_SECONDS) -> list
         await sleep(poll)
 
 
-async def run_children(
-    deployment: str,
-    parameter_sets: Sequence[Mapping[str, object]],
-    timeout_seconds: int,
-    tags: Sequence[str],
-) -> list[ChildRun]:
-    """Start one run of the deployment for each set of parameters, and wait for all.
+async def find_children(deployment: str, parent_run_id: str | None) -> list[ChildRun]:
+    """Return the child runs that a flow run already started in a deployment.
 
-    The runs belong to the current flow run as subflows. At the timeout the runs that
+    After a restart Prefect sends the same flow run again, and it starts over. The
+    children that it started before the restart stay linked to it, and they are found
+    here. Nothing comes back outside a flow run.
+    """
+    if not parent_run_id:
+        return []
+
+    async with get_client() as client:
+        found = await client.read_deployment_by_name(deployment)
+        runs = await client.read_flow_runs(
+            flow_run_filter=FlowRunFilter(
+                deployment_id=FlowRunFilterDeploymentId(any_=[found.id]),
+                parent_flow_run_id=FlowRunFilterParentFlowRunId(any_=[UUID(parent_run_id)]),
+            ),
+            limit=LISTED_RUNS_LIMIT,
+        )
+
+    return [to_child_run(run) for run in runs]
+
+
+async def run_children(
+    step: Step,
+    parameter_sets: Sequence[Mapping[str, object]],
+    tags: Sequence[str],
+    existing: Sequence[ChildRun],
+) -> list[ChildRun]:
+    """Start a run for each set of parameters that has none, and wait for all of them.
+
+    The runs belong to the current flow run as subflows, and each one has a tag with its
+    position, so that a restart does not start it twice. At the timeout the runs that
     are still going are not cancelled: the last state that was read comes back.
     """
-    ids: list[UUID] = []
+    ids = [UUID(run.run_id) for run in existing]
 
-    for position, parameters in enumerate(parameter_sets, start=1):
+    for position in missing_positions(existing, len(parameter_sets)):
         run = await arun_deployment(
-            name=deployment,
-            parameters=dict(parameters),
+            name=step.deployment,
+            parameters=dict(parameter_sets[position - 1]),
             timeout=0,
-            tags=list(tags),
+            tags=[*tags, item_tag(position)],
             as_subflow=True,
         )
         ids.append(run.id)
@@ -127,7 +153,7 @@ async def run_children(
         )
 
     try:
-        async with timeout(timeout_seconds):
+        async with timeout(step.timeout_seconds):
             return await wait_children(ids)
     except TimeoutError:
         return await read_children(ids)
@@ -164,15 +190,29 @@ async def read_parameter_sets_task(deployment: str) -> list[dict[str, object]]:
 
 
 @task
+async def find_children_task(step: Step, parent_run_id: str | None) -> list[ChildRun]:
+    """Find the child runs that this flow run started in the deployment of the step."""
+    children = await find_children(step.deployment, parent_run_id)
+
+    if children:
+        logger.info("%s: %d filhos deste run já existem; o run foi reiniciado.", step.label, len(children))
+
+    return children
+
+
+@task
 async def run_children_task(
-    deployment: str, parameter_sets: Sequence[Mapping[str, object]], timeout_seconds: int, tags: Sequence[str]
+    step: Step,
+    parameter_sets: Sequence[Mapping[str, object]],
+    tags: Sequence[str],
+    existing: Sequence[ChildRun],
 ) -> list[ChildRun]:
-    """Start a child run for each set of parameters, and wait for all of them.
+    """Start the missing child runs of a step, and wait for all of them.
 
     Return the child runs in their last state. A child run that is still going at the
     timeout is not cancelled.
     """
-    return await run_children(deployment, parameter_sets, timeout_seconds, tags)
+    return await run_children(step, parameter_sets, tags, existing)
 
 
 @task
@@ -183,12 +223,17 @@ async def pause_task(seconds: int) -> None:
 
 
 @task
-async def notify_task(message: str, *, enabled: bool) -> None:
-    """Post a line to Discord, unless it is off. A Discord failure never stops it."""
+async def notify_task(message: str, *, enabled: bool, roles: Sequence[str] = ()) -> None:
+    """Post a line to Discord, unless it is off. A Discord failure never stops it.
+
+    The roles are the numbers of the Discord roles that the line mentions, for a stop.
+    """
     if not enabled:
         return
 
+    mentions = "".join(f"<@&{role}> " for role in roles)
+
     try:
-        await post_notice(message)
+        await post_notice(f"{mentions}{message}")
     except Exception as error:
         logger.warning("The notice to Discord failed: %s", error)

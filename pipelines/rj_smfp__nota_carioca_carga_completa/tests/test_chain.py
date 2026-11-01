@@ -2,7 +2,16 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from pipelines.rj_smfp__nota_carioca_carga_completa.helpers.chain import build_run_tags, format_duration, unfinished
+from pipelines.rj_smfp__nota_carioca_carga_completa.helpers.chain import (
+    build_run_tags,
+    format_duration,
+    is_done,
+    item_tag,
+    missing_positions,
+    not_triggered,
+    position_of,
+    unfinished,
+)
 from pipelines.rj_smfp__nota_carioca_carga_completa.helpers.guard import blocking_runs, describe_blocking
 from pipelines.rj_smfp__nota_carioca_carga_completa.types import ActiveRun, ChildRun
 
@@ -81,7 +90,7 @@ def child(state_type: str, name: str = "t", state_name: str | None = None) -> Ch
 def test_a_step_is_unfinished_only_if_a_child_run_did_not_complete() -> None:
     """Give nothing when every child run completed."""
     assert (
-        unfinished("Oracle → BigQuery", [child("COMPLETED"), child("COMPLETED", "u")], 3600, "BigQuery → Oracle")
+        unfinished("Oracle → BigQuery", [child("COMPLETED"), child("COMPLETED", "u")], 3600, ["BigQuery → Oracle"])
         is None
     )
 
@@ -92,11 +101,60 @@ def test_a_child_run_that_failed_or_is_still_going_stops_the_step() -> None:
         "Oracle → BigQuery",
         [child("COMPLETED", "ok"), child("FAILED", "bad"), child("RUNNING", "slow")],
         3600,
-        "BigQuery → Oracle",
+        ["BigQuery → Oracle"],
     )
 
     assert reason == (
         "Oracle → BigQuery: bad terminou em Failed; slow ainda estava em Running após o limite de 1h00min; "
         "BigQuery → Oracle não foi disparado"
     )
-    assert "não foi disparado" not in str(unfinished("BigQuery → Oracle", [child("CRASHED")], 60, None))
+    assert "não foi disparado" not in str(unfinished("BigQuery → Oracle", [child("CRASHED")], 60, []))
+
+
+@pytest.mark.parametrize(
+    ("tags", "expected"),
+    [
+        pytest.param([item_tag(3), "disparo:discord"], 3, id="the_tag_of_the_position"),
+        pytest.param(["disparo:discord"], 0, id="no_position_tag"),
+        pytest.param(["carga-completa-item:x"], 0, id="a_position_that_is_not_a_number"),
+    ],
+)
+def test_the_position_of_a_child_run_is_read_from_its_tags(tags: list[str], expected: int) -> None:
+    """Read the number after the tag prefix, and give 0 when there is none."""
+    assert position_of(tags) == expected
+
+
+def positioned(position: int, state_type: str = "COMPLETED") -> ChildRun:
+    """Return a child run with a position, in a state."""
+    return ChildRun(f"id{position}", f"t{position}", state_type, state_type.title(), position)
+
+
+@pytest.mark.parametrize(
+    ("existing", "total", "missing", "done"),
+    [
+        pytest.param([], 2, [1, 2], False, id="nothing_started"),
+        pytest.param([positioned(1)], 3, [2, 3], False, id="started_half_way"),
+        pytest.param([positioned(1), positioned(2, "RUNNING")], 2, [], False, id="one_still_runs"),
+        pytest.param([positioned(1), positioned(2)], 2, [], True, id="all_completed"),
+        pytest.param([positioned(1, "FAILED")], 1, [], False, id="one_failed"),
+    ],
+)
+def test_a_restart_starts_only_the_runs_that_are_missing(
+    existing: list[ChildRun], total: int, missing: list[int], done: bool
+) -> None:
+    """Find the positions with no child run, and tell whether the step is done."""
+    assert missing_positions(existing, total) == missing
+    assert is_done(existing, total) is done
+
+
+@pytest.mark.parametrize(
+    ("labels", "expected"),
+    [
+        pytest.param([], "", id="nothing_skipped"),
+        pytest.param(["A"], "; A não foi disparado", id="one_step"),
+        pytest.param(["A", "B", "C"], "; A, B e C não foram disparados", id="three_steps"),
+    ],
+)
+def test_the_steps_that_do_not_start_are_listed(labels: list[str], expected: str) -> None:
+    """Write the skipped steps in the singular or the plural."""
+    assert not_triggered(labels) == expected

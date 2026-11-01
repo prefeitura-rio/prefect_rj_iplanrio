@@ -36,8 +36,12 @@ deployments:
       collision_strategy: CANCEL_NEW
     parameters:
       chain:
+        extraction_deployment: rj-smfp--nota-carioca-extracao-xml/rj-smfp--nota-carioca-extracao-xml--staging
         oracle_to_bq_deployment: rj-smfp--nota-carioca-oracle-to-bq/rj-smfp--nota-carioca-oracle-to-bq--staging
         bq_to_oracle_deployment: rj-smfp--nota-carioca-bq-to-oracle/rj-smfp--nota-carioca-bq-to-oracle--staging
+        alert_role_ids:
+          - "1558828140166647901"
+          - "903644455582695494"
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -53,9 +57,9 @@ deployments:
           INFISICAL_ENVIRONMENT: staging
           INFISICAL_PATHS: /shared
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
-        cpu_request: 100m
-        cpu_limit: 500m
-        memory_request: 256Mi
+        cpu_request: 250m
+        cpu_limit: 250m
+        memory_request: 512Mi
         memory_limit: 512Mi
   - name: rj-smfp--nota-carioca-carga-completa--prod
     tags:
@@ -67,6 +71,15 @@ deployments:
     concurrency_limit:
       limit: 1
       collision_strategy: CANCEL_NEW
+    schedules:
+      - cron: "0 17 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+    parameters:
+      chain:
+        alert_role_ids:
+          - "1558828140166647901"
+          - "903644455582695494"
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -82,7 +95,7 @@ deployments:
           INFISICAL_ENVIRONMENT: prod
           INFISICAL_PATHS: /shared
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
-        cpu_request: 100m
-        cpu_limit: 500m
-        memory_request: 256Mi
+        cpu_request: 250m
+        cpu_limit: 250m
+        memory_request: 512Mi
         memory_limit: 512Mi
