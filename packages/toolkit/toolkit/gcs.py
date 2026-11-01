@@ -22,6 +22,9 @@ from .constants import BUFFER_SIZE, DELETE_SPAN, READ_BUFFER_BYTES, UPLOAD_SPAN
 from .settings import GcsSettings
 from .telemetry import DELETED_FILES, UPLOADED_BYTES, UPLOADED_FILES, logger, tracer
 
+type Store = ObjectStore
+"""The type of a store, for the code outside the toolkit that holds one."""
+
 
 def create_store(bucket: str) -> S3Store:
     """Create the S3 store of one bucket, with the endpoint and keys of the settings."""

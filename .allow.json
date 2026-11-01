@@ -29,6 +29,7 @@
     "rj_iplanrio__run_dbt",
     "rj_iplanrio__sici",
     "rj_iplanrio__sicop",
+    "rj_iplanrio__sisbicho_images",
     "rj_iplanrio__taxirio",
     "rj_iplanrio__vigia_urbano",
     "rj_pgm__divida_ativa",
