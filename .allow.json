@@ -55,6 +55,7 @@
     "rj_ssm__run_dbt"
   ],
   "prod": [
+    "rj_cgm__osinfo_rh",
     "rj_cor__meteorologia_inmet",
     "rj_cor__meteorologia_redemet",
     "rj_cor__meteorologia_redemet_estacoes",
