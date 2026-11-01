@@ -1,9 +1,11 @@
+from collections.abc import AsyncIterator
 from datetime import date
 from pathlib import Path
 from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
+from polars import DataFrame
 from psycopg.sql import Identifier
 from pyarrow import Table as ArrowTable
 from pyarrow.parquet import read_table, write_table
@@ -126,10 +128,10 @@ async def test_describe_of_a_native_query_is_metadata_only_for_sql_server(
     """Prefix the query of SQL Server, so a heavy view does not run in full."""
     seen: list[str] = []
 
-    async def query(sql, **_):
+    async def query(sql: str, **_: object) -> AsyncIterator[DataFrame]:
         seen.append(sql)
-        return
-        yield
+        for frame in cast("list[DataFrame]", []):
+            yield frame
 
     monkeypatch.setattr(duckdb_memory, "query", query, raising=False)
 

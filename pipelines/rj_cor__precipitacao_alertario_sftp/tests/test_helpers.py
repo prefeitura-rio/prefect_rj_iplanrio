@@ -69,7 +69,7 @@ def test_only_the_xml_files_after_the_watermark_are_new() -> None:
     assert read_watermark("bad") is None
 
 
-def test_the_listing_of_a_name_prefix_reads_the_folder_and_keeps_the_names(monkeypatch) -> None:
+def test_the_listing_of_a_name_prefix_reads_the_folder_and_keeps_the_names(monkeypatch: pytest.MonkeyPatch) -> None:
     """List the folder of the prefix, because a store lists a prefix as a folder."""
     keys = [
         "nimbus/Chuvas_20260717100000.xml",
@@ -77,11 +77,15 @@ def test_the_listing_of_a_name_prefix_reads_the_folder_and_keeps_the_names(monke
         "nimbus/novo_layout/Chuvas_20260717130000.xml",
         "nimbus/novo_layout/other.xml",
     ]
-    monkeypatch.setattr("pipelines.rj_cor__precipitacao_alertario_sftp.helpers.create_store", lambda _bucket: None)
-    monkeypatch.setattr(
-        "pipelines.rj_cor__precipitacao_alertario_sftp.helpers.list_sizes",
-        lambda _store, folder: {key: 1 for key in keys if key.startswith(folder.rstrip("/") + "/")},
-    )
+
+    def create_store(_bucket: str) -> None:
+        return None
+
+    def list_sizes(_store: None, folder: str) -> dict[str, int]:
+        return {key: 1 for key in keys if key.startswith(folder.rstrip("/") + "/")}
+
+    monkeypatch.setattr("pipelines.rj_cor__precipitacao_alertario_sftp.helpers.create_store", create_store)
+    monkeypatch.setattr("pipelines.rj_cor__precipitacao_alertario_sftp.helpers.list_sizes", list_sizes)
 
     assert list_new_files("bucket", "nimbus/novo_layout/Chuvas_", "2026-07-17 12:00:00") == [
         "nimbus/novo_layout/Chuvas_20260717130000.xml"
