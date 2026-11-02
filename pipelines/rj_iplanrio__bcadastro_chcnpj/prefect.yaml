@@ -69,7 +69,7 @@ deployments:
           INFISICAL_PATHS: /rj_iplanrio__bcadastro_chcnpj,/shared
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
     schedules:
-      - cron: "30 3 * * *"
+      - cron: "30 3 * * 0"
         timezone: America/Sao_Paulo
         slug: chcnpj-daily
         parameters:
