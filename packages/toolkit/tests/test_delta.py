@@ -4,7 +4,7 @@ from threading import Thread
 
 import pytest
 from deltalake import DeltaTable, write_deltalake
-from deltalake.exceptions import SchemaMismatchError
+from deltalake.exceptions import CommitFailedError, SchemaMismatchError
 from obstore import put
 from obstore.store import MemoryStore
 from pyarrow import Table
@@ -16,7 +16,7 @@ from pyarrow import timestamp as arrow_timestamp
 from pyarrow.parquet import write_table
 
 from toolkit.chunks import LedgerEntry, hash_summary
-from toolkit.constants import EXTRACTED_AT_COLUMN
+from toolkit.constants import COMMIT_ATTEMPTS, COMMIT_PAUSE_CAP, EXTRACTED_AT_COLUMN
 from toolkit.delta import (
     build_merge_predicate,
     compact,
@@ -816,3 +816,44 @@ def test_a_folder_outside_the_mount_is_read_locally(tmp_path, monkeypatch) -> No
     monkeypatch.setattr("toolkit.delta.gettempdir", lambda: str(tmp_path / "mount"))
 
     assert open_reader(local, None).read_all().column("id").to_pylist() == [7, 8]
+
+
+@pytest.mark.parametrize(
+    ("conflicts", "raises"),
+    [
+        pytest.param(0, False, id="no-conflict-writes-once"),
+        pytest.param(COMMIT_ATTEMPTS - 1, False, id="the-last-try-still-writes"),
+        pytest.param(COMMIT_ATTEMPTS, True, id="every-try-conflicts-so-it-raises"),
+    ],
+)
+def test_a_commit_conflict_is_tried_again_until_the_attempts_end(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, conflicts: int, raises: bool
+) -> None:
+    """Retry the write after each `CommitFailedError`, with a bounded random pause."""
+    calls: list[int] = []
+    pauses: list[float] = []
+
+    def fake_write(*_args: object, **_kwargs: object) -> None:
+        calls.append(1)
+        if len(calls) <= conflicts:
+            raise CommitFailedError("a concurrent transaction added new data")
+
+    monkeypatch.setattr("toolkit.delta.write_deltalake", fake_write)
+
+    def fake_reader(*_args: object) -> None:
+        return None
+
+    monkeypatch.setattr("toolkit.delta.open_reader", fake_reader)
+    monkeypatch.setattr("toolkit.delta.sleep", pauses.append)
+
+    def run() -> None:
+        write_chunk("memory://t", tmp_path, "k", LedgerEntry("c:k", 1))
+
+    if raises:
+        with pytest.raises(CommitFailedError):
+            run()
+    else:
+        run()
+
+    assert len(calls) == min(conflicts + 1, COMMIT_ATTEMPTS)
+    assert all(0 < pause <= COMMIT_PAUSE_CAP for pause in pauses)

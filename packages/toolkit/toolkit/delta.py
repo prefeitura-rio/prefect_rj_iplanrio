@@ -9,6 +9,7 @@ from collections.abc import Collection, Sequence
 from datetime import UTC, date, datetime
 from itertools import chain
 from pathlib import Path, PurePath
+from random import uniform
 from re import fullmatch
 from tempfile import gettempdir
 from time import sleep
@@ -30,6 +31,7 @@ from .constants import (
     ALL_KEY,
     BATCH_COLUMN,
     COMMIT_ATTEMPTS,
+    COMMIT_PAUSE_CAP,
     COUNT_COLUMN,
     DATE_KEY,
     EXTRACTED_AT_COLUMN,
@@ -206,7 +208,7 @@ def write_chunk(
             if attempt == COMMIT_ATTEMPTS:
                 raise
             logger.info("Delta commit conflict: chunk=%s attempt=%d", key, attempt)
-            sleep(attempt * 0.2)
+            sleep(min(attempt, COMMIT_PAUSE_CAP) * uniform(0.2, 1.0))  # noqa: S311  # jitter, not a secret
         else:
             return
 

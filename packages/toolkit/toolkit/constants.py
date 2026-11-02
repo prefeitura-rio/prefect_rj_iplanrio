@@ -173,8 +173,14 @@ TARGET_ALIAS: Final = "t"
 COUNT_COLUMN: Final = "count_all"
 """The column that a group by of `pyarrow` names for the size of each group."""
 
-COMMIT_ATTEMPTS: Final = 5
-"""How many times a Delta write tries again after a commit conflict."""
+COMMIT_ATTEMPTS: Final = 30
+"""How many times a Delta write tries again after a commit conflict.
+
+The shards of one dump write to the same table, and each commit of a chunk conflicts
+with the others in flight, so a big table needs many tries."""
+
+COMMIT_PAUSE_CAP: Final = 10
+"""The most seconds, before the random factor, that a write waits between two tries."""
 
 BUFFER_SIZE: Final = 64 * 1024
 """The size of the Python buffer over a chunk file in the temp bucket."""
