@@ -14,11 +14,11 @@ from pipelines.rj_crm__geolocalizacao_residencia.tasks import (
     geocode_nominatim_task,
     read_addresses_task,
 )
-from pipelines.rj_crm__geolocalizacao_residencia.types import Strategy
+from pipelines.rj_crm__geolocalizacao_residencia.types import Source, Strategy
 from utils.constants import DEFAULT_CLOUD
 from utils.hooks import notify_failure
 from utils.tasks import publish_table_in_bq, upload_files_to_gcs
-from utils.types import Cloud, DumpMode, Table
+from utils.types import Cloud, Table
 from utils.utils import capture_options
 
 
@@ -28,15 +28,17 @@ async def rj_crm__geolocalizacao_residencia(
     cloud: Cloud = DEFAULT_CLOUD,
     table: Table,
     strategy: Strategy = "fallback",
-    dump_mode: DumpMode = "append",
     max_concurrent: int = DEFAULT_MAX_CONCURRENT,
+    source: Source = "citizens",
 ) -> None:
     """Find the coordinates of citizen home addresses that have none, and load them.
 
     The load goes to BigQuery.
 
-    The flow reads up to 10,000 new addresses at random, and geocodes them by
-    `strategy`:
+    The flow reads new addresses at random from the `source` and geocodes them by
+    `strategy`. The source `citizens` gives up to 10,000 addresses of citizens, and
+    `chamados` up to 50,000 addresses of the calls to 1746, which the schedule
+    `chamados` loads to the project and the bucket of its own `cloud`.
 
     - `nominatim`: the Nominatim server of the settings, fast and with less precision,
       `max_concurrent` at one time.
@@ -47,7 +49,7 @@ async def rj_crm__geolocalizacao_residencia(
     Every row that got a point is loaded with its geocode and its plus code, all as
     text.
     """
-    addresses = await read_addresses_task()
+    addresses = await read_addresses_task(source, cloud["project"])
 
     if not addresses:
         logger.info("No address to geocode")
@@ -71,9 +73,9 @@ async def rj_crm__geolocalizacao_residencia(
             folder,
             table,
             bucket=cloud["bucket"],
-            dump_mode=dump_mode,
+            dump_mode="append",
             source_format="parquet",
-            options=capture_options(dump_mode),
+            options=capture_options("append"),
         )
 
     await publish_table_in_bq(table, cloud)

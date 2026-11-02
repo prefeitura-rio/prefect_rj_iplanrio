@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 from httpx2 import AsyncClient, ConnectError, MockTransport, Request, Response
@@ -27,7 +28,8 @@ from pipelines.rj_crm__geolocalizacao_residencia.helpers.providers import (
 )
 from pipelines.rj_crm__geolocalizacao_residencia.helpers.rows import has_point, join_rows, stringify, to_pluscode
 from pipelines.rj_crm__geolocalizacao_residencia.tests.conftest import no_pause, reply
-from pipelines.rj_crm__geolocalizacao_residencia.types import Address, Run
+from pipelines.rj_crm__geolocalizacao_residencia.types import Address, Geocode, Run
+from utils.utils import render_query
 
 TODAY = "2026-07-17"
 
@@ -419,7 +421,7 @@ async def test_a_geoapify_job_that_fails_or_times_out_gives_nothing() -> None:
 
 def address(street: str | None, number: str | None = "10") -> Address:
     """Build an address."""
-    return Address(logradouro_tratado=street, numero_porta=number, bairro="tijuca", endereco_completo="full")
+    return {"logradouro_tratado": street, "numero_porta": number, "bairro": "tijuca", "endereco_completo": "full"}
 
 
 def test_the_rows_keep_the_addresses_with_a_point_and_add_the_geocode_and_the_plus_code() -> None:
@@ -473,3 +475,23 @@ def test_the_plus_code_comes_from_a_valid_point(latitude: str, longitude: str, e
 def test_a_value_is_written_as_text() -> None:
     """Give empty text for nothing."""
     assert (stringify(None), stringify(1.5), stringify("a")) == ("", "1.5", "a")
+
+
+def test_a_row_keeps_every_column_of_its_address() -> None:
+    """Pass the columns of a call address through, ahead of the geocode."""
+    call = {"id_logradouro": "7", "logradouro": "rua a", "numero_logradouro": None, "endereco_completo": "full"}
+    found: Geocode = {"latitude": "1", "longitude": "2"}
+
+    rows = join_rows([call], [found], need_street=False)
+
+    assert list(rows[0])[:4] == ["id_logradouro", "logradouro", "numero_logradouro", "endereco_completo"]
+    assert rows[0]["numero_logradouro"] == ""
+    assert rows[0]["latitude"] == "1"
+
+
+@pytest.mark.parametrize("source", [pytest.param("citizens", id="citizens"), pytest.param("chamados", id="chamados")])
+def test_each_source_has_a_query_that_returns_the_full_address(source: str) -> None:
+    """Render the query of the source, and find the column that the geocoder reads."""
+    text = render_query(str(Path(__file__).parent.parent / "tasks.py"), f"addresses_{source}")
+
+    assert "endereco_completo" in text

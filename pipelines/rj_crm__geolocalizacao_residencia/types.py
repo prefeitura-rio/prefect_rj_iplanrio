@@ -3,23 +3,16 @@
 from asyncio import Semaphore
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Literal, TypedDict
+from typing import Literal
 
 from httpx2 import AsyncClient
 
 type Strategy = Literal["nominatim", "fallback", "geoapify_batch"]
+type Source = Literal["citizens", "chamados"]
+type Address = dict[str, str | None]
 type Geocode = dict[str, str | float | None]
 type Row = dict[str, str]
 type Pause = Callable[[float], Awaitable[None]]
-
-
-class Address(TypedDict):
-    """An address of a citizen that has no coordinates yet."""
-
-    logradouro_tratado: str | None
-    numero_porta: str | None
-    bairro: str | None
-    endereco_completo: str | None
 
 
 @dataclass(frozen=True)

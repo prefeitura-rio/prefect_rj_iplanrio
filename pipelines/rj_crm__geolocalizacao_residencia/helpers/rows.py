@@ -11,7 +11,7 @@ from pipelines.rj_crm__geolocalizacao_residencia.types import Address, Geocode, 
 
 def texts(addresses: Sequence[Address]) -> list[str]:
     """Return the full address of each address."""
-    return [address["endereco_completo"] or "" for address in addresses]
+    return [address.get("endereco_completo") or "" for address in addresses]
 
 
 def split_found(
@@ -66,7 +66,8 @@ def has_point(geocode: Mapping[str, str | float | None]) -> bool:
 def join_rows(addresses: Sequence[Address], geocodes: Sequence[Geocode], *, need_street: bool) -> list[Row]:
     """Return a text row for each address that got a point.
 
-    The geocode and the plus code follow it.
+    The row keeps every column of the address, and the geocode and the plus code
+    follow them.
 
     With `need_street`, as in the fallback, an address whose geocode has no street is
     dropped, and so is an address whose treated street is the text `nan`.
@@ -77,15 +78,10 @@ def join_rows(addresses: Sequence[Address], geocodes: Sequence[Geocode], *, need
         if not has_point(geocode):
             continue
 
-        if need_street and (geocode.get("logradouro_geocode") is None or address["logradouro_tratado"] == "nan"):
+        if need_street and (geocode.get("logradouro_geocode") is None or address.get("logradouro_tratado") == "nan"):
             continue
 
-        row: Row = {
-            "logradouro_tratado": stringify(address["logradouro_tratado"]),
-            "numero_porta": stringify(address["numero_porta"]),
-            "bairro": stringify(address["bairro"]),
-            "endereco_completo": stringify(address["endereco_completo"]),
-        }
+        row: Row = {column: stringify(value) for column, value in address.items()}
         row.update({field: stringify(geocode.get(field)) for field in GEOCODE_FIELDS})
         row["pluscode"] = to_pluscode(row["latitude"], row["longitude"]) or ""
         rows.append(row)

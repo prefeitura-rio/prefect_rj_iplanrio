@@ -69,7 +69,6 @@ deployments:
       table:
         dataset_id: brutos_dados_enriquecidos
         table_id: enderecos_geolocalizados
-      dump_mode: append
       max_concurrent: 100
   - name: rj-crm--geolocalizacao-residencia--nominatim--prod
     tags:
@@ -116,13 +115,26 @@ deployments:
       table:
         dataset_id: brutos_dados_enriquecidos
         table_id: enderecos_geolocalizados
-      dump_mode: append
       max_concurrent: 100
     schedules:
       - interval: 180
         anchor_date: "2021-01-01T00:06:00"
         timezone: America/Sao_Paulo
         slug: geocoding_every_3min
+      - interval: 3600
+        anchor_date: "2025-12-15T18:52:44"
+        timezone: America/Sao_Paulo
+        slug: chamados
+        parameters:
+          cloud:
+            bucket: rj-crm-registry
+            project: rj-crm-registry
+            connection: rj-crm-registry.us.biglake
+          table:
+            dataset_id: brutos_dados_enriquecidos
+            table_id: enderecos_geolocalizados_chamado
+          source: chamados
+          max_concurrent: 500
 
   - name: rj-crm--geolocalizacao-residencia--fallback--staging
     tags:
@@ -169,7 +181,6 @@ deployments:
       table:
         dataset_id: brutos_dados_enriquecidos
         table_id: enderecos_geolocalizados
-      dump_mode: append
       max_concurrent: 100
   - name: rj-crm--geolocalizacao-residencia--fallback--prod
     tags:
@@ -216,7 +227,6 @@ deployments:
       table:
         dataset_id: brutos_dados_enriquecidos
         table_id: enderecos_geolocalizados
-      dump_mode: append
       max_concurrent: 100
     schedules:
       - interval: 3600
@@ -269,7 +279,6 @@ deployments:
       table:
         dataset_id: brutos_dados_enriquecidos
         table_id: enderecos_geolocalizados
-      dump_mode: append
       max_concurrent: 100
   - name: rj-crm--geolocalizacao-residencia--geoapify--prod
     tags:
@@ -316,7 +325,6 @@ deployments:
       table:
         dataset_id: brutos_dados_enriquecidos
         table_id: enderecos_geolocalizados
-      dump_mode: append
       max_concurrent: 100
     schedules:
       - interval: 1800

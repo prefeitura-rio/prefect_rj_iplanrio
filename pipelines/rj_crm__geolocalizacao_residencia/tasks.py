@@ -7,7 +7,6 @@ from pydantic import TypeAdapter
 from toolkit.telemetry import logger
 
 from pipelines.rj_crm__geolocalizacao_residencia.constants import (
-    BILLING_PROJECT,
     DEFAULT_SLEEP_SECONDS,
     GEOAPIFY_BATCH_SIZE,
     SP_TZ,
@@ -16,11 +15,11 @@ from pipelines.rj_crm__geolocalizacao_residencia.helpers.geocode import geocode_
 from pipelines.rj_crm__geolocalizacao_residencia.helpers.providers import nominatim
 from pipelines.rj_crm__geolocalizacao_residencia.helpers.rows import join_rows, texts
 from pipelines.rj_crm__geolocalizacao_residencia.settings import Settings
-from pipelines.rj_crm__geolocalizacao_residencia.types import Address, Row
+from pipelines.rj_crm__geolocalizacao_residencia.types import Address, Row, Source
 from utils.tasks import read_bq
 from utils.utils import render_query
 
-ADDRESSES: TypeAdapter[list[Address]] = TypeAdapter(list[Address])
+ADDRESSES: TypeAdapter[list[dict[str, object]]] = TypeAdapter(list[dict[str, object]])
 
 
 def today() -> str:
@@ -29,13 +28,19 @@ def today() -> str:
 
 
 @task(retries=2, retry_delay_seconds=30)
-async def read_addresses_task() -> list[Address]:
-    """Read up to 10,000 addresses of citizens with no coordinates, in random order.
+async def read_addresses_task(source: Source, project: str) -> list[Address]:
+    """Read the addresses with no coordinates of a source, in random order.
 
-    Only an address with a full text is kept.
+    The `citizens` source gives up to 10,000 addresses of citizens, and the `chamados`
+    source up to 50,000 addresses of the calls to 1746. Only an address with a full
+    text is kept, and every value is text.
     """
-    frame = await read_bq(render_query(__file__, "addresses"), project=BILLING_PROJECT)
-    addresses = [address for address in ADDRESSES.validate_python(frame.to_dicts()) if address["endereco_completo"]]
+    frame = await read_bq(render_query(__file__, f"addresses_{source}"), project=project)
+    addresses = [
+        {column: None if value is None else str(value) for column, value in row.items()}
+        for row in ADDRESSES.validate_python(frame.to_dicts())
+        if row.get("endereco_completo")
+    ]
     logger.info("Addresses to geocode: count=%d", len(addresses))
 
     return addresses
