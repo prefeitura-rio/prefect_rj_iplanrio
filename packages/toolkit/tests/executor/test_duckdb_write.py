@@ -11,7 +11,7 @@ from pyarrow import Table as ArrowTable
 from pyarrow.parquet import read_table, write_table
 
 from toolkit.chunks import NULL_CHUNK, Chunk, Rows
-from toolkit.executor.engines.duckdb import DuckDBEngine
+from toolkit.executor.engines.duckdb import DuckDBEngine, build_origin_values
 from toolkit.executor.requests import Changes, Files, Query
 from toolkit.executor.sources.backends.files import FilesSource
 
@@ -175,3 +175,17 @@ async def test_files_are_written_to_a_sheet_with_the_header_in_the_first_row() -
 
     assert "read_parquet('rows.parquet'" in sql
     assert "TO 'id1' (FORMAT gsheet, SHEET 'Aba 1')" in sql
+
+
+@pytest.mark.parametrize(
+    ("dialect", "prefixed"),
+    [
+        pytest.param("mssql", True, id="sql-server-reads-with-arithabort-on"),
+        pytest.param("postgres", False, id="other-sources-keep-the-query"),
+    ],
+)
+def test_a_native_query_of_sql_server_sets_arithabort_on(dialect, prefixed) -> None:
+    """Prefix the query of SQL Server with the session option of its plan."""
+    values = build_origin_values(Query("SELECT 1 AS x", dialect))
+
+    assert ("SET ARITHABORT ON;" in str(values["query"])) is prefixed

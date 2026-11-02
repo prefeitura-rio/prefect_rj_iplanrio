@@ -24,7 +24,13 @@ from ...settings import DuckDBSettings
 from ...telemetry import logger
 from ...types import Columns, QueryParams, TemplateValue
 from ...utils import filter_conditions
-from ..constants import ALIAS, DEFAULT_BATCH_SIZE, MSSQL_METADATA_ONLY, SECRET
+from ..constants import (
+    ALIAS,
+    DEFAULT_BATCH_SIZE,
+    MSSQL_METADATA_ONLY,
+    MSSQL_SESSION,
+    SECRET,
+)
 from ..probe import build_native_chunk, quote_native
 from ..render import render_template
 from ..requests import (
@@ -106,7 +112,8 @@ def build_origin_values(origin: Origin) -> dict[str, TemplateValue]:
                 "table": Identifier(ALIAS, *name.split(".")),
             }
         case Query(text, dialect):
-            return {**base, "type": dialect, "query": Literal(text)}
+            sent = f"{MSSQL_SESSION}{text}" if dialect == "mssql" else text
+            return {**base, "type": dialect, "query": Literal(sent)}
         case Files(glob, kind):
             return {**base, "type": kind, "query": Literal(glob)}
         case Layer(url, where, srid):
@@ -293,7 +300,9 @@ class DuckDBEngine(Engine):
         """
         values = build_origin_values(origin)
         if isinstance(origin, Query) and origin.dialect == "mssql":
-            values["query"] = Literal(f"{MSSQL_METADATA_ONLY}{origin.text}")
+            values["query"] = Literal(
+                f"{MSSQL_METADATA_ONLY}{MSSQL_SESSION}{origin.text}"
+            )
         sql = render_template("duckdb/describe_source", values)
         columns: dict[str, str] = {}
 

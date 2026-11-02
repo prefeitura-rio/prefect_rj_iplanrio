@@ -30,6 +30,13 @@ ALIAS: Final = "src"
 MSSQL_METADATA_ONLY: Final = "SET FMTONLY ON;\n"
 """Prefix that makes SQL Server answer the columns of a query and no rows."""
 
+MSSQL_SESSION: Final = "SET ARITHABORT ON;\n"
+"""Prefix of every native query of SQL Server.
+
+The drivers that are not ODBC or SqlClient connect with ARITHABORT off. The query plan
+of a heavy view is then another one, and the view sent no first row in 11 hours, while
+the same query with the option on answered in 27 minutes."""
+
 PROBE_DATE_MARGIN_DAYS: Final = 1
 """The days that a probe adds on each side of a date chunk, to cover the time zone."""
 
