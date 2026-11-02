@@ -352,5 +352,6 @@ deployments:
               FROM SICOP.VW_PROCESSO_DLK
           dump_mode: overwrite
           options:
+            batch_size: 5000
             columns:
               add_timestamp: true
