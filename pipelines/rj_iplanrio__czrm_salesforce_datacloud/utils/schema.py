@@ -32,8 +32,17 @@ TIPOS = {
     "Number": _FLOAT64,
     "Percent": _FLOAT64,
     "Currency": _FLOAT64,
+    "Int": _FLOAT64,
+    "BigInt": _FLOAT64,
+    "SmallInt": _FLOAT64,
+    "Long": _FLOAT64,
+    "Float": _FLOAT64,
+    "Double": _FLOAT64,
+    "Decimal": _FLOAT64,
     "TimestampTZ": _TIMESTAMP,
+    "Timestamp": _TIMESTAMP,
     "DateTime": _TIMESTAMP,
+    "Bool": _BOOLEAN,
     "Boolean": _BOOLEAN,
     "Date": _DATE,
 }
@@ -62,6 +71,11 @@ def nome_final(nome_dlo: str, renomear: dict[str, str] | None = None) -> str:
     limpo = re.sub(r"^ssot__", "", nome_dlo)
     limpo = re.sub(r"(__c|__dlm|__dll)$", "", limpo)
     normalizado = _snake(limpo)
+    # Campo custom: o Data Cloud grava `__c` como `_c` no nome do campo, então
+    # depois de tirar o sufixo da Query API sobra um `_c` que não faz parte do
+    # nome (ex.: CPF_c__c -> cpf_c -> cpf). Removido aqui; `renomear` fica para
+    # exceções.
+    normalizado = re.sub(r"_c$", "", normalizado)
     return (renomear or {}).get(normalizado, normalizado)
 
 

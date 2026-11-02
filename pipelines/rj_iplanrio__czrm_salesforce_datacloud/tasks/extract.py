@@ -93,10 +93,14 @@ def extrair(session: dict, dlo: str, filtro: str, order_by: str, tabela: str = "
         if not colunas:
             colunas = [c["name"] for c in corpo.get("metadata") or []]
         novas = corpo.get("data") or []
-        linhas.extend(novas)
-        if len(novas) < PAGE_SIZE:
+        if not novas:
+            # página vazia é o único sinal confiável de fim: o servidor devolve
+            # menos que PAGE_SIZE quando o payload da página estoura (visto no
+            # Case: 989 de 1000 com 3.659 linhas na DLO) — parar por
+            # "len(novas) < PAGE_SIZE" truncava a extração em silêncio.
             break
-        offset += PAGE_SIZE
+        linhas.extend(novas)
+        offset += len(novas)
         if offset >= MAX_ROWS:
             raise RuntimeError(
                 f"[DC] {tabela or dlo}: limite de segurança de {MAX_ROWS} linhas atingido — "

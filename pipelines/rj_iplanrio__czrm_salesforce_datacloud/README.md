@@ -8,7 +8,7 @@ por `MERGE`.
 |---|---|
 | **Dataset** | `rj-iplanrio.brutos_czrm_salesforce_staging` (zona de pouso, pré-dbt) |
 | **Camada curada** | `rj-iplanrio.brutos_czrm_salesforce` — escrita pelo dbt (`queries-rj-iplanrio`), não por esta pipeline |
-| **Tabelas** | `account`, `work_order` (e as próximas que entrarem em `tabelas.yaml`) |
+| **Tabelas** | **15**: 2 fatos (`account`, `work_order`), 11 dimensões para traduzir os IDs (`user`, `queue_group`, `contact`, `individual`, `service_case`, `record_type`, `operating_hours`, `neighborhood`, `organizational_unity`, `service_catalog`, `service_attribute_library`) e 2 do formulário dinâmico (`work_order_attribute_answer`, `work_order_update`) |
 | **Origens** | `qa`, `staging`, `prod` — mudam só a credencial e o nome da DLO |
 
 ## Como funciona
