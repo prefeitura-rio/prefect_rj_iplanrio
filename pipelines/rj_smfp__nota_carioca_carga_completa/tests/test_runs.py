@@ -1,4 +1,4 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from prefect.client.schemas.objects import FlowRun, StateType
@@ -42,5 +42,44 @@ def test_to_child_run_keeps_the_state_of_a_run_still_active_after_the_timeout() 
     flow_run = make_flow_run(StateType.RUNNING, "Running")
 
     child = runs.to_child_run(flow_run)
+
+    assert (child.state_type, child.state_name) == ("RUNNING", "Running")
+
+
+def test_own_child_filter_selects_the_subflows_of_this_run_for_the_deployment() -> None:
+    deployment_id, parent_id = uuid4(), uuid4()
+
+    flow_filter = runs.own_child_filter(deployment_id, str(parent_id))
+
+    assert flow_filter.deployment_id is not None
+    assert flow_filter.deployment_id.any_ == [deployment_id]
+    assert flow_filter.parent_flow_run_id is not None
+    assert flow_filter.parent_flow_run_id.any_ == [parent_id]
+
+
+def test_wait_for_run_polls_until_a_final_state() -> None:
+    states = iter([StateType.RUNNING, StateType.RUNNING, StateType.COMPLETED])
+    run_id = str(uuid4())
+    slept: list[float] = []
+    clock = iter(range(0, 10_000, 30))
+
+    def read(rid: UUID) -> FlowRun:
+        assert str(rid) == run_id
+        state = next(states)
+        return make_flow_run(state, state.value.title())
+
+    child = runs.wait_for_run(run_id, 3600, read=read, sleep=slept.append, clock=lambda: float(next(clock)))
+
+    assert (child.state_type, child.state_name) == ("COMPLETED", "Completed")
+    assert slept == [30.0, 30.0]
+
+
+def test_wait_for_run_returns_the_active_state_at_the_timeout_without_cancelling() -> None:
+    clock = iter(range(0, 10_000, 30))
+
+    def read(_rid: UUID) -> FlowRun:
+        return make_flow_run(StateType.RUNNING, "Running")
+
+    child = runs.wait_for_run(str(uuid4()), 60, read=read, sleep=lambda _s: None, clock=lambda: float(next(clock)))
 
     assert (child.state_type, child.state_name) == ("RUNNING", "Running")

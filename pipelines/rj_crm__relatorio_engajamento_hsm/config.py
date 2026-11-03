@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Constantes da pipeline de relatório de engajamento por campanha (ver flow.py)."""
 
 from __future__ import annotations
@@ -43,33 +42,18 @@ LOTES_SEM_NOVIDADE_LIMITE = 5
 N_EXEMPLOS_DESCOBERTA = 5
 SEED_DESCOBERTA = 42
 
-# CUSTOMER fica de fora de propósito — é cópia crua da 1ª resposta do cidadão que
-# AI_AGENT_CIDADAO já repete com timestamp de processamento (mantê-la duplicaria a fala).
-FONTES_CONVERSA = ["HSM", "AI_AGENT_CIDADAO", "AI_AGENT_AGENTE"]
-# Uma sessão (id_sessao_48h) dura até 48h: a extração busca mensagens até esse número
-# de dias depois da data de fim, pra sessão do último dia vir inteira (ver
-# queries/extrai_conversas.sql).
-DIAS_SESSAO = 2
-
 # De onde vêm os disparos de cada solicitação (parâmetro fonte_disparos do flow):
-#   "campanha" (padrão, Form): sessões da rmi_conversas.chatbot por hsm.nome_campanha
-#              — queries/extrai_conversas.sql;
-#   "hsm"      (só custom run): envios do template direto da messaging_events_whatsapp
-#              + conversa do Digital Engagement até JANELA_RESPOSTA_HSM_HORAS depois —
-#              queries/extrai_conversas_hsm.sql.
+#   "campanha" (padrão, Form): disparos da rmi_conversas.chatbot por hsm.nome_campanha;
+#   "hsm"      (só custom run): por hsm.nome_hsm.
+# A conversa é a mesma nos dois: as sessões receptivas ligadas ao disparo
+# (queries/extrai_conversas.sql).
 FONTE_DISPAROS_CAMPANHA = "campanha"
 FONTE_DISPAROS_HSM = "hsm"
 FONTES_DISPAROS = (FONTE_DISPAROS_CAMPANHA, FONTE_DISPAROS_HSM)
-JANELA_RESPOSTA_HSM_HORAS = 48
-# staging: a raw do dbt filtra só MARKETING (perde o DIGITAL_ENGAGEMENT) e a do
-# send_event não traz message_text
-EVENTOS_WHATSAPP_TABLE = f"{PROJECT_ID}.brutos_salesforce_staging.messaging_events_whatsapp"
-SEND_EVENT_TABLE = f"{PROJECT_ID}.brutos_salesforce_staging.sfmc_whatsapp_send_event"
 ROTULO_FONTE = {"HSM": "HSM", "AI_AGENT_CIDADAO": "CIDADÃO", "AI_AGENT_AGENTE": "AGENTE"}
 
 # Tipo de engajamento: msg_tipo cru do WhatsApp (coluna das queries) -> tipo do relatório.
-# Nulo conta como texto: as falas AI_AGENT_CIDADAO da rmi_conversas.chatbot vêm sem tipo
-# e hoje são todas texto. Tipo cru fora do mapa vira TIPO_ENGAJAMENTO_OUTRO.
+# Nulo conta como texto. Tipo cru fora do mapa vira TIPO_ENGAJAMENTO_OUTRO.
 TIPO_ENGAJAMENTO_TEXTO = "Texto"
 TIPO_ENGAJAMENTO_REACAO = "Reação"
 TIPO_ENGAJAMENTO_OUTRO = "Outro"

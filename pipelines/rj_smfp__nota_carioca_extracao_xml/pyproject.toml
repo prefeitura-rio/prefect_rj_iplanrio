@@ -1,0 +1,12 @@
+[project]
+name = "rj_smfp__nota_carioca_extracao_xml"
+version = "1.0.0"
+description = "Triggers the Nota Carioca national XML extraction (SOAP ExtrairDocumentosFiscaisNacionaisAutomatico) and waits in NFSE_OWNER.TAREFAS until it and the post-processing finish, so the full refresh only starts after a successful extraction."
+dependencies = [
+    "prefect_rj_iplanrio",
+    "httpx>=0.28.1",
+    "oracledb>=4.0.1",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
