@@ -324,7 +324,7 @@ class CouchDBClient:
                     response.raise_for_status()
 
                     return response
-            except (HTTPError, TimeoutError):
+            except HTTPError, TimeoutError:
                 if attempt + 1 == self.attempts:
                     raise
 
