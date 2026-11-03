@@ -143,4 +143,7 @@ class ClassificacaoConstants(Enum):
     # nome com vírgula era quebrado na validação e descartado. As sessões da v1 foram
     # renomeadas por UPDATE; o secundário que já tinha sido descartado não volta.
     PROMPT_VERSAO_MACROTEMA = "v2"
-    PROMPT_VERSAO_SECRETARIA = "v2"
+    # v3 secretaria (2026-11-03): o prompt lista só as secretarias candidatas dos
+    # macrotemas da sessão (campo "secretarias" do macrotemas.json), com "OUTRA" refazendo
+    # a pergunta com a lista completa — a lista inteira era metade dos tokens da sessão.
+    PROMPT_VERSAO_SECRETARIA = "v3"

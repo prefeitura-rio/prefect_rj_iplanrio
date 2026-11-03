@@ -15,6 +15,7 @@ nenhuma mensagem do usuário -> descartada (nunca é classificada, igual ao note
 
 from __future__ import annotations
 
+import functools
 import json
 import re
 import time
@@ -74,9 +75,56 @@ if _ROTULOS_COM_VIRGULA:
 _TEMPLATE_MACROTEMA = (_PROMPTS_DIR / "classificacao_macrotema.txt").read_text().replace(
     "<<MACROTEMAS>>", "\n".join(f"- {m['nome']}: {m['descricao']}" for m in _MACROTEMAS)
 )
-_TEMPLATE_SECRETARIA = (_PROMPTS_DIR / "classificacao_secretaria.txt").read_text().replace(
-    "<<SECRETARIAS>>", "\n".join(f"- {s['sigla']} – {s['nome']}: {s['descricao']}" for s in _SECRETARIAS)
+# Secretaria: o prompt mostra só as candidatas dos macrotemas da sessão (campo
+# "secretarias" de cada macrotema no macrotemas.json) — a lista inteira tem 63 órgãos e
+# era metade dos tokens de uma sessão relevante. Macrotema sem lista ("Outros") ou
+# ausente usa a lista completa. Na lista filtrada a LLM pode responder "OUTRA" (órgão da
+# Prefeitura fora das candidatas), e aí a pergunta é refeita com a lista completa.
+_TEMPLATE_SECRETARIA_BASE = (_PROMPTS_DIR / "classificacao_secretaria.txt").read_text()
+_SECRETARIA_FORA_DA_LISTA = "OUTRA"
+_REGRA_FORA_DA_LISTA_COMPLETA = (
+    "3. Se o assunto não for responsabilidade de nenhum órgão da lista (ex.: CEDAE, Light, Detran, "
+    "INSS, Governo do Estado), os dois campos devem ser null."
 )
+_REGRA_FORA_DA_LISTA_FILTRADA = (
+    "3. A lista abaixo traz só os órgãos ligados ao assunto desta conversa. Se o assunto for de um "
+    f'órgão da Prefeitura que não está nela, responda "{_SECRETARIA_FORA_DA_LISTA}" nos dois campos. '
+    "Se não for responsabilidade de nenhum órgão da Prefeitura (ex.: CEDAE, Light, Detran, INSS, "
+    "Governo do Estado), os dois campos devem ser null."
+)
+_SECRETARIAS_POR_MACROTEMA = {m["nome"]: m["secretarias"] for m in _MACROTEMAS if m.get("secretarias")}
+_SIGLAS_DESCONHECIDAS = {s for v in _SECRETARIAS_POR_MACROTEMA.values() for s in v} - {
+    s["sigla"] for s in _SECRETARIAS
+}
+if _SIGLAS_DESCONHECIDAS:
+    raise ValueError(f"macrotemas.json cita sigla fora de secretarias.json: {sorted(_SIGLAS_DESCONHECIDAS)}")
+
+
+@functools.lru_cache(maxsize=None)
+def _template_secretaria(candidatas: tuple[str, ...] | None) -> str:
+    """Template de secretaria com a lista de órgãos já renderizada — completa (None) ou só
+    as candidatas, na ordem do catálogo: o mesmo conjunto gera sempre o mesmo prefixo,
+    que o cache implícito do Gemini aproveita."""
+    if candidatas is None:
+        orgaos, regra = _SECRETARIAS, _REGRA_FORA_DA_LISTA_COMPLETA
+    else:
+        orgaos, regra = [s for s in _SECRETARIAS if s["sigla"] in candidatas], _REGRA_FORA_DA_LISTA_FILTRADA
+    return _TEMPLATE_SECRETARIA_BASE.replace(
+        "<<SECRETARIAS>>", "\n".join(f"- {s['sigla']} – {s['nome']}: {s['descricao']}" for s in orgaos)
+    ).replace("<<REGRA_FORA_DA_LISTA>>", regra)
+
+
+def _secretarias_candidatas(macrotemas_relacionados) -> tuple[str, ...] | None:
+    """União das secretarias dos macrotemas da sessão (relacionados já inclui o
+    principal). None = lista completa: sem macrotema, ou algum deles sem lista própria."""
+    if not macrotemas_relacionados:
+        return None
+    candidatas: set[str] = set()
+    for nome in macrotemas_relacionados.split(", "):
+        if nome not in _SECRETARIAS_POR_MACROTEMA:
+            return None
+        candidatas.update(_SECRETARIAS_POR_MACROTEMA[nome])
+    return tuple(sorted(candidatas))
 # Texto que entra no lugar do HSM nos prompts de roteamento quando a sessão é sem_hsm —
 # eles são um template só pros dois casos (diferente do prompt principal, que tem
 # com_hsm/sem_hsm separados porque sem HSM não há relacao_hsm/telefone pra avaliar).
@@ -460,17 +508,29 @@ def classifica_sessoes(
 
     def _roteia(hsm_texto, conversa_completa) -> tuple[dict, list[dict]]:
         """Prompts de macrotema e secretaria — mesma entrada (HSM + conversa) nos dois.
-        Retorna (campos pra linha destino, usages das 2 chamadas)."""
+        Retorna (campos pra linha destino, usages das chamadas)."""
         hsm = hsm_texto if isinstance(hsm_texto, str) and hsm_texto.strip() else _HSM_AUSENTE
         parsed_mt, bruto_mt, usage_mt = _pergunta(
             _render(_TEMPLATE_MACROTEMA, hsm_texto=hsm, conversa_completa=conversa_completa)
         )
-        parsed_sec, bruto_sec, usage_sec = _pergunta(
-            _render(_TEMPLATE_SECRETARIA, hsm_texto=hsm, conversa_completa=conversa_completa)
-        )
         macrotema_principal, macrotemas_relacionados = _valida_principal_e_relacionados(
             parsed_mt.get("macrotema_principal"), parsed_mt.get("macrotemas_relacionados"), _MACROTEMAS_VALIDOS
         )
+        # secretaria depende do macrotema: só as candidatas dele, com "OUTRA" refazendo
+        # com a lista completa (ver _template_secretaria)
+        candidatas = _secretarias_candidatas(macrotemas_relacionados)
+        parsed_sec, bruto_sec, usage_sec = _pergunta(
+            _render(_template_secretaria(candidatas), hsm_texto=hsm, conversa_completa=conversa_completa)
+        )
+        usages = [usage_mt, usage_sec]
+        if candidatas is not None and _normaliza_rotulo(
+            parsed_sec.get("secretaria_principal") or ""
+        ) == _normaliza_rotulo(_SECRETARIA_FORA_DA_LISTA):
+            parsed_sec, bruto_completa, usage_completa = _pergunta(
+                _render(_template_secretaria(None), hsm_texto=hsm, conversa_completa=conversa_completa)
+            )
+            bruto_sec = f"{bruto_sec}\n--- lista completa ---\n{bruto_completa}"
+            usages.append(usage_completa)
         secretaria_principal, secretarias_relacionadas = _valida_principal_e_relacionados(
             parsed_sec.get("secretaria_principal"), parsed_sec.get("secretarias_relacionadas"), _SECRETARIAS_VALIDAS
         )
@@ -486,7 +546,7 @@ def classifica_sessoes(
             "resposta_llm_bruta_secretaria": bruto_sec,
             "prompt_versao_secretaria": prompt_versao_secretaria,
         }
-        return campos, [usage_mt, usage_sec]
+        return campos, usages
 
     def _processa(id_sessao, tipo_prompt, prompt, hsm_texto, conversa_completa):
         try:
@@ -539,6 +599,8 @@ def classifica_sessoes(
                 "tokens_entrada": _soma_tokens(usages, "promptTokenCount"),
                 "tokens_saida": _soma_tokens(usages, "candidatesTokenCount"),
                 "tokens_total": _soma_tokens(usages, "totalTokenCount"),
+                # parte da entrada que veio do cache implícito do Gemini (cobrada com desconto)
+                "tokens_cache": _soma_tokens(usages, "cachedContentTokenCount"),
                 **roteamento,
                 "erro": None,
             }
@@ -621,6 +683,7 @@ def monta_dataframe_final(
         df_pre_classificadas["tokens_entrada"] = None
         df_pre_classificadas["tokens_saida"] = None
         df_pre_classificadas["tokens_total"] = None
+        df_pre_classificadas["tokens_cache"] = None
         # null, não "resposta_atrasada_btn": tipo_prompt identifica qual PROMPT gerou a
         # classificação (com_hsm/sem_hsm) — resposta atrasada não passou por prompt
         # nenhum, foi decidida por regra.

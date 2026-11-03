@@ -131,6 +131,11 @@ SCHEMA: list[bigquery.SchemaField] = [
     bigquery.SchemaField("justificativa_secretaria", _STRING),
     bigquery.SchemaField("resposta_llm_bruta_secretaria", _STRING),
     bigquery.SchemaField("prompt_versao_secretaria", _STRING),
+    # Parte de tokens_entrada que veio do cache implícito do Gemini (cachedContentTokenCount
+    # do usageMetadata, soma das chamadas da sessão) — cobrada com desconto. Null nas
+    # RESPOSTA_ATRASADA_BTN e quando o gateway não devolve o campo. Adicionada por ALTER
+    # TABLE (ordem física no fim).
+    bigquery.SchemaField("tokens_cache", _INT64),
 ]
 
 _COLUNAS = [f.name for f in SCHEMA]
