@@ -74,6 +74,7 @@ COUCHDB_DESIGN_PREFIX: Final = "_design/"
 """The start of the id of a CouchDB design document, which is never a row."""
 
 COUCHDB_PLAIN_PORT: Final = 5984
+COUCHDB_REQUEST_ATTEMPTS: Final = 3
 """The plain port of CouchDB. It serves TLS on 6984 and on the ports of a proxy."""
 
 OPTIONAL_BACKENDS: Final = {"mongodb": ("pymongo", "pymongoarrow")}

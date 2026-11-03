@@ -119,7 +119,12 @@ class CouchDBEngine(Engine):
         """
         self.duckdb = await stack.enter_async_context(DuckDBEngine())
         http = await stack.enter_async_context(self.source.build_client())
-        self.client = CouchDBClient(http, self.source.batch_size, self.source.key_width)
+        self.client = CouchDBClient(
+            http,
+            self.source.batch_size,
+            self.source.key_width,
+            self.source.timeout,
+        )
         await self.client.ping(self.database)
 
     @override

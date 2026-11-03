@@ -1,18 +1,20 @@
+from asyncio import Event
 from dataclasses import replace
 from datetime import date
 from json import loads
 
 import pytest
-from httpx2 import HTTPStatusError
+from httpx2 import AsyncClient, HTTPStatusError
 from pyarrow import bool_ as arrow_bool
 from pyarrow import json_ as arrow_json
 from pyarrow import schema as arrow_schema
 from pyarrow import string as arrow_string
 from pyarrow.parquet import read_table
-from pydantic import JsonValue
+from pydantic import BaseModel, JsonValue
 
 import toolkit.executor.sources.backends.couchdb as couchdb_module
 from toolkit.chunks import NULL_CHUNK, Chunk, Rows
+from toolkit.executor.couchdb import CouchDBClient
 from toolkit.executor.engines.base import Engine
 from toolkit.executor.engines.couchdb import CouchDBEngine
 from toolkit.executor.engines.duckdb import DuckDBEngine
@@ -27,6 +29,26 @@ from toolkit.types import Chunks
 USER = "user"
 PASSWORD = "segredo"
 DESIGN = "_design/cac500ad"
+
+
+async def test_a_stalled_request_stops_and_retries(monkeypatch) -> None:
+    """Bound the whole response time and retry a stalled CouchDB request."""
+    calls = 0
+
+    async def stall(*_: object, **__: object) -> None:
+        nonlocal calls
+        calls += 1
+        await Event().wait()
+
+    http = AsyncClient(base_url="http://couchdb")
+    monkeypatch.setattr(http, "get", stall)
+    client = CouchDBClient(http, 1000, timeout=0.01, attempts=2)
+
+    with pytest.raises(TimeoutError):
+        await client.get("/db/_all_docs", {}, BaseModel)
+
+    assert calls == 2
+    await http.aclose()
 
 
 def change_row(item: CouchDBItem) -> dict[str, JsonValue]:

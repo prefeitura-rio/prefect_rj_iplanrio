@@ -1,15 +1,16 @@
 """The CouchDB HTTP client: it reads the pages of `_all_docs`, `_find`, `_changes`."""
 
-from collections.abc import AsyncGenerator, Mapping
+from asyncio import timeout
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from hashlib import md5
 from urllib.parse import quote
 
-from httpx2 import AsyncClient
+from httpx2 import AsyncClient, HTTPError, Response
 from pydantic import BaseModel, JsonValue
 
 from ..chunks import NULL_CHUNK, Chunk
-from .constants import COUCHDB_DESIGN_PREFIX
+from .constants import COUCHDB_DESIGN_PREFIX, COUCHDB_REQUEST_ATTEMPTS
 from .sources.models import (
     CouchDBAllDocs,
     CouchDBChange,
@@ -99,6 +100,8 @@ class CouchDBClient:
     http: AsyncClient
     page_size: int
     key_width: int | None = None
+    timeout: float = 300
+    attempts: int = COUCHDB_REQUEST_ATTEMPTS
     width: int | None = field(default=None, init=False)
 
     async def ping(self, database: str) -> None:
@@ -312,6 +315,21 @@ class CouchDBClient:
 
         return page.rows[0].id if page.rows else ""
 
+    async def request(self, send: Callable[[], Awaitable[Response]]) -> Response:
+        """Return one response within the deadline, retrying network failures."""
+        for attempt in range(self.attempts):
+            try:
+                async with timeout(self.timeout):
+                    response = await send()
+                    response.raise_for_status()
+
+                    return response
+            except (HTTPError, TimeoutError):
+                if attempt + 1 == self.attempts:
+                    raise
+
+        raise RuntimeError("A CouchDB request made no attempt")
+
     async def get[Model: BaseModel](
         self,
         path: str,
@@ -319,8 +337,7 @@ class CouchDBClient:
         page: type[Model],
     ) -> Model:
         """Return the page that a `GET` answers, or raise `ValidationError`."""
-        response = await self.http.get(path, params=params)
-        response.raise_for_status()
+        response = await self.request(lambda: self.http.get(path, params=params))
 
         return page.model_validate_json(response.content)
 
@@ -331,7 +348,6 @@ class CouchDBClient:
         page: type[Model],
     ) -> Model:
         """Return the page that a `POST` answers, or raise `ValidationError`."""
-        response = await self.http.post(path, json=body)
-        response.raise_for_status()
+        response = await self.request(lambda: self.http.post(path, json=body))
 
         return page.model_validate_json(response.content)
