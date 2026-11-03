@@ -14,6 +14,7 @@ from pipelines.rj_crm__disparo_template.helpers.frames import (
     has_alternatives,
     normalize_columns,
     quarantine,
+    restrict_test_phones,
     retry_frame,
     split_frame,
     validate_frame,
@@ -198,6 +199,28 @@ def test_the_filters_of_a_try(
     )
 
     assert apply_filters(frame, dispatched, audience, "campaign", attempt)["cpf"].to_list() == kept
+
+
+@pytest.mark.parametrize(
+    ("test_mode", "allowed", "kept"),
+    [
+        pytest.param(False, [], ["1", "2", "3"], id="production_keeps_the_audience"),
+        pytest.param(True, ["2", "4"], ["2"], id="test_keeps_only_allowed_phones"),
+    ],
+)
+def test_test_mode_restricts_every_phone(
+    make_frame: Frames, test_mode: bool, allowed: list[str], kept: list[str]
+) -> None:
+    """Keep only configured test phones when test mode is active."""
+    frame = make_frame(("1", "1", None), ("2", "2", None), ("3", "3", None))
+
+    assert restrict_test_phones(frame, allowed, test_mode=test_mode)["telefone"].to_list() == kept
+
+
+def test_test_mode_without_an_allowlist_is_refused(make_frame: Frames) -> None:
+    """Refuse a test that could otherwise send to the production audience."""
+    with pytest.raises(ValueError, match="test_phones"):
+        restrict_test_phones(make_frame(("1", "1", None)), [], test_mode=True)
 
 
 def test_no_filter_applies_when_nothing_was_dispatched(make_frame: Frames, make_dispatched: Frames) -> None:

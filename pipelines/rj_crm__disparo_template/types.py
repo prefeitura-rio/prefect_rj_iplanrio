@@ -11,12 +11,13 @@ class Campaign:
     """The campaign that a run sends, and where it runs.
 
     `name` is the campaign in the control sheet and in Salesforce. With `test_mode`,
-    nothing goes to the log table and the waits are short.
+    only `test_phones` go out, nothing goes to the log table, and waits are short.
     """
 
     name: str = "template"
     environment: Literal["staging", "production"] = "staging"
     test_mode: bool = False
+    test_phones: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -158,6 +158,16 @@ def of_day(dispatched: pl.DataFrame, day: date) -> pl.DataFrame:
     return dispatched.filter(pl.col("data_particao").cast(pl.String).str.slice(0, 10).str.to_date() == day)
 
 
+def restrict_test_phones(frame: pl.DataFrame, allowed: Sequence[str], *, test_mode: bool) -> pl.DataFrame:
+    """Keep only allowed phones in test mode, and refuse an empty allowlist."""
+    if not test_mode:
+        return frame
+    if not allowed:
+        raise ValueError("campaign.test_phones is required in test mode")
+
+    return frame.filter(pl.col("telefone").cast(pl.String).is_in(allowed))
+
+
 def drop_dispatched(frame: pl.DataFrame, dispatched: pl.DataFrame, column: str) -> pl.DataFrame:
     """Drop the rows whose CPF or phone is in the dispatches.
 

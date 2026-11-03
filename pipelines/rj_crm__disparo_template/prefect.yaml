@@ -64,6 +64,7 @@ deployments:
     parameters:
       campaign:
         name: disparo-template-sf
+        test_mode: true
       table:
         dataset_id: brutos_wetalkie
         table_id: disparos_efetuados_sf

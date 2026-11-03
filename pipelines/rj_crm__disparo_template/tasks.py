@@ -37,6 +37,7 @@ from pipelines.rj_crm__disparo_template.helpers.frames import (
     has_alternatives,
     normalize_columns,
     quarantine,
+    restrict_test_phones,
     retry_frame,
     split_frame,
     validate_frame,
@@ -326,6 +327,7 @@ async def select_task(frame: pl.DataFrame, campaign: Campaign, audience: Audienc
 
     dispatched = await read_dispatched_task.fn(audience.interval_days)
     current = apply_filters(current, dispatched, audience, campaign.name, attempt)
+    current = restrict_test_phones(current, campaign.test_phones, test_mode=campaign.test_mode)
 
     return drop_duplicates(current, "telefone", enabled=audience.drop_duplicate_phones)
 
