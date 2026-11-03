@@ -338,6 +338,7 @@ deployments:
               SELECT * FROM aad0ed8f
               WHERE CONVERT(DATE, CAST(Ano AS VARCHAR)) >= '2026'
                 AND CONVERT(DATE, CAST(Ano AS VARCHAR)) <= '2030'
+              OPTION (RECOMPILE)
           dump_mode: append
           options:
             columns:
