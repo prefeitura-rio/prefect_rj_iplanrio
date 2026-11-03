@@ -76,6 +76,7 @@
     "rj_iplanrio__cor_alerts_aggregator",
     "rj_iplanrio__dados_mestres",
     "rj_iplanrio__equipamentos_arcgis",
+    "rj_iplanrio__maintain_delta",
     "rj_iplanrio__sici",
     "rj_iplanrio__sicop",
     "rj_iplanrio__sisbicho_images",
