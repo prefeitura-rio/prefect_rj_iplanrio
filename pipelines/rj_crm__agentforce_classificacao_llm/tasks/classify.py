@@ -64,6 +64,13 @@ _TEMPLATE_SEM_HSM = (_PROMPTS_DIR / "classificacao_sem_hsm.txt").read_text()
 # implícito de contexto do Gemini.
 _MACROTEMAS = json.loads((_TAXONOMIAS_DIR / "macrotemas.json").read_text())
 _SECRETARIAS = json.loads((_TAXONOMIAS_DIR / "secretarias.json").read_text())
+# Os relacionados chegam da LLM e são gravados separados por vírgula — rótulo com
+# vírgula seria quebrado em pedaços que não batem com o catálogo e descartado.
+_ROTULOS_COM_VIRGULA = [m["nome"] for m in _MACROTEMAS if "," in m["nome"]] + [
+    s["sigla"] for s in _SECRETARIAS if "," in s["sigla"]
+]
+if _ROTULOS_COM_VIRGULA:
+    raise ValueError(f"rótulo de taxonomia com vírgula (separador dos relacionados): {_ROTULOS_COM_VIRGULA}")
 _TEMPLATE_MACROTEMA = (_PROMPTS_DIR / "classificacao_macrotema.txt").read_text().replace(
     "<<MACROTEMAS>>", "\n".join(f"- {m['nome']}: {m['descricao']}" for m in _MACROTEMAS)
 )

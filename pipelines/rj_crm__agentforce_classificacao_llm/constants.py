@@ -138,5 +138,9 @@ class ClassificacaoConstants(Enum):
     # do instituto — na v1, salário/bônus de servidor ativo caía na PREVI-RIO por causa do
     # "calendário de pagamento" na descrição dela. As sessões já classificadas na v1 foram
     # migradas por UPDATE (PREVI-RIO → SUBGGC, menos as de aposentadoria/pensão/auxílios).
-    PROMPT_VERSAO_MACROTEMA = "v1"
+    # v2 macrotema (2026-11-03): nomes sem vírgula nem " e " (viraram " / ", ex.:
+    # "Trabalho / renda / qualificação"). Os relacionados são separados por vírgula, e
+    # nome com vírgula era quebrado na validação e descartado. As sessões da v1 foram
+    # renomeadas por UPDATE; o secundário que já tinha sido descartado não volta.
+    PROMPT_VERSAO_MACROTEMA = "v2"
     PROMPT_VERSAO_SECRETARIA = "v2"
