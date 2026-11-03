@@ -34,14 +34,15 @@ import pandas as pd
 from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 from prefect import task
+from prefect.deployments import run_deployment
 
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import SCHEMA, _full_table_id
 from pipelines.rj_crm__agentforce_classificacao_llm.utils.bigquery import get_bq_client
 
-# Secretaria usada no catálogo (e no CSV de origem, clustering/data/categorias_taxonomia.csv)
-# pra sessão relevante sem secretaria identificada pela LLM — secretaria_principal vem
-# NULL da classificação inicial nesse caso, não essa string; o mapeamento é feito aqui.
-_SECRETARIA_NAO_IDENTIFICADA = "Sem secretaria identificada"
+# Coluna da sessão que dá o valor de cada agrupamento_tipo do catálogo. Hierarquia:
+# agrupamento (hoje o macrotema) > tema > motivo — a sessão só recebe tema do seu próprio
+# agrupamento, e motivo só do seu agrupamento E de um tema que ela já recebeu.
+COLUNA_SESSAO_POR_AGRUPAMENTO = {"macrotema": "macrotema_principal"}
 
 
 def _normaliza_resumo(texto: str) -> str:
@@ -184,75 +185,92 @@ class RulesSandbox:
 
 
 @task(log_prints=True, retries=2, retry_delay_seconds=30)
-def carrega_catalogo_regras(project_id: str, dataset_id: str, table_id: str, etapa: str) -> pd.DataFrame:
-    """Lê as regras ativas de uma etapa (hoje só 'tema' tem linha; 'motivo' é o mesmo
-    catálogo, só filtrando etapa diferente quando existir). Tabela é gerenciada por fora
+def carrega_catalogo_regras(
+    project_id: str, dataset_id: str, table_id: str, etapa: str, agrupamento_tipo: str
+) -> pd.DataFrame:
+    """Lê as regras ativas de uma etapa ('tema' ou 'motivo') de um agrupamento_tipo só
+    (hoje 'macrotema'). Regra de outro tipo, se existir no catálogo, fica de fora — a
+    sessão é classificada num nível de agregação por vez. Tabela é gerenciada por fora
     desta pipeline (promovida manualmente do clustering, ver docstring do módulo) — se
     ainda não existir, trata como "sem regras hoje" em vez de falhar o flow inteiro."""
+    if agrupamento_tipo not in COLUNA_SESSAO_POR_AGRUPAMENTO:
+        raise ValueError(
+            f"agrupamento_tipo '{agrupamento_tipo}' sem coluna de sessão em COLUNA_SESSAO_POR_AGRUPAMENTO."
+        )
     client = get_bq_client(project_id)
     full_id = f"{project_id}.{dataset_id}.{table_id}"
     query = f"""
-        SELECT secretaria, categoria_pai, nome_funcao, nome, descricao, regra_python
+        SELECT agrupamento_tipo, agrupamento, categoria_pai, nome_funcao, nome, descricao, regra_python
         FROM `{full_id}`
-        WHERE etapa = @etapa AND ativo_indicador = TRUE
+        WHERE etapa = @etapa AND agrupamento_tipo = @agrupamento_tipo AND ativo_indicador = TRUE
     """
     job_config = bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ScalarQueryParameter("etapa", "STRING", etapa)]
+        query_parameters=[
+            bigquery.ScalarQueryParameter("etapa", "STRING", etapa),
+            bigquery.ScalarQueryParameter("agrupamento_tipo", "STRING", agrupamento_tipo),
+        ]
     )
     try:
         df = client.query(query, job_config=job_config).to_dataframe()
     except NotFound:
         print(f"[TAXONOMIA] '{table_id}' não existe ainda — nenhuma regra de '{etapa}' aplicada nesta execução.")
-        return pd.DataFrame(columns=["secretaria", "categoria_pai", "nome_funcao", "nome", "descricao", "regra_python"])
+        df = pd.DataFrame(
+            columns=["agrupamento_tipo", "agrupamento", "categoria_pai", "nome_funcao", "nome", "descricao", "regra_python"]
+        )
 
-    print(f"[TAXONOMIA] {len(df)} regra(s) ativa(s) de '{etapa}' carregadas do catálogo.")
+    print(f"[TAXONOMIA] {len(df)} regra(s) ativa(s) de '{etapa}' ({agrupamento_tipo}) carregadas do catálogo.")
     return df
 
 
 def _aplica_regras(df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida: str, rotulo_etapa: str) -> pd.DataFrame:
     """Lógica compartilhada entre aplica_regras_tema e aplica_regras_causa: roda cada
     regra do catálogo (já sandboxed) contra o `resumo` normalizado (ver
-    `_normaliza_resumo`) das sessões relevantes da secretaria correspondente, e preenche
-    `coluna_saida` com os nomes das categorias que bateram (pode ser mais de uma — por
-    isso a coluna é array). Sessão não relevante, sem resumo, ou de secretaria sem regra
-    no catálogo continua com `coluna_saida` vazio (já é o default vindo de
-    monta_dataframe_final).
+    `_normaliza_resumo`) das sessões relevantes, e preenche `coluna_saida` com os nomes
+    das categorias que bateram (pode ser mais de uma — por isso a coluna é array).
 
-    Regra com `categoria_pai` preenchido (etapa='motivo', ver carrega_catalogo_regras) só
-    é avaliada em sessão cujo `tema_nome` (já calculado por aplica_regras_tema, que roda
-    antes — ver flow.py) contenha aquele tema: motivo é sub-categoria DENTRO de um tema
-    específico, não um rótulo livre pra secretaria inteira. Regra de tema (categoria_pai
-    nulo) continua sem essa restrição — é ela quem decide tema_nome, não faz sentido
-    condicioná-la a um tema que ainda não existe nesse ponto do pipeline.
+    Hierárquico: agrupamento (hoje o macrotema) > tema > motivo.
+    - A sessão só é avaliada contra as regras do SEU agrupamento — o valor da coluna da
+      sessão que corresponde ao agrupamento_tipo do catálogo (macrotema_principal, ver
+      COLUNA_SESSAO_POR_AGRUPAMENTO). Tema de outro macrotema nunca é herdado, mesmo que a
+      regra dele bata no resumo.
+    - Regra com `categoria_pai` preenchido (etapa='motivo') só é avaliada em sessão cujo
+      `tema_nome` (já calculado por aplica_regras_tema, que roda antes — ver flow.py)
+      contenha aquele tema. Como o motivo também é buscado só no agrupamento da sessão,
+      ele fica preso ao tema E ao macrotema: um tema homônimo em outro macrotema não
+      empresta motivo. Bug real que motivou o filtro por tema: causa_nome vinha com
+      motivo de um cluster ao qual a sessão não pertencia.
 
-    Sem essa checagem, uma sessão classificada num tema (ex.: "Remoção de Entulho e
-    Resíduos de Obras") podia receber um motivo cuja regra bateu no resumo mas que
-    pertence a OUTRO tema da mesma secretaria (ex.: um motivo de "Poda ou Remoção de
-    Árvores") — bug real observado em produção: causa_nome vinha com motivo de cluster ao
-    qual a sessão não pertence.
+    Sessão não relevante, sem resumo, sem agrupamento (macrotema_principal NULL: o prompt
+    de macrotema não rodou ou devolveu rótulo fora do catálogo) ou de agrupamento sem regra
+    continua com `coluna_saida` vazio (já é o default vindo de monta_dataframe_final).
 
     Regra que falha ao compilar (rejeitada pelo sandbox) ou ao rodar numa sessão específica
     é pulada e logada — nunca derruba a classificação da sessão nem do resto das regras."""
     if df_final.empty or df_regras.empty:
         return df_final
 
+    tipos = set(df_regras["agrupamento_tipo"])
+    if len(tipos) != 1:
+        raise ValueError(f"catálogo de '{rotulo_etapa}' mistura agrupamento_tipo {sorted(tipos)} — esperado um só.")
+    coluna_agrupamento = COLUNA_SESSAO_POR_AGRUPAMENTO[tipos.pop()]
+
     sandbox = RulesSandbox()
-    regras_por_secretaria: dict[str, list[dict]] = {}
+    regras_por_agrupamento: dict[str, list[dict]] = {}
     n_rejeitadas = 0
     for row in df_regras.itertuples():
         try:
             compiladas = sandbox.compile(row.regra_python)
         except ValueError as e:
             n_rejeitadas += 1
-            print(f"[TAXONOMIA] regra '{row.nome_funcao}' (secretaria={row.secretaria}) rejeitada pelo sandbox: {e}")
+            print(f"[TAXONOMIA] regra '{row.nome_funcao}' (agrupamento={row.agrupamento}) rejeitada pelo sandbox: {e}")
             continue
         categoria_pai = None if pd.isna(row.categoria_pai) else row.categoria_pai
         for info in compiladas.values():
-            regras_por_secretaria.setdefault(row.secretaria, []).append(
+            regras_por_agrupamento.setdefault(row.agrupamento, []).append(
                 {"nome_categoria": row.nome, "categoria_pai": categoria_pai, "funcao": info["funcao"]}
             )
 
-    if not regras_por_secretaria:
+    if not regras_por_agrupamento:
         print(
             f"[TAXONOMIA] nenhuma regra de '{rotulo_etapa}' compilou com segurança "
             f"({n_rejeitadas} rejeitada(s)) — {coluna_saida} fica vazio."
@@ -267,16 +285,11 @@ def _aplica_regras(df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida
         if not resumo or (isinstance(resumo, float) and pd.isna(resumo)):
             return []
 
-        # secretaria_principal NULL no BigQuery chega aqui como float('nan'), não None —
-        # e nan é truthy em Python (`nan or default` fica nan, não cai no default). Sem
-        # o pd.isna aqui, sessão sem secretaria virava secretaria=nan, não achava nada em
-        # regras_por_secretaria (indexado por string) e nunca recebia tema_nome/causa_nome
-        # (bug real observado em produção: 0/1467 sessões "sem secretaria" classificadas).
-        secretaria_bruta = row.get("secretaria_principal")
-        if pd.isna(secretaria_bruta):
-            secretaria_bruta = None
-        secretaria = secretaria_bruta or _SECRETARIA_NAO_IDENTIFICADA
-        regras = regras_por_secretaria.get(secretaria, [])
+        # NULL do BigQuery chega como float('nan'), que é truthy — pd.isna explícito
+        agrupamento = row.get(coluna_agrupamento)
+        if agrupamento is None or pd.isna(agrupamento):
+            return []
+        regras = regras_por_agrupamento.get(agrupamento, [])
         if not regras:
             return []
 
@@ -308,7 +321,7 @@ def _aplica_regras(df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida
     n_com_categoria = (df_final[coluna_saida].str.len() > 0).sum()
     print(
         f"[TAXONOMIA] {n_rejeitadas} regra(s) de '{rotulo_etapa}' rejeitada(s) pelo sandbox, "
-        f"{sum(len(v) for v in regras_por_secretaria.values())} regra(s) aplicadas, "
+        f"{sum(len(v) for v in regras_por_agrupamento.values())} regra(s) aplicadas, "
         f"{n_com_categoria} sessão(ões) com {coluna_saida} atribuído."
     )
     return df_final
@@ -316,7 +329,7 @@ def _aplica_regras(df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida
 
 @task(log_prints=True)
 def aplica_regras_tema(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.DataFrame:
-    """Etapa 2 (tema, por secretaria) — ver _aplica_regras pra lógica completa."""
+    """Etapa 2 (tema, dentro do agrupamento da sessão) — ver _aplica_regras pra lógica completa."""
     return _aplica_regras(df_final, df_regras, coluna_saida="tema_nome", rotulo_etapa="tema")
 
 
@@ -341,25 +354,25 @@ def aplica_regras_causa(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.D
 # categoria é adicionada — e as sessões já classificadas precisam refletir isso,
 # sem rechamar a LLM (custo zero, é só reavaliar função Python contra o resumo
 # que já está salvo) e sem sobrescrever relacao_hsm/resumo/motivo/etc. (só
-# tema_nome/causa_nome mudam). Opção A discutida: MERGE parcial (só essas 2
-# colunas) direto na tabela auxiliar E nas tabelas mart do dbt (chatbot/
-# v2_chatbot_conversas), que são incrementais e não reprocessam retroativamente
-# sozinhas quando a fonte (auxiliar) muda.
+# tema_nome/causa_nome mudam). MERGE parcial (só essas 2 colunas) em todas as
+# sessões relevantes da tabela de classificação e, em seguida, full refresh do ramo
+# Salesforce da chatbot no dbt — os incrementais dele não reprocessam o passado
+# sozinhos quando a tabela de classificação muda.
 # ---------------------------------------------------------------------------
 
 
 @task(log_prints=True, retries=2, retry_delay_seconds=30)
 def extrai_sessoes_para_recalculo_taxonomia(project_id: str, dataset_id: str, table_id: str) -> pd.DataFrame:
     """Lê da própria tabela destino (não da fonte, não rechama a LLM) só o que
-    aplica_regras_tema precisa: id_sessao, resumo, secretaria_principal,
-    conteudo_relevante — mesmo filtro (conteudo_relevante = true) que a etapa 1 já usa
-    internamente pra decidir quem entra na avaliação de regra. Inclui causa_nome já
-    existente (não recalculado aqui — aplica_regras_tema só sabe recalcular tema; sem
-    isso, atualiza_tema_causa reescreveria causa_nome como vazio à toa)."""
+    as regras precisam: id_sessao, resumo, a coluna de agrupamento da sessão (macrotema_principal)
+    e conteudo_relevante — mesmo filtro (conteudo_relevante = true) que a etapa 1 já usa
+    internamente pra decidir quem entra na avaliação de regra. Todo o histórico, sem
+    filtro de data: o recálculo reescreve tema_nome/causa_nome de todas as sessões
+    relevantes. causa_nome é recalculado em seguida por aplica_regras_causa (flow.py)."""
     client = get_bq_client(project_id)
     full_id = _full_table_id(project_id, dataset_id, table_id)
     query = f"""
-        SELECT id_sessao, resumo, secretaria_principal, conteudo_relevante, causa_nome
+        SELECT id_sessao, resumo, macrotema_principal, conteudo_relevante, causa_nome
         FROM `{full_id}`
         WHERE conteudo_relevante = true
     """
@@ -425,48 +438,42 @@ def atualiza_tema_causa(
     return linhas
 
 
-@task(log_prints=True, retries=3, retry_delay_seconds=[30, 60, 120])
-def propaga_tema_causa_chatbot(
-    project_id: str,
-    aux_full_table_id: str,
-    chatbot_dataset_id: str,
-    chatbot_v1_table_id: str,
-    chatbot_v2_table_id: str,
-) -> int:
-    """Propaga tema_nome/causa_nome (já atualizados na tabela auxiliar por
-    atualiza_tema_causa) pras tabelas mart do dbt — chatbot (v1) e v2_chatbot_conversas
-    (v2). Necessário porque essas tabelas são incrementais (insert_overwrite): não
-    reprocessam retroativamente sozinhas só porque a fonte (tabela auxiliar) mudou —
-    sem isso, ficariam com o tema antigo até alguém rodar um `dbt run --full-refresh`
-    (caro: reconstrói a tabela inteira só pra atualizar 2 colunas).
+@task(log_prints=True)
+def dispara_full_refresh_chatbot(
+    deployment_name: str,
+    select: str,
+    github_repo: str,
+    bigquery_project: str,
+) -> None:
+    """Dispara o full refresh do ramo Salesforce da chatbot (deployment do
+    rj_crm__run_dbt) pra tema_nome/causa_nome recalculados chegarem ao struct `llm` de
+    todas as sessões, de qualquer data. Os incrementais da cadeia só reescrevem o passado
+    recente (chatbot: ~9 dias; fct_chatbot_salesforce: 35), então sem isso o tema novo
+    só aparece nas sessões novas.
 
-    Mesma lógica de MERGE parcial de atualiza_tema_causa, só que a fonte aqui já é a
-    tabela auxiliar (não precisa de tmp: não é um load de DataFrame, é MERGE direto
-    entre 2 tabelas que já existem no BigQuery).
+    A pipeline não escreve na fato (o dbt a regrava a cada rodada — ver
+    models/mart/chatbot/salesforce/DIVIDA_TECNICA.md, repo queries-rj-crm-registry). O
+    select parte de int_chatbot_salesforce_sessao_receptivo, onde está o left join com a
+    tabela de classificação, e fica fora do ramo da fct_chatbot_v2: um full refresh lá
+    apagaria o llm do histórico dela, que casa pelos ids antigos do Agentforce.
 
-    tema_nome/causa_nome moram dentro do struct `llm` nessas tabelas (repo
-    queries-rj-crm-registry, models/mart/chatbot/{v1,v2}) — BigQuery aceita SET num
-    subcampo de struct direto (t.llm.tema_nome = ...), sem precisar reconstruir o
-    struct inteiro. Só funciona se `llm` já não for NULL na linha alvo: como esta
-    função só roda pra sessão já classificada (id_interacao = id_sessao casado com
-    uma linha da tabela auxiliar), llm já foi preenchido pela carga original
-    (carrega_classificacoes/monta_dataframe_final), então essa premissa vale na
-    prática."""
-    client = get_bq_client(project_id)
-    linhas_total = 0
-    for table_id in (chatbot_v1_table_id, chatbot_v2_table_id):
-        chatbot_full = f"{project_id}.{chatbot_dataset_id}.{table_id}"
-        merge_sql = f"""
-            MERGE `{chatbot_full}` AS t
-            USING `{aux_full_table_id}` AS s
-            ON t.id_interacao = s.id_sessao
-            WHEN MATCHED THEN
-                UPDATE SET t.llm.tema_nome = s.tema_nome, t.llm.causa_nome = s.causa_nome
-        """
-        merge_job = client.query(merge_sql)
-        merge_job.result()
-        linhas = merge_job.num_dml_affected_rows or 0
-        linhas_total += linhas
-        print(f"[TAXONOMIA] '{table_id}': {linhas} linha(s) de tema/causa propagada(s).")
-
-    return linhas_total
+    Espera o run terminar e falha se ele não completar — o deployment tem
+    concurrency_limit 1 com ENQUEUE, então pode ficar na fila atrás do quarter_hourly."""
+    flow_run = run_deployment(
+        name=deployment_name,
+        parameters={
+            "command": "run",
+            "select": select,
+            "flag": "--full-refresh",
+            "github_repo": github_repo,
+            "bigquery_project": bigquery_project,
+            "target": "prod",
+        },
+    )
+    print(f"[TAXONOMIA] full refresh '{select}': flow run {flow_run.id} terminou em {flow_run.state.name}.")
+    if not flow_run.state.is_completed():
+        raise RuntimeError(
+            f"Full refresh do dbt ({deployment_name}, select '{select}') não completou: "
+            f"{flow_run.state.name}. tema_nome/causa_nome já estão na tabela de classificação; "
+            f"rodar o full refresh de novo pra eles chegarem à chatbot."
+        )
