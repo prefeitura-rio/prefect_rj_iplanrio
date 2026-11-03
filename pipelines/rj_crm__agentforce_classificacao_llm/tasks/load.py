@@ -26,8 +26,15 @@ _BOOL = bigquery.enums.SqlTypeNames.BOOLEAN
 _INT64 = bigquery.enums.SqlTypeNames.INT64
 
 SCHEMA: list[bigquery.SchemaField] = [
+    # id_sessao_receptivo da fct_chatbot (id_mensagem da 1ª mensagem da sessão: message_id
+    # do SFMC ou wamid) — é por ele que o dbt devolve o struct llm. As linhas antigas, com
+    # o UUID da sessão do Agentforce, ficam: servem a fct_chatbot_v2 até ela ser desligada.
     bigquery.SchemaField("id_sessao", _STRING, mode="REQUIRED"),
+    # telefone: canônico (13 dígitos), a chave da dimensão de telefones — nulo em número
+    # estrangeiro e fixo, que a sessão do dbt aceita desde que tenha o original.
+    # telefone_original: como veio no evento (+55...), sempre preenchido.
     bigquery.SchemaField("telefone", _STRING),
+    bigquery.SchemaField("telefone_original", _STRING),
     bigquery.SchemaField("cpf", _STRING),
     bigquery.SchemaField("nome_cidadao", _STRING),
     bigquery.SchemaField("sessao_inicio_datahora", _TIMESTAMP),
@@ -58,7 +65,7 @@ SCHEMA: list[bigquery.SchemaField] = [
     bigquery.SchemaField("conteudo_relevante", _BOOL),
     bigquery.SchemaField("resumo", _STRING),
     # todas as secretarias mencionadas (multi-label, separadas por vírgula) vs. a
-    # mais central pra demanda — ver docstring do prompt (item 3/4).
+    # mais central pra demanda — vêm do prompt de secretaria (classificacao_secretaria.txt).
     bigquery.SchemaField("secretarias_relacionadas", _STRING),
     bigquery.SchemaField("secretaria_principal", _STRING),
     # rótulos de natureza da manifestação (multi-label, separados por vírgula):
@@ -72,7 +79,8 @@ SCHEMA: list[bigquery.SchemaField] = [
     bigquery.SchemaField("resposta_llm_bruta", _STRING),
     bigquery.SchemaField("modelo", _STRING),
     # Auditoria de custo/depuração — null nas sessões RESPOSTA_ATRASADA_BTN (não
-    # chamam a LLM). tokens_* vêm de usageMetadata da própria resposta do Gemini,
+    # chamam a LLM). tokens_* vêm de usageMetadata da própria resposta do Gemini (soma
+    # das chamadas da sessão: principal + macrotema + secretaria, quando rodam),
     # sem custo extra de chamada.
     bigquery.SchemaField("prompt_enviado", _STRING),
     bigquery.SchemaField("tokens_entrada", _INT64),
@@ -95,7 +103,7 @@ SCHEMA: list[bigquery.SchemaField] = [
     bigquery.SchemaField("causa_nome", _STRING, mode="REPEATED"),
     bigquery.SchemaField("data_particao", _DATE, mode="REQUIRED"),
     # Se a resposta do cidadão à HSM indica que o número que a recebeu é dele —
-    # PERTENCE | INDEFINIDO | NAO_PERTENCE, item 8 do prompt com_hsm (ver
+    # PERTENCE | INDEFINIDO | NAO_PERTENCE, item 7 do prompt com_hsm (ver
     # tasks/classify.py::_TELEFONE_CONFIRMACAO_VALIDAS e monta_dataframe_final).
     # Null nas sessões sem_hsm (sem HSM não há assunto pra avaliar reação). Ordem
     # física real: colunas adicionadas por ALTER TABLE depois que a tabela já
@@ -106,6 +114,28 @@ SCHEMA: list[bigquery.SchemaField] = [
     # Datahora da sessão (sessao_fim_datahora) que originou telefone_confirmacao_flag
     # — não é classificado_em. Null junto com a flag, nunca sozinha.
     bigquery.SchemaField("telefone_confirmacao_datahora", _TIMESTAMP),
+    # Prompt de macrotema (prompts/classificacao_macrotema.txt + taxonomias/macrotemas.json)
+    # — roda só em sessão com conteudo_relevante=true; null em todas as outras (não
+    # relevante, RESPOSTA_ATRASADA_BTN). macrotema_principal é rótulo único (base da
+    # clusterização); macrotemas_relacionados é multi-label separado por vírgula e
+    # sempre inclui o principal — mesmo contrato de secretaria_principal/
+    # secretarias_relacionadas. Colunas adicionadas por ALTER TABLE (ordem física no fim).
+    bigquery.SchemaField("macrotema_principal", _STRING),
+    bigquery.SchemaField("macrotemas_relacionados", _STRING),
+    bigquery.SchemaField("justificativa_macrotema", _STRING),
+    bigquery.SchemaField("resposta_llm_bruta_macrotema", _STRING),
+    bigquery.SchemaField("prompt_versao_macrotema", _STRING),
+    # Prompt de secretaria (prompts/classificacao_secretaria.txt + taxonomias/secretarias.json)
+    # — preenche secretaria_principal/secretarias_relacionadas (colunas mais acima), que
+    # antes vinham do prompt principal. Mesma regra de quando roda que o de macrotema.
+    bigquery.SchemaField("justificativa_secretaria", _STRING),
+    bigquery.SchemaField("resposta_llm_bruta_secretaria", _STRING),
+    bigquery.SchemaField("prompt_versao_secretaria", _STRING),
+    # Parte de tokens_entrada que veio do cache implícito do Gemini (cachedContentTokenCount
+    # do usageMetadata, soma das chamadas da sessão) — cobrada com desconto. Null nas
+    # RESPOSTA_ATRASADA_BTN e quando o gateway não devolve o campo. Adicionada por ALTER
+    # TABLE (ordem física no fim).
+    bigquery.SchemaField("tokens_cache", _INT64),
 ]
 
 _COLUNAS = [f.name for f in SCHEMA]
