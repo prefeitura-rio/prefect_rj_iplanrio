@@ -5,7 +5,9 @@ Flow diário — Classificação inicial por LLM das sessões do Agentforce (Wha
 Extrai sessões dos últimos LOOKBACK_DAYS dias ainda não classificadas (dois filtros: um
 pré-filtro barato por llm.classificacao_datahora na fonte, mais o anti-join de sempre
 contra a tabela destino como garantia final — ver queries/extract_sessoes.sql), classifica
-via Bifrost/Gemini (ou por regra, quando é resposta atrasada a botão), aplica o catálogo
+via Bifrost/Gemini (ou por regra, quando é resposta atrasada a botão) — prompt principal
+e, nas sessões relevantes, os prompts de macrotema e secretaria (taxonomias em
+taxonomias/*.json) —, aplica o catálogo
 de regras de tema e grava em rj-crm-registry.brutos_salesforce.ai_agent_session_classificacao
 via tmp + MERGE (idempotente, upsert por id_sessao).
 
@@ -17,9 +19,10 @@ Consumo: outras pipelines/dashboards fazem LEFT JOIN nessa tabela filtrando o ú
 
 Parâmetro recalcula_taxonomia=True: modo alternativo, não roda a classificação normal
 acima — reavalia só tema_nome/causa_nome contra o catálogo de regras atual (sem LLM,
-sem tocar em nenhuma outra coluna) e propaga via MERGE parcial pra tabela destino e pras
-tabelas mart do dbt (chatbot/v2_chatbot_conversas). Usar quando a taxonomia mudar e as
-sessões já classificadas precisarem refletir isso — ver tasks/taxonomia.py.
+sem tocar em nenhuma outra coluna) via MERGE parcial na tabela destino, e dispara o full
+refresh do ramo Salesforce da chatbot no dbt pra chegar ao struct `llm` de todas as
+sessões. Usar quando a taxonomia mudar e as sessões já classificadas precisarem refletir
+isso — ver tasks/taxonomia.py.
 """
 
 from __future__ import annotations
@@ -36,10 +39,7 @@ from pipelines.rj_crm__agentforce_classificacao_llm.tasks.classify import (
     monta_dataframe_final,
     monta_prompts,
 )
-from pipelines.rj_crm__agentforce_classificacao_llm.tasks.extract import (
-    enriquece_com_catalogo_hsm,
-    extrai_sessoes_nao_classificadas,
-)
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.extract import extrai_sessoes_nao_classificadas
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import (
     carrega_classificacoes,
     ensure_destino_table,
@@ -50,8 +50,8 @@ from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import (
     aplica_regras_tema,
     atualiza_tema_causa,
     carrega_catalogo_regras,
+    dispara_full_refresh_chatbot,
     extrai_sessoes_para_recalculo_taxonomia,
-    propaga_tema_causa_chatbot,
 )
 
 
@@ -62,19 +62,17 @@ def rj_crm__agentforce_classificacao_llm(
     dest_table_id: str = C.DEST_TABLE_ID.value,
     dest_tmp_table_id: str = C.DEST_TMP_TABLE_ID.value,
     taxonomia_regras_table_id: str = C.TAXONOMIA_REGRAS_TABLE_ID.value,
+    taxonomia_agrupamento_tipo: str = C.TAXONOMIA_AGRUPAMENTO_TIPO.value,
     source_table: str = C.SOURCE_TABLE.value,
-    hsm_catalog_table: str = C.HSM_CATALOG_TABLE.value,
     lookback_days: int = C.LOOKBACK_DAYS.value,
-    hsm_max_dias_antes: int = C.HSM_MAX_DIAS_ANTES.value,
     bifrost_base_url: str = C.BIFROST_BASE_URL.value,
     bifrost_model: str = C.BIFROST_MODEL.value,
     max_workers: int = C.MAX_WORKERS.value,
     max_tentativas_llm: int = C.MAX_TENTATIVAS_LLM.value,
     espera_inicial_segundos: int = C.ESPERA_INICIAL_SEGUNDOS.value,
     tamanho_lote_carga: int = C.TAMANHO_LOTE_CARGA.value,
-    chatbot_dataset_id: str = C.CHATBOT_DATASET_ID.value,
-    chatbot_v1_table_id: str = C.CHATBOT_V1_TABLE_ID.value,
-    chatbot_v2_table_id: str = C.CHATBOT_V2_TABLE_ID.value,
+    dbt_deployment_name: str = C.DBT_DEPLOYMENT_NAME.value,
+    dbt_full_refresh_select: str = C.DBT_FULL_REFRESH_SELECT.value,
     recalcula_taxonomia: bool = False,
 ) -> None:
     destino_full_table_id = f"{project_id}.{dest_dataset_id}.{dest_table_id}"
@@ -83,8 +81,8 @@ def rj_crm__agentforce_classificacao_llm(
     # classificadas precisam refletir isso em tema_nome/causa_nome — sem rechamar a LLM
     # (custo zero) e sem sobrescrever nenhuma outra coluna (classificacao, resumo, motivo
     # etc. ficam intactos). Não usa BF_KEY, não faz extração/classificação — é só reler o
-    # que já está na tabela destino, reavaliar as regras, e propagar via MERGE parcial pra
-    # tabela destino e pras 2 tabelas mart do dbt (ver docstrings em tasks/taxonomia.py).
+    # que já está na tabela destino, reavaliar as regras, gravar via MERGE parcial e
+    # disparar o full refresh do dbt (ver docstrings em tasks/taxonomia.py).
     if recalcula_taxonomia:
         rename_current_flow_run_task(new_name=f"recalcula_taxonomia_{dest_dataset_id}_{dest_table_id}")
 
@@ -96,12 +94,14 @@ def rj_crm__agentforce_classificacao_llm(
             dataset_id=dest_dataset_id,
             table_id=taxonomia_regras_table_id,
             etapa=C.TAXONOMIA_ETAPA_TEMA.value,
+            agrupamento_tipo=taxonomia_agrupamento_tipo,
         )
         df_regras_causa = carrega_catalogo_regras(
             project_id=project_id,
             dataset_id=dest_dataset_id,
             table_id=taxonomia_regras_table_id,
             etapa=C.TAXONOMIA_ETAPA_MOTIVO.value,
+            agrupamento_tipo=taxonomia_agrupamento_tipo,
         )
         df_tema = aplica_regras_tema(df_final=df_sessoes_relevantes, df_regras=df_regras_tema)
         df_tema = aplica_regras_causa(df_final=df_tema, df_regras=df_regras_causa)
@@ -112,16 +112,15 @@ def rj_crm__agentforce_classificacao_llm(
             table_id=dest_table_id,
             tmp_table_id=dest_tmp_table_id,
         )
-        linhas_chatbot = propaga_tema_causa_chatbot(
-            project_id=project_id,
-            aux_full_table_id=destino_full_table_id,
-            chatbot_dataset_id=chatbot_dataset_id,
-            chatbot_v1_table_id=chatbot_v1_table_id,
-            chatbot_v2_table_id=chatbot_v2_table_id,
+        dispara_full_refresh_chatbot(
+            deployment_name=dbt_deployment_name,
+            select=dbt_full_refresh_select,
+            github_repo=C.DBT_GITHUB_REPO.value,
+            bigquery_project=C.DBT_BIGQUERY_PROJECT.value,
         )
         print(
-            f"[FLOW] Recálculo de taxonomia concluído: {linhas_aux} linha(s) na tabela auxiliar, "
-            f"{linhas_chatbot} linha(s) propagada(s) pras tabelas mart (chatbot + v2_chatbot_conversas)."
+            f"[FLOW] Recálculo de taxonomia concluído: {linhas_aux} linha(s) na tabela de classificação, "
+            f"full refresh do dbt ('{dbt_full_refresh_select}') completo."
         )
         return
 
@@ -148,13 +147,12 @@ def rj_crm__agentforce_classificacao_llm(
     )
 
     # 2. Extrai sessões pendentes (janela fixa + pré-filtro por llm.classificacao_datahora
-    #    + anti-join final contra o destino) e enriquece com HSM
+    #    + anti-join final contra o destino), já com o HSM ligado pelo dbt
     df_sessoes = extrai_sessoes_nao_classificadas(
         project_id=project_id,
         source_table=source_table,
         destino_full_table_id=destino_full_table_id,
         lookback_days=lookback_days,
-        hsm_max_dias_antes=hsm_max_dias_antes,
     )
     n_extraidas = len(df_sessoes)
 
@@ -163,12 +161,8 @@ def rj_crm__agentforce_classificacao_llm(
         notify_resumo(n_extraidas=0, n_pre_classificadas=0, n_classificadas_llm=0, n_falhas=0, linhas_carregadas=0)
         return
 
-    df_enriquecido = enriquece_com_catalogo_hsm(
-        df_sessoes=df_sessoes, project_id=project_id, hsm_catalog_table=hsm_catalog_table
-    )
-
     # 3. Monta os prompts (com_hsm / sem_hsm) e separa as pré-classificadas por regra
-    df_prompts, df_pre_classificadas = monta_prompts(df_enriquecido)
+    df_prompts, df_pre_classificadas = monta_prompts(df_sessoes)
 
     # 4. Catálogo de regras de tema/motivo — carregado antes da classificação porque
     #    tanto o passo 5 (pré-classificadas) quanto o passo 6 (LLM, lote a lote)
@@ -180,12 +174,14 @@ def rj_crm__agentforce_classificacao_llm(
         dataset_id=dest_dataset_id,
         table_id=taxonomia_regras_table_id,
         etapa=C.TAXONOMIA_ETAPA_TEMA.value,
+        agrupamento_tipo=taxonomia_agrupamento_tipo,
     )
     df_regras_causa = carrega_catalogo_regras(
         project_id=project_id,
         dataset_id=dest_dataset_id,
         table_id=taxonomia_regras_table_id,
         etapa=C.TAXONOMIA_ETAPA_MOTIVO.value,
+        agrupamento_tipo=taxonomia_agrupamento_tipo,
     )
 
     # 5. Sessões decididas por regra (resposta_atrasada_btn) já são conhecidas sem
@@ -226,6 +222,8 @@ def rj_crm__agentforce_classificacao_llm(
         classificacao_resposta_atrasada=C.CLASSIFICACAO_RESPOSTA_ATRASADA_BTN.value,
         justificativa_resposta_atrasada=C.JUSTIFICATIVA_RESPOSTA_ATRASADA_BTN.value,
         prompt_versao=C.PROMPT_VERSAO.value,
+        prompt_versao_macrotema=C.PROMPT_VERSAO_MACROTEMA.value,
+        prompt_versao_secretaria=C.PROMPT_VERSAO_SECRETARIA.value,
         project_id=project_id,
         dataset_id=dest_dataset_id,
         table_id=dest_table_id,
