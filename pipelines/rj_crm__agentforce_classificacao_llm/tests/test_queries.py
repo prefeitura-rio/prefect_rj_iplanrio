@@ -20,6 +20,13 @@ def test_the_extraction_query_takes_the_window_and_the_tables() -> None:
     assert "DEFAULT 3;" in sql
     assert "`p.d.src`" in sql
     assert "`p.d.dst`" in sql
+    assert "id_sessao_receptivo AS id_sessao" in sql
+    assert "receptivo_inicio_datahora" in sql
+    assert "receptivo_fim_datahora" in sql
+    assert "mensagem_texto" in sql
+    assert "jornada.nome AS jornada_nome" in sql
+    assert "jornada.id AS id_jornada" in sql
+    assert "mensagens[" not in sql
     assert "{{" not in sql
 
 

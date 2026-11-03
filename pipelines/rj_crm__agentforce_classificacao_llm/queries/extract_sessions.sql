@@ -57,22 +57,22 @@ WITH
 -- sem as respostas do agente) concatenadas na ordem em que ocorreram
 sessoes_usuario AS (
     SELECT
-        id_interacao AS id_sessao,
+        id_sessao_receptivo AS id_sessao,
         ANY_VALUE(contato.contato_telefone) AS telefone,
         ANY_VALUE(contato.cpf) AS cpf,
         ANY_VALUE(contato.contato_nome) AS nome_cidadao,
-        ANY_VALUE(inicio_datahora) AS sessao_inicio_datahora,
-        ANY_VALUE(fim_datahora) AS sessao_fim_datahora,
+        ANY_VALUE(receptivo_inicio_datahora) AS sessao_inicio_datahora,
+        ANY_VALUE(receptivo_fim_datahora) AS sessao_fim_datahora,
         COUNT(*) AS qtd_mensagens_usuario,
         STRING_AGG(
-            mensagens[SAFE_OFFSET(0)].texto, ' ' ORDER BY mensagem_sequencia
+            mensagem_texto, ' ' ORDER BY mensagem_sequencia
         ) AS mensagens_usuario_concatenadas
     FROM `{{ source_table }}`
     WHERE
         fonte = 'AI_AGENT_CIDADAO'
         AND data_particao BETWEEN DATE(data_inicio) AND DATE(data_fim)
-        AND inicio_datahora BETWEEN data_inicio AND data_fim
-        AND fim_datahora IS NOT NULL  -- só sessão encerrada
+        AND receptivo_inicio_datahora BETWEEN data_inicio AND data_fim
+        AND receptivo_fim_datahora IS NOT NULL  -- só sessão encerrada
         AND llm.classificacao_datahora IS NULL  -- ainda não classificada (ver cabeçalho)
     GROUP BY id_sessao  -- grão da CTE: 1 linha por sessão, ver nota acima
 ),
@@ -86,11 +86,11 @@ sessoes_usuario AS (
 -- sessoes_usuario, que agrupa só AI_AGENT_CIDADAO) pra não misturar o grão.
 conversa_completa AS (
     SELECT
-        id_interacao AS id_sessao,
+        id_sessao_receptivo AS id_sessao,
         STRING_AGG(
             CONCAT(
                 IF(fonte = 'AI_AGENT_CIDADAO', 'CIDADÃO: ', 'AGENTE: '),
-                mensagens[SAFE_OFFSET(0)].texto
+                mensagem_texto
             ),
             '\n'
             ORDER BY mensagem_sequencia
@@ -99,7 +99,7 @@ conversa_completa AS (
     WHERE
         fonte IN ('AI_AGENT_CIDADAO', 'AI_AGENT_AGENTE')
         AND data_particao BETWEEN DATE(data_inicio) AND DATE(data_fim)
-        AND inicio_datahora BETWEEN data_inicio AND data_fim
+        AND receptivo_inicio_datahora BETWEEN data_inicio AND data_fim
     GROUP BY id_sessao
 ),
 
@@ -112,11 +112,11 @@ conversa_completa AS (
 --     candidato inútil pra esse pareamento).
 --   - hsm.nome_hsm IS NOT NULL sozinho também não basta: uma linha fonte='CUSTOMER'
 --     (resposta de botão do cidadão) HERDA os dados de hsm quando pareada, incluindo
---     hsm.nome_hsm preenchido — mas mensagens[0].texto nela é a resposta do cidadão, não o
+--     hsm.nome_hsm preenchido — mas mensagem_texto nela é a resposta do cidadão, não o
 --     texto do template. Sem o fonte='HSM' também, essas linhas entrariam como candidatas
 --     com hsm_texto errado.
 -- hsm_texto e hsm_variaveis_json vêm resolvidos aqui mesmo, do disparo específico (não de
--- um catálogo por jornada) — mensagens[0].texto já é o texto do template ou o de Session
+-- um catálogo por jornada) — mensagem_texto já é o texto do template ou o de Session
 -- (ver template_match_tipo em int_chatbot_v2_mensagens_enviadas_enriquecidas.sql, repo
 -- queries-rj-crm-registry), e hsm.dados_disparo são as variáveis de personalização
 -- daquele disparo específico. A substituição dos placeholders do template acontece em Python.
@@ -128,10 +128,10 @@ hsm_candidatas AS (
         hsm.nome_hsm,
         hsm.categoria_hsm,
         hsm.nome_campanha,
-        jornada_nome,
-        id_jornada,
+        jornada.nome AS jornada_nome,
+        jornada.id AS id_jornada,
         hsm.criacao_envio_datahora AS hsm_envio_datahora,
-        mensagens[SAFE_OFFSET(0)].texto AS hsm_texto,
+        mensagem_texto AS hsm_texto,
         hsm.dados_disparo AS hsm_variaveis_json
     FROM `{{ source_table }}`
     WHERE
