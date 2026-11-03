@@ -3,7 +3,7 @@
 from prefect import flow
 from toolkit.dbt import DbtRun
 
-from pipelines.rj_smas__cadunico.constants import DEFAULT_RAW, DEFAULT_TABLES
+from pipelines.rj_smas__cadunico.constants import DEFAULT_CLOUD, DEFAULT_RAW, DEFAULT_TABLES
 from pipelines.rj_smas__cadunico.tasks import (
     control_versions_task,
     ingest_archives_task,
@@ -13,7 +13,6 @@ from pipelines.rj_smas__cadunico.tasks import (
     sync_layouts_task,
 )
 from pipelines.rj_smas__cadunico.types import RawFolders, Tables
-from utils.constants import DEFAULT_CLOUD
 from utils.hooks import notify_failure
 from utils.tasks import run_dbt
 from utils.types import Cloud

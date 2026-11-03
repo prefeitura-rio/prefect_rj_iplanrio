@@ -27,12 +27,16 @@ class Tables(TypedDict):
 
 
 class Partition(NamedTuple):
-    """The Parquet files of one ZIP, ready to load."""
+    """The Parquet files of one ZIP, ready to load, and what the ZIP had."""
 
     folder: Path
     date: str
     layout_version: str
     extracted: str
+    archive_bytes: int
+    texts: int
+    rows: int
+    files: int
 
 
 class Field(TypedDict):
