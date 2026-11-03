@@ -342,7 +342,12 @@ def merge_tmp_into_historico(
 
     target = f"`{project_id}.{dataset_id}.{final_table_id}`"
     source = f"`{project_id}.{dataset_id}.{tmp_table_id}`"
-    on_clause = " AND ".join(f"T.{col} IS NOT DISTINCT FROM S.{col}" for col in key_columns)
+    # IS NOT DISTINCT FROM vira CROSS JOIN no BigQuery; COALESCE + "=" mantém o
+    # match de NULL com NULL e permite hash join (chaves são todas STRING).
+    null_sentinel = "'__NULL__'"
+    on_clause = " AND ".join(
+        f"COALESCE(T.{col}, {null_sentinel}) = COALESCE(S.{col}, {null_sentinel})" for col in key_columns
+    )
     update_clause = ", ".join(f"{col} = S.{col}" for col in update_columns)
     insert_columns = ", ".join(all_columns)
     insert_values = ", ".join(f"S.{col}" for col in all_columns)
