@@ -35,6 +35,8 @@ def test_the_buttons_query_lists_the_journeys() -> None:
     sql = render_query(ANCHOR, "hsm_buttons", catalog_table="p.d.cat", journeys=["a", "b"])
 
     assert "jornada_nome IN ('a', 'b')" in sql
+    assert "TO_JSON_STRING(hsm_botoes_json) AS hsm_botoes_json" in sql
+    assert "hsm_nome IS NOT NULL" in sql
     assert "`p.d.cat`" in sql
 
 

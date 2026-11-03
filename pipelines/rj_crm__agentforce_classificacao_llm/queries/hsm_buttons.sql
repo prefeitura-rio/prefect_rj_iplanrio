@@ -11,9 +11,10 @@ SELECT
     jornada_nome,
     atividade_nome,
     hsm_nome,
-    hsm_botoes_json,
+    TO_JSON_STRING(hsm_botoes_json) AS hsm_botoes_json,
     template_pos_versao_indicador
 FROM `{{ catalog_table }}`
 WHERE
     jornada_nome IN ({% for name in journeys %}'{{ name }}'{% if not loop.last %}, {% endif %}{% endfor %})
     AND atividade_versao_mais_recente_indicador = true
+    AND hsm_nome IS NOT NULL
