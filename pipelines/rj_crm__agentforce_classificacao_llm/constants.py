@@ -133,5 +133,10 @@ class ClassificacaoConstants(Enum):
     # secretarias da aba Núcleo, mantendo a grafia do catálogo taxonomia_regras pras 7
     # secretarias originais (Comlurb, RioLuz, Seconserva...) — senão as regras de tema
     # param de bater (match por string exata em tasks/taxonomia.py::_aplica_regras).
+    # v2 secretaria (2026-11-03): SUBGGC (Fazenda e Planejamento) entra pra remuneração e
+    # vida funcional do servidor ativo, e a PREVI-RIO fica só com previdência e os auxílios
+    # do instituto — na v1, salário/bônus de servidor ativo caía na PREVI-RIO por causa do
+    # "calendário de pagamento" na descrição dela. As sessões já classificadas na v1 foram
+    # migradas por UPDATE (PREVI-RIO → SUBGGC, menos as de aposentadoria/pensão/auxílios).
     PROMPT_VERSAO_MACROTEMA = "v1"
-    PROMPT_VERSAO_SECRETARIA = "v1"
+    PROMPT_VERSAO_SECRETARIA = "v2"
