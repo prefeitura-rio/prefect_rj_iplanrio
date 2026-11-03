@@ -108,9 +108,9 @@ deployments:
     schedules:
       - cron: "0 8 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: relatorio-engajamento-hsm-diario-8h
       - cron: "0 18 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: relatorio-engajamento-hsm-diario-18h
