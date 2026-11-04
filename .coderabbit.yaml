@@ -151,7 +151,7 @@ reviews:
         "ALWAYS review Prefect flow files THOROUGHLY with the following criteria:
 
         FOR INGESTION FLOWS (flows that dump database to BigQuery):
-        - MUST import and use format_partitioned_query_task and dump_upload_batch_task from iplanrio.pipelines_templates.dump_db.tasks
+        - MUST import and use format_partitioned_query_task and dump_upload_batch_task from toolkit.pipelines_templates.dump_db.tasks
         - MUST have add_timestamp_column parameter set to True by default
         - MUST define these REQUIRED parameters: db_database, db_host, db_port, db_type, dataset_id, infisical_secret_path
         - MUST follow the standard flow structure with rename_current_flow_run_task, inject_bd_credentials_task, and proper task chaining

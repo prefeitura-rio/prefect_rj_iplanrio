@@ -1,0 +1,75 @@
+[
+  {
+    "$project": {
+      "id": {
+        "$toString": "$_id"
+      },
+      "createdAt": {
+        "$dateToString": {
+          "date": "$createdAt"
+        }
+      },
+      "updatedAt": {
+        "$dateToString": {
+          "date": "$updatedAt"
+        }
+      },
+      "ano_particao": {
+        "$dateToString": {
+          "format": "%Y",
+          "date": "$createdAt"
+        }
+      },
+      "mes_particao": {
+        "$dateToString": {
+          "format": "%m",
+          "date": "$createdAt"
+        }
+      },
+      "dia_particao": {
+        "$dateToString": {
+          "format": "%d",
+          "date": "$createdAt"
+        }
+      },
+      "race": {
+        "$toString": "$race"
+      },
+      "competitors": {
+        "$map": {
+          "input": "$competitors",
+          "as": "competitor",
+          "in": {
+            "driver": {
+              "$toString": "$$competitor.driver"
+            },
+            "id": {
+              "$toString": "$$competitor._id"
+            },
+            "rankingRaceStatus": "$$competitor.rankingRaceStatus",
+            "distance": {
+              "$toString": "$$competitor.distance"
+            },
+            "acceptedLocation": "$$competitor.acceptedLocation"
+          }
+        }
+      }
+    }
+  },
+  {
+    "$unset": "_id"
+  },
+  {
+    "$addFields": {
+      "competitors": {
+        "$function": {
+          "lang": "js",
+          "args": [
+            "$competitors"
+          ],
+          "body": "function(x) { return JSON.stringify(x); }"
+        }
+      }
+    }
+  }
+]

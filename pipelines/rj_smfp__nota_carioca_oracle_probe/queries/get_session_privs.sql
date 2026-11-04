@@ -1,6 +1,0 @@
-SELECT privilege AS privilegio
-FROM session_privs
-WHERE privilege IN (
-    'CREATE SESSION', 'SELECT ANY TABLE', 'FLASHBACK ANY TABLE', 'SELECT ANY DICTIONARY', 'CREATE JOB'
-)
-ORDER BY privilege

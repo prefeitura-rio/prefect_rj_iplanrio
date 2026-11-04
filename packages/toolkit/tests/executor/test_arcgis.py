@@ -1,0 +1,115 @@
+from collections.abc import Iterator
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from json import dumps
+from pathlib import Path
+from threading import Thread
+from urllib.parse import parse_qs, urlparse
+
+import pytest
+
+POLL_SECONDS = 0.01
+
+FEATURES = [
+    {"attributes": {"id": 1, "name": "a"}, "geometry": {"x": 1.0, "y": 2.0}},
+    {"attributes": {"id": 2, "name": "b"}, "geometry": {"x": 3.0, "y": 4.0}},
+    {"attributes": {"id": 3, "name": "c"}, "geometry": {"x": 5.0, "y": 6.0}},
+]
+PAGE_SIZE = 2
+
+
+@pytest.fixture
+def layer() -> Iterator[tuple[str, list[dict[str, list[str]]]]]:
+    """Serve a three-point ArcGIS layer with a page size of two.
+
+    Yield the layer URL and the query strings of each `/query` request.
+    """
+    queries: list[dict[str, list[str]]] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            """Serve one page, and log each `/query` string."""
+            parsed = urlparse(self.path)
+            query = parse_qs(parsed.query)
+            if parsed.path.endswith("/query"):
+                queries.append(query)
+                offset = int(query.get("resultOffset", ["0"])[0])
+                page = FEATURES[offset : offset + PAGE_SIZE]
+                body = {
+                    "objectIdFieldName": "id",
+                    "geometryType": "esriGeometryPoint",
+                    "spatialReference": {"wkid": 4326},
+                    "fields": [
+                        {"name": "id", "type": "esriFieldTypeInteger"},
+                        {"name": "name", "type": "esriFieldTypeString"},
+                    ],
+                    "features": page,
+                    "exceededTransferLimit": offset + PAGE_SIZE < len(FEATURES),
+                }
+            else:
+                body = {
+                    "name": "points",
+                    "type": "Feature Layer",
+                    "geometryType": "esriGeometryPoint",
+                    "maxRecordCount": PAGE_SIZE,
+                    "fields": [
+                        {"name": "id", "type": "esriFieldTypeInteger"},
+                        {"name": "name", "type": "esriFieldTypeString"},
+                    ],
+                }
+            payload = dumps(body).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    Thread(target=server.serve_forever, args=(POLL_SECONDS,), daemon=True).start()
+    url = (
+        f"http://127.0.0.1:{server.server_port}/arcgis/rest/services/s/FeatureServer/0"
+    )
+    yield url, queries
+    server.shutdown()
+
+
+@pytest.mark.extensions
+async def test_a_layer_is_read_through_every_page(
+    layer, tmp_path: Path, read_layer
+) -> None:
+    """Read every page of a layer."""
+    url, queries = layer
+
+    assert await read_layer(url, tmp_path) == [1, 2, 3]
+    assert len(queries) > 1
+
+
+@pytest.mark.extensions
+async def test_the_where_clause_reaches_the_server_intact(
+    layer, tmp_path: Path, read_layer
+) -> None:
+    """Send the where clause to the server unchanged."""
+    url, queries = layer
+    where = "id > 1 AND name <> 'x'"
+
+    await read_layer(url, tmp_path, where)
+
+    assert {query["where"][0] for query in queries} == {where}
+
+
+@pytest.mark.extensions
+@pytest.mark.parametrize(
+    ("srid", "expected"),
+    [
+        pytest.param("31983", {"31983"}, id="the_system_asked"),
+        pytest.param(None, set(), id="no_system_leaves_the_parameter_out"),
+    ],
+)
+async def test_the_coordinate_system_is_asked_of_the_server(
+    layer, tmp_path: Path, srid, expected, read_layer
+) -> None:
+    """Send `outSR` only when a system is set, so the server reprojects the layer."""
+    url, queries = layer
+
+    await read_layer(url, tmp_path, srid=srid)
+
+    assert {query["outSR"][0] for query in queries if "outSR" in query} == expected

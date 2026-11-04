@@ -1,9 +1,10 @@
 [project]
 name = "rj_smfp__crf"
 version = "1.0.0"
-description = "Downloads and extracts ZIP files from a GCS bucket folder for SMFP's CRF processing pipeline."
+description = "Loads the CRF files of the SMFP (Simples and MEI periods and events) from ZIP files in a GCS bucket to BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",
+    "duckdb",
 ]
 
 [tool.uv.sources]

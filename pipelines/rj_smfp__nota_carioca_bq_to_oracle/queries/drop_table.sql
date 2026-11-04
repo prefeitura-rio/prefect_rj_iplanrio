@@ -1,1 +1,1 @@
-DROP TABLE "$schema"."$table" PURGE
+DROP TABLE "{{ schema }}"."{{ table }}" PURGE

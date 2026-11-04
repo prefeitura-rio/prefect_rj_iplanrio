@@ -1,10 +1,10 @@
 [project]
 name = "rj_cor__meteorologia_redemet_estacoes"
-version = "0.1.0"
+version = "1.0.0"
 description = "Pipeline para atualização de estações meteorológicas do REDEMET - COR"
 dependencies = [
     "prefect_rj_iplanrio",
-    "pendulum>=3.0.0",
+    "unidecode",
 ]
 
 [tool.uv.sources]

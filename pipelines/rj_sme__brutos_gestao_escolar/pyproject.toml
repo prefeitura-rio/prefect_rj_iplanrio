@@ -1,7 +1,7 @@
 [project]
 name = "rj_sme__brutos_gestao_escolar"
-version = "0.1.0"
-description = "Pipeline brutos_gestao_escolar da secretaria sme"
+version = "1.0.0"
+description = "Dump the school management tables of SME from SQL Server to BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",
 ]

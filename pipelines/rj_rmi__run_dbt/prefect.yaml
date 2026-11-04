@@ -31,19 +31,44 @@ deployments:
       - code_owner:miloskimatheus
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_rmi__run_dbt/flow.py:rj_rmi__run_dbt
-    # dbt debug contra prod, que não escreve nada. O target e o secret são os
-    # de prod porque a service account do RMI não tem papel no rj-rmi-dev.
     parameters:
-      command: "debug"
-      target: "prod"
+      request:
+        repository: https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-rmi.git
+        command: deps
+        target: prod
     work_pool:
       name: default-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_rmi__run_dbt -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        command: uv run --no-sync --package rj_rmi__run_dbt -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
+        service_account_name: pipelines
+        finished_job_ttl: 600
+        pod_annotations:
+          gke-gcsfuse/volumes: 'true'
+        resources:
+          requests:
+            ephemeral-storage: 1Gi
+          limits:
+            ephemeral-storage: 4Gi
+        volume_mounts:
+          - name: tmp
+            mountPath: /tmp
+        volumes:
+          - name: tmp
+            csi:
+              driver: gcsfuse.csi.storage.gke.io
+              volumeAttributes:
+                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
+                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
+        env:
+          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: staging
+          INFISICAL_PATHS: /rj_rmi__run_dbt,/shared
+          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
   - name: rj-rmi--run-dbt--prod
     tags:
       - environment:prod
@@ -51,13 +76,13 @@ deployments:
       - code_owner:miloskimatheus
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_rmi__run_dbt/flow.py:rj_rmi__run_dbt
-    # Valem para o schedule e para o Quick run, que refaz a passada do dia.
     parameters:
-      command: "build"
-      select: "tag:daily"
-      target: "prod"
-    # Uma execução manual durante a agendada espera a vez em vez de escrever
-    # nos mesmos modelos.
+      request:
+        repository: https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-rmi.git
+        command: build
+        target: prod
+        select: tag:daily
+      report: false
     concurrency_limit:
       limit: 1
       collision_strategy: ENQUEUE
@@ -66,12 +91,35 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_rmi__run_dbt -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        command: uv run --no-sync --package rj_rmi__run_dbt -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
+        service_account_name: pipelines
+        finished_job_ttl: 600
+        pod_annotations:
+          gke-gcsfuse/volumes: 'true'
+        resources:
+          requests:
+            ephemeral-storage: 1Gi
+          limits:
+            ephemeral-storage: 4Gi
+        volume_mounts:
+          - name: tmp
+            mountPath: /tmp
+        volumes:
+          - name: tmp
+            csi:
+              driver: gcsfuse.csi.storage.gke.io
+              volumeAttributes:
+                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
+                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
+        env:
+          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: prod
+          INFISICAL_PATHS: /rj_rmi__run_dbt,/shared
+          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     schedules:
-      # Depois da passada diária do rj-crm-registry (07:15, termina por volta
-      # de 07:30), da qual o RMI lê tabelas.
       - cron: "0 8 * * *"
         timezone: America/Sao_Paulo
         slug: dbt_daily_build

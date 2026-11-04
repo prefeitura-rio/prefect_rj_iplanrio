@@ -1,7 +1,7 @@
 [project]
 name = "rj_iplanrio__sicop"
-version = "0.1.0"
-description = "Pipeline sicop da secretaria iplanrio"
+version = "1.0.0"
+description = "Dump the SICOP tables of IplanRio from Oracle to BigQuery."
 dependencies = [
     "prefect_rj_iplanrio",
 ]

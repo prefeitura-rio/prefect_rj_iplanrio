@@ -1,0 +1,19 @@
+[sqlfluff]
+dialect = oracle
+templater = jinja
+max_line_length = 88
+exclude_rules = RF01,RF05,AL01,AL05,AL07,CP02,CP03,CV09,LT02,LT05,LT08,LT09,LT14,RF04,RF06,ST03,ST07,ST09,TQ01,TQ02,TQ03,TQ04,AM04
+
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = False
+loader_search_path = toolkit/executor/templates
+
+[sqlfluff:templater:jinja:context]
+flashback = false
+scn = true
+source = "SELECT 1 FROM dual"
+columns = [{"name": "\"A\"", "expression": "plain"}]
+sql = "SELECT 1 FROM dual"
+empty = false
+predicates = [{"column": "\"A\"", "op": ">=", "value": ":p0"}]
+zone = "'America/Sao_Paulo'"

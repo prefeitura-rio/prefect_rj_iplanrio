@@ -1,20 +1,25 @@
 """Flow for rj_smfp__nota_carioca_bq_to_oracle."""
 
-import time
-from typing import Literal
+from time import monotonic
+from typing import Literal, cast
 
 from prefect import flow
+from prefect.exceptions import TerminationSignal
 from prefect.runtime import flow_run
+from prefect.settings import PREFECT_API_URL, PREFECT_UI_URL
 
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import DBT_DEPLOYMENT
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.cleanup import raise_failures
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.dbt import should_run_dbt
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import current_environment
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_format import flow_run_url
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify import LoadNotifier, NotifierConfig
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.stages import Step, TableStep
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
     create_oracle_indexes_task,
     delete_gcs_files_task,
     disable_inmemory_task,
     drop_oracle_indexes_task,
-    enable_inmemory_window_task,
+    enable_inmemory_task,
     ensure_oracle_table_task,
     export_snapshot_task,
     gather_oracle_stats_task,
@@ -28,192 +33,131 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
     release_inmemory_task,
     resolve_slots_task,
     run_dbt_task,
-    start_inmemory_population_task,
     swap_synonyms_task,
     truncate_oracle_table_task,
     validate_row_count_task,
     wait_inmemory_task,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.dbt import resolve_dbt_parameters, should_run_dbt
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord import current_environment
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify import LoadNotifier, NotifierConfig
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.stages import Step, TableStep
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import Dbt, Load, Source
+
+DEFAULT_SOURCE = Source()
+DEFAULT_LOAD = Load()
+DEFAULT_DBT = Dbt()
 
 
-@flow(log_prints=True)
-def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
-    project: str = "rj-iplanrio-dia",
-    dataset_id: str = "nota_carioca_staging",
-    table_ids: list[str] | None = None,
-    gcs_bucket: str = "rj-iplanrio-dia-bq-to-oracle",
-    infisical_secret_path: str = "/db-oracle-nota-fiscal",
-    sqlldr_sessions: int = 2,
-    template_schema: str | None = None,
-    excluded_template_columns: list[str] | None = None,
-    progress_interval_seconds: int = 30,
-    index_parallel_degree: int = 4,
-    raw_text_encoding: Literal["base64", "hex"] = "base64",
-    bigquery_quiet_minutes: int = 5,
-    inmemory_wait_minutes: int = 30,
-    inmemory_window_months: int = 3,
-    inmemory_release_delay_seconds: int = 120,
+@flow(log_prints=True, flow_run_name="{source.dataset_id}")
+def rj_smfp__nota_carioca_bq_to_oracle(
+    *,
+    source: Source = DEFAULT_SOURCE,
+    load: Load = DEFAULT_LOAD,
+    dbt: Dbt = DEFAULT_DBT,
     mode: Literal["full", "synonyms_only"] = "full",
-    run_dbt: bool = False,
-    dbt_deployment: str = DBT_DEPLOYMENT,
-    dbt_parameters: dict[str, object] | None = None,
-    dbt_timeout_minutes: int = 120,
     discord_notifications: bool = True,
 ) -> None:
-    rename_current_flow_run_task(new_name=dataset_id)
-    inject_bd_credentials_task(environment="prod")
-    dbt_enabled = should_run_dbt(run_dbt, mode)
+    """Load the tables of a BigQuery dataset into Oracle, with slots A and B.
+
+    It swaps synonyms at the end.
+
+    The flow exports every table as one consistent snapshot to GCS, loads each one into
+    the idle slot with SQL*Loader, checks the row count against BigQuery, builds the
+    indexes of the original table, and swaps the synonyms of all the tables at the end.
+    With `dbt.enabled`, a dbt run goes first and the export waits for it. In
+    `synonyms_only` mode there is no load: the synonyms go back to the tables in use. A
+    Discord message follows the run, unless `discord_notifications` is off.
+
+    The files of a table go only after its validation, which raises if the count
+    differs, and the deletion runs next to the indexes. The flow waits for it at the
+    end, so a failure still fails the flow. The indexes wait for the validation with
+    `wait_for`, because they use no value of it.
+    """
+    dbt_enabled = should_run_dbt(dbt.enabled, mode)
     notifier = LoadNotifier.create(
         NotifierConfig(
-            dataset_id=dataset_id,
-            run_id=str(flow_run.id),
-            run_name=dataset_id,
-            table_ids=tuple(table_ids or ()),
-            sessions=sqlldr_sessions,
+            dataset_id=source.dataset_id,
+            url=flow_run_url(
+                cast("str | None", PREFECT_UI_URL.value()),
+                cast("str | None", PREFECT_API_URL.value()),
+                str(flow_run.get_id()),
+            ),
+            run_name=source.dataset_id,
+            table_ids=tuple(source.table_ids or ()),
+            sessions=load.sessions,
             run_dbt=dbt_enabled,
             mode=mode,
             enabled=discord_notifications,
+            cancellations=(TerminationSignal,),
             environment=current_environment(),
         )
     )
     with notifier.guard():
-        if inmemory_window_months < 0:
-            raise ValueError(f"inmemory_window_months não pode ser negativo: {inmemory_window_months}")
         notifier.begin()
         dbt_finished_at = None
         if dbt_enabled:
-            dbt_started = time.monotonic()
-            dbt_finished_at = run_dbt_task(
-                deployment=dbt_deployment,
-                parameters=resolve_dbt_parameters(dbt_parameters),
-                timeout_minutes=dbt_timeout_minutes,
-            )
-            notifier.dbt_finished(time.monotonic() - dbt_started)
-        tables = list_tables_task(project=project, dataset_id=dataset_id, table_ids=table_ids)
+            dbt_started = monotonic()
+            dbt_finished_at = run_dbt_task(options=dbt)
+            notifier.dbt_finished(monotonic() - dbt_started)
+        tables = list_tables_task(source=source)
         notifier.set_tables(dict.fromkeys(tables, 1))
         if mode == "synonyms_only":
-            refresh_synonyms_task(infisical_secret_path=infisical_secret_path, table_ids=tables)
+            refresh_synonyms_task(table_ids=tables)
             return
         notifier.enter(Step.EXPORT)
-        snapshot = export_snapshot_task(
-            project=project,
-            dataset_id=dataset_id,
-            table_ids=tables,
-            bucket=gcs_bucket,
-            quiet_minutes=bigquery_quiet_minutes,
-            dbt_finished_at=dbt_finished_at,
+        snapshot = export_snapshot_task(source=source, load=load, table_ids=tables, dbt_finished_at=dbt_finished_at)
+        notifier.exported(
+            {name: sum(file.size for file in snapshot[name].files) for name in tables},
+            {name: snapshot[name].schema.num_rows for name in tables},
         )
-        notifier.set_tables({name: sum(file.size for file in snapshot[name].files) for name in tables})
-        notifier.set_bigquery_rows({name: snapshot[name].schema.get("num_rows") for name in tables})
         notifier.enter(Step.TABLES)
 
-        loaded = []
-        cleanups = []
+        loaded, cleanups = [], []
         for table_id in tables:
             exported = snapshot[table_id]
             notifier.table_step(table_id, TableStep.PREPARATION)
-            plan = plan_load_task(
-                infisical_secret_path=infisical_secret_path,
-                template_schema=template_schema,
-                excluded_template_columns=excluded_template_columns,
-                table_id=table_id,
-                table_schema=exported.schema,
-                raw_text_encoding=raw_text_encoding,
-            )
-            structure = plan_structure_task(
-                infisical_secret_path=infisical_secret_path,
-                template_schema=template_schema,
-                table_id=table_id,
-                plan=plan,
-            )
-            slots = resolve_slots_task(infisical_secret_path=infisical_secret_path, table_id=table_id)
+            plan = plan_load_task(load=load, table_id=table_id, table_schema=exported.schema)
+            structure = plan_structure_task(load=load, table_id=table_id, plan=plan)
+            slots = resolve_slots_task(table_id=table_id)
             notifier.table_step(table_id, TableStep.PREPARATION, slot=slots.slot)
             notifier.set_physical_table(table_id, slots.inactive)
             oracle_table = ensure_oracle_table_task(
-                infisical_secret_path=infisical_secret_path,
-                project=project,
-                dataset_id=dataset_id,
-                table_id=table_id,
-                table=slots.inactive,
-                plan=plan,
-                structure=structure,
+                source=source, table_id=table_id, table=slots.inactive, plan=plan, structure=structure
             )
-            unindexed_table = drop_oracle_indexes_task(infisical_secret_path=infisical_secret_path, table=oracle_table)
-            released_table = disable_inmemory_task(infisical_secret_path=infisical_secret_path, table=unindexed_table)
-            empty_table = truncate_oracle_table_task(infisical_secret_path=infisical_secret_path, table=released_table)
+            empty_table = truncate_oracle_table_task(
+                table=disable_inmemory_task(table=drop_oracle_indexes_task(table=oracle_table))
+            )
             notifier.table_step(table_id, TableStep.LOAD)
             loaded_rows = load_into_oracle_task(
-                infisical_secret_path=infisical_secret_path,
-                table=empty_table,
-                plan=plan,
-                bucket=gcs_bucket,
-                files=exported.files,
-                sessions=sqlldr_sessions,
-                progress_interval_seconds=progress_interval_seconds,
+                table=empty_table, plan=plan, files=exported.files, source=source, load=load
             )
             notifier.table_loaded(table_id, loaded_rows)
             notifier.table_step(table_id, TableStep.VALIDATION)
             validated_rows = validate_row_count_task(
-                infisical_secret_path=infisical_secret_path,
-                table=empty_table,
-                table_schema=exported.schema,
-                loaded_rows=loaded_rows,
-                parallel_degree=index_parallel_degree,
+                table=empty_table, table_schema=exported.schema, loaded_rows=loaded_rows, load=load
             )
             notifier.table_validated(table_id, validated_rows)
-            # A remoção dos arquivos só é submetida depois da validação (que levanta se a contagem divergir) e roda
-            # em paralelo aos índices; o resultado é esperado no fim, para que uma falha ainda falhe o flow.
-            cleanups.append(delete_gcs_files_task.submit(project=project, bucket=gcs_bucket, files=exported.files))
+            cleanups.append(delete_gcs_files_task.submit(source=source, files=exported.files))
             notifier.table_step(table_id, TableStep.INDEXES)
             indexed_table = create_oracle_indexes_task(
-                infisical_secret_path=infisical_secret_path,
-                table=empty_table,
-                structure=structure,
-                slot=slots.slot,
-                parallel_degree=index_parallel_degree,
-                wait_for=[validated_rows],
+                table=empty_table, structure=structure, slot=slots.slot, load=load, wait_for=[validated_rows]
             )
             notifier.table_step(table_id, TableStep.STATS)
-            analyzed_table = gather_oracle_stats_task(
-                infisical_secret_path=infisical_secret_path, table=indexed_table, parallel_degree=index_parallel_degree
-            )
+            analyzed_table = gather_oracle_stats_task(table=indexed_table, load=load)
             notifier.table_step(table_id, TableStep.ACCESS)
-            granted_table = grant_access_task(infisical_secret_path=infisical_secret_path, table=analyzed_table)
-            ready = record_load_task(
-                infisical_secret_path=infisical_secret_path,
-                plan=slots,
-                table=granted_table,
-                source=f"{project}.{dataset_id}.{table_id}",
-                snapshot_modified=exported.last_modified,
+            granted_table = grant_access_task(table=analyzed_table)
+            loaded.append(
+                record_load_task(
+                    plan=slots,
+                    table=granted_table,
+                    source=source,
+                    table_id=table_id,
+                    snapshot_modified=exported.last_modified,
+                )
             )
             notifier.table_step(table_id, TableStep.INMEMORY)
-            enable_inmemory_window_task(
-                infisical_secret_path=infisical_secret_path,
-                table=granted_table,
-                window_months=inmemory_window_months,
-                wait_for=[ready],
-            )
-            start_inmemory_population_task(
-                infisical_secret_path=infisical_secret_path,
-                table=granted_table,
-                structure=structure,
-                wait_minutes=inmemory_wait_minutes,
-            )
+            enable_inmemory_task(table=granted_table, structure=structure, load=load)
             notifier.table_done(table_id, validated_rows)
-            loaded.append(ready)
 
         notifier.enter(Step.INMEMORY_WAIT)
-        populated = wait_inmemory_task(
-            infisical_secret_path=infisical_secret_path, plans=loaded, wait_minutes=inmemory_wait_minutes
-        )
+        populated = wait_inmemory_task(plans=loaded, load=load)
         notifier.enter(Step.SWAP)
-        swap_synonyms_task(infisical_secret_path=infisical_secret_path, plans=populated)
-        release_inmemory_task(
-            infisical_secret_path=infisical_secret_path, plans=populated, delay_seconds=inmemory_release_delay_seconds
-        )
-        for cleanup in cleanups:
-            cleanup.result()
+        release_inmemory_task(plans=populated, load=load, wait_for=[swap_synonyms_task(plans=populated)])
+        raise_failures(cleanups)
