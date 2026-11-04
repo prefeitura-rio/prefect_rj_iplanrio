@@ -6,6 +6,7 @@
 --      grupo (janela do desfecho de 30 dias + 10 de folga); no dia D+40 a pessoa volta
 --      para a fila e pode ser sorteada de novo, numa coorte nova, em qualquer grupo;
 --   2) seleciona 2 × cota_diaria em ordem aleatória (FARM_FINGERPRINT(cpf || data));
+--      a cota começa em cota_inicial e sobe incremento_cota por coorte até cota_maxima;
 --   3) embaralha os selecionados e divide exatamente 50/50 (par = controle);
 --   4) insere a coorte do dia em smtr_multa_atribuicao, só se ela ainda não existir
 --      (o job é idempotente: rodar de novo no mesmo dia não sorteia de novo);
@@ -25,7 +26,12 @@
 
 DECLARE hoje DATE DEFAULT CURRENT_DATE("America/Sao_Paulo");
 DECLARE dia_util BOOL DEFAULT EXTRACT(DAYOFWEEK FROM hoje) NOT IN (1, 7);
-DECLARE cota_diaria INT64 DEFAULT CAST({cota_diaria_placeholder} AS INT64);  -- tratamento por dia; seleciona 2× (metade vai pro controle)
+-- cota do dia = tratamento do dia (seleciona 2×, metade vai pro controle); começa em
+-- cota_inicial e sobe incremento_cota a cada coorte já sorteada, até cota_maxima
+DECLARE cota_inicial INT64 DEFAULT CAST({cota_inicial_placeholder} AS INT64);
+DECLARE incremento_cota INT64 DEFAULT CAST({incremento_cota_placeholder} AS INT64);
+DECLARE cota_maxima INT64 DEFAULT CAST({cota_maxima_placeholder} AS INT64);
+DECLARE cota_diaria INT64;
 DECLARE dias_quarentena INT64 DEFAULT CAST({dias_quarentena_placeholder} AS INT64);  -- janela do desfecho (30 dias) + folga
 DECLARE max_infracoes_veiculo INT64 DEFAULT CAST({max_infracoes_veiculo_placeholder} AS INT64);  -- veículo principal com mais que isso fica fora
 
@@ -58,10 +64,52 @@ CREATE TABLE IF NOT EXISTS `{tabela_atribuicao_placeholder}` (
     primeira_data_autuacao DATE,
     ultima_data_autuacao DATE,
     n_atribuicoes_anteriores INT64,
+    -- histórico de multas no dia do sorteio (bloco 3)
+    n_multas INT64,
+    n_pagas_antes INT64,
+    share_pagas_antes FLOAT64,
+    pagas_antes STRING,
+    pagou_ultimos_12m BOOL,
+    dias_medio_ate_pagar FLOAT64,
+    dias_desde_ultimo_pagamento INT64,
+    dias_desde_primeira_multa INT64,
+    dias_desde_ultima_multa INT64,
+    n_multas_12m INT64,
+    n_abertas INT64,
+    valor_aberto NUMERIC,
+    valor_maior_multa_aberta NUMERIC,
+    dias_multa_aberta_mais_antiga INT64,
+    dias_medio_multas_abertas FLOAT64,
+    n_abertas_ainda_recorriveis INT64,
+    pontos_abertos INT64,
+    pontos_12m INT64,
+    ja_contestou BOOL,
+    ja_indicou_condutor BOOL,
+    aderiu_sne BOOL,
+    especie_veiculo_recente STRING,
+    descricao_veiculo_recente STRING,
+    ano_fabricacao_veiculo_recente INT64,
+    uf_proprietario_recente STRING,
+    municipio_possuidor_recente STRING,
+    n_veiculos_historico INT64,
+    gravidade_mais_comum_aberta STRING,
+    tipificacao_mais_comum_aberta STRING,
+    autuador_mais_comum_aberta STRING,
     inserido_em TIMESTAMP
 )
 PARTITION BY data_selecao
 CLUSTER BY grupo, id_devedor;
+
+
+-- coortes anteriores a hoje: um dia sem execução (feriado, falha) não pula degrau
+SET cota_diaria = LEAST(
+    cota_maxima,
+    cota_inicial + incremento_cota * (
+        SELECT COUNT(DISTINCT data_selecao)
+        FROM `{tabela_atribuicao_placeholder}`
+        WHERE data_selecao < hoje
+    )
+);
 
 
 -- ============================================================
@@ -175,38 +223,140 @@ QUALIFY ROW_NUMBER() OVER (
 
 
 -- ============================================================
--- 3) Tipo do veículo da multa mais recente, entre todas as multas do CPF
+-- 3) Histórico de multas do CPF no dia do sorteio, entre todas as multas
 --    (pagas ou não), igual a atributos_por_cpf.sql da análise
+--    Tudo é medido antes do disparo, para valer igual para tratamento e controle.
+--    "Paga antes" = data_pagamento < hoje; "aberta" = não paga antes.
+--    tipo_veiculo_recente é o que decide a exclusão de homens com moto.
 -- ============================================================
-CREATE TEMP TABLE veiculo_recente AS
+CREATE TEMP TABLE historico_multas AS
 WITH todas_autuacoes AS (
-    SELECT
-        LPAD(
-            REGEXP_REPLACE(
-                CAST(COALESCE(documento_proprietario, documento_possuidor_veiculo) AS STRING),
-                r'\D',
-                ''
-            ),
-            11,
-            '0'
-        ) AS cpf,
-        id_auto_infracao,
-        data AS data_autuacao,
-        tipo_veiculo
-    FROM `rj-smtr.transito.autuacao`
-    WHERE data BETWEEN DATE '2023-01-01' AND hoje
+    SELECT *
+    FROM (
+        SELECT
+            LPAD(
+                REGEXP_REPLACE(
+                    CAST(COALESCE(documento_proprietario, documento_possuidor_veiculo) AS STRING),
+                    r'\D',
+                    ''
+                ),
+                11,
+                '0'
+            ) AS cpf,
+            CAST(id_auto_infracao AS STRING) AS id_auto_infracao,
+            data AS data_autuacao,
+            datetime_ultima_atualizacao,
+            SAFE_CAST(valor_infracao AS NUMERIC) AS valor_infracao,
+            SAFE_CAST(pontuacao AS INT64) AS pontuacao,
+            data_pagamento,
+            data_limite_recurso,
+            processo_defesa_autuacao,
+            recurso_penalidade_multa,
+            processo_troca_real_infrator,
+            status_sne,
+            gravidade,
+            tipificacao_resumida,
+            descricao_autuador,
+            tipo_veiculo,
+            especie_veiculo,
+            descricao_veiculo,
+            ano_fabricacao_veiculo,
+            placa_veiculo,
+            uf_proprietario,
+            municipio_possuidor_veiculo
+        FROM `rj-smtr.transito.autuacao`
+        WHERE data BETWEEN DATE '2023-01-01' AND hoje
+    )
+    WHERE cpf IN (SELECT DISTINCT cpf FROM multas_detalhadas)
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY cpf, id_auto_infracao
         ORDER BY datetime_ultima_atualizacao DESC
     ) = 1
+),
+
+marcadas AS (
+    SELECT
+        *,
+        data_pagamento IS NOT NULL AND data_pagamento < hoje AS paga_antes,
+        data_pagamento IS NULL OR data_pagamento >= hoje AS aberta,
+        data_autuacao >= DATE_SUB(hoje, INTERVAL 12 MONTH) AS ultimos_12m
+    FROM todas_autuacoes
+),
+
+-- valor mais comum entre as multas abertas (gravidade, tipificação e autuador)
+modas AS (
+    SELECT cpf, atributo, valor
+    FROM marcadas
+    UNPIVOT (valor FOR atributo IN (gravidade, tipificacao_resumida, descricao_autuador))
+    WHERE aberta
+    GROUP BY cpf, atributo, valor
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY cpf, atributo ORDER BY COUNT(*) DESC, valor) = 1
+),
+
+modas_por_cpf AS (
+    SELECT
+        cpf,
+        MAX(IF(atributo = "gravidade", valor, NULL)) AS gravidade_mais_comum_aberta,
+        MAX(IF(atributo = "tipificacao_resumida", valor, NULL)) AS tipificacao_mais_comum_aberta,
+        MAX(IF(atributo = "descricao_autuador", valor, NULL)) AS autuador_mais_comum_aberta
+    FROM modas
+    GROUP BY cpf
+),
+
+por_cpf AS (
+    SELECT
+        cpf,
+
+        -- histórico de pagamento
+        COUNT(*) AS n_multas,
+        COUNTIF(paga_antes) AS n_pagas_antes,
+        SAFE_DIVIDE(COUNTIF(paga_antes), COUNT(*)) AS share_pagas_antes,
+        CASE
+            WHEN COUNTIF(paga_antes) > 0 THEN "já pagou antes"
+            WHEN COUNT(*) = 1 THEN "primeira multa"
+            ELSE "nunca pagou"
+        END AS pagas_antes,
+        LOGICAL_OR(paga_antes AND data_pagamento >= DATE_SUB(hoje, INTERVAL 12 MONTH)) AS pagou_ultimos_12m,
+        AVG(IF(paga_antes, DATE_DIFF(data_pagamento, data_autuacao, DAY), NULL)) AS dias_medio_ate_pagar,
+        DATE_DIFF(hoje, MAX(IF(paga_antes, data_pagamento, NULL)), DAY) AS dias_desde_ultimo_pagamento,
+        DATE_DIFF(hoje, MIN(data_autuacao), DAY) AS dias_desde_primeira_multa,
+        DATE_DIFF(hoje, MAX(data_autuacao), DAY) AS dias_desde_ultima_multa,
+        COUNTIF(ultimos_12m) AS n_multas_12m,
+
+        -- dívida em aberto
+        COUNTIF(aberta) AS n_abertas,
+        SUM(IF(aberta, valor_infracao, 0)) AS valor_aberto,
+        MAX(IF(aberta, valor_infracao, NULL)) AS valor_maior_multa_aberta,
+        MAX(IF(aberta, DATE_DIFF(hoje, data_autuacao, DAY), NULL)) AS dias_multa_aberta_mais_antiga,
+        AVG(IF(aberta, DATE_DIFF(hoje, data_autuacao, DAY), NULL)) AS dias_medio_multas_abertas,
+        COUNTIF(aberta AND data_limite_recurso >= hoje) AS n_abertas_ainda_recorriveis,
+
+        -- pontos na CNH (suspensão a partir de 20/30/40 pontos em 12 meses)
+        SUM(IF(aberta, pontuacao, 0)) AS pontos_abertos,
+        SUM(IF(ultimos_12m, pontuacao, 0)) AS pontos_12m,
+
+        -- relação com a multa
+        LOGICAL_OR(processo_defesa_autuacao IS NOT NULL OR recurso_penalidade_multa IS NOT NULL) AS ja_contestou,
+        LOGICAL_OR(processo_troca_real_infrator IS NOT NULL) AS ja_indicou_condutor,
+        LOGICAL_OR(status_sne) AS aderiu_sne,
+
+        -- veículo (o da multa mais recente) e quantidade de veículos
+        ARRAY_AGG(tipo_veiculo IGNORE NULLS ORDER BY data_autuacao DESC LIMIT 1)[SAFE_OFFSET(0)] AS tipo_veiculo_recente,
+        ARRAY_AGG(especie_veiculo IGNORE NULLS ORDER BY data_autuacao DESC LIMIT 1)[SAFE_OFFSET(0)] AS especie_veiculo_recente,
+        ARRAY_AGG(descricao_veiculo IGNORE NULLS ORDER BY data_autuacao DESC LIMIT 1)[SAFE_OFFSET(0)] AS descricao_veiculo_recente,
+        SAFE_CAST(
+            ARRAY_AGG(ano_fabricacao_veiculo IGNORE NULLS ORDER BY data_autuacao DESC LIMIT 1)[SAFE_OFFSET(0)] AS INT64
+        ) AS ano_fabricacao_veiculo_recente,
+        ARRAY_AGG(uf_proprietario IGNORE NULLS ORDER BY data_autuacao DESC LIMIT 1)[SAFE_OFFSET(0)] AS uf_proprietario_recente,
+        ARRAY_AGG(municipio_possuidor_veiculo IGNORE NULLS ORDER BY data_autuacao DESC LIMIT 1)[SAFE_OFFSET(0)] AS municipio_possuidor_recente,
+        COUNT(DISTINCT placa_veiculo) AS n_veiculos_historico
+    FROM marcadas
+    GROUP BY cpf
 )
 
-SELECT
-    cpf,
-    ARRAY_AGG(tipo_veiculo IGNORE NULLS ORDER BY data_autuacao DESC LIMIT 1)[SAFE_OFFSET(0)] AS tipo_veiculo_recente
-FROM todas_autuacoes
-WHERE cpf IN (SELECT DISTINCT cpf FROM multas_detalhadas)
-GROUP BY cpf;
+SELECT *
+FROM por_cpf
+LEFT JOIN modas_por_cpf USING (cpf);
 
 
 -- ============================================================
@@ -271,7 +421,7 @@ SELECT
     r.qualidade_tel,
     r.estrategia_envio,
     r.celular_disparo,
-    vr.tipo_veiculo_recente,
+    h.tipo_veiculo_recente,
     v.descricao_veiculo,
     v.placa_veiculo,
     v.id_autuacao,
@@ -283,11 +433,41 @@ SELECT
     m.todos_id_auto_infracao,
     m.primeira_data_autuacao,
     m.ultima_data_autuacao,
-    COALESCE(a.n_atribuicoes, 0) AS n_atribuicoes_anteriores
+    COALESCE(a.n_atribuicoes, 0) AS n_atribuicoes_anteriores,
+    h.n_multas,
+    h.n_pagas_antes,
+    h.share_pagas_antes,
+    h.pagas_antes,
+    h.pagou_ultimos_12m,
+    h.dias_medio_ate_pagar,
+    h.dias_desde_ultimo_pagamento,
+    h.dias_desde_primeira_multa,
+    h.dias_desde_ultima_multa,
+    h.n_multas_12m,
+    h.n_abertas,
+    h.valor_aberto,
+    h.valor_maior_multa_aberta,
+    h.dias_multa_aberta_mais_antiga,
+    h.dias_medio_multas_abertas,
+    h.n_abertas_ainda_recorriveis,
+    h.pontos_abertos,
+    h.pontos_12m,
+    h.ja_contestou,
+    h.ja_indicou_condutor,
+    h.aderiu_sne,
+    h.especie_veiculo_recente,
+    h.descricao_veiculo_recente,
+    h.ano_fabricacao_veiculo_recente,
+    h.uf_proprietario_recente,
+    h.municipio_possuidor_recente,
+    h.n_veiculos_historico,
+    h.gravidade_mais_comum_aberta,
+    h.tipificacao_mais_comum_aberta,
+    h.autuador_mais_comum_aberta
 FROM multas_por_cpf m
 INNER JOIN veiculo_principal v USING (cpf)
 INNER JOIN rmi r USING (cpf)
-LEFT JOIN veiculo_recente vr USING (cpf)
+LEFT JOIN historico_multas h USING (cpf)
 LEFT JOIN (
     SELECT id_devedor AS cpf, COUNT(*) AS n_atribuicoes
     FROM `{tabela_atribuicao_placeholder}`
@@ -301,7 +481,7 @@ WHERE NULLIF(TRIM(r.nome_completo), '') IS NOT NULL
     AND NOT (
         r.sexo = 'masculino'
         AND REGEXP_CONTAINS(
-            NORMALIZE_AND_CASEFOLD(COALESCE(vr.tipo_veiculo_recente, ''), NFKD),
+            NORMALIZE_AND_CASEFOLD(COALESCE(h.tipo_veiculo_recente, ''), NFKD),
             r'motocicleta|motoneta|ciclomotor|triciclo|quadriciclo'
         )
     )
@@ -366,6 +546,36 @@ SELECT
     primeira_data_autuacao,
     ultima_data_autuacao,
     n_atribuicoes_anteriores,
+    n_multas,
+    n_pagas_antes,
+    share_pagas_antes,
+    pagas_antes,
+    pagou_ultimos_12m,
+    dias_medio_ate_pagar,
+    dias_desde_ultimo_pagamento,
+    dias_desde_primeira_multa,
+    dias_desde_ultima_multa,
+    n_multas_12m,
+    n_abertas,
+    valor_aberto,
+    valor_maior_multa_aberta,
+    dias_multa_aberta_mais_antiga,
+    dias_medio_multas_abertas,
+    n_abertas_ainda_recorriveis,
+    pontos_abertos,
+    pontos_12m,
+    ja_contestou,
+    ja_indicou_condutor,
+    aderiu_sne,
+    especie_veiculo_recente,
+    descricao_veiculo_recente,
+    ano_fabricacao_veiculo_recente,
+    uf_proprietario_recente,
+    municipio_possuidor_recente,
+    n_veiculos_historico,
+    gravidade_mais_comum_aberta,
+    tipificacao_mais_comum_aberta,
+    autuador_mais_comum_aberta,
     CURRENT_TIMESTAMP() AS inserido_em
 FROM divididos
 WHERE dia_util

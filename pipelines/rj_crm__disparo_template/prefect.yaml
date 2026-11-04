@@ -128,7 +128,7 @@ deployments:
             dataset_id: brutos_salesforce
             table_id: disparos_efetuados
           audience:
-            replacements: {"cota_diaria_placeholder": 500, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5, "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}
+            replacements: {"cota_inicial_placeholder": 500, "incremento_cota_placeholder": 50, "cota_maxima_placeholder": 5000, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5, "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}
             drop_duplicate_cpfs: true
             query_file: queries/smtr_multa_holdout.sql
           delivery:
