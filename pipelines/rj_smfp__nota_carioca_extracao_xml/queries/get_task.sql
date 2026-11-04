@@ -8,6 +8,4 @@ SELECT
     execucao_resumo,
     ROUND((SYSDATE - data_inicio) * 86400) AS segundos_em_execucao
 FROM nfse_owner.tarefas
-WHERE tipo IN (:tipo_extracao, :tipo_pos_processamento)
-  AND status = 1
-ORDER BY data_inicio
+WHERE tarefa = :1
