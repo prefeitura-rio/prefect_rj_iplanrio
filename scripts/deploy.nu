@@ -98,11 +98,11 @@ def 'main plan' [
 
     let allowed = read-allowed $environment
 
-    if ($pipeline != null) and ($pipeline not-in $allowed) {
+    if ($pipeline != null) and ($allowed != null) and ($pipeline not-in $allowed) {
         fail $'The pipeline ($pipeline) is not in .allow.json for ($environment)' {command: plan, span: (metadata $pipeline).span}
     }
 
-    let chosen = $candidates | where $it in $allowed | where (find-deployments $it $environment | is-not-empty) | sort
+    let chosen = $candidates | where {|name| ($allowed == null) or ($name in $allowed) } | where (find-deployments $it $environment | is-not-empty) | sort
 
     if ($pipeline != null) and ($chosen | is-empty) {
         fail $'The pipeline ($pipeline) has no ($environment) deployment' {command: plan, span: (metadata $pipeline).span}
