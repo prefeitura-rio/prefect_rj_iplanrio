@@ -87,6 +87,7 @@
     "rj_iplanrio__vigia_urbano",
     "rj_pgm__divida_ativa",
     "rj_seconserva__infraestrutura_siscor_obras",
+    "rj_segur__forca_municipal",
     "rj_setur__turismo_fluxo_visitantes",
     "rj_smas__api_datametrica_agendamentos",
     "rj_smdue__dump_db_sislic",
