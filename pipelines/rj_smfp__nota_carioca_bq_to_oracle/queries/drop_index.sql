@@ -1,1 +1,1 @@
-DROP INDEX "$schema"."$index"
+DROP INDEX "{{ schema }}"."{{ index }}"

@@ -24,8 +24,11 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  # Nominatim-only strategy (fast, basic accuracy)
   - name: rj-crm--geolocalizacao-residencia--nominatim--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
     work_pool:
@@ -33,26 +36,45 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
-        secretName: prefect-jobs-crm-registry-secrets-staging
+        command: uv run --no-sync --package rj_crm__geolocalizacao_residencia -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
+        service_account_name: pipelines
+        finished_job_ttl: 600
+        pod_annotations:
+          gke-gcsfuse/volumes: 'true'
+        resources:
+          requests:
+            ephemeral-storage: 1Gi
+          limits:
+            ephemeral-storage: 4Gi
+        volume_mounts:
+          - name: tmp
+            mountPath: /tmp
+        volumes:
+          - name: tmp
+            csi:
+              driver: gcsfuse.csi.storage.gke.io
+              volumeAttributes:
+                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
+                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
+        env:
+          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: staging
+          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/shared
+          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     parameters:
-      provider_strategy: "nominatim"
-      query_override: null
-      dataset_id: "brutos_dados_enriquecidos"
-      table_id: "enderecos_geolocalizados"
-      billing_project_id: "rj-crm-registry"
-      bucket_name: "rj-sms"
-      biglake_table: false
-      file_folder: "pipelines/data"
-      file_format: "parquet"
-      source_format: "parquet"
-      dump_mode: "append"
-      max_concurrent_nominatim: 100
-      return_original_cols: true
-      infisical_secret_path: "/geocoding"
-
+      strategy: nominatim
+      table:
+        dataset_id: brutos_dados_enriquecidos
+        table_id: enderecos_geolocalizados
+      max_concurrent: 100
   - name: rj-crm--geolocalizacao-residencia--nominatim--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
     work_pool:
@@ -60,32 +82,65 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
-        secretName: prefect-jobs-crm-registry-secrets
+        command: uv run --no-sync --package rj_crm__geolocalizacao_residencia -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
+        service_account_name: pipelines
+        finished_job_ttl: 600
+        pod_annotations:
+          gke-gcsfuse/volumes: 'true'
+        resources:
+          requests:
+            ephemeral-storage: 1Gi
+          limits:
+            ephemeral-storage: 4Gi
+        volume_mounts:
+          - name: tmp
+            mountPath: /tmp
+        volumes:
+          - name: tmp
+            csi:
+              driver: gcsfuse.csi.storage.gke.io
+              volumeAttributes:
+                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
+                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
+        env:
+          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: prod
+          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/shared
+          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     parameters:
-      provider_strategy: "nominatim"
-      query_override: null
-      dataset_id: "brutos_dados_enriquecidos"
-      table_id: "enderecos_geolocalizados"
-      billing_project_id: "rj-crm-registry"
-      bucket_name: "rj-sms"
-      biglake_table: false
-      file_folder: "pipelines/data"
-      file_format: "parquet"
-      source_format: "parquet"
-      dump_mode: "append"
-      max_concurrent_nominatim: 100
-      return_original_cols: true
-      infisical_secret_path: "/geocoding"
+      strategy: nominatim
+      table:
+        dataset_id: brutos_dados_enriquecidos
+        table_id: enderecos_geolocalizados
+      max_concurrent: 100
     schedules:
-      - interval: 180  # 3 minutes (from updated schedule)
+      - interval: 180
         anchor_date: "2021-01-01T00:06:00"
         timezone: America/Sao_Paulo
         slug: geocoding_every_3min
+      - interval: 3600
+        anchor_date: "2025-12-15T18:52:44"
+        timezone: America/Sao_Paulo
+        slug: chamados
+        parameters:
+          cloud:
+            bucket: rj-crm-registry
+            project: rj-crm-registry
+            connection: rj-crm-registry.us.biglake
+          table:
+            dataset_id: brutos_dados_enriquecidos
+            table_id: enderecos_geolocalizados_chamado
+          source: chamados
+          max_concurrent: 500
 
-  # Fallback strategy (slower, higher accuracy)
   - name: rj-crm--geolocalizacao-residencia--fallback--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
     work_pool:
@@ -93,26 +148,45 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
-        secretName: prefect-jobs-crm-registry-secrets-staging
+        command: uv run --no-sync --package rj_crm__geolocalizacao_residencia -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
+        service_account_name: pipelines
+        finished_job_ttl: 600
+        pod_annotations:
+          gke-gcsfuse/volumes: 'true'
+        resources:
+          requests:
+            ephemeral-storage: 1Gi
+          limits:
+            ephemeral-storage: 4Gi
+        volume_mounts:
+          - name: tmp
+            mountPath: /tmp
+        volumes:
+          - name: tmp
+            csi:
+              driver: gcsfuse.csi.storage.gke.io
+              volumeAttributes:
+                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
+                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
+        env:
+          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: staging
+          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/shared
+          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     parameters:
-      provider_strategy: "fallback"
-      query_override: null
-      dataset_id: "brutos_dados_enriquecidos"
-      table_id: "enderecos_geolocalizados"
-      billing_project_id: "rj-crm-registry"
-      bucket_name: "rj-sms"
-      biglake_table: false
-      file_folder: "pipelines/data"
-      file_format: "parquet"
-      source_format: "parquet"
-      dump_mode: "append"
-      max_concurrent_nominatim: 100
-      return_original_cols: true
-      infisical_secret_path: "/geocoding"
-
+      strategy: fallback
+      table:
+        dataset_id: brutos_dados_enriquecidos
+        table_id: enderecos_geolocalizados
+      max_concurrent: 100
   - name: rj-crm--geolocalizacao-residencia--fallback--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
     work_pool:
@@ -120,32 +194,51 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
-        secretName: prefect-jobs-crm-registry-secrets
+        command: uv run --no-sync --package rj_crm__geolocalizacao_residencia -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
+        service_account_name: pipelines
+        finished_job_ttl: 600
+        pod_annotations:
+          gke-gcsfuse/volumes: 'true'
+        resources:
+          requests:
+            ephemeral-storage: 1Gi
+          limits:
+            ephemeral-storage: 4Gi
+        volume_mounts:
+          - name: tmp
+            mountPath: /tmp
+        volumes:
+          - name: tmp
+            csi:
+              driver: gcsfuse.csi.storage.gke.io
+              volumeAttributes:
+                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
+                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
+        env:
+          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: prod
+          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/shared
+          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     parameters:
-      provider_strategy: "fallback"
-      query_override: null
-      dataset_id: "brutos_dados_enriquecidos"
-      table_id: "enderecos_geolocalizados"
-      billing_project_id: "rj-crm-registry"
-      bucket_name: "rj-sms"
-      biglake_table: false
-      file_folder: "pipelines/data"
-      file_format: "parquet"
-      source_format: "parquet"
-      dump_mode: "append"
-      max_concurrent_nominatim: 100
-      return_original_cols: true
-      infisical_secret_path: "/geocoding"
+      strategy: fallback
+      table:
+        dataset_id: brutos_dados_enriquecidos
+        table_id: enderecos_geolocalizados
+      max_concurrent: 100
     schedules:
-      - interval: 3600  # 1 hour for fallback strategy (more expensive)
+      - interval: 3600
         anchor_date: "2021-01-01T00:00:00"
         timezone: America/Sao_Paulo
         slug: fallback_geocoding_hourly
 
-  # Geoapify batch strategy (medium speed, good accuracy)
   - name: rj-crm--geolocalizacao-residencia--geoapify--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
     work_pool:
@@ -153,26 +246,45 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
-        secretName: prefect-jobs-crm-registry-secrets-staging
+        command: uv run --no-sync --package rj_crm__geolocalizacao_residencia -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
+        service_account_name: pipelines
+        finished_job_ttl: 600
+        pod_annotations:
+          gke-gcsfuse/volumes: 'true'
+        resources:
+          requests:
+            ephemeral-storage: 1Gi
+          limits:
+            ephemeral-storage: 4Gi
+        volume_mounts:
+          - name: tmp
+            mountPath: /tmp
+        volumes:
+          - name: tmp
+            csi:
+              driver: gcsfuse.csi.storage.gke.io
+              volumeAttributes:
+                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
+                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
+        env:
+          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: staging
+          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/shared
+          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     parameters:
-      provider_strategy: "geoapify_batch"
-      query_override: null
-      dataset_id: "brutos_dados_enriquecidos"
-      table_id: "enderecos_geolocalizados"
-      billing_project_id: "rj-crm-registry"
-      bucket_name: "rj-sms"
-      biglake_table: false
-      file_folder: "pipelines/data"
-      file_format: "parquet"
-      source_format: "parquet"
-      dump_mode: "append"
-      max_concurrent_nominatim: 100
-      return_original_cols: true
-      infisical_secret_path: "/geocoding"
-
+      strategy: geoapify_batch
+      table:
+        dataset_id: brutos_dados_enriquecidos
+        table_id: enderecos_geolocalizados
+      max_concurrent: 100
   - name: rj-crm--geolocalizacao-residencia--geoapify--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
     work_pool:
@@ -180,26 +292,42 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
-        secretName: prefect-jobs-crm-registry-secrets
+        command: uv run --no-sync --package rj_crm__geolocalizacao_residencia -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
+        service_account_name: pipelines
+        finished_job_ttl: 600
+        pod_annotations:
+          gke-gcsfuse/volumes: 'true'
+        resources:
+          requests:
+            ephemeral-storage: 1Gi
+          limits:
+            ephemeral-storage: 4Gi
+        volume_mounts:
+          - name: tmp
+            mountPath: /tmp
+        volumes:
+          - name: tmp
+            csi:
+              driver: gcsfuse.csi.storage.gke.io
+              volumeAttributes:
+                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
+                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
+        env:
+          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: prod
+          INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/shared
+          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     parameters:
-      provider_strategy: "geoapify_batch"
-      query_override: null
-      dataset_id: "brutos_dados_enriquecidos"
-      table_id: "enderecos_geolocalizados"
-      billing_project_id: "rj-crm-registry"
-      bucket_name: "rj-sms"
-      biglake_table: false
-      file_folder: "pipelines/data"
-      file_format: "parquet"
-      source_format: "parquet"
-      dump_mode: "append"
-      max_concurrent_nominatim: 100
-      return_original_cols: true
-      infisical_secret_path: "/geocoding"
+      strategy: geoapify_batch
+      table:
+        dataset_id: brutos_dados_enriquecidos
+        table_id: enderecos_geolocalizados
+      max_concurrent: 100
     schedules:
-      - interval: 1800  # 30 minutes for batch strategy (balanced frequency)
+      - interval: 1800
         anchor_date: "2021-01-01T00:00:00"
         timezone: America/Sao_Paulo
         slug: batch_geocoding_30min

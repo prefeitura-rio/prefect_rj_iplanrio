@@ -1,47 +1,33 @@
 """Flow for rj_smfp__nota_carioca_bq_to_oracle_validation."""
 
-from typing import Literal
-
 from prefect import flow
 
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.tasks import (
     list_tables_task,
     log_session_task,
     summarize_task,
     validate_table_task,
 )
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.types import Options, Source
+
+DEFAULT_SOURCE = Source()
+DEFAULT_OPTIONS = Options()
 
 
-@flow(log_prints=True)
-def rj_smfp__nota_carioca_bq_to_oracle_validation(  # noqa: PLR0913
-    project: str = "rj-iplanrio-dia",
-    dataset_id: str = "nota_carioca_staging",
-    table_ids: list[str] | None = None,
-    infisical_secret_path: str = "/db-oracle-nota-fiscal",
-    compute_column_metrics: bool = True,
-    fail_on_divergence: bool = True,
-    template_schema: str | None = None,
-    excluded_template_columns: list[str] | None = None,
-    raw_text_encoding: Literal["base64", "hex"] = "base64",
+@flow(log_prints=True, flow_run_name="validacao-{source.dataset_id}")
+def rj_smfp__nota_carioca_bq_to_oracle_validation(
+    *, source: Source = DEFAULT_SOURCE, options: Options = DEFAULT_OPTIONS
 ) -> None:
-    rename_current_flow_run_task(new_name=f"validacao-{dataset_id}")
-    inject_bd_credentials_task(environment="prod")
-    log_session_task(infisical_secret_path=infisical_secret_path)
-    tables = list_tables_task(project=project, dataset_id=dataset_id, table_ids=table_ids)
+    """Compare the tables that the load wrote to Oracle with their source in BigQuery.
 
-    results = [
-        validate_table_task(
-            infisical_secret_path=infisical_secret_path,
-            project=project,
-            dataset_id=dataset_id,
-            table_id=table_id,
-            template_schema=template_schema,
-            excluded_template_columns=excluded_template_columns,
-            compute_column_metrics=compute_column_metrics,
-            raw_text_encoding=raw_text_encoding,
-        )
-        for table_id in tables
-    ]
-    summarize_task(results=results, fail_on_divergence=fail_on_divergence)
+    It only reads.
+
+    Each table is checked for the row count, the columns, the indexes, the partitions,
+    the synonyms, the grants, and the In-Memory state. With
+    `options.compute_column_metrics`, it also compares a metric of each column. The run
+    fails if a table differs, unless `options.fail_on_divergence` is off.
+    """
+    log_session_task()
+    tables = list_tables_task(source=source)
+    results = [validate_table_task(source=source, table_id=table_id, options=options) for table_id in tables]
+    summarize_task(results=results, options=options)

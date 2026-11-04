@@ -26,9 +26,9 @@ pull:
 deployments:
   - name: rj-smfp--crf--staging
     tags:
-    - environment:staging
-    - severity:high
-    - code_owner:tricktx
+      - environment:staging
+      - severity:high
+      - code_owner:tricktx
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_smfp__crf/flow.py:rj_smfp__crf
     work_pool:
@@ -36,15 +36,21 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_smfp__crf -- prefect flow-run execute
-        secretName: prefect-jobs-secrets-staging
+        command: uv run --no-sync --package rj_smfp__crf -- python -m utils.secrets -- prefect flow-run execute
+        namespace: pipelines-staging
+        secretName: pipelines-infisical
         image_pull_policy: Always
-
+        env:
+          INFISICAL_URL: https://infisical.iplan.dados.rio
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: staging
+          INFISICAL_PATHS: /rj_smfp__crf,/shared
+          GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
   - name: rj-smfp--crf--prod
     tags:
-    - environment:prod
-    - severity:high
-    - code_owner:tricktx
+      - environment:prod
+      - severity:high
+      - code_owner:tricktx
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smfp__crf/flow.py:rj_smfp__crf
     work_pool:
@@ -52,9 +58,16 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_smfp__crf -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        command: uv run --no-sync --package rj_smfp__crf -- python -m utils.secrets -- prefect flow-run execute
+        namespace: pipelines-prod
+        secretName: pipelines-infisical
         image_pull_policy: Always
+        env:
+          INFISICAL_URL: https://infisical.iplan.dados.rio
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: prod
+          INFISICAL_PATHS: /rj_smfp__crf,/shared
+          GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
     schedules:
       - interval: 86400
         anchor_date: "2021-01-01T01:00:00"

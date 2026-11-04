@@ -22,7 +22,7 @@ WITH disparos_base AS (
     c.contato.cpf AS cpf,
     c.hsm.status_disparo,
     c.hsm.envio_datahora
-  FROM `rj-crm-registry.rmi_conversas.chatbot` AS c
+  FROM `rj-crm-registry.rmi_conversas.v2_chatbot_conversas` AS c
   WHERE c.hsm.indicador = TRUE
     AND c.hsm.id_hsm IS NOT NULL
 ),
@@ -57,14 +57,14 @@ universo AS (
   FROM aparicoes
   WHERE telefone IS NOT NULL
 ),
-$amostra_ctes
+{{ amostra_ctes }}
 disparo_amostra AS (
   SELECT d.id_interacao, d.telefone, d.cpf, d.status_disparo, d.envio_datahora, am.data_corte
   FROM disparos d
   JOIN amostra am ON d.telefone = am.telefone
 ),
 
-$rotulo_ctes
+{{ rotulo_ctes }}
 -- ---- 2) features do passado: disparos -----------------------------------
 passado AS (
   SELECT
@@ -91,18 +91,11 @@ feat_disparo AS (
 -- diferente; "há quanto tempo esse telefone respondeu alguma coisa" é
 -- mais simples e mais robusto que tentar reamarrar a um disparo específico)
 mensagens_resposta AS (
-  SELECT c.contato.contato_telefone AS telefone, c.mensagens[OFFSET(0)].data AS mensagem_datahora
-  FROM `rj-crm-registry.rmi_conversas.chatbot` AS c
-  WHERE c.plataforma_origem = 'SALESFORCE'
-    AND c.fonte IN ('CUSTOMER', 'AI_AGENT_CIDADAO')
-
-  UNION ALL
-
-  SELECT c.contato.contato_telefone AS telefone, msg.data AS mensagem_datahora
-  FROM `rj-crm-registry.rmi_conversas.chatbot` AS c,
-    UNNEST(c.mensagens) AS msg
-  WHERE c.plataforma_origem IS DISTINCT FROM 'SALESFORCE'
-    AND msg.fonte = 'CUSTOMER'
+  SELECT
+    c.contato.contato_telefone AS telefone,
+    c.mensagem_datahora
+  FROM `rj-crm-registry.rmi_conversas.v2_chatbot_conversas` AS c
+  WHERE c.fonte IN ('CUSTOMER', 'AI_AGENT_CIDADAO')
 ),
 respostas_amostra AS (
   SELECT r.telefone, am.data_corte, r.mensagem_datahora
@@ -333,4 +326,4 @@ LEFT JOIN ddd_telefone dt    ON dt.telefone = am.telefone
 LEFT JOIN telefone_meta tm   ON tm.telefone = am.telefone
 )
 
-$select_final
+{{ select_final }}

@@ -24,130 +24,227 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-iplanrio--dados_mestres--staging
-    version: "{{ build-image.tag }}"
+  - name: rj-iplanrio--dados-mestres--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_iplanrio__dados_mestres/flow.py:rj_iplanrio__dados_mestres
     work_pool:
       name: default-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_iplanrio__dados_mestres -- prefect flow-run execute
-        secretName: prefect-jobs-secrets-staging
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: uv run --no-sync --package rj_iplanrio__dados_mestres -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
-  - name: rj-iplanrio--dados_mestres--prod
-    version: "{{ get-commit-hash.stdout }}"
+        service_account_name: pipelines
+        finished_job_ttl: 600
+        pod_annotations:
+          gke-gcsfuse/volumes: 'true'
+        resources:
+          requests:
+            ephemeral-storage: 1Gi
+          limits:
+            ephemeral-storage: 4Gi
+        volume_mounts:
+          - name: tmp
+            mountPath: /tmp
+        volumes:
+          - name: tmp
+            csi:
+              driver: gcsfuse.csi.storage.gke.io
+              volumeAttributes:
+                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
+                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
+        env:
+          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: staging
+          INFISICAL_PATHS: /shared
+          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
+  - name: rj-iplanrio--dados-mestres--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_iplanrio__dados_mestres/flow.py:rj_iplanrio__dados_mestres
     work_pool:
       name: default-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_iplanrio__dados_mestres -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: uv run --no-sync --package rj_iplanrio__dados_mestres -- python -m utils.secrets -- prefect flow-run execute
         image_pull_policy: Always
+        service_account_name: pipelines
+        finished_job_ttl: 600
+        pod_annotations:
+          gke-gcsfuse/volumes: 'true'
+        resources:
+          requests:
+            ephemeral-storage: 1Gi
+          limits:
+            ephemeral-storage: 4Gi
+        volume_mounts:
+          - name: tmp
+            mountPath: /tmp
+        volumes:
+          - name: tmp
+            csi:
+              driver: gcsfuse.csi.storage.gke.io
+              volumeAttributes:
+                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
+                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
+        env:
+          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: prod
+          INFISICAL_PATHS: /shared
+          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     schedules:
       - interval: 604800
         anchor_date: '2025-07-15T00:00:00'
         timezone: America/Sao_Paulo
         slug: bairro
         parameters:
+          table:
+            dataset_id: brutos_dados_mestres
+            table_id: bairro
           url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Cartografia/Limites_administrativos/MapServer/4
           crs: EPSG:31983
-          table_id: bairro
+          dump_mode: overwrite
       - interval: 604800
         anchor_date: '2025-07-15T00:10:00'
         timezone: America/Sao_Paulo
         slug: area_planejamento
         parameters:
+          table:
+            dataset_id: brutos_dados_mestres
+            table_id: area_planejamento
           url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Cartografia/Limites_administrativos/MapServer/1
           crs: EPSG:31983
-          table_id: area_planejamento
+          dump_mode: overwrite
       - interval: 604800
         anchor_date: '2025-07-15T00:20:00'
         timezone: America/Sao_Paulo
         slug: regiao_planejamento
         parameters:
+          table:
+            dataset_id: brutos_dados_mestres
+            table_id: regiao_planejamento
           url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Cartografia/Limites_administrativos/MapServer/2
           crs: EPSG:31983
-          table_id: regiao_planejamento
+          dump_mode: overwrite
       - interval: 604800
         anchor_date: '2025-07-15T00:30:00'
         timezone: America/Sao_Paulo
         slug: regiao_administrativa
         parameters:
+          table:
+            dataset_id: brutos_dados_mestres
+            table_id: regiao_administrativa
           url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Cartografia/Limites_administrativos/MapServer/3
           crs: EPSG:31983
-          table_id: regiao_administrativa
+          dump_mode: overwrite
       - interval: 604800
         anchor_date: '2025-07-15T00:40:00'
         timezone: America/Sao_Paulo
         slug: rio_janeiro
         parameters:
+          table:
+            dataset_id: brutos_dados_mestres
+            table_id: rio_janeiro
           url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Cartografia/Limites_administrativos/MapServer/0
           crs: EPSG:31983
-          table_id: rio_janeiro
+          dump_mode: overwrite
       - interval: 604800
         anchor_date: '2025-07-15T00:50:00'
         timezone: America/Sao_Paulo
         slug: subprefeitura
         parameters:
+          table:
+            dataset_id: brutos_dados_mestres
+            table_id: subprefeitura
           url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Cartografia/Subprefeituras/MapServer/0
           crs: EPSG:31983
-          table_id: subprefeitura
+          dump_mode: overwrite
       - interval: 604800
         anchor_date: '2025-07-15T01:00:00'
         timezone: America/Sao_Paulo
         slug: zoneamento_macro_zonas
         parameters:
+          table:
+            dataset_id: brutos_dados_mestres
+            table_id: zoneamento_macro_zonas
           url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Urbanismo/LBB_Zoneamento_urbano_vigente/MapServer/1
           crs: EPSG:31983
-          table_id: zoneamento_macro_zonas
+          dump_mode: overwrite
       - interval: 604800
         anchor_date: '2025-07-15T01:10:00'
         timezone: America/Sao_Paulo
         slug: zoneamento_urbano
         parameters:
+          table:
+            dataset_id: brutos_dados_mestres
+            table_id: zoneamento_urbano
           url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Urbanismo/LBB_Zoneamento_urbano_vigente/MapServer/0
           crs: EPSG:31983
-          table_id: zoneamento_urbano
+          dump_mode: overwrite
       - interval: 604800
         anchor_date: '2025-07-15T01:20:00'
         timezone: America/Sao_Paulo
         slug: logradouro
         parameters:
+          table:
+            dataset_id: brutos_dados_mestres
+            table_id: logradouro
           url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/CadLog/Trechos_Logradouros/MapServer/0
           crs: EPSG:31983
-          table_id: logradouro
+          dump_mode: overwrite
       - interval: 604800
         anchor_date: '2025-07-15T01:30:00'
         timezone: America/Sao_Paulo
         slug: numero_porta
         parameters:
-          url: 'https://pgeo3.rio.rj.gov.br/arcgis/rest/services/CadLog/Numero_de_porta/FeatureServer/0'
+          table:
+            dataset_id: brutos_dados_mestres
+            table_id: numero_porta
+          url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/CadLog/Numero_de_porta/FeatureServer/0
           crs: EPSG:31983
-          table_id: numero_porta
+          dump_mode: overwrite
       - interval: 604800
         anchor_date: '2025-07-15T01:30:00'
         timezone: America/Sao_Paulo
         slug: lote
         parameters:
-          url: 'https://services5.arcgis.com/mgrvZxGU0bSJbVld/arcgis/rest/services/Quadras_Lotes_Edificacoes/FeatureServer/1/'
+          table:
+            dataset_id: brutos_dados_mestres
+            table_id: lote
+          url: https://services5.arcgis.com/mgrvZxGU0bSJbVld/arcgis/rest/services/Quadras_Lotes_Edificacoes/FeatureServer/1/
           crs: EPSG:31983
-          table_id: lote
+          dump_mode: overwrite
       - interval: 604800
         anchor_date: '2025-07-15T01:30:00'
         timezone: America/Sao_Paulo
         slug: aeis
         parameters:
-          url: 'https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Urbanismo/LBB_AEIS/FeatureServer/1'
+          table:
+            dataset_id: brutos_dados_mestres
+            table_id: aeis
+          url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Urbanismo/LBB_AEIS/FeatureServer/1
           crs: EPSG:31983
-          table_id: aeis
+          dump_mode: overwrite
       - interval: 604800
         anchor_date: '2025-07-15T01:30:00'
         timezone: America/Sao_Paulo
         slug: aeis_bairro_maravilha
         parameters:
-          url: 'https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Urbanismo/LBB_AEIS/FeatureServer/0'
+          table:
+            dataset_id: brutos_dados_mestres
+            table_id: aeis_bairro_maravilha
+          url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Urbanismo/LBB_AEIS/FeatureServer/0
           crs: EPSG:31983
-          table_id: aeis_bairro_maravilha
+          dump_mode: overwrite
