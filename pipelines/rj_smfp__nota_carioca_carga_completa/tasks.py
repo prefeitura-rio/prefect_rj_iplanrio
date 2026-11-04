@@ -1,4 +1,4 @@
-"""Tasks da carga completa: conferir se o deployment está livre, disparar e esperar, pausar."""
+"""Tasks da carga completa: conferir se o deployment está livre, disparar e esperar, retomar, pausar."""
 
 import time
 from collections.abc import Sequence
@@ -36,6 +36,31 @@ def run_deployment_task(step: Step, tags: Sequence[str]) -> ChildRun:
     :returns: O flow run filho no último estado lido.
     """
     return runs.run_and_wait(step.deployment, step.timeout_seconds, tags)
+
+
+@task(cache_policy=NO_CACHE)
+def find_own_child_task(step: Step, parent_run_id: str | None) -> ChildRun | None:
+    """O filho que este flow run já disparou no deployment do passo (antes de um reinício), ou ``None``.
+
+    :param step: Passo da cadeia.
+    :param parent_run_id: Id do flow run da carga completa.
+    :returns: O filho no estado atual, ou ``None``.
+    """
+    child = runs.find_own_child(step.deployment, parent_run_id)
+    if child is not None:
+        log(f"{step.label}: este run já disparou o flow run {child.name} ({child.state_name}) antes de reiniciar.")
+    return child
+
+
+@task(cache_policy=NO_CACHE)
+def wait_for_child_task(step: Step, child: ChildRun) -> ChildRun:
+    """Espera um filho já existente terminar ou o tempo limite do passo (sem cancelar no limite).
+
+    :param step: Passo da cadeia (tempo limite).
+    :param child: Filho disparado antes do reinício.
+    :returns: O filho no último estado lido.
+    """
+    return runs.wait_for_run(child.run_id, step.timeout_seconds)
 
 
 @task(cache_policy=NO_CACHE)
