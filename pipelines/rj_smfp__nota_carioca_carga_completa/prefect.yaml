@@ -73,7 +73,7 @@ deployments:
       collision_strategy: CANCEL_NEW
     schedules:
       - cron: "0 17 * * *"
-        active: false
+        active: true
         timezone: America/Sao_Paulo
     parameters:
       chain:
