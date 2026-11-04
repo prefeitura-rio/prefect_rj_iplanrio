@@ -1,0 +1,10 @@
+[project]
+name = "rj_smfp__nota_carioca_extracao_xml"
+version = "1.0.0"
+description = "Starts the national XML extraction of the Nota Carioca and waits in NFSE_OWNER.TAREFAS until it and its post-processing end, so the full load starts only after a successful extraction."
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
