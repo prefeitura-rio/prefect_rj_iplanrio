@@ -80,6 +80,7 @@ class Answer:
     prompt_tokens: int | None = None
     output_tokens: int | None = None
     total_tokens: int | None = None
+    cache_tokens: int | None = None
 
 
 def parse_json_object(text: str) -> dict[str, JsonValue]:
@@ -129,6 +130,7 @@ def read_answer(body: JsonValue) -> Answer:
         read_count(dig(body, "usageMetadata", "promptTokenCount")),
         read_count(dig(body, "usageMetadata", "candidatesTokenCount")),
         read_count(dig(body, "usageMetadata", "totalTokenCount")),
+        read_count(dig(body, "usageMetadata", "cachedContentTokenCount")),
     )
 
 

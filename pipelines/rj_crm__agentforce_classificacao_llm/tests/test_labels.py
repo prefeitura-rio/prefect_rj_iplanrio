@@ -71,8 +71,8 @@ def test_the_sentiment_comes_from_the_nature_by_rule(nature: str | None, expecte
     assert derive_sentiment(nature) == expected
 
 
-def test_a_session_with_an_hsm_gets_every_label_checked(make_session: SessionFactory) -> None:
-    """Fix the labels, drop the invalid ones, and keep the tokens and the raw answer."""
+def test_a_session_with_an_hsm_gets_every_principal_label_checked(make_session: SessionFactory) -> None:
+    """Check principal labels and leave routing labels to their own prompts."""
     session = make_session()
     prompted = Prompted(session, "com_hsm", "the prompt")
     parsed: dict[str, JsonValue] = {
@@ -92,8 +92,8 @@ def test_a_session_with_an_hsm_gets_every_label_checked(make_session: SessionFac
     assert row["relacao_hsm"] == "DENTRO_DO_ESCOPO"
     assert (row["telefone_confirmacao_flag"], row["secretarias_relacionadas"], row["secretaria_principal"]) == (
         "PERTENCE",
-        "Comlurb",
-        "RioLuz",
+        None,
+        None,
     )
     assert (row["natureza"], row["sentimento"], row["conteudo_relevante"]) == ("Solicitação", "neutro", True)
     assert (row["tipo_prompt"], row["modelo"], row["resposta_llm_bruta"], row["prompt_enviado"]) == (

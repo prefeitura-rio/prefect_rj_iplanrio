@@ -149,12 +149,23 @@ def test_the_answer_carries_the_tokens_of_the_gateway() -> None:
     """Read the usage next to the text, and give nothing for a count that is missing."""
     body: JsonValue = {
         "candidates": [{"content": {"parts": [{"text": "x"}]}}],
-        "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5, "totalTokenCount": True},
+        "usageMetadata": {
+            "promptTokenCount": 10,
+            "candidatesTokenCount": 5,
+            "cachedContentTokenCount": 3,
+            "totalTokenCount": True,
+        },
     }
 
     answer = read_answer(body)
 
-    assert (answer.text, answer.prompt_tokens, answer.output_tokens, answer.total_tokens) == ("x", 10, 5, None)
+    assert (answer.text, answer.prompt_tokens, answer.output_tokens, answer.total_tokens, answer.cache_tokens) == (
+        "x",
+        10,
+        5,
+        None,
+        3,
+    )
 
 
 def test_a_json_object_answer_is_parsed_and_a_list_is_refused() -> None:

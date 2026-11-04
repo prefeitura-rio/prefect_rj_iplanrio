@@ -51,7 +51,9 @@ LATE_BUTTON_NOTE: Final = " ".join(
         "mas chegou fora da janela de 24h (não foi capturada como clique de botão).",
     ]
 )
-PROMPT_VERSION: Final = "v3"
+PROMPT_VERSION: Final = "v4"
+MACROTHEME_PROMPT_VERSION: Final = "v2"
+SECRETARIAT_PROMPT_VERSION: Final = "v3"
 """Goes up by hand when the prompts change what a classification means.
 
 It is for audit only.
