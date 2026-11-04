@@ -158,9 +158,11 @@ async def test_dbt_runs_deps_then_the_command_in_the_cloned_project(fake_runner,
     """Regression: the clone was ignored, so dbt ran in the working directory."""
     await run_dbt.fn(DbtRun(repository="https://example.invalid/q.git", select="vendas"))
 
-    [runner] = fake_runner.instances
-    assert runner.settings.project_dir == tmp_path / "queries"
-    assert runner.invoked == [["deps"], ["run", "--target", "dev", "--select", "vendas"]]
+    deps_runner, command_runner = fake_runner.instances
+    assert deps_runner.settings.project_dir == tmp_path / "queries"
+    assert command_runner.settings.project_dir == tmp_path / "queries"
+    assert deps_runner.invoked == [["deps"]]
+    assert command_runner.invoked == [["run", "--target", "dev", "--select", "vendas"]]
 
 
 @pytest.mark.parametrize("has_profile", [True, False])
@@ -176,8 +178,10 @@ async def test_regression_the_profile_of_the_repository_is_used_when_it_has_one(
 
     await run_dbt.fn(DbtRun(repository="https://example.invalid/q.git"))
 
-    [runner] = fake_runner.instances
-    assert runner.settings.profiles_dir.name.startswith("dbt_profiles_") is has_profile
+    assert len(fake_runner.instances) == 2
+    assert all(
+        runner.settings.profiles_dir.name.startswith("dbt_profiles_") is has_profile for runner in fake_runner.instances
+    )
     assert "DBT_PROFILES_DIR" not in environ
 
 

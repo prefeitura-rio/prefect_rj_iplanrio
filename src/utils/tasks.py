@@ -433,10 +433,12 @@ async def run_dbt(request: DbtRun, *, report: bool = False) -> None:
             )
 
             with use_profiles(project_dir):
-                runner = PrefectDbtRunner(settings=PrefectDbtSettings(project_dir=project_dir), raise_on_failure=False)
-                if not runner.invoke(["deps"]).success:
+                settings = PrefectDbtSettings(project_dir=project_dir)
+                dependency_runner = PrefectDbtRunner(settings=settings, raise_on_failure=False)
+                if not dependency_runner.invoke(["deps"]).success:
                     raise RuntimeError("dbt deps failed")
-                result = runner.invoke(request.build_arguments())
+                command_runner = PrefectDbtRunner(settings=settings, raise_on_failure=False)
+                result = command_runner.invoke(request.build_arguments())
 
         return DbtOutcome(success=result.success, nodes=read_nodes(result))
 
