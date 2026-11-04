@@ -74,6 +74,7 @@ deployments:
       - interval: 300
         anchor_date: "2025-01-01T00:00:00-03:00"
         timezone: America/Sao_Paulo
+        active: false
         slug: ocorrencias_ativas_v2
         parameters:
           table:
@@ -84,6 +85,7 @@ deployments:
       - interval: 86400
         anchor_date: "2025-01-01T01:00:00-03:00"
         timezone: America/Sao_Paulo
+        active: false
         slug: unidades_historico
         parameters:
           table:
@@ -94,6 +96,7 @@ deployments:
       - interval: 86400
         anchor_date: "2025-01-01T01:20:00-03:00"
         timezone: America/Sao_Paulo
+        active: false
         slug: qmd
         parameters:
           table:
@@ -104,6 +107,7 @@ deployments:
       - interval: 86400
         anchor_date: "2025-01-01T01:25:00-03:00"
         timezone: America/Sao_Paulo
+        active: false
         slug: ocorrencias_historico
         parameters:
           table:
@@ -114,6 +118,7 @@ deployments:
       - interval: 86400
         anchor_date: "2025-01-01T01:45:00-03:00"
         timezone: America/Sao_Paulo
+        active: false
         slug: qmd_servicos
         parameters:
           table:
@@ -124,6 +129,7 @@ deployments:
       - interval: 86400
         anchor_date: "2025-01-01T01:50:00-03:00"
         timezone: America/Sao_Paulo
+        active: false
         slug: qmd_plano
         parameters:
           table:
@@ -134,6 +140,7 @@ deployments:
       - interval: 86400
         anchor_date: "2025-01-01T03:00:00-03:00"
         timezone: America/Sao_Paulo
+        active: false
         slug: unit_positions
         parameters:
           table:
@@ -144,6 +151,7 @@ deployments:
       - interval: 86400
         anchor_date: "2025-01-01T03:20:00-03:00"
         timezone: America/Sao_Paulo
+        active: false
         slug: qmd_detalhes
         parameters:
           table:
@@ -154,6 +162,7 @@ deployments:
       - interval: 86400
         anchor_date: "2025-01-01T03:40:00-03:00"
         timezone: America/Sao_Paulo
+        active: false
         slug: qmd_kml
         parameters:
           table:
