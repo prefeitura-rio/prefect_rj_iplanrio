@@ -1,6 +1,7 @@
 {
   "secretaria": "sec",
   "pipeline": "example",
+  "tipo": ["dump_database", "ingest_api", "dump_arcgis", "dump_gsheet"],
   "severidade": "high",
   "code_owner": "github_account"
 }

@@ -1,34 +1,46 @@
 from dataclasses import replace
 from decimal import Decimal
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import OracleColumn
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import OracleColumn
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import (
     IndexDefinition,
-    PartitionStorage,
     Partitioning,
+    PartitionStorage,
     TablePartition,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.utils.report import (
-    compare_columns,
-    compare_grants,
-    compare_indexes,
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.report import (
     compare_metrics,
-    compare_partitions,
-    compare_synonyms,
     count_divergences,
-    describe_column,
     format_text_table,
     metric_specs,
     normalize_metric,
+)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.report_compare import (
+    compare_columns,
+    compare_grants,
+    compare_indexes,
+    compare_partitions,
+    compare_synonyms,
+    describe_column,
     short_bound,
 )
 
 
 def field(name: str, type_: str, mode: str = "NULLABLE") -> dict[str, str]:
+    """Return the field."""
     return {"name": name, "type": type_, "mode": mode}
 
 
-def ora(name: str, data_type: str, length=None, char_used=None, precision=None, scale=None, nullable=False):
+def ora(
+    name: str,
+    data_type: str,
+    length: int | None = None,
+    char_used: str | None = None,
+    precision: int | None = None,
+    scale: int | None = None,
+    nullable: bool = False,
+) -> OracleColumn:
+    """Return the ora."""
     return OracleColumn(name, data_type, length, char_used, precision, scale, nullable)
 
 
@@ -44,20 +56,23 @@ BQ_TYPES = {
 }
 
 
-def test_describe_column_shows_type_and_not_null():
+def test_describe_column_shows_type_and_not_null() -> None:
+    """Check that describe column shows type and not null."""
     assert describe_column(ORIGINAL[0]) == "DATE NOT NULL"
     assert describe_column(ora("NOME", "VARCHAR2", 300, "C", nullable=True)) == "VARCHAR2(300 CHAR)"
     assert describe_column(ora("DOC", "CLOB", 4000)) == "CLOB NOT NULL"
     assert describe_column(None) == "(ausente)"
 
 
-def test_compare_columns_accepts_identical_copy():
+def test_compare_columns_accepts_identical_copy() -> None:
+    """Check that compare columns accepts identical copy."""
     rows = compare_columns(ORIGINAL, list(ORIGINAL), BQ_TYPES)
     assert [row[-1] for row in rows] == ["OK", "OK", "OK"]
     assert rows[0][2:5] == ["STRING (NULLABLE)", "DATE NOT NULL", "DATE NOT NULL"]
 
 
-def test_compare_columns_flags_type_nullability_and_missing_columns():
+def test_compare_columns_flags_type_nullability_and_missing_columns() -> None:
+    """Check that compare columns flags type nullability and missing columns."""
     loaded = [
         ora("DATA_COMPETENCIA_MUNICIPIO", "VARCHAR2", 4000, "B", nullable=True),
         ora("CPF_CNPJ_RESPONSAVEL", "VARCHAR2", 14, "B", nullable=True),
@@ -70,13 +85,15 @@ def test_compare_columns_flags_type_nullability_and_missing_columns():
     assert count_divergences(rows) == 3
 
 
-def test_compare_columns_flags_renamed_column():
+def test_compare_columns_flags_renamed_column() -> None:
+    """Check that compare columns flags renamed column."""
     rows = compare_columns(ORIGINAL[:1], [ora("DATA", "DATE", 7)], BQ_TYPES)
     assert rows[0][1] == "DATA_COMPETENCIA_MUNICIPIO ≠ DATA"
     assert rows[0][-1] == "DIVERGE"
 
 
-def test_metric_specs_only_loaded_columns_and_convert_text_dates():
+def test_metric_specs_only_loaded_columns_and_convert_text_dates() -> None:
+    """Check that metric specs only loaded columns and convert text dates."""
     specs = metric_specs(
         [
             field("_bigquery_uid", "STRING"),
@@ -100,13 +117,14 @@ def test_metric_specs_only_loaded_columns_and_convert_text_dates():
     ]
     assert specs[1].bigquery_expression == (
         "FORMAT_DATETIME('%E4Y-%m-%d %H:%M:%S', MIN(SAFE_CAST(REPLACE(SUBSTR(`data_competencia_municipio`, 1, 19), "
-        "'T', ' ') AS DATETIME)))"
+        + "'T', ' ') AS DATETIME)))"
     )
     assert specs[1].oracle_expression == "TO_CHAR(MIN(\"DATA_COMPETENCIA_MUNICIPIO\"), 'YYYY-MM-DD HH24:MI:SS')"
     assert specs[3].bigquery_expression == "COUNTIF(`nome` IS NOT NULL AND `nome` != '')"
 
 
-def test_metric_specs_decode_raw_stored_as_base64_and_compare_bytes():
+def test_metric_specs_decode_raw_stored_as_base64_and_compare_bytes() -> None:
+    """Check that metric specs decode raw stored as base64 and compare bytes."""
     specs = metric_specs([field("pessoa_emitente", "STRING")], {"PESSOA_EMITENTE": "RAW"})
     assert [(spec.kind, spec.oracle_expression) for spec in specs] == [
         ("nao_nulos", 'COUNT("PESSOA_EMITENTE")'),
@@ -119,7 +137,8 @@ def test_metric_specs_decode_raw_stored_as_base64_and_compare_bytes():
     assert describe_column(ora("PESSOA_EMITENTE", "RAW", 16)) == "RAW(16) NOT NULL"
 
 
-def test_normalize_metric_treats_equivalent_decimals_as_equal():
+def test_normalize_metric_treats_equivalent_decimals_as_equal() -> None:
+    """Check that normalize metric treats equivalent decimals as equal."""
     assert normalize_metric("soma", "1.50") == normalize_metric("soma", Decimal("1.5")) == "1.5"
     assert normalize_metric("soma", ".25") == "0.25"
     assert normalize_metric("soma", 1000) == "1000"
@@ -127,14 +146,16 @@ def test_normalize_metric_treats_equivalent_decimals_as_equal():
     assert normalize_metric("minimo", "2026-01-01 00:00:00") == "2026-01-01 00:00:00"
 
 
-def test_compare_metrics_reports_divergences_with_readable_labels():
+def test_compare_metrics_reports_divergences_with_readable_labels() -> None:
+    """Check that compare metrics reports divergences with readable labels."""
     specs = metric_specs([field("valor", "NUMERIC")], {"VALOR": "NUMBER"})
     rows = compare_metrics(specs, [10, "12.50", "1", "9"], [10, "12.5", "1", "8"])
     assert [row[-1] for row in rows] == ["OK", "OK", "OK", "DIVERGE"]
     assert rows[3][:2] == ["VALOR", "máximo"]
 
 
-def test_format_text_table_aligns_columns():
+def test_format_text_table_aligns_columns() -> None:
+    """Check that format text table aligns columns."""
     text = format_text_table(["A", "Coluna"], [["1", "x"], ["22", "yy"]])
     assert text.splitlines() == ["A  | Coluna", "---+-------", "1  | x", "22 | yy"]
 
@@ -149,12 +170,14 @@ MONTHLY = Partitioning(
 )
 
 
-def test_short_bound_shows_only_the_date():
+def test_short_bound_shows_only_the_date() -> None:
+    """Check that short bound shows only the date."""
     assert short_bound(JAN) == "< 2026-01-01 00:00:00"
     assert short_bound("MAXVALUE") == "MAXVALUE"
 
 
-def test_compare_partitions_accepts_identical_copy():
+def test_compare_partitions_accepts_identical_copy() -> None:
+    """Check that compare partitions accepts identical copy."""
     rows = compare_partitions(MONTHLY, MONTHLY)
     assert [row[-1] for row in rows] == ["OK", "OK", "OK"]
     assert rows[1] == [
@@ -166,7 +189,8 @@ def test_compare_partitions_accepts_identical_copy():
     ]
 
 
-def test_compare_partitions_flags_unpartitioned_missing_and_extra_partitions():
+def test_compare_partitions_flags_unpartitioned_missing_and_extra_partitions() -> None:
+    """Flag an unpartitioned table, and missing and extra partitions."""
     rows = compare_partitions(MONTHLY, None)
     assert rows[0] == ["-", "(particionamento)", "RANGE (DATA_COMPETENCIA_MUNICIPIO)", "sem partição", "DIVERGE"]
     assert count_divergences(rows) == 3
@@ -180,24 +204,30 @@ def test_compare_partitions_flags_unpartitioned_missing_and_extra_partitions():
     assert compare_partitions(None, None) == [["-", "(particionamento)", "sem partição", "sem partição", "OK"]]
 
 
-def test_compare_partitions_checks_only_the_storage_the_original_declares():
+def test_compare_partitions_checks_only_the_storage_the_original_declares() -> None:
+    """Compare the segment and `STORAGE` only if the original declares them."""
+    assert MONTHLY.partitions
     immediate = PartitionStorage(True, 8388608, 1048576, 1, 2147483645)
     deferred = PartitionStorage(False)
     first, second = MONTHLY.partitions
     expected = replace(MONTHLY, partitions=(replace(first, storage=immediate), replace(second, storage=deferred)))
     loaded = replace(MONTHLY, partitions=(replace(first, storage=deferred), replace(second, storage=immediate)))
+
     rows = compare_partitions(expected, loaded)
+
     assert [row[-1] for row in rows] == ["OK", "DIVERGE", "OK"]
     assert rows[1][2].endswith(f"· {immediate.clause}")
     assert rows[1][3].endswith("· SEGMENT CREATION DEFERRED")
     assert "·" not in rows[2][2]
 
 
-def index(name, degree="1", status="N/A", columns=("A", "B")):
+def index(name: str, degree: str = "1", status: str = "N/A", columns: tuple[str, ...] = ("A", "B")) -> IndexDefinition:
+    """Return the index."""
     return IndexDefinition(name, "NORMAL", False, columns, "LOCAL", "DFEN_BIG_IDX", degree=degree, status=status)
 
 
-def test_compare_indexes_requires_same_definition_usable_and_without_parallel_degree():
+def test_compare_indexes_requires_same_definition_usable_and_without_parallel_degree() -> None:
+    """Require the same definition, usable status and no parallel degree."""
     expected = [index("BQLOAD_IX1"), index("BQLOAD_IX2"), index("BQLOAD_IX3"), index("BQLOAD_IX4")]
     actual = [
         index("BQLOAD_IX1"),
@@ -213,7 +243,8 @@ def test_compare_indexes_requires_same_definition_usable_and_without_parallel_de
     assert compare_indexes([index("BQLOAD_IX1")], [index("BQLOAD_IX1", columns=("B", "A"))])[0][-1] == "DIVERGE"
 
 
-def test_compare_synonyms_requires_all_owners_on_active_table():
+def test_compare_synonyms_requires_all_owners_on_active_table() -> None:
+    """Check that compare synonyms requires all owners on active table."""
     owners = ("DFEN", "NFSE_SIGA", "NFSE_USER")
     targets = {"DFEN": "DFEN.BQLOAD_X_B", "NFSE_SIGA": "DFEN.BQLOAD_X_B", "NFSE_USER": "DFEN.BQLOAD_X_A"}
     rows = compare_synonyms(owners, targets, "DFEN.BQLOAD_X_B")
@@ -225,7 +256,8 @@ def test_compare_synonyms_requires_all_owners_on_active_table():
     assert compare_synonyms(("NFSE_SIGA",), {}, "DFEN.BQLOAD_X_A") == [["NFSE_SIGA", "(ausente)", "DIVERGE"]]
 
 
-def test_compare_grants_accepts_extra_privileges_and_flags_missing_ones():
+def test_compare_grants_accepts_extra_privileges_and_flags_missing_ones() -> None:
+    """Check that compare grants accepts extra privileges and flags missing ones."""
     expected = (("RL_NFSE", "SELECT"), ("NFSE_OWNER", "SELECT, ALTER, DELETE"))
     found = [("RL_NFSE", "SELECT"), ("RL_NFSE", "INSERT"), ("NFSE_OWNER", "SELECT"), ("NFSE_OWNER", "DELETE")]
     assert compare_grants(expected, found) == [
@@ -235,7 +267,8 @@ def test_compare_grants_accepts_extra_privileges_and_flags_missing_ones():
     assert compare_grants((("RL_NFSE", "SELECT"),), []) == [["RL_NFSE", "SELECT", "(nenhum)", "DIVERGE"]]
 
 
-def test_metric_specs_decode_raw_stored_as_hex_when_the_load_used_hex():
+def test_metric_specs_decode_raw_stored_as_hex_when_the_load_used_hex() -> None:
+    """Check that metric specs decode raw stored as hex when the load used hex."""
     specs = metric_specs([field("pessoa_emitente", "STRING")], {"PESSOA_EMITENTE": "RAW"}, "hex")
     assert [(spec.kind, spec.oracle_expression) for spec in specs] == [
         ("nao_nulos", 'COUNT("PESSOA_EMITENTE")'),
@@ -248,7 +281,8 @@ def test_metric_specs_decode_raw_stored_as_hex_when_the_load_used_hex():
     assert specs[3].bigquery_expression == "UPPER(TO_HEX(MAX(FROM_HEX(NULLIF(`pessoa_emitente`, '')))))"
 
 
-def test_metric_specs_keep_base64_decoding_by_default_and_ignore_the_encoding_for_other_types():
+def test_metric_specs_keep_base64_decoding_by_default_and_ignore_the_encoding_for_other_types() -> None:
+    """Keep base64 decoding by default, and ignore the encoding for other types."""
     raw = [field("pessoa_emitente", "STRING")]
     assert metric_specs(raw, {"PESSOA_EMITENTE": "RAW"}) == metric_specs(raw, {"PESSOA_EMITENTE": "RAW"}, "base64")
     text = [field("nome", "STRING")]

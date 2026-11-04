@@ -1,6 +1,6 @@
 [project]
 name = "rj_seconserva__infraestrutura_siscor_obras"
-version = "0.1.0"
+version = "1.0.0"
 description = "Pipeline de Infraestrutura SISCOR Obras da SECONSERVA - Dump de tabelas do Sistema de Conservação e Obras"
 dependencies = [
     "prefect_rj_iplanrio",

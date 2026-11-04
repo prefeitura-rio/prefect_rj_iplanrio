@@ -1,1 +1,1 @@
-ALTER TABLE "$schema"."$table" $clause
+ALTER TABLE "{{ schema }}"."{{ table }}" {{ clause }}

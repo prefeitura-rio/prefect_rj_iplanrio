@@ -1,18 +1,21 @@
-import threading
-import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from threading import Condition, Thread
+from threading import enumerate as list_threads
+from time import sleep
+from typing import final, override
 
 import pytest
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import discord as discord_module
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import notify as notify_module
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord import DiscordStatusMessage
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_embed import RunStatus, build_payload
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify import LoadNotifier, NotifierConfig
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify_view import RunState, TableState, build_view
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.stages import Step, TableStep
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import discord as discord_module
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import notify as notify_module
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import DiscordStatusMessage
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import build_payload
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import RunStatus
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify import LoadNotifier, NotifierConfig
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify_view import RunState, TableState, build_view
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.stages import Step, TableStep
 
 NOW = datetime(2026, 10, 9, 15, 0, 0, tzinfo=UTC)
 INTERVAL = 0.05
@@ -27,55 +30,64 @@ class Publish:
 
 
 class RecordingMessage(DiscordStatusMessage):
-    """Cliente falso: registra cada ``publish`` e ``announce`` sem nenhuma requisição HTTP."""
+    """A fake client that records each `publish` and `announce`, with no HTTP."""
 
     def __init__(self, on_publish: Callable[[bool], None] | None = None) -> None:
+        """Store the arguments."""
         super().__init__("https://discord.example/api/webhooks/1/t")
         self.publishes: list[Publish] = []
         self.announcements: list[Mapping[str, object]] = []
-        self._on_publish = on_publish
-        self._changed = threading.Condition()
+        self.on_publish: Callable[[bool], None] | None = on_publish
+        self.changed: Condition = Condition()
 
+    @override
     def publish(self, payload: Mapping[str, object], force: bool = False) -> None:
-        with self._changed:
+        with self.changed:
             self.publishes.append(Publish(payload, force))
-            self._changed.notify_all()
-        if self._on_publish is not None:
-            self._on_publish(force)
+            self.changed.notify_all()
+        if self.on_publish is not None:
+            self.on_publish(force)
 
+    @override
     def announce(self, payload: Mapping[str, object]) -> None:
         self.announcements.append(payload)
 
     def wait_for(self, count: int) -> bool:
-        """Espera (com limite) até haver ``count`` publicações; ``False`` se o prazo estourar."""
-        with self._changed:
-            return self._changed.wait_for(lambda: len(self.publishes) >= count, WAIT_SECONDS)
+        """Wait up to a limit for `count` publications, or return `False`."""
+        with self.changed:
+            return self.changed.wait_for(lambda: len(self.publishes) >= count, WAIT_SECONDS)
 
 
+@final
 class Clock:
-    """Substitui o módulo ``time`` do notificador para controlar o relógio monotônico."""
+    """Replace the `time` module of the notifier to control the monotonic clock."""
 
     def __init__(self) -> None:
+        """Store the arguments."""
         self.now = 1000.0
 
     def monotonic(self) -> float:
+        """Return the monotonic."""
         return self.now
 
 
 def make(
     message: DiscordStatusMessage | None, heartbeat_seconds: float = INTERVAL, tables: tuple[str, ...] = ("A",)
 ) -> LoadNotifier:
+    """Make."""
     config = NotifierConfig(
-        "nota_carioca_staging", "run-1", "nota_carioca_staging", tables, 2, False, "full", True, heartbeat_seconds
+        "nota_carioca_staging", None, "nota_carioca_staging", tables, 2, False, "full", True, heartbeat_seconds
     )
     return LoadNotifier(config, message)
 
 
-def heartbeat_threads() -> set[threading.Thread]:
-    return {thread for thread in threading.enumerate() if thread.name == THREAD_NAME and thread.is_alive()}
+def heartbeat_threads() -> set[Thread]:
+    """Return the heartbeat threads."""
+    return {thread for thread in list_threads() if thread.name == THREAD_NAME and thread.is_alive()}
 
 
 def fields_by_name(payload: Mapping[str, object]) -> dict[str, str]:
+    """Return the fields by name."""
     embeds = payload["embeds"]
     assert isinstance(embeds, list)
     fields = embeds[0]["fields"]
@@ -84,29 +96,33 @@ def fields_by_name(payload: Mapping[str, object]) -> dict[str, str]:
 
 
 def etapa_atual(notifier: LoadNotifier) -> str:
+    """Return the etapa atual."""
     return fields_by_name(build_payload(build_view(notifier.state)))["🧭 Etapa atual"]
 
 
 @pytest.fixture
 def warnings(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Return the warnings."""
     seen: list[str] = []
     monkeypatch.setattr(discord_module, "warn", seen.append)
-    monkeypatch.setattr(discord_module, "info", lambda _: None)
     return seen
 
 
 @pytest.fixture
 def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
+    """Return the clock."""
     fake = Clock()
     monkeypatch.setattr(notify_module, "time", fake)
     return fake
 
 
-# --- heartbeat thread --------------------------------------------------------------------------------------------
+# --- heartbeat thread
 
 
 def test_heartbeat_republishes_the_view_while_nothing_else_happens(warnings: list[str]) -> None:
-    # Given a live notifier that is begun and then goes idle (no step change, no progress)
+    # Given a live notifier that is begun and then goes idle (no step change, no
+    # progress)
+    """Check that heartbeat republishes the view while nothing else happens."""
     before = heartbeat_threads()
     message = RecordingMessage()
     notifier = make(message)
@@ -115,7 +131,8 @@ def test_heartbeat_republishes_the_view_while_nothing_else_happens(warnings: lis
         notifier.begin()
         reached = message.wait_for(4)
         started = heartbeat_threads() - before
-    # Then the creation was forced and every later publish is a plain (throttled) one from a daemon thread
+    # Then the creation was forced and every later publish is a plain (throttled) one
+    # from a daemon thread
     assert reached
     assert [publish.force for publish in message.publishes[:4]] == [True, False, False, False]
     assert len(started) == 1
@@ -125,6 +142,7 @@ def test_heartbeat_republishes_the_view_while_nothing_else_happens(warnings: lis
 
 def test_begin_twice_keeps_a_single_heartbeat() -> None:
     # Given a notifier begun twice
+    """Check that begin twice keeps a single heartbeat."""
     before = heartbeat_threads()
     notifier = make(RecordingMessage())
     with notifier.guard():
@@ -134,16 +152,32 @@ def test_begin_twice_keeps_a_single_heartbeat() -> None:
         assert len(heartbeat_threads() - before) == 1
 
 
+def succeed(notifier: LoadNotifier) -> None:
+    """Run the succeed."""
+    notifier.succeed()
+
+
+def fail_with_error(notifier: LoadNotifier) -> None:
+    """Run the fail with error."""
+    notifier.fail(RuntimeError("falhou"))
+
+
+def fail_with_interrupt(notifier: LoadNotifier) -> None:
+    """Run the fail with interrupt."""
+    notifier.fail(KeyboardInterrupt())
+
+
 @pytest.mark.parametrize(
     "finish",
     [
-        pytest.param(lambda notifier: notifier.succeed(), id="succeed"),
-        pytest.param(lambda notifier: notifier.fail(RuntimeError("falhou")), id="fail"),
-        pytest.param(lambda notifier: notifier.fail(KeyboardInterrupt()), id="cancel"),
+        pytest.param(succeed, id="succeed"),
+        pytest.param(fail_with_error, id="fail"),
+        pytest.param(fail_with_interrupt, id="cancel"),
     ],
 )
 def test_heartbeat_stops_when_the_run_is_finalized(finish: Callable[[LoadNotifier], None]) -> None:
     # Given a notifier with a heartbeat that already beat at least once
+    """Check that heartbeat stops when the run is finalized."""
     before = heartbeat_threads()
     message = RecordingMessage()
     notifier = make(message)
@@ -151,16 +185,18 @@ def test_heartbeat_stops_when_the_run_is_finalized(finish: Callable[[LoadNotifie
     assert message.wait_for(2)
     # When the run is finalized
     finish(notifier)
-    # Then the thread is gone, the last publish is the forced final one, and nothing is published afterwards
+    # Then the thread is gone, the last publish is the forced final one, and nothing is
+    # published afterwards
     assert not heartbeat_threads() - before
     assert message.publishes[-1].force
     assert len(message.announcements) == 1
     published = len(message.publishes)
-    time.sleep(2 * INTERVAL)
+    sleep(2 * INTERVAL)
     assert len(message.publishes) == published
 
 
 def run_until_beat(notifier: LoadNotifier, message: RecordingMessage, *, fails: bool) -> None:
+    """Run until beat."""
     with notifier.guard():
         notifier.begin()
         assert message.wait_for(2)
@@ -168,9 +204,10 @@ def run_until_beat(notifier: LoadNotifier, message: RecordingMessage, *, fails: 
             raise RuntimeError("sqlldr exited 1")
 
 
-@pytest.mark.parametrize("fails", [False, True], ids=["normal exit", "exception"])
+@pytest.mark.parametrize("fails", [pytest.param(False, id="normal_exit"), pytest.param(True, id="exception")])
 def test_heartbeat_stops_when_the_guard_exits(*, fails: bool) -> None:
     # Given a notifier that begins inside the guard and beats at least once
+    """Check that heartbeat stops when the guard exits."""
     before = heartbeat_threads()
     message = RecordingMessage()
     notifier = make(message)
@@ -183,16 +220,18 @@ def test_heartbeat_stops_when_the_guard_exits(*, fails: bool) -> None:
     # Then the thread is gone and the message stopped receiving publishes
     assert not heartbeat_threads() - before
     published = len(message.publishes)
-    time.sleep(2 * INTERVAL)
+    sleep(2 * INTERVAL)
     assert len(message.publishes) == published
 
 
 def test_no_heartbeat_when_discord_is_off_or_the_interval_is_zero() -> None:
-    # Given a notifier without a client, one created with the notifications disabled, and one with interval 0
+    # Given a notifier without a client, one created with the notifications disabled,
+    # and one with interval 0
+    """Check that no heartbeat when discord is off or the interval is zero."""
     before = heartbeat_threads()
     without_client = make(None)
     disabled = LoadNotifier.create(
-        NotifierConfig("ds", "run-1", "ds", ("A",), 2, False, "full", enabled=False, heartbeat_seconds=INTERVAL)
+        NotifierConfig("ds", None, "ds", ("A",), 2, False, "full", enabled=False, heartbeat_seconds=INTERVAL)
     )
     no_interval = make(RecordingMessage(), heartbeat_seconds=0)
     # When each begins and finishes
@@ -204,7 +243,10 @@ def test_no_heartbeat_when_discord_is_off_or_the_interval_is_zero() -> None:
 
 
 def test_a_failing_publish_neither_kills_the_heartbeat_nor_raises(warnings: list[str]) -> None:
-    # Given a client whose plain publishes blow up (the forced ones, at the start and the end, work)
+    # Given a client whose plain publishes blow up (the forced ones, at the start and
+    # the end, work)
+    """Check that a failing publish neither kills the heartbeat nor raises."""
+
     def explode(force: bool) -> None:
         if not force:
             raise RuntimeError("boom")
@@ -215,24 +257,33 @@ def test_a_failing_publish_neither_kills_the_heartbeat_nor_raises(warnings: list
     with notifier.guard():
         notifier.begin()
         survived = message.wait_for(5)
-    # Then the thread kept beating, nothing reached the flow, and the failure was warned once
+    # Then the thread kept beating, nothing reached the flow, and the failure was warned
+    # once
     assert survived
     assert notifier.state.status is RunStatus.SUCCESS
     assert warnings == ["Batimento do Discord falhou: RuntimeError: boom"]
 
 
-# --- elapsed time ------------------------------------------------------------------------------------------------
+# --- elapsed time
 
 
 def test_heartbeat_makes_the_elapsed_and_the_step_elapsed_advance(clock: Clock, warnings: list[str]) -> None:
-    # Given a client that makes 30 s pass on every publish, so each heartbeat sees a later clock
-    message = RecordingMessage(on_publish=lambda _: setattr(clock, "now", clock.now + 30))
+    # Given a client that makes 30 s pass on every publish, so each heartbeat sees a
+    # later clock
+    """Check that heartbeat makes the elapsed and the step elapsed advance."""
+
+    def advance(force: bool) -> None:
+        del force
+        clock.now += 30
+
+    message = RecordingMessage(on_publish=advance)
     notifier = make(message, tables=())
     # When the run sits in its first step (export) across the creation and three beats
     with notifier.guard():
         notifier.begin()
         reached = message.wait_for(4)
-    # Then the beats show the run elapsed growing and, once past a minute, how long the step has been going
+    # Then the beats show the run elapsed growing and, once past a minute, how long the
+    # step has been going
     assert reached
     assert warnings == []
     beats = [fields_by_name(publish.payload) for publish in message.publishes if not publish.force]
@@ -246,6 +297,7 @@ def test_heartbeat_makes_the_elapsed_and_the_step_elapsed_advance(clock: Clock, 
 
 def test_step_elapsed_shows_in_the_current_stage_and_resets_when_the_step_changes(clock: Clock) -> None:
     # Given a run in the export step for 2 minutes
+    """Show the step time in the current stage, and reset it when the step changes."""
     notifier = make(None)
     notifier.begin()
     notifier.enter(Step.EXPORT)
@@ -260,7 +312,8 @@ def test_step_elapsed_shows_in_the_current_stage_and_resets_when_the_step_change
     notifier.table_step("A", TableStep.PREPARATION, slot="B")
     notifier.set_physical_table("A", "BQLOAD_A_B")
     assert etapa_atual(notifier) == "A: Preparação · há 3min 05s"
-    # and moving to the next table step starts the count again, silent until a minute has passed
+    # and moving to the next table step starts the count again, silent until a minute
+    # has passed
     notifier.table_step("A", TableStep.LOAD)
     clock.now += 59
     assert etapa_atual(notifier) == "A: Carga SQL*Loader"
@@ -270,6 +323,7 @@ def test_step_elapsed_shows_in_the_current_stage_and_resets_when_the_step_change
 
 def test_step_elapsed_is_only_shown_for_a_running_stage() -> None:
     # Given a state 5 minutes into the same stage
+    """Check that step elapsed is only shown for a running stage."""
     running = RunState(
         dataset_id="ds",
         run_name="ds",
@@ -287,7 +341,8 @@ def test_step_elapsed_is_only_shown_for_a_running_stage() -> None:
     )
     done = replace(running, tables={"A": TableState("A", step=TableStep.DONE)})
     failed = replace(running, status=RunStatus.FAILED, failed_step=Step.TABLES)
-    # Then only the running one carries the suffix; a finished table and a failed run do not
+    # Then only the running one carries the suffix; a finished table and a failed run do
+    # not
     assert build_view(running).stage == "A: Índices · há 5min 00s"
     assert build_view(done).stage == "A: Concluída"
     assert build_view(failed).stage == "A: Índices"

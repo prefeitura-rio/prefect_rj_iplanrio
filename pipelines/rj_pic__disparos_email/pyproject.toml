@@ -1,11 +1,11 @@
 [project]
 name = "rj_pic__disparos_email"
-version = "0.1.0"
-description = "Pipeline disparos_email da secretaria pic"
-requires-python = ">=3.13"
+version = "1.0.0"
+description = "Send an HTML mail to each recipient of a BigQuery table, via the Data Relay."
 dependencies = [
-    "jinja2>=3.1.2",
-    "python-dotenv>=1.0.0",
-    "google-cloud-bigquery>=3.25.0",
-    "requests>=2.31.0",
+    "prefect_rj_iplanrio",
+    "jinja2",
 ]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
