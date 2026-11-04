@@ -136,6 +136,6 @@ deployments:
         memory_limit: 6Gi
     schedules:
       - cron: "0 9,18 * * *"
-        timezone: America/Sao_Paulo
         active: false
+        timezone: America/Sao_Paulo
         slug: nota-carioca-bq-to-oracle-9h-18h

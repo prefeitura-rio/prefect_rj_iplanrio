@@ -107,10 +107,10 @@ deployments:
           GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     schedules:
       - cron: "0 8 * * *"
-        timezone: America/Sao_Paulo
         active: false
+        timezone: America/Sao_Paulo
         slug: relatorio-engajamento-hsm-diario-8h
       - cron: "0 18 * * *"
-        timezone: America/Sao_Paulo
         active: false
+        timezone: America/Sao_Paulo
         slug: relatorio-engajamento-hsm-diario-18h

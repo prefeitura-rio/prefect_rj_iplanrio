@@ -121,5 +121,6 @@ deployments:
           GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     schedules:
       - cron: "0 8 * * *"
+        active: false
         timezone: America/Sao_Paulo
         slug: dbt_daily_build

@@ -107,6 +107,6 @@ deployments:
           GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     schedules:
       - cron: "0 15 * * *"
+        active: false
         timezone: America/Sao_Paulo
-        active: true
         slug: agentforce-classificacao-llm-diario-15h

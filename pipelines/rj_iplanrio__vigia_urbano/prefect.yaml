@@ -82,6 +82,7 @@ deployments:
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
     schedules:
       - interval: 3600
+        active: false
         anchor_date: '2022-01-01T01:00:00'
         timezone: America/Sao_Paulo
         slug: vw_RespostaOcorrencia
@@ -103,6 +104,7 @@ deployments:
             target: prod
             select: raw_vigia_urbano__vw_resposta_ocorrencia
       - interval: 3600
+        active: false
         anchor_date: '2022-01-01T01:00:00'
         timezone: America/Sao_Paulo
         slug: vw_Auditoria
@@ -124,6 +126,7 @@ deployments:
             target: prod
             select: raw_vigia_urbano__vw_auditoria
       - interval: 3600
+        active: false
         anchor_date: '2022-01-01T01:00:00'
         timezone: America/Sao_Paulo
         slug: PerfilUsuario
@@ -145,6 +148,7 @@ deployments:
             target: prod
             select: raw_vigia_urbano__perfil_usuario
       - interval: 3600
+        active: false
         anchor_date: '2022-01-01T01:00:00'
         timezone: America/Sao_Paulo
         slug: Usuario
@@ -166,6 +170,7 @@ deployments:
             target: prod
             select: raw_vigia_urbano__usuario
       - interval: 3600
+        active: false
         anchor_date: '2022-01-01T01:00:00'
         timezone: America/Sao_Paulo
         slug: OrgaoUsuario
@@ -187,6 +192,7 @@ deployments:
             target: prod
             select: raw_vigia_urbano__orgao_usuario
       - interval: 3600
+        active: false
         anchor_date: '2022-01-01T01:00:00'
         timezone: America/Sao_Paulo
         slug: Orgao
@@ -208,6 +214,7 @@ deployments:
             target: prod
             select: raw_vigia_urbano__orgao
       - interval: 3600
+        active: false
         anchor_date: '2022-01-01T01:00:00'
         timezone: America/Sao_Paulo
         slug: TratamentoFator
@@ -229,6 +236,7 @@ deployments:
             target: prod
             select: raw_vigia_urbano__tratamento_fator
       - interval: 3600
+        active: false
         anchor_date: '2022-01-01T01:00:00'
         timezone: America/Sao_Paulo
         slug: Chamado
@@ -250,6 +258,7 @@ deployments:
             target: prod
             select: raw_vigia_urbano__chamado
       - interval: 3600
+        active: false
         anchor_date: '2022-01-01T01:00:00'
         timezone: America/Sao_Paulo
         slug: EncaminhamentoOrgao
@@ -271,6 +280,7 @@ deployments:
             target: prod
             select: raw_vigia_urbano__encaminhamento_orgao
       - interval: 3600
+        active: false
         anchor_date: '2022-01-01T01:00:00'
         timezone: America/Sao_Paulo
         slug: ArquivoEncaminhamento
