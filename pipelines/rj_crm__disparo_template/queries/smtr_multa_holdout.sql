@@ -66,7 +66,7 @@ CLUSTER BY grupo, id_devedor;
 
 -- ============================================================
 -- 1) RMI: dados demográficos e telefone
---    Sem filtrar estrategia_envio, para manter ENVIAR/TESTAR/EVITAR/NÃO ENVIAR
+--    Sem óbito, sem menor de idade e sem estratégia NÃO ENVIAR
 -- ============================================================
 CREATE TEMP TABLE rmi AS
 WITH rmi_base AS (
@@ -94,11 +94,12 @@ WITH rmi_base AS (
                 IFNULL(pf.telefone.principal.ddd, "21"),
                 pf.telefone.principal.valor
             )
-        ) AS celular_disparo,
-        pf.menor_idade,
-        pf.obito.indicador AS obito_indicador
+        ) AS celular_disparo
     FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf
     WHERE pf.cpf IS NOT NULL
+        AND pf.telefone.principal.estrategia_envio != 'NÃO ENVIAR'
+        AND pf.obito.indicador IS FALSE
+        AND pf.menor_idade IS FALSE
 )
 
 SELECT *
@@ -106,8 +107,6 @@ FROM rmi_base
 QUALIFY ROW_NUMBER() OVER (
     PARTITION BY cpf
     ORDER BY
-        CASE WHEN obito_indicador IS FALSE THEN 0 ELSE 1 END,
-        CASE WHEN menor_idade IS FALSE THEN 0 ELSE 1 END,
         CASE
             WHEN estrategia_envio = 'ENVIAR' THEN 0
             WHEN estrategia_envio = 'TESTAR' THEN 1
@@ -123,6 +122,17 @@ QUALIFY ROW_NUMBER() OVER (
 -- ============================================================
 -- 2) Multas vencidas / não pagas
 -- ============================================================
+/*
+    Extração da lista de multas vencidas desde 2025 (PF)
+    Regras de negócio:
+      1. Recorte temporal: autuações desde 2025
+      2. Situação: "Ativo" ou "Desvinculado" e "NP Gerada"
+      3. Sem pagamento: valor_pago e data_pagamento nulos
+      4. Sem defesa/recurso: processo_defesa_autuacao e recurso_penalidade_multa nulos
+      5. Precedência: proprietário; na falta, possuidor
+      6. Filtro PF: documento com 11 dígitos
+      7. Vencidas: data_limite_recurso < hoje
+*/
 CREATE TEMP TABLE multas_detalhadas AS
 WITH autuacao_vencida_raw AS (
     SELECT
