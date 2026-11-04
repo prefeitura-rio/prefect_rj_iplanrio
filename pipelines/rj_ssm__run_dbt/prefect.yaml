@@ -109,6 +109,7 @@ deployments:
           GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     schedules:
       - interval: 86400
+        active: false
         anchor_date: '2023-01-01T09:00:00'
         timezone: America/Sao_Paulo
         slug: dbt_daily_freshness
@@ -119,6 +120,7 @@ deployments:
             target: prod
           report: true
       - interval: 86400
+        active: false
         anchor_date: '2023-01-01T10:15:00'
         timezone: America/Sao_Paulo
         slug: dbt_daily_build
@@ -130,6 +132,7 @@ deployments:
             select: +tag:daily
           report: true
       - cron: 0 9,12,15,18 * * *
+        active: false
         timezone: America/Sao_Paulo
         slug: dbt_fatores_build
         parameters:
