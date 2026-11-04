@@ -106,6 +106,7 @@ deployments:
           GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     schedules:
       - interval: 86400
+        active: false
         anchor_date: '2023-01-01T09:00:00'
         timezone: America/Sao_Paulo
         slug: dbt_daily_freshness
@@ -115,6 +116,7 @@ deployments:
             command: source freshness
             target: prod
       - interval: 86400
+        active: false
         anchor_date: '2023-01-01T09:15:00'
         timezone: America/Sao_Paulo
         slug: dbt_daily_build
@@ -125,6 +127,7 @@ deployments:
             target: prod
             select: tag:daily
       - interval: 604800
+        active: false
         anchor_date: '2024-03-17T09:15:00'
         timezone: America/Sao_Paulo
         slug: dbt_weekly_build
@@ -135,6 +138,7 @@ deployments:
             target: prod
             select: tag:weekly
       - interval: 3600
+        active: false
         anchor_date: '2024-03-17T09:15:00'
         timezone: America/Sao_Paulo
         slug: dbt_hourly_build
@@ -145,6 +149,7 @@ deployments:
             target: prod
             select: +tag:hourly
       - interval: 3600
+        active: false
         anchor_date: '2023-01-01T09:30:00'
         timezone: America/Sao_Paulo
         slug: dbt_hourly_freshness
