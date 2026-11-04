@@ -1,5 +1,8 @@
 from json import loads
 from os import environ
+from pathlib import Path
+from re import search
+from subprocess import run
 from types import SimpleNamespace
 
 import pytest
@@ -226,3 +229,25 @@ async def test_no_report_is_posted_when_it_is_off(fake_runner, fake_api, monkeyp
 
     assert fake_runner.instances
     assert fake_api.requests == []
+
+
+@pytest.mark.parametrize(
+    ("folder", "kept"),
+    [
+        pytest.param("dbt/include/global_project/macros/materializations/tests", True, id="dbt-test-materialization"),
+        pytest.param("dbt/include/bigquery/macros/tests", True, id="dbt-adapter-macros"),
+        pytest.param("somepackage/tests", False, id="package-tests"),
+        pytest.param("somepackage/test", False, id="package-test"),
+    ],
+)
+def test_regression_the_image_keeps_the_dbt_macros_and_drops_package_tests(tmp_path, folder, kept) -> None:
+    """Regression: the image pruned every `tests` folder and dbt lost its macros."""
+    dockerfile = (Path(__file__).parents[1] / "Dockerfile").read_text()
+    match = search(r"find \.venv -type d \\\( -name tests .*?\{\} \+", dockerfile)
+    assert match
+    command = match.group(0)
+    (tmp_path / ".venv" / "lib" / folder).mkdir(parents=True)
+
+    run(["sh", "-c", command], cwd=tmp_path, check=True)
+
+    assert (tmp_path / ".venv" / "lib" / folder).exists() is kept

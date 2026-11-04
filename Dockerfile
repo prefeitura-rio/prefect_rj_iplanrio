@@ -31,7 +31,7 @@ RUN set -e; \
     for member in $(ls pipelines); do [ "$member" = "$HEAVY_PIPELINE" ] || names "$member"; done | sort -u > /tmp/shared; \
     names "$HEAVY_PIPELINE" | sort -u | comm -23 - /tmp/shared | sed 's/^/--no-install-package /' > /tmp/skip; \
     uv sync --frozen --all-packages --no-install-workspace --no-dev --no-cache $(cat /tmp/skip) \
-    && find .venv -type d \( -name tests -o -name test \) -prune -exec rm -rf {} + \
+    && find .venv -type d \( -name tests -o -name test \) ! -path '*/dbt/include/*' -prune -exec rm -rf {} + \
     && find .venv -name "*.pyi" -delete \
     && rm -f .venv/bin/dbt-core-experimental-parser \
     && rm -rf .venv/lib/python3.14/site-packages/google/cloud/aiplatform* \
