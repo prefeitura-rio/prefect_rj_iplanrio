@@ -28,8 +28,11 @@ export def find-deployments [pipeline: string, environment: string]: nothing -> 
     | where ($it | str ends-with $'--($environment)')
 }
 
-# Return the pipelines that may deploy to one environment, from `.allow.json`.
-export def read-allowed [environment: string]: nothing -> list<string> {
+# Return the pipelines that may deploy to one environment, from `.allow.json` in the root of the repository.
+# Return nothing if the file does not exist: then every pipeline may deploy.
+export def read-allowed [environment: string]: nothing -> oneof<list<string>, nothing> {
+    if not ($ALLOW_FILE | path exists) { return null }
+
     let allowed = try { open $ALLOW_FILE } catch {|err|
         fail $'Cannot read ($ALLOW_FILE): ($err.msg)' {command: read-allowed, span: (metadata $environment).span}
     }
