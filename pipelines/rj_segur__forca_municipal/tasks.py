@@ -117,7 +117,7 @@ def resolve_window(window: Window) -> tuple[str, str]:
 async def read_unit_ids(table: Table, cloud: Cloud) -> list[str]:
     """Return the ids of the units in the latest partitions of `unidades_historico`."""
     return await read_ids_task(
-        cloud["project"], f"{cloud['project']}.{table['dataset_id']}.unidades_historico", "unit_ids", "UnitId"
+        cloud["project"], f"{cloud['project']}.{table['dataset_id']}_staging.unidades_historico", "unit_ids", "UnitId"
     )
 
 
@@ -165,7 +165,8 @@ async def run_qmd_task(table: Table, cloud: Cloud, dump_mode: DumpMode, limits: 
     5%.
     """
     table_id = table["table_id"]
-    qmd_ids = await read_ids_task(cloud["project"], f"{cloud['project']}.{table['dataset_id']}.qmd", "qmd_ids", "Id")
+    qmd_table = f"{cloud['project']}.{table['dataset_id']}_staging.qmd"
+    qmd_ids = await read_ids_task(cloud["project"], qmd_table, "qmd_ids", "Id")
 
     if not qmd_ids:
         logger.warning("No QMD in the catalog")
