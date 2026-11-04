@@ -59,6 +59,7 @@ sessoes_usuario AS (
     SELECT
         id_sessao_receptivo AS id_sessao,
         ANY_VALUE(contato.contato_telefone) AS telefone,
+        ANY_VALUE(contato.telefone_original) AS telefone_original,
         ANY_VALUE(contato.cpf) AS cpf,
         ANY_VALUE(contato.contato_nome) AS nome_cidadao,
         ANY_VALUE(receptivo_inicio_datahora) AS sessao_inicio_datahora,

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 from pydantic import JsonValue
 
@@ -21,6 +21,7 @@ class Session:
 
     id_sessao: str
     telefone: str | None
+    telefone_original: str | None
     cpf: str | None
     nome_cidadao: str | None
     sessao_inicio_datahora: datetime | None
@@ -76,6 +77,24 @@ class Rule:
     function_name: str
     name: str
     code: str
+    grouping_type: str | None = None
+    grouping: str | None = None
+
+
+class MacrothemeCatalog(TypedDict):
+    """One macrotheme and its candidate secretariats."""
+
+    nome: str
+    descricao: str
+    secretarias: NotRequired[list[str]]
+
+
+class SecretariatCatalog(TypedDict):
+    """One secretariat available to the routing prompt."""
+
+    sigla: str
+    nome: str
+    descricao: str
 
 
 class Tables(TypedDict, total=False):
@@ -126,3 +145,4 @@ class Relevant(TypedDict):
     secretaria_principal: str | None
     conteudo_relevante: bool | None
     causa_nome: list[str] | None
+    macrotema_principal: str | None

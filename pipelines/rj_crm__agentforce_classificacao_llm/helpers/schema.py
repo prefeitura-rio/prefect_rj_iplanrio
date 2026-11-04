@@ -13,6 +13,7 @@ INT64: Final = bigquery.enums.SqlTypeNames.INT64
 SCHEMA: Final = [
     bigquery.SchemaField("id_sessao", STRING, mode="REQUIRED"),
     bigquery.SchemaField("telefone", STRING),
+    bigquery.SchemaField("telefone_original", STRING),
     bigquery.SchemaField("cpf", STRING),
     bigquery.SchemaField("nome_cidadao", STRING),
     bigquery.SchemaField("sessao_inicio_datahora", TIMESTAMP),
@@ -46,6 +47,15 @@ SCHEMA: Final = [
     bigquery.SchemaField("data_particao", DATE, mode="REQUIRED"),
     bigquery.SchemaField("telefone_confirmacao_flag", STRING),
     bigquery.SchemaField("telefone_confirmacao_datahora", TIMESTAMP),
+    bigquery.SchemaField("macrotema_principal", STRING),
+    bigquery.SchemaField("macrotemas_relacionados", STRING),
+    bigquery.SchemaField("justificativa_macrotema", STRING),
+    bigquery.SchemaField("resposta_llm_bruta_macrotema", STRING),
+    bigquery.SchemaField("prompt_versao_macrotema", STRING),
+    bigquery.SchemaField("justificativa_secretaria", STRING),
+    bigquery.SchemaField("resposta_llm_bruta_secretaria", STRING),
+    bigquery.SchemaField("prompt_versao_secretaria", STRING),
+    bigquery.SchemaField("tokens_cache", INT64),
 ]
 """The columns, in the physical order of the table.
 

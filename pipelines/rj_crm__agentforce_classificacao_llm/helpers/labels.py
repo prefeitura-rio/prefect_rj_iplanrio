@@ -15,7 +15,6 @@ from pipelines.rj_crm__agentforce_classificacao_llm.constants import (
     VALID_NATURES,
     VALID_PHONE_FLAGS,
     VALID_RELATIONS,
-    VALID_SECRETARIATS,
     WITH_HSM,
     WITHOUT_HSM,
 )
@@ -83,6 +82,7 @@ def session_columns(session: Session) -> Row:
     return {
         "id_sessao": session.id_sessao,
         "telefone": session.telefone,
+        "telefone_original": session.telefone_original,
         "cpf": session.cpf,
         "nome_cidadao": session.nome_cidadao,
         "sessao_inicio_datahora": session.sessao_inicio_datahora.isoformat()
@@ -121,8 +121,8 @@ def build_classified_row(prompted: Prompted, parsed: Mapping[str, JsonValue], mo
         if isinstance(parsed.get("conteudo_relevante"), bool)
         else None,
         "resumo": parsed.get("resumo"),
-        "secretarias_relacionadas": check_labels(parsed.get("secretarias_relacionadas"), VALID_SECRETARIATS),
-        "secretaria_principal": check_label(parsed.get("secretaria_principal"), VALID_SECRETARIATS),
+        "secretarias_relacionadas": None,
+        "secretaria_principal": None,
         "natureza": nature,
         "sentimento": derive_sentiment(nature),
         "motivo": parsed.get("motivo"),
@@ -133,6 +133,7 @@ def build_classified_row(prompted: Prompted, parsed: Mapping[str, JsonValue], mo
         "tokens_entrada": answer.prompt_tokens,
         "tokens_saida": answer.output_tokens,
         "tokens_total": answer.total_tokens,
+        "tokens_cache": answer.cache_tokens,
     }
 
 
@@ -164,6 +165,15 @@ def build_rule_row(session: Session) -> Row:
         "tokens_entrada": None,
         "tokens_saida": None,
         "tokens_total": None,
+        "tokens_cache": None,
+        "macrotema_principal": None,
+        "macrotemas_relacionados": None,
+        "justificativa_macrotema": None,
+        "resposta_llm_bruta_macrotema": None,
+        "prompt_versao_macrotema": None,
+        "justificativa_secretaria": None,
+        "resposta_llm_bruta_secretaria": None,
+        "prompt_versao_secretaria": None,
     }
 
 

@@ -56,9 +56,15 @@ def test_a_block_that_is_not_safe_raises() -> None:
         compile_rules("import os\ndef f(t):\n    return True\n")
 
 
-def rule(name: str, code: str, secretariat: str = "Comlurb", parent: str | None = None) -> Rule:
+def rule(
+    name: str,
+    code: str,
+    secretariat: str = "Comlurb",
+    parent: str | None = None,
+    grouping: str | None = None,
+) -> Rule:
     """Build a rule of the catalog."""
-    return Rule(secretariat, parent, name, name.upper(), code)
+    return Rule(secretariat, parent, name, name.upper(), code, "macrotema" if grouping else None, grouping)
 
 
 def row(
@@ -67,12 +73,14 @@ def row(
     *,
     relevant: bool | None = True,
     themes: list[JsonValue] | None = None,
+    macrotheme: str | None = None,
 ) -> Row:
     """Build a row with a summary."""
     return {
         "id_sessao": "s",
         "resumo": summary,
         "secretaria_principal": secretariat,
+        "macrotema_principal": macrotheme,
         "conteudo_relevante": relevant,
         "tema_nome": themes if themes is not None else [],
     }
@@ -101,6 +109,14 @@ def test_a_session_without_a_secretariat_uses_the_rules_of_none_identified() -> 
     )
 
     assert apply_rules([row("preciso de ajuda", None)], index, "tema_nome")[0]["tema_nome"] == ["GENERICA"]
+
+
+def test_a_macrotheme_rule_does_not_apply_to_another_macrotheme() -> None:
+    """Apply a grouped rule only inside its macrotheme."""
+    index = compile_catalog([rule("poda", PODA, grouping="Conservação")])
+    rows = [row("poda", macrotheme="Conservação"), row("poda", macrotheme="Saúde")]
+
+    assert [item["tema_nome"] for item in apply_rules(rows, index, "tema_nome")] == [["PODA"], []]
 
 
 def test_a_cause_runs_only_inside_the_theme_that_it_belongs_to() -> None:

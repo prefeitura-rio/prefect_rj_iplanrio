@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 from prefect import task
-from pydantic import TypeAdapter
+from pydantic import JsonValue, TypeAdapter
 from toolkit.telemetry import logger
 
 from pipelines.rj_crm__agentforce_classificacao_llm.constants import (
@@ -15,10 +15,22 @@ from pipelines.rj_crm__agentforce_classificacao_llm.constants import (
     DEFAULT_MAX_WORKERS,
     LLM_MAX_OUTPUT_TOKENS,
     LLM_TIMEOUT,
+    MACROTHEME_PROMPT_VERSION,
+    SECRETARIAT_PROMPT_VERSION,
 )
 from pipelines.rj_crm__agentforce_classificacao_llm.helpers import bq
 from pipelines.rj_crm__agentforce_classificacao_llm.helpers.hsm import build_button_lookup, enrich_sessions
 from pipelines.rj_crm__agentforce_classificacao_llm.helpers.labels import build_classified_row
+from pipelines.rj_crm__agentforce_classificacao_llm.helpers.routing import (
+    MACROTHEME_LABELS,
+    OUTSIDE,
+    SECRETARIAT_LABELS,
+    candidate_secretariats,
+    canonical,
+    check_pair,
+    macrotheme_prompt,
+    secretariat_prompt,
+)
 from pipelines.rj_crm__agentforce_classificacao_llm.helpers.schema import COLUMNS, PRIMARY_KEY
 from pipelines.rj_crm__agentforce_classificacao_llm.types import (
     ButtonRow,
@@ -31,7 +43,7 @@ from pipelines.rj_crm__agentforce_classificacao_llm.types import (
     Session,
     Window,
 )
-from utils.bifrost import Bifrost, BifrostError, parse_json_object
+from utils.bifrost import Answer, Bifrost, BifrostError, parse_json_object
 from utils.constants import BIFROST_MODEL
 from utils.settings import NoticeSettings
 from utils.tasks import notify_discord
@@ -126,6 +138,8 @@ async def read_rules_task(names: Names, stage: str) -> list[Rule]:
             str(row["nome_funcao"]),
             str(row["nome"]),
             str(row["regra_python"]),
+            None if row["agrupamento_tipo"] is None else str(row["agrupamento_tipo"]),
+            None if row["agrupamento"] is None else str(row["agrupamento"]),
         )
         for row in rows
     ]
@@ -134,25 +148,89 @@ async def read_rules_task(names: Names, stage: str) -> list[Rule]:
     return rules
 
 
+def token_sum(answers: list[Answer], field: str) -> int | None:
+    """Add one token counter from answers, or return nothing when none reports it."""
+    values = {
+        "prompt_tokens": [answer.prompt_tokens for answer in answers],
+        "output_tokens": [answer.output_tokens for answer in answers],
+        "total_tokens": [answer.total_tokens for answer in answers],
+        "cache_tokens": [answer.cache_tokens for answer in answers],
+    }[field]
+    reported = [value for value in values if value is not None]
+    return sum(reported) if reported else None
+
+
+async def ask_json(bifrost: Bifrost, prompt: str) -> tuple[dict[str, JsonValue], Answer]:
+    """Ask one routing question and parse its JSON object."""
+    answer = await bifrost.answer(prompt, max_output_tokens=LLM_MAX_OUTPUT_TOKENS)
+    return parse_json_object(answer.text), answer
+
+
+async def route_row(bifrost: Bifrost, prompted: Prompted) -> tuple[Row, list[Answer]]:
+    """Classify the macrotheme and secretariat of one relevant session."""
+    session = prompted.session
+    macro, macro_answer = await ask_json(bifrost, macrotheme_prompt(session.hsm_texto, session.conversa_completa))
+    principal, related = check_pair(
+        macro.get("macrotema_principal"), macro.get("macrotemas_relacionados"), list(MACROTHEME_LABELS)
+    )
+    candidates = candidate_secretariats(related)
+    secretariat, secretariat_answer = await ask_json(
+        bifrost, secretariat_prompt(candidates, session.hsm_texto, session.conversa_completa)
+    )
+    answers = [macro_answer, secretariat_answer]
+    raw_secretariat = secretariat_answer.text
+
+    if candidates is not None and canonical(secretariat.get("secretaria_principal"), [OUTSIDE]) == OUTSIDE:
+        secretariat, full_answer = await ask_json(
+            bifrost, secretariat_prompt(None, session.hsm_texto, session.conversa_completa)
+        )
+        answers.append(full_answer)
+        raw_secretariat = f"{raw_secretariat}\n--- lista completa ---\n{full_answer.text}"
+
+    main_secretariat, related_secretariats = check_pair(
+        secretariat.get("secretaria_principal"),
+        secretariat.get("secretarias_relacionadas"),
+        list(SECRETARIAT_LABELS),
+    )
+    return {
+        "macrotema_principal": principal,
+        "macrotemas_relacionados": related,
+        "justificativa_macrotema": macro.get("justificativa_macrotema"),
+        "resposta_llm_bruta_macrotema": macro_answer.text,
+        "prompt_versao_macrotema": MACROTHEME_PROMPT_VERSION,
+        "secretaria_principal": main_secretariat,
+        "secretarias_relacionadas": related_secretariats,
+        "justificativa_secretaria": secretariat.get("justificativa_secretaria"),
+        "resposta_llm_bruta_secretaria": raw_secretariat,
+        "prompt_versao_secretaria": SECRETARIAT_PROMPT_VERSION,
+    }, answers
+
+
 async def classify_one(bifrost: Bifrost, slots: Semaphore, prompted: Prompted, model: str) -> Row | None:
-    """Ask the model about one session and return its row.
-
-    A failure is logged and gives nothing.
-
-    A session that fails stays out of the result and is tried again at the next run,
-    inside the window.
-    """
+    """Ask all applicable model questions about one session and return its row."""
     async with slots:
         try:
-            answer = await bifrost.answer(prompted.prompt, max_output_tokens=LLM_MAX_OUTPUT_TOKENS)
-            parsed = parse_json_object(answer.text)
+            parsed, answer = await ask_json(bifrost, prompted.prompt)
+            row = build_classified_row(prompted, parsed, model, answer)
+            answers = [answer]
+
+            if parsed.get("conteudo_relevante") is True:
+                routed, routing_answers = await route_row(bifrost, prompted)
+                row.update(routed)
+                answers.extend(routing_answers)
+
+            row.update(
+                tokens_entrada=token_sum(answers, "prompt_tokens"),
+                tokens_saida=token_sum(answers, "output_tokens"),
+                tokens_total=token_sum(answers, "total_tokens"),
+                tokens_cache=token_sum(answers, "cache_tokens"),
+            )
+            return row
         except (BifrostError, ValueError) as error:
             logger.warning(
                 "A session failed: id=%s error=%s: %s", prompted.session.id_sessao, type(error).__name__, error
             )
             return None
-
-    return build_classified_row(prompted, parsed, model, answer)
 
 
 @task
@@ -223,6 +301,7 @@ async def read_relevant_task(names: Names) -> list[Row]:
             "id_sessao": item["id_sessao"],
             "resumo": item["resumo"],
             "secretaria_principal": item["secretaria_principal"],
+            "macrotema_principal": item["macrotema_principal"],
             "conteudo_relevante": item["conteudo_relevante"],
             "causa_nome": [*(item["causa_nome"] or [])],
             "tema_nome": [],

@@ -42,7 +42,8 @@ def compile_catalog(rules: Sequence[Rule]) -> dict[str, list[CompiledRule]]:
             logger.warning("A rule is refused by the sandbox: %s (%s): %s", rule.function_name, rule.secretariat, error)
             continue
 
-        index.setdefault(rule.secretariat, []).extend(
+        key = rule.grouping if rule.grouping_type == "macrotema" and rule.grouping else rule.secretariat
+        index.setdefault(key, []).extend(
             CompiledRule(rule.name, rule.parent, function) for function in functions.values()
         )
 
@@ -95,8 +96,10 @@ def apply_rules(rows: Sequence[Row], index: Mapping[str, Sequence[CompiledRule]]
 
     for row in rows:
         summary = row.get("resumo")
+        macrotheme = row.get("macrotema_principal")
         secretariat = row.get("secretaria_principal")
-        rules = index.get(secretariat if isinstance(secretariat, str) and secretariat else NO_SECRETARIAT, [])
+        key = macrotheme if isinstance(macrotheme, str) and macrotheme else secretariat
+        rules = index.get(key if isinstance(key, str) and key else NO_SECRETARIAT, [])
         relevant = row.get("conteudo_relevante") is True and isinstance(summary, str) and bool(summary)
         found: list[JsonValue] = [*match_row(row, rules)] if relevant else []
         result.append({**row, column: found})

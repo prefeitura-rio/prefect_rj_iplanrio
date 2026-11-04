@@ -22,6 +22,7 @@ def test_the_extraction_query_takes_the_window_and_the_tables() -> None:
     assert "`p.d.dst`" in sql
     assert "id_sessao_receptivo AS id_sessao" in sql
     assert "receptivo_inicio_datahora" in sql
+    assert "contato.telefone_original" in sql
     assert "receptivo_fim_datahora" in sql
     assert "mensagem_texto" in sql
     assert "jornada.nome AS jornada_nome" in sql
@@ -38,6 +39,14 @@ def test_the_buttons_query_lists_the_journeys() -> None:
     assert "TO_JSON_STRING(hsm_botoes_json) AS hsm_botoes_json" in sql
     assert "hsm_nome IS NOT NULL" in sql
     assert "`p.d.cat`" in sql
+
+
+def test_the_rules_query_selects_macrotheme_groups() -> None:
+    """Restrict taxonomy rules to macrotheme groups."""
+    sql = render_query(ANCHOR, "rules", table="p.d.rules")
+
+    assert "agrupamento_tipo = 'macrotema'" in sql
+    assert "agrupamento" in sql
 
 
 def test_the_merge_queries_name_their_tables_and_columns() -> None:

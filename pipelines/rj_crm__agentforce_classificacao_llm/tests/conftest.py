@@ -19,6 +19,7 @@ def make_session() -> SessionFactory:
         base = {
             "id_sessao": "s1",
             "telefone": "5521",
+            "telefone_original": "+5521",
             "cpf": "123",
             "nome_cidadao": "Ana",
             "sessao_inicio_datahora": datetime(2026, 7, 17, 10, 0, tzinfo=UTC),
