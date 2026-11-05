@@ -3,7 +3,6 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import polars as pl
 from prefect import flow
 from toolkit.telemetry import logger
 
@@ -17,7 +16,7 @@ from pipelines.rj_crm__geolocalizacao_residencia.tasks import (
 from pipelines.rj_crm__geolocalizacao_residencia.types import Source, Strategy
 from utils.constants import DEFAULT_CLOUD
 from utils.hooks import notify_failure
-from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs, write_parquet_records
 from utils.types import Cloud, Table
 from utils.utils import capture_options
 
@@ -68,7 +67,7 @@ async def rj_crm__geolocalizacao_residencia(
 
     with TemporaryDirectory() as directory:
         folder = Path(directory)
-        pl.DataFrame(rows, schema=dict.fromkeys(rows[0], pl.String)).write_parquet(folder / "geocoded.parquet")
+        await write_parquet_records(rows, folder)
         await upload_files_to_gcs(
             folder,
             table,

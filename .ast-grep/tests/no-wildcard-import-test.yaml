@@ -1,0 +1,5 @@
+id: no-wildcard-import
+valid:
+  - pass
+invalid:
+  - from module import *

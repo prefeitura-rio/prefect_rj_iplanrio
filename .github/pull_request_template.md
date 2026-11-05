@@ -13,6 +13,7 @@
 - [ ] O código foi testado localmente antes de solicitar revisão
 - [ ] `devenv --profile checks tasks run lint:all test:all` passa
 - [ ] Os `prefect.yaml` alterados não têm comentários
+- [ ] O código segue o `STYLEGUIDE.md`
 
 ---
 

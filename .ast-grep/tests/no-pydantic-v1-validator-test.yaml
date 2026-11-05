@@ -1,0 +1,5 @@
+id: no-pydantic-v1-validator
+valid:
+  - pass
+invalid:
+  - from pydantic import validator

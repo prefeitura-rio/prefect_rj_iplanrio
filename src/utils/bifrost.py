@@ -1,9 +1,10 @@
 """A client of the Bifrost AI gateway, which serves Gemini."""
 
 from asyncio import sleep
+from collections.abc import Sequence
 from dataclasses import dataclass
 from json import JSONDecodeError, loads
-from math import ceil
+from math import ceil, sqrt
 from re import IGNORECASE
 from re import sub as replace_pattern
 from types import TracebackType
@@ -19,6 +20,8 @@ from .constants import (
     BIFROST_CALIBRATED_TOKENS,
     BIFROST_FIRST_WAIT_SECONDS,
     BIFROST_MODEL,
+    EMBEDDING_BATCH,
+    EMBEDDING_MODEL,
 )
 from .records import dig
 from .settings import BifrostSettings
@@ -239,6 +242,82 @@ class Bifrost:
                 await sleep(self.wait * (1 << (attempt - 1)))
 
         return await self.send(payload)
+
+    async def embed_batch(self, model: str, batch: Sequence[str]) -> list[list[float]]:
+        """Send one embedding request and return the raw vectors of the batch.
+
+        Raise `BifrostError` for a network error, an error status, or a wrong answer.
+        """
+        payload: dict[str, JsonValue] = {
+            "requests": [{"model": f"models/{model}", "content": {"parts": [{"text": text}]}} for text in batch]
+        }
+
+        try:
+            response = await self.client.post(f"/genai/v1beta/models/{model}:batchEmbedContents", json=payload)
+        except HTTPError as error:
+            raise BifrostError(f"The embedding request failed: {error}") from error
+
+        if response.is_error:
+            raise BifrostError(f"The embedding gateway answered {response.status_code}")
+
+        try:
+            body = JSON.validate_json(response.content)
+        except ValidationError as error:
+            raise BifrostError(f"The embedding gateway answered {response.status_code} with no JSON") from error
+
+        embeddings = dig(body, "embeddings")
+
+        if not isinstance(embeddings, list) or len(embeddings) != len(batch):
+            got = len(embeddings) if isinstance(embeddings, list) else 0
+            raise BifrostError(f"The gateway returned {got} embeddings, expected {len(batch)} embeddings")
+
+        vectors: list[list[float]] = []
+
+        for embedding in embeddings:
+            values = dig(embedding, "values")
+
+            raw = values if isinstance(values, list) else []
+            numbers = [item for item in raw if isinstance(item, int | float)]
+
+            if not numbers or len(numbers) != len(raw):
+                raise BifrostError("The gateway returned an invalid embedding vector")
+
+            vectors.append([float(item) for item in numbers])
+
+        return vectors
+
+    async def embed(
+        self, texts: Sequence[str], *, model: str = EMBEDDING_MODEL, batch_size: int = EMBEDDING_BATCH
+    ) -> list[list[float]]:
+        """Return one unit vector for each text, in batches.
+
+        Each batch tries `attempts` times with a growing wait, like a question.
+
+        Raise `BifrostError` after the last try, or for a zero vector.
+        """
+        result: list[list[float]] = []
+
+        for start in range(0, len(texts), batch_size):
+            batch = texts[start : start + batch_size]
+
+            for attempt in range(1, self.attempts):
+                try:
+                    vectors = await self.embed_batch(model, batch)
+                    break
+                except BifrostError:
+                    await sleep(self.wait * (1 << (attempt - 1)))
+            else:
+                vectors = await self.embed_batch(model, batch)
+
+            for vector in vectors:
+                norm = sqrt(sum(value * value for value in vector))
+
+                if norm == 0:
+                    raise BifrostError("The gateway returned a zero embedding vector")
+
+                result.append([value / norm for value in vector])
+
+        return result
 
     async def ask(self, prompt: str, *, system: str = "Responda em PT-BR.", max_output_tokens: int = 512) -> str:
         """Ask the model and return the text of its answer.

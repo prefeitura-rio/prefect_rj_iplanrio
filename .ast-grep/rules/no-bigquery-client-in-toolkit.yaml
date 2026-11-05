@@ -1,0 +1,10 @@
+id: no-bigquery-client-in-toolkit
+language: Python
+severity: error
+message: Create the BigQuery client only in toolkit/bigquery.py.
+files:
+  - packages/toolkit/toolkit/**/*.py
+ignores:
+  - packages/toolkit/toolkit/bigquery.py
+rule:
+  pattern: bigquery.Client($$$A)

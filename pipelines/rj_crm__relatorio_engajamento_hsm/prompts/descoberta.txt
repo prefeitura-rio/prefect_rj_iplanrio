@@ -16,8 +16,8 @@ Regras:
 - Ausência de resposta útil do cidadão (mensagem vazia, automática de terceiro, incompreensível) também é um tema — merece categoria própria (ex.: "SEM_RESPOSTA_UTIL") se ainda não existir uma cobrindo isso.
 - Cada tema aparece só UMA vez na resposta, mesmo que várias conversas do lote o revelem.
 
-Responda APENAS com um JSON array, sem texto antes ou depois, um item por tema NOVO encontrado (não por conversa, sem id):
-[{"categoria_nova": "NOME_DA_CATEGORIA", "categoria_nova_descricao": "descrição em 1 frase"}]
+Responda APENAS com um JSON array, sem texto antes ou depois, um item por tema NOVO encontrado (não por conversa). Em "exemplos", use os NÚMEROS das conversas do lote (o número do título "### CONVERSA N"), só conversas em que o tema aparece de fato:
+[{"categoria_nova": "NOME_DA_CATEGORIA", "categoria_nova_descricao": "descrição em 1 frase", "exemplos": [<números de até 5 conversas do lote que ilustram o tema>]}]
 Se todos os temas do lote já são cobertos por categoria existente, responda: []
 
 --- HSM ENVIADO ---

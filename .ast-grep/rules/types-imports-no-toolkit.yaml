@@ -1,0 +1,10 @@
+id: types-imports-no-toolkit
+language: Python
+severity: error
+message: toolkit/types.py does not import another toolkit module.
+files:
+  - packages/toolkit/toolkit/types.py
+rule:
+  any:
+    - pattern: import toolkit.$$$A
+    - pattern: from toolkit.$M import $$$A

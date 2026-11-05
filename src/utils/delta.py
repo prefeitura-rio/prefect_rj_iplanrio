@@ -8,7 +8,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import uuid4
 
-from obstore.store import ObjectStore
 from polars import DataFrame, concat
 from toolkit.bigquery import BigQuery
 from toolkit.chunks import (
@@ -34,7 +33,7 @@ from toolkit.executor.executor import Executor
 from toolkit.executor.sources.backends.bigquery import BigQuerySource
 from toolkit.executor.sources.protocols import Source
 from toolkit.executor.types import Origin
-from toolkit.gcs import create_store, delete_keys, list_keys, list_prefixes, upload
+from toolkit.gcs import Store, create_store, delete_keys, list_keys, list_prefixes, upload
 from toolkit.telemetry import logger
 from toolkit.utils import select_columns
 
@@ -89,7 +88,7 @@ class Destination:
         return f"{self.dataset(project)}.{self.table_id}"
 
 
-async def clear_prefix(store: ObjectStore, destination: Destination) -> None:
+async def clear_prefix(store: Store, destination: Destination) -> None:
     """Delete the files of the table from the bucket."""
     await delete_keys(store, await list_keys(store, destination.prefix))
 
@@ -112,7 +111,7 @@ async def publish(
         await bigquery.sync_delta_table(destination.table(project), destination.uri, connection)
 
 
-async def discover_tables(store: ObjectStore, bucket: str) -> list[Destination]:
+async def discover_tables(store: Store, bucket: str) -> list[Destination]:
     """Return the Delta tables under the staging folder of a bucket.
 
     A folder `staging/<dataset>/<table>` with a `_delta_log` is a table.

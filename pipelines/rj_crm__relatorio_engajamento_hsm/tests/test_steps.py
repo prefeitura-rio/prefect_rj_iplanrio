@@ -3,6 +3,7 @@ from pydantic import JsonValue
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.catalog import Catalog
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.steps import (
+    cap_selection,
     judge_target,
     read_classifications,
     read_verdicts,
@@ -26,10 +27,13 @@ def test_a_sample_is_capped_and_the_same_for_the_same_seed(make_conversation: Co
     )
 
 
-def test_a_discovery_adds_new_categories_and_counts_the_items_that_fail() -> None:
+def test_a_discovery_adds_new_categories_and_counts_the_items_that_fail(
+    make_conversation: ConversationFactory,
+) -> None:
     """Add a new name once, ignore a repeat, and fail an item with no name."""
     catalog = Catalog()
     catalog.register("EXISTENTE", "d")
+    batch = [make_conversation("s1")]
     answer: list[dict[str, JsonValue]] = [
         {"categoria_nova": "NOVA", "categoria_nova_descricao": "descrição"},
         {"categoria_nova": "existente", "categoria_nova_descricao": "other"},
@@ -37,8 +41,56 @@ def test_a_discovery_adds_new_categories_and_counts_the_items_that_fail() -> Non
         {"outra": "x"},
     ]
 
-    assert register_discoveries(answer, catalog) == (1, 2)
+    found, failed = register_discoveries(answer, batch, catalog)
+
+    assert found == {"NOVA": []}
+    assert failed == 2
     assert catalog.as_dict() == {"EXISTENTE": "d", "NOVA": "descrição"}
+
+
+@pytest.mark.parametrize(
+    ("numbers", "expected", "invalid"),
+    [
+        pytest.param([2, 2, 1], ["s2", "s1"], 0, id="a_repeat_is_dropped"),
+        pytest.param([9, 0], [], 2, id="a_number_outside_the_batch_is_invalid"),
+        pytest.param(["2", "x", True, None], ["s2"], 3, id="text_numbers_work_and_other_values_are_invalid"),
+        pytest.param([1, 2, 3, 4, 5, 6, 7], ["s1", "s2", "s3", "s4", "s5"], 0, id="at_most_five_examples"),
+        pytest.param("1", [], 0, id="a_number_that_is_not_a_list_gives_none"),
+        pytest.param(None, [], 0, id="no_examples"),
+    ],
+)
+def test_the_examples_of_a_new_category_are_session_ids_of_the_batch(
+    make_conversation: ConversationFactory, numbers: JsonValue, expected: list[str], invalid: int
+) -> None:
+    """Keep valid unique examples in order, and count the numbers that are not valid."""
+    batch = [make_conversation(f"s{number}") for number in range(1, 8)]
+    catalog = Catalog()
+    answer: list[dict[str, JsonValue]] = [{"categoria_nova": "NEW", "exemplos": numbers}]
+
+    found, failed = register_discoveries(answer, batch, catalog)
+
+    assert found == {"NEW": expected}
+    assert failed == invalid
+
+
+@pytest.mark.parametrize(
+    ("size", "ceiling", "expected"),
+    [
+        pytest.param(5, 10, 5, id="below_the_ceiling_keeps_all"),
+        pytest.param(10, 10, 10, id="at_the_ceiling_keeps_all"),
+        pytest.param(30, 10, 10, id="above_the_ceiling_is_sampled"),
+    ],
+)
+def test_the_judge_selection_is_capped_by_the_ceiling(
+    make_classification: ClassificationFactory, size: int, ceiling: int, expected: int
+) -> None:
+    """Judge a sample when the selection costs more than the ceiling allows."""
+    selected = [make_classification(f"s{number}") for number in range(size)]
+
+    capped = cap_selection(selected, ceiling, 42)
+
+    assert len(capped) == expected
+    assert capped == cap_selection(selected, ceiling, 42)
 
 
 def test_a_classification_picks_only_a_category_that_exists(

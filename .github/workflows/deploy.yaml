@@ -4,6 +4,7 @@ on:
     branches:
       - master
       - staging/*
+      - '!staging/main'
     paths:
       - pipelines/**
       - src/**

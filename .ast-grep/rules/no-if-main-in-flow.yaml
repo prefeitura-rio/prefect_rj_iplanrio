@@ -1,0 +1,10 @@
+id: no-if-main-in-flow
+language: Python
+severity: error
+message: Run flows through Prefect deployments, not a Python main block.
+files:
+  - pipelines/**/flow.py
+rule:
+  pattern: |
+    if __name__ == "__main__":
+      $$$A

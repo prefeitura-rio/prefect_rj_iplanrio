@@ -5,12 +5,12 @@ from typing import Literal, cast
 
 from prefect import flow
 from prefect.exceptions import TerminationSignal
-from prefect.runtime import flow_run
+from prefect.runtime import deployment, flow_run
 from prefect.settings import PREFECT_API_URL, PREFECT_UI_URL
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.cleanup import raise_failures
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.dbt import should_run_dbt
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import current_environment
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import environment_from_deployment
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_format import flow_run_url
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify import LoadNotifier, NotifierConfig
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.stages import Step, TableStep
@@ -86,7 +86,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(
             mode=mode,
             enabled=discord_notifications,
             cancellations=(TerminationSignal,),
-            environment=current_environment(),
+            environment=environment_from_deployment(cast("str | None", deployment.name)),
         )
     )
     with notifier.guard():

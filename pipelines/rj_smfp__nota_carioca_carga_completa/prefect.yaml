@@ -75,6 +75,7 @@ deployments:
       - cron: "0 17 * * *"
         active: true
         timezone: America/Sao_Paulo
+        slug: daily-full-load
     parameters:
       chain:
         alert_role_ids:

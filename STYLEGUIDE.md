@@ -1,1261 +1,782 @@
----
-lang: pt-br
----
+# Repository style guide
 
-# Guia de Estilo
+Use this guide when you add or change a pipeline. It is for developers who know Python but are new to this repository.
 
-Regras para escrever, estruturar e manter pipelines neste monorepo. Cada regra declara o que é, por que existe e apresenta um exemplo concreto.
+The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** show the strength of a rule. A rule with an `.ast-grep/rules/*.yaml` path has an executable ast-grep check in that file. `lint:all` runs every automated check. A rule with `Check: review` needs human judgment.
 
-As regras de Python, dados e testes valem também para `packages/toolkit/`. As regras só do toolkit estão em [`packages/toolkit/STYLEGUIDE.md`](packages/toolkit/STYLEGUIDE.md).
+Run this command before you request review:
 
-## Início rápido
+```sh
+devenv --profile checks tasks run lint:all test:all
+```
 
-Vai criar uma pipeline nova? Siga estes cinco passos. Cada passo aponta para a seção com a regra completa.
+## 1. Start a pipeline
 
-1. **Crie a pipeline com o template.** Rode `uvx cookiecutter templates --output-dir=pipelines` e escolha o `tipo`: `dump_database`, `ingest_api`, `dump_arcgis` ou `dump_gsheet`. O template cria `flow.py`, `prefect.yaml`, `pyproject.toml` e `Dockerfile`. O nome segue o padrão `rj_<secretaria>__<pipeline>` ([Seção 3](#3-contrato-de-arquivos-da-pipeline)).
-2. **Troque os valores de exemplo.** Os parâmetros ficam no `prefect.yaml`, e uma pipeline desses tipos não precisa de mais código. Escreva o `description` no `pyproject.toml` ([Seção 10](#10-pyprojecttoml)).
-3. **Para uma pipeline própria, escreva o código nos arquivos certos.** O flow só orquestra, a task é um wrapper fino e o trabalho fica em `helpers.py` ([Seção 4](#4-responsabilidades-dos-módulos)). O SQL fica em `queries/*.sql` ([Seção 7](#7-sql)). Antes de escrever um helper, procure em `src/utils/` e no [README do toolkit](packages/toolkit/README.md).
-4. **Configure o deploy.** No `prefect.yaml`, defina as tags, a agenda da produção e o work pool ([Seções 8, 9 e 13](#8-agendamento)).
-5. **Teste e abra o PR.** Escreva testes para a lógica de `helpers.py` ([Seção 14](#14-testes)) e passe pelo [checklist](#15-checklist-antes-do-pull-request).
+Use the template:
 
-Existem dois pontos de partida:
+```sh
+uvx cookiecutter templates --output-dir=pipelines
+```
 
-- **Pipeline de um tipo pronto:** o `flow.py` importa o flow de `utils.flows` e o `prefect.yaml` tem os parâmetros (veja o [README](README.md#flows-prontos)).
-- **Pipeline própria:** o `flow.py` chama as tasks de `utils.tasks` ou as suas, em `tasks.py`, com a lógica em `helpers.py`.
+Choose `dump_database`, `ingest_api`, `dump_arcgis`, or `dump_gsheet`. Replace every example value. A ready pipeline has a clear package description and valid staging and production deployments.
 
-### Exemplo mínimo completo
+There are two designs:
 
-Uma pipeline que baixa uma lista de itens de uma API e salva em Parquet. Os comentários indicam a seção que explica cada arquivo.
+1. A standard pipeline imports a ready flow from `utils.flows`. It puts configuration in `prefect.yaml`.
+2. A custom pipeline keeps orchestration in `flow.py`, Prefect tasks in `tasks.py`, and domain behavior in `helpers.py` or `helpers/`.
+
+Search `src/utils/` and `packages/toolkit/README.md` before you write a helper.
+
+## 2. Code layers
+
+### layer-owner
+
+- **Level:** MUST
+- **Check:** review
+- **Rule:** Put code in the lowest layer that owns its behavior.
+- **Why:** One owner prevents duplicate implementations.
+
+Compliant:
+
+```text
+packages/toolkit/   Generic primitive used by repositories
+src/utils/          Shared behavior used by two pipelines in this repository
+pipelines/rj_x__y/  Behavior used by one pipeline
+```
+
+Non-compliant:
+
+```text
+src/utils/taxirio.py  # TaxiRio-only behavior in the shared layer
+```
+
+### promote-on-second-use
+
+- **Level:** MUST
+- **Check:** review
+- **Rule:** Move a helper to `src/utils/` only when a second pipeline uses it.
+- **Why:** An unused abstraction makes code harder to change.
+
+Compliant:
 
 ```python
-# pipelines/rj_secretaria__pipeline/flow.py  — Seção 4.1
-"""Flow for rj_secretaria__pipeline."""
-
-from prefect import flow
-
-from pipelines.rj_secretaria__pipeline.tasks import fetch_items_task
-
-
-@flow(log_prints=True, flow_run_name="{table_id}")
-def rj_secretaria__pipeline(
-    dataset_id: str = "brutos_example",
-    table_id: str = "items",
-) -> None:
-    fetch_items_task(dataset_id=dataset_id, table_id=table_id)
+# Keep this in one pipeline until another pipeline needs it.
+def parse_vendor_date(value: str) -> date: ...
 ```
+
+Non-compliant:
 
 ```python
-# pipelines/rj_secretaria__pipeline/tasks.py  — Seção 4.2
-"""Tasks for rj_secretaria__pipeline."""
-
-from prefect import task
-
-from pipelines.rj_secretaria__pipeline import helpers
-
-
-@task
-def fetch_items_task(dataset_id: str, table_id: str) -> str:
-    """Download the items and return the path of the Parquet file."""
-    return helpers.fetch_items(dataset_id=dataset_id, table_id=table_id)
+# Do not add this to src/utils/ because it might be useful later.
+def parse_possible_future_vendor_date(value: str) -> date: ...
 ```
 
-```python
-# pipelines/rj_secretaria__pipeline/helpers.py  — Seções 4.3, 5.5 e 5.8
-"""Helpers of rj_secretaria__pipeline."""
+## 3. Pipeline files
 
-import httpx2
-import polars as pl
-from prefect.logging import get_logger
+### required-pipeline-files
 
-logger = get_logger("toolkit")
+- **Level:** MUST
+- **Check:** `lint:layout`
+- **Rule:** Each enabled pipeline has `flow.py`, `prefect.yaml`, `pyproject.toml`, and `Dockerfile`.
+- **Why:** The build and deploy tools depend on these files.
 
+Compliant:
 
-def fetch_items(dataset_id: str, table_id: str) -> str:
-    """Download the items of the API, save them as Parquet and return the path.
-
-    Raise `httpx2.HTTPStatusError` if the API answers with an error.
-    """
-    response = httpx2.get("https://api.example.com/items", timeout=30)
-    response.raise_for_status()
-    logger.info("Items received: %d", len(response.json()))
-    path = f"/tmp/{dataset_id}/{table_id}.parquet"
-    pl.DataFrame(response.json()).write_parquet(path)
-    return path
+```text
+pipelines/rj_sec__items/
+├── Dockerfile
+├── flow.py
+├── prefect.yaml
+└── pyproject.toml
 ```
 
-```yaml
-# pipelines/rj_secretaria__pipeline/prefect.yaml (trecho)  — Seções 8, 9 e 13
-deployments:
-  - name: rj-secretaria--pipeline--prod
-    tags:
-      - environment:prod
-      - severity:medium
-      - code_owner:seu_username
-    schedules:
-      - cron: "0 6 * * *"
-        timezone: America/Sao_Paulo
-        slug: daily
-    work_pool:
-      name: default-pool
+Non-compliant:
+
+```text
+pipelines/rj_sec__items/
+└── pipeline.py
 ```
 
-```toml
-# pipelines/rj_secretaria__pipeline/pyproject.toml  — Seção 10
-[project]
-name = "rj_secretaria__pipeline"
-version = "1.0.0"
-description = "Fetches the item list from the Example API and loads it into BigQuery for the secretaria's monitoring."
-dependencies = ["prefect_rj_iplanrio", "polars>=2.0.0"]
+### forbidden-pipeline-files
 
-[tool.uv.sources]
-prefect_rj_iplanrio = { workspace = true }
+- **Level:** MUST NOT
+- **Check:** `lint:layout`
+- **Rule:** Do not add `__init__.py`, `utils.py`, `utils/`, `env.py`, `schedules.py`, `build_prefect_yaml.py`, `.python-version`, loose test scripts, or generated migration notes.
+- **Why:** These files shadow shared modules or create a second source of truth.
+
+Compliant:
+
+```text
+helpers/api.py
+tests/test_api.py
+queries/read_items.sql
 ```
 
-Este exemplo não usa SQL. Se a sua pipeline executa SQL, crie `queries/` e leia a [Seção 7](#7-sql).
+Non-compliant:
 
-## Índice
-
-- [Início rápido](#início-rápido)
-
-1. [Filosofia](#1-filosofia)
-2. [Arquitetura de código em três camadas](#2-arquitetura-de-código-em-três-camadas)
-3. [Contrato de arquivos da pipeline](#3-contrato-de-arquivos-da-pipeline)
-4. [Responsabilidades dos módulos](#4-responsabilidades-dos-módulos)
-5. [Estilo Python](#5-estilo-python)
-6. [Padrões do Prefect 3.0](#6-padrões-do-prefect-30)
-7. [SQL](#7-sql)
-8. [Agendamento](#8-agendamento)
-9. [Convenções do `prefect.yaml`](#9-convenções-do-prefectyaml)
-10. [`pyproject.toml`](#10-pyprojecttoml)
-11. [`src/utils/` — código compartilhado do workspace](#11-srcutils--código-compartilhado-do-workspace)
-12. [Higiene do repositório](#12-higiene-do-repositório)
-13. [Tags de pipeline](#13-tags-de-pipeline)
-14. [Testes](#14-testes)
-15. [Checklist antes do pull request](#15-checklist-antes-do-pull-request)
-16. [Glossário](#16-glossário)
-
-Apêndice:
-
-- [Apêndice A — Por que tags em vez de parâmetros](#apêndice-a--por-que-tags-em-vez-de-parâmetros)
-
-## 1. Filosofia
-
-Flows orquestram. Tasks encapsulam. Utils calculam. SQL é dado.
-
-Qualquer pessoa deve conseguir abrir um diretório de pipeline e entender imediatamente sua estrutura, pois toda pipeline segue as mesmas convenções. Consistência vale mais do que otimização local.
-
-### 1.1 Princípios
-
-- Leia o código antes de escrever código.
-- Prefira apagar a criar uma abstração ou uma camada de configuração.
-- Faça mudanças pequenas e fáceis de revisar. Não misture trabalhos sem relação.
-- Corrija a causa, não o sintoma.
-- Mantenha uma única fonte de verdade para cada fato.
-- Use a ferramenta idiomática de cada ecossistema.
-- Siga um padrão que já existe antes de criar um novo.
-
-## 2. Arquitetura de código em três camadas
-
-O código neste repositório vive em um de três níveis. O nível determina onde uma função é escrita, não sua importância.
-
-| Camada                          | Local                           | Regra                                                                                                                          |
-| ------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **Compartilhado de primitivos** | `packages/toolkit/` (workspace) | Primitivos reutilizáveis sem lógica de pipeline. Regras em [`packages/toolkit/STYLEGUIDE.md`](packages/toolkit/STYLEGUIDE.md). |
-| **Compartilhado do repo**       | `src/utils/`                    | Utilitários usados por **2 ou mais pipelines** neste repo sem lógica específica de pipeline.                                   |
-| **Interno à pipeline**          | `pipelines/rj_x__y/helpers.py`  | Lógica que pertence a exatamente uma pipeline.                                                                                 |
-
-**Regra de promoção:** uma função sobe de `helpers.py` para `src/utils/` quando uma segunda pipeline precisar dela. Nunca sobe por reutilização especulativa.
-
-## 3. Contrato de arquivos da pipeline
-
-### 3.1 Arquivos obrigatórios
-
-Todo diretório de pipeline deve conter estes três arquivos obrigatórios.
-Arquivos condicionais da Seção 3.2 podem ser adicionados quando necessários.
-
-```
-pipelines/rj_secretaria__pipeline/
-├── flow.py          ← a função @flow
-├── pyproject.toml   ← manifesto do pacote
-└── Dockerfile       ← segue o template padrão, um por pipeline
+```text
+utils/api.py
+schedules.py
+test_api.py
+MIGRATION_NOTES.md
 ```
 
-### 3.2 Arquivos condicionais
+### data-file-location
 
-Adicione apenas quando a necessidade existir concretamente:
+- **Level:** MUST
+- **Check:** `lint:layout`
+- **Rule:** Put SQL in `queries/`, test data in `tests/`, and Mongo aggregation JSON in `pipelines/`.
+- **Why:** A reader can find data files without searching the package.
 
-```
-├── tasks.py         ← quando o flow chama funções decoradas com @task
-├── settings.py      ← quando a pipeline lê variáveis de ambiente (Seção 5.11)
-├── helpers.py       ← quando as tasks delegam para helpers puros reutilizáveis
-├── helpers/         ← quando os helpers abrangem múltiplos domínios distintos
-│   ├── api.py       ← nomeado pelo domínio, não pelo papel (nunca helpers/tasks.py)
-│   └── schemas.py
-├── constants.py     ← quando constantes são compartilhadas entre 2+ módulos
-├── queries/         ← quando a pipeline executa SQL
-│   ├── fetch_data.sql
-│   └── get_last_update.sql
-└── tests/           ← quando helpers.py tem lógica com ramificações ou parsing (Seção 14)
-    └── test_helpers.py
+Compliant:
+
+```text
+queries/read_items.sql
+tests/fixtures/response.json
+pipelines/races.json
 ```
 
-### 3.3 Proibidos nos diretórios de pipeline
+Non-compliant:
 
-`nu scripts/checks.nu lint layout [pipeline]` confere esta seção e a 4 em todas as pipelines, e o `lint:all` o roda: os arquivos proibidos, o nome do flow, o `@task` fora de `tasks.py`, o `@flow` fora de `flow.py`, o `import prefect` em `helpers` e o nome de função com `_`. O seguinte nunca deve ser commitado em um diretório de pipeline:
-
-| Arquivo / padrão                                                       | Motivo                                                                                                                                                      |
-| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `__init__.py`                                                          | Pacotes membros do workspace não precisam dele; sua presença causa confusão nos imports.                                                                    |
-| `utils.py` e `utils/`                                                  | O Prefect põe a pasta do `flow.py` na frente no caminho de imports, então eles escondem o módulo compartilhado `src/utils/`. Use `helpers.py` e `helpers/`. |
-| `env.py`                                                               | Variáveis de ambiente são injetadas em runtime via Infisical ou o ambiente do container.                                                                    |
-| `schedules.py`                                                         | Agendamentos vivem no `prefect.yaml`. Geradores Python de schedules são uma indireção desnecessária.                                                        |
-| `build_prefect_yaml.py`                                                | Scripts avulsos ficam desatualizados e induzem ao erro.                                                                                                     |
-| `scheduler*.yaml` (avulsos)                                            | Uma segunda fonte de verdade de agendamentos que diverge do `prefect.yaml`.                                                                                 |
-| `test_*.py` na raiz da pipeline                                        | Scripts de teste ad-hoc não são reproduzíveis. Testes ficam em `tests/` e rodam com `pytest`.                                                               |
-| `FIX_SUMMARY.md`, `MIGRATION_NOTES.md`, `MIGRACAO_*.md`                | Artefatos de sessões de LLM. Delete antes de commitar.                                                                                                      |
-| `.python-version`                                                      | A versão do Python é fixada na raiz do workspace no `pyproject.toml`.                                                                                       |
-| `.DS_Store`                                                            | Metadados do macOS. Coberto pelo `.gitignore` — se aparecer, o gitignore falhou.                                                                            |
-| Arquivos de dados avulsos (`.json`, `.xml`, `.sql` fora de `queries/`) | Fixtures pertencem a `tests/fixtures/`; scripts DDL pertencem a um repositório de migrations. A exceção é `pipelines/`, com os estágios de agregação do `MongoDB`, um `.json` por agregação.   |
-
-## 4. Responsabilidades dos módulos
-
-### 4.1 `flow.py`
-
-**Contém:** exatamente uma função `@flow(log_prints=True)` cujo nome corresponde exatamente ao nome do diretório da pipeline.
-
-**Papel:** orquestração pura — declara quais tasks rodam e em que ordem. Sem lógica de negócio, sem transformação de dados, sem I/O.
-
-```python
-# ✅ correto
-"""Flow for rj_secretaria__pipeline."""
-
-from prefect import flow
-
-from pipelines.rj_secretaria__pipeline.tasks import fetch_items_task, upload_task
-
-
-@flow(log_prints=True, flow_run_name="{table_id}")
-def rj_secretaria__pipeline(
-    dataset_id: str = "brutos_example",
-    table_id: str = "items",
-) -> None:
-    data_path = fetch_items_task(dataset_id=dataset_id, table_id=table_id)
-    upload_task(data_path=data_path, dataset_id=dataset_id, table_id=table_id)
+```text
+helpers/read_items.sql
+response.json
 ```
 
-**Nunca contém:**
+## 4. Module responsibilities
 
-- O decorator `@task`
-- `if __name__ == "__main__":`
-- Lógica de negócio (busca de dados, transformação, chamadas de API)
-- Strings SQL
+### one-flow
 
-### 4.2 `tasks.py`
+- **Level:** MUST
+- **Check:** `lint:layout`
+- **Rule:** `flow.py` defines or assigns exactly one flow whose name equals the pipeline directory.
+- **Why:** Prefect and the deploy script use that name as the entry point.
 
-**Contém:** exclusivamente funções decoradas com `@task`. Cada task é um wrapper fino que chama uma função de `helpers.py` ou da biblioteca `toolkit`.
-
-**Papel:** fronteira entre o engine de orquestração do Prefect e o Python puro. Tasks dão visibilidade ao Prefect — retries, rastreamento de estado, limites de concorrência — sem acoplar essa maquinaria à lógica em si.
-
-```python
-# ✅ correto — task delega para helpers, permanece fina
-from prefect import task
-from pipelines.rj_secretaria__pipeline import helpers
-
-
-@task
-def fetch_items_task(dataset_id: str, table_id: str) -> str:
-    return helpers.fetch_items(dataset_id=dataset_id, table_id=table_id)
-```
-
-```python
-# ❌ errado — 80 linhas de lógica de API dentro de um @task
-@task
-def fetch_items_task(dataset_id: str, table_id: str) -> str:
-    client = httpx2.Client(headers=...)
-    response = client.get(...)
-    # ... mais 70 linhas
-```
-
-**Nunca contém:** `@flow`, lógica de negócio com mais de ~20 linhas, `import`s sem relação com o Prefect ou com a chamada a `helpers`.
-
-### 4.3 `helpers.py`
-
-**Contém:** funções Python sem dependência do Prefect que realizam o trabalho real — chamadas de API, transformação de dados, I/O de arquivos e construção de queries.
-
-**Papel:** o núcleo testável da pipeline. Por não terem imports do Prefect, essas funções podem ser chamadas diretamente no `pytest` sem subir um ambiente Prefect.
-
-```python
-# ✅ correto — sem Prefect, totalmente testável
-import httpx2
-import polars as pl
-
-
-def fetch_items(dataset_id: str, table_id: str) -> str:
-    response = httpx2.get("https://api.example.com/items")
-    response.raise_for_status()
-    df = pl.DataFrame(response.json())
-    path = f"/tmp/{dataset_id}/{table_id}.parquet"
-    df.write_parquet(path)
-    return path
-```
-
-**Nunca contém:** `from prefect import ...`, `@task`, `@flow`, efeitos colaterais no momento do import do módulo.
-
-### 4.4 `helpers/<domain>.py`
-
-Use um subdiretório `helpers/` quando os helpers se dividem naturalmente em múltiplos domínios distintos e um único `helpers.py` ficaria extenso demais. Nomeie cada módulo pelo domínio, não pelo papel.
-
-```
-helpers/
-├── api.py       ← helpers de client HTTP
-├── schemas.py   ← modelos Pydantic / dataclasses
-└── bq.py        ← helpers específicos do BigQuery
-```
-
-**`helpers/tasks.py` é proibido.** Tasks são primitivos do Prefect, não utilitários. Se você se encontrar criando `helpers/tasks.py`, está misturando duas responsabilidades. Coloque as tasks em `tasks.py` e a lógica no `helpers/<domain>.py` adequado.
-
-### 4.5 `constants.py`
-
-**Contém:** constantes do módulo compartilhadas entre dois ou mais módulos da pipeline.
-
-```python
-# ✅ correto
-from zoneinfo import ZoneInfo
-
-SP_TZ = ZoneInfo("America/Sao_Paulo")
-DEFAULT_PAGE_SIZE = 500
-API_TIMEOUT = 120.0
-```
-
-**Nunca contém:** strings SQL, instâncias de dataclass, ou constantes usadas por apenas um módulo (defina-as lá).
-
-### 4.6 `queries/`
-
-**Contém:** um arquivo `.sql` por query lógica, nomeado descritivamente em `snake_case`. Cada arquivo é um modelo Jinja que o `Executor` renderiza (veja a [Seção 7](#7-sql)).
-
-```
-queries/
-├── get_last_update.sql
-├── fetch_active_records.sql
-└── count_pending.sql
-```
-
-## 5. Estilo Python
-
-### 5.1 Type hints
-
-Todas as assinaturas de função — parâmetros e tipo de retorno — devem ter type hints. Sem exceções.
-
-```python
-# ✅ correto
-def fetch_items(dataset_id: str, table_id: str) -> str: ...
-
-
-# ❌ errado — tipo de retorno ausente, tipos dos parâmetros ausentes
-def fetch_items(dataset_id, table_id): ...
-```
-
-### 5.2 Sintaxe de tipos
-
-Use a sintaxe de union do Python 3.10+ e os tipos genéricos embutidos. Não importe tipos de container do módulo `typing`. `TypedDict`, `Protocol` e `TYPE_CHECKING` continuam vindo de `typing`, pois não têm equivalente embutido.
-
-```python
-# ✅ correto
-def process(
-    items: list[str],
-    config: dict[str, int],
-    label: str | None = None,
-) -> tuple[str, int]: ...
-
-
-# ❌ errado
-from typing import Dict, List, Optional, Tuple
-
-
-def process(
-    items: List[str],
-    config: Dict[str, int],
-    label: Optional[str] = None,
-) -> Tuple[str, int]: ...
-```
-
-### 5.3 Imports
-
-- Sem imports com wildcard (`from x import *`).
-- Sem cabeçalho de encoding (`# -*- coding: utf-8 -*-`). UTF-8 é o padrão no Python 3, e o cabeçalho é ruído.
-- Imports explícitos apenas: liste cada nome que você usa.
-- Importe nomes, não módulos: `from asyncio import to_thread`, e não `import asyncio`. Se o nome colide com um nome local ou com um nome embutido, dê um apelido (`from duckdb import connect as duckdb_connect`, `from re import compile as compile_pattern`). As exceções são:
-  - o `pytest` (`import pytest`, que o `ruff` exige pela regra `PT013`);
-  - o módulo que um teste precisa para trocar um nome (`from toolkit import dbt`, e então `monkeypatch.setattr(dbt, ...)`, ou `import time` quando o teste troca `time`);
-  - o módulo que o código passa adiante como objeto (o `re` que a sandbox entrega à função);
-  - as bibliotecas de dados com apelido fixo: `import polars as pl`, `import numpy as np` e `import pyarrow as pa`.
-- Sem `# noqa`, `# type: ignore` nem `# pyright: ignore` sem o id da regra e o motivo. Corrija o problema com um `cast` ou com o tipo certo. Se o silêncio for inevitável, escreva `# noqa: EXXX  # motivo` ou `# pyright: ignore[regra]  # motivo`.
-
-```python
-# ✅ correto
-from asyncio import to_thread
-from toolkit.dbt import DbtRun
-from toolkit.gcs import list_keys
-
-# ❌ errado
-import asyncio
-from toolkit.gcs import *
-```
-
-### 5.4 Nomenclatura
-
-Não use `_` como prefixo para indicar nomes internos/privados. Use fronteiras de módulo para controlar visibilidade — se algo não deve ser importado por outros módulos, mantenha-o no módulo onde pertence, não em um módulo globalmente visível com uma dica no nome.
-
-Use `UPPER_SNAKE_CASE` apenas para constantes no nível do módulo. Dentro de funções, use `snake_case`.
-
-Nomeie uma função com um verbo no imperativo e o objeto: `read_bq`, `build_column`, `extract_records`. Não use o molde `algo_of` (`config_of`, `records_of`): ele diz o que a função devolve, e não o que ela faz. Uma função que responde sim ou não começa com `is_` ou `has_`. Um script `Nushell` segue a mesma regra, com hífen (`find-deployments`).
-
-```python
-# ✅ correto — constante real no nível do módulo
-DEFAULT_TMP_PATH = "/tmp/dump"
-
-
-def dump(url: str) -> str:
-    data_path = DEFAULT_TMP_PATH
-    ...
-
-
-# ❌ errado — variável local com nome de constante
-def dump(url: str) -> str:
-    DATA_PATH = "/tmp/dump"
-    ...
-```
-
-### 5.5 Logging
-
-`print()` é **proibido** em qualquer arquivo Python do repositório. Todo logging usa `get_logger("toolkit")` de `prefect.logging`. Ele devolve o logger do workspace, `prefect.toolkit`, o mesmo de `toolkit.telemetry.logger`: tem a formatação padrão do Prefect, mostra INFO, aparece na UI do Prefect e, com a exportação do OpenTelemetry ligada, segue para o coletor. Um logger de `logging.getLogger(__name__)` fica fora da árvore `prefect`, então não tem nada disso e perde as mensagens INFO. Em uma `@task`, `get_run_logger()` do Prefect também é permitido quando a mensagem precisa aparecer na UI do Prefect.
-
-```python
-# ✅ correto
-from prefect.logging import get_logger
-
-logger = get_logger("toolkit")
-
-
-def fetch_items(dataset_id: str, table_id: str) -> str:
-    logger.info("Buscando itens para dataset_id=%s", dataset_id)
-    ...
-    logger.warning("Nenhum item encontrado")
-```
-
-```python
-# ❌ errado — import direto do stdlib sem a configuração do workspace
-import logging
-
-logger = logging.getLogger(__name__)
-
-
-# ❌ errado — proibido
-def fetch_items(dataset_id: str, table_id: str) -> str:
-    print("Buscando itens")
-```
-
-Regras de conteúdo:
-
-- Escreva frases de ciclo de vida que uma pessoa lê: `<Componente> <ação> <estado>: <contexto>`, como `Itens buscados: dataset_id=brutos_x rows=120`.
-- Use `debug` para detalhe de sondagem, `info` para mudança normal de ciclo de vida, `warning` para nova tentativa ou trabalho opcional pulado, e `error` só antes de um erro terminal.
-- Nunca registre credenciais, tokens, strings de conexão, corpos de requisição, valores de cache, valores de SQL nem query strings.
-- Mantenha a saída de ferramentas externas (dbt, DuckDB) como ela vem. Não a interprete nem a reformate.
-
-### 5.6 Docstrings
-
-Toda função tem uma `docstring` em inglês, em Markdown, sem `reST`: código com uma crase, sem `:param:`, `:returns:` nem `:type:`. Os type hints já dizem os tipos. O resumo é uma frase curta no imperativo, em uma linha, com ponto final e até 88 colunas. Escreva mais frases só se o contrato não aparecer no nome e nos tipos, após uma linha em branco. O erro que a função levanta entra na `docstring`. Uma função difícil de entender leva um exemplo em bloco `python` cercado, com o resultado num comentário `#` conferido ao rodar.
-
-```python
-# ✅ correto — o contrato cabe numa linha, e o erro vem depois
-def fetch_items(dataset_id: str, table_id: str) -> str:
-    """Download the items of the API, save them as Parquet and return the path.
-
-    Raise `httpx2.HTTPStatusError` if the API answers with an error.
-    """
-    ...
-```
-
-````python
-# ✅ correto — uma função difícil leva um exemplo
-def normalize_column(name: str) -> str:
-    """Return the column name that BigQuery accepts.
-
-    ```python
-    normalize_column("Código do Órgão")  # "codigo_do_orgao"
-    ```
-    """
-    ...
-````
-
-```python
-# ❌ errado — reST, e um resumo que repete o que os tipos dizem
-def fetch_items(dataset_id: str, table_id: str) -> str:
-    """Downloads the items of the API and saves them as Parquet.
-
-    :param dataset_id: Dataset de destino no BigQuery.
-    :returns: Caminho do arquivo Parquet.
-    """
-    ...
-```
-
-Regras:
-
-- Uma função que só delega para outra (ex.: tasks finas) pode ter apenas a linha de resumo.
-- Uma classe leva um sintagma nominal ("Uma linha do resultado de `totals_by_station`."), e uma função com `@overload` não leva `docstring`.
-- Sem o rótulo `Example:`. Um exemplo é um bloco `python` ou `sql` cercado.
-
-### 5.7 Parâmetros em excesso
-
-Funções em `helpers.py` com mais de 5 parâmetros que formem um grupo coeso devem agrupar esses parâmetros em um `dataclass` ou `TypedDict`. Em `@flow` e `@task` a regra vale também, mas só com `TypedDict`, porque os parâmetros precisam ser JSON-serializáveis para o Prefect. O Prefect valida o dicionário e recusa uma chave que falta, um erro de digitação ou um tipo errado antes de rodar. Ponha cada grupo em `types.py`.
-
-Prefira `dataclass(frozen=True)` para configs imutáveis com defaults. Use `TypedDict` quando o caller precisa construir o dict diretamente e passá-lo com `**`.
-
-```python
-# ❌ errado — mais de 5 parâmetros sem agrupamento
-def fetch_records(
-    project: str,
-    dataset_id: str,
-    table_id: str,
-    environment: str,
-    page_size: int = 500,
-    timeout: int = 30,
-) -> pl.DataFrame: ...
-```
-
-```python
-# ✅ correto — dataclass para config imutável com defaults
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class FetchConfig:
-    project: str
-    dataset_id: str
-    table_id: str
-    environment: str
-    page_size: int = 500
-    timeout: int = 30
-
-
-def fetch_records(config: FetchConfig) -> pl.DataFrame: ...
-```
-
-```python
-# ✅ TypedDict — quando o caller monta o dict e passa com **params
-from typing import TypedDict, Unpack
-
-
-class FetchParams(TypedDict):
-    project: str
-    dataset_id: str
-    table_id: str
-    environment: str
-    page_size: int
-    timeout: int
-
-
-def fetch_records(**params: Unpack[FetchParams]) -> pl.DataFrame: ...
-```
-
-### 5.8 Dados tabulares
-
-Use **Polars** para DataFrames e **DuckDB** para SQL sobre arquivos Parquet ou dados locais. `pandas` é proibido. Parquet é o formato intermediário padrão. CSV só é aceito quando a API de destino exigir.
-
-**Eager (`pl.DataFrame`)** quando os dados cabem em memória e o processamento é em lote. **Lazy (`pl.LazyFrame`)** quando a fonte é um arquivo Parquet e a transformação pode ser otimizada pelo motor: use `scan_parquet` e `sink_parquet`.
-
-```python
-# ✅ correto — eager para um lote em memória
-import polars as pl
-
-
-def batch_to_dataframe(batch: list[list], columns: list[str]) -> pl.DataFrame:
-    """Converta um lote de linhas em um DataFrame, com os nomes das colunas dados."""
-    return pl.DataFrame(dict(zip(columns, zip(*batch, strict=True), strict=True)))
-```
-
-```python
-# ✅ correto — lazy para arquivo → arquivo, e o Executor do toolkit para SQL no DuckDB
-from pathlib import Path
-from typing import TypedDict
-
-import polars as pl
-from psycopg.sql import Literal
-from toolkit.executor.dataset import Dataset
-from toolkit.executor.engines.duckdb import DuckDBEngine
-from toolkit.executor.executor import Executor
-
-
-class StationTotal(TypedDict):
-    """Uma linha do resultado de `totals_by_station`."""
-
-    station_id: str
-    mm: float
-
-
-def normalize_parquet(source: Path, dest: Path) -> None:
-    """Normalize os nomes das colunas de um Parquet e grave o resultado em `dest`."""
-    lf = pl.scan_parquet(source)
-    lf.rename({col: col.lower().replace(" ", "_") for col in lf.collect_schema().names()}).sink_parquet(dest)
-
-
-async def totals_by_station(source: Path) -> Dataset[StationTotal]:
-    """Some os valores de um Parquet com as colunas `station_id` e `mm`, por estação."""
-    async with DuckDBEngine() as engine:
-        executor = Executor(engine, Path(__file__).parent / "queries")
-        return await executor.query("totals_by_station", {"source": Literal(str(source))}, expect=StationTotal)
-```
-
-```sql
--- queries/totals_by_station.sql
-SELECT station_id, sum(mm) AS mm
-FROM read_parquet({{ source }})
-GROUP BY station_id
-```
-
-Uma pipeline nunca importa `duckdb`: o SQL que roda no DuckDB passa pelo `Executor` do toolkit (Seção 7.2).
-
-Para extrair de uma API, use o flow `ingest_api` ou, se a API tem páginas, escreva um flow próprio: peça cada página com `request_json`, grave os registros com `write_records` e carregue tudo com `upload_files_to_gcs` e `publish_table_in_bq`. O Prefect cuida da ordem, das repetições e do estado, e o `Executor` cuida do SQL.
-
-```python
-# ❌ errado — pandas e CSV intermediário
-import pandas as pd
-
-df = pd.read_csv(path)
-df.to_csv(output_path, index=False)
-```
-
-### 5.9 Exceções
-
-Não levante `BaseException`. Use o tipo de exceção mais específico ou crie uma subclasse.
-
-```python
-# ❌ errado
-raise BaseException("Data need to be a polars DataFrame")
-
-# ✅ correto
-raise TypeError(f"Esperado pl.DataFrame, recebido {type(data).__name__}.")
-```
-
-### 5.10 Validação
-
-Valide na borda, onde o dado entra. Duas ferramentas, cada uma com um papel:
-
-| Camada                     | Ferramenta                  | Quando usar                                |
-| -------------------------- | --------------------------- | ------------------------------------------ |
-| Estrutura de DataFrame     | Polars nativo (`pl.Schema`) | Dado externo: banco, GCS, API              |
-| Parâmetros e configurações | Pydantic v2 `BaseModel`     | Parâmetros de `@flow` e configs de conexão |
-
-Declare o schema esperado ao ler dado externo. O Polars levanta `SchemaError` na hora, perto da origem. Use `@field_validator` do Pydantic v2. `@validator` (v1) é proibido.
-
-```python
-# ✅ correto — schema declarado na borda
-import polars as pl
-from pathlib import Path
-
-ITEMS_SCHEMA = pl.Schema({"item_id": pl.String, "value": pl.Float64})
-
-
-def read_items(path: Path) -> pl.DataFrame:
-    """Leia os itens do Parquet no schema de itens.
-
-    Levante `polars.exceptions.SchemaError` se o arquivo não respeitar o schema.
-    """
-    return pl.read_parquet(path, schema=ITEMS_SCHEMA)
-```
-
-```python
-# ✅ correto — Pydantic v2
-from pydantic import BaseModel, field_validator
-
-
-class UploadConfig(BaseModel):
-    """Configuração de upload para o BigQuery."""
-
-    dataset_id: str
-    dump_mode: str
-
-    @field_validator("dump_mode")
-    @classmethod
-    def validate_dump_mode(cls, value: str) -> str:
-        """Aceita apenas ``append`` ou ``overwrite``."""
-        if value not in {"append", "overwrite"}:
-            raise ValueError(f"dump_mode inválido: {value!r}")
-        return value
-```
-
-Não faça isto:
-
-- I/O em um validador (consulta ao BigQuery, leitura do GCS, chamada de API). O validador verifica estrutura e formato. O I/O fica na função que usa o dado.
-- `assert` fora de testes para validar dado.
-- Revalidar um dado que já passou pela borda.
-
-### 5.11 Variáveis de ambiente
-
-Uma pipeline lê uma variável de ambiente só por uma classe `Settings` (`pydantic-settings`) em `settings.py`. Não chame `getenv`, `environ.get` nem `environ[...]` no código da pipeline: `nu scripts/checks.nu lint env` recusa a leitura à mão. A classe estende `ToolkitSettings`, e o código a cria quando precisa dela, dentro da task ou da função, e não na importação do módulo. Um campo obrigatório usa `required_text()` ou `required_secret()` (`toolkit.settings`): faltando ou vazio, o `ValidationError` nomeia a variável, e o `basedpyright` deixa chamar `Settings()` sem argumento.
-
-```python
-from pydantic import SecretStr
-from toolkit.settings import ToolkitSettings, required_secret, required_text
-
-
-class Settings(ToolkitSettings):
-    """The login of the Wetalkie API."""
-
-    WETALKIE_URL: str = required_text()
-    WETALKIE_USERNAME: str = required_text()
-    WETALKIE_PASSWORD: SecretStr = required_secret()
-```
-
-O nome de um campo segue estas regras, e o `lint env` confere as duas primeiras:
-
-1. `UPPER_SNAKE_CASE`, sem hífen, sem letra minúscula e sem sublinhado duplo.
-2. `<SERVIÇO>_<ATRIBUTO>`, com o serviço primeiro: `INMET_TOKEN`, `DATA_RELAY_API_KEY`, `WETALKIE_USERNAME`. O atributo é `TOKEN`, `API_KEY`, `USERNAME`, `PASSWORD`, `CLIENT_ID`, `CLIENT_SECRET`, `URL`, `BASE_URL`, `HOST`, `PORT` ou `WEBHOOK_URL`.
-3. Sem o ambiente (`STAGING`, `PROD`) e sem o nome da pipeline no nome. O ambiente é o do Infisical: `staging` e `prod` têm valores separados, e uma pipeline em `staging` nunca lê um valor de `prod`.
-4. O login de um banco é `DB_USERNAME` e `DB_PASSWORD` (`toolkit.settings.DatabaseSettings`).
-5. O webhook do Discord da pipeline é `DISCORD_WEBHOOK_URL`. Um segundo canal leva a finalidade no nome: `DISCORD_ERRORS_WEBHOOK_URL`.
-6. Um valor que não é segredo e muda com a implantação é parâmetro do `prefect.yaml`, e não variável.
-7. Não guarde credencial do Google em variável: use o ADC (workload identity).
-
-Uma variável que mais de uma pipeline lê entra em uma classe de `utils.settings` (`WetalkieSettings`, `SfmcSettings`, `DataRelaySettings`, `BifrostSettings`, `NoticeSettings`). No Infisical ela fica na pasta `/shared`.
-
-## 6. Padrões do Prefect 3.0
-
-### 6.1 Declaração de flow
+Compliant:
 
 ```python
 @flow(log_prints=True)
-def rj_secretaria__pipeline(param: str = "default") -> None: ...
+def rj_sec__items() -> None:
+    """Load the items."""
+    load_items_task()
 ```
 
-- `log_prints=True` é sempre definido como proteção contra chamadas `print()` acidentais. Todo logging intencional deve usar `get_logger` (veja [§5.5](#55-logging)).
-- O nome da função deve corresponder **exatamente** ao nome do diretório da pipeline. É isso que o Prefect usa para identificar o flow nos deployments.
-- O tipo de retorno é quase sempre `None` — flows produzem efeitos colaterais por natureza.
-- Dê nome à run com `flow_run_name="{table_id}"` no `@flow`: o Prefect preenche o texto com os parâmetros do flow. Não renomeie a run com uma task.
-
-### 6.2 Declaração de task
+Non-compliant:
 
 ```python
-from prefect import task
+@flow
+def load_items(): ...
 
+@flow
+def retry_items(): ...
+```
 
+### no-task-in-flow
+
+- **Level:** MUST NOT
+- **Check:** `.ast-grep/rules/no-task-in-flow.yaml`
+- **Rule:** Do not define a task in `flow.py`.
+- **Why:** A task belongs to the task boundary in `tasks.py`.
+
+Compliant:
+
+```python
+from pipelines.rj_sec__items.tasks import load_items_task
+```
+
+Non-compliant:
+
+```python
 @task
-def fetch_data_task(url: str, timeout: int = 30) -> pl.DataFrame:
-    return helpers.fetch_data(url=url, timeout=timeout)
+def load_items_task() -> None: ...
 ```
 
-- Tasks ficam apenas em `tasks.py`.
-- Cada task faz uma coisa.
-- Type hints completos, incluindo o tipo de retorno.
+### no-flow-in-tasks
 
-### 6.3 Expressando a ordem das tasks — data flow em vez de `wait_for`
+- **Level:** MUST NOT
+- **Check:** `.ast-grep/rules/no-flow-in-tasks.yaml`
+- **Rule:** Do not define a flow in `tasks.py`.
+- **Why:** A flow belongs to `flow.py`.
 
-No Prefect 3, o grafo de execução é inferido a partir das dependências de dados. Quando a task B recebe o valor de retorno da task A como argumento, o Prefect sabe que A deve terminar antes de B começar. Esta é a forma correta de expressar ordenação.
-
-`wait_for` é uma saída de emergência. Use-o apenas no caso raro em que a task B deve rodar após a task A, mas não consome o valor de retorno de A, e o Prefect não consegue inferir a dependência pelo grafo de chamadas.
+Compliant:
 
 ```python
-# ✅ correto — ordenação expressa por data flow
-@flow(log_prints=True, flow_run_name="{table_id}")
-def rj_secretaria__pipeline(dataset_id: str, table_id: str) -> None:
-    prepare_workdir_task()  # sequencial, sem output necessário
-    last_update = get_last_update_task(dataset_id=dataset_id, table_id=table_id)
-    data_path = fetch_history_task(last_update=last_update)  # dependência de dados — Prefect infere a ordem
-    upload_task(data_path=data_path, dataset_id=dataset_id, table_id=table_id)
+@task
+def load_items_task() -> None: ...
 ```
+
+Non-compliant:
 
 ```python
-# ❌ errado — wait_for usado onde existe uma dependência de dados
-prepare_workdir_task(wait_for=[rename_task])
-path = download_task(url=url, wait_for=[prepare_task])
+@flow
+def child_flow() -> None: ...
 ```
+
+### orchestration-only-flow
+
+- **Level:** MUST
+- **Check:** `.ast-grep/rules/no-io-in-flow.yaml` and review
+- **Rule:** A pipeline `flow.py` only calls tasks, handles their results, and defines their order.
+- **Why:** Domain behavior must remain testable without Prefect.
+
+Compliant:
 
 ```python
-# ✅ wait_for aceitável — task de efeito colateral sem valor de retorno significativo
-workdir = prepare_workdir_task()
-path = download_task(url=url, wait_for=[workdir])  # apenas se download_task não usa o output de prepare
+@flow(log_prints=True)
+def rj_sec__items() -> None:
+    """Load the items."""
+    rows = read_items_task()
+    write_items_task(rows)
 ```
 
-**Resumo:** se a task downstream puder aceitar o valor de retorno da task upstream como argumento, faça isso. Use `wait_for` apenas quando não há nenhuma relação de dados.
+Non-compliant:
 
-### 6.4 Padrões proibidos
+```python
+@flow(log_prints=True)
+def rj_sec__items() -> None:
+    """Load the items."""
+    response = httpx2.get(URL)
+    rows = [clean(row) for row in response.json()]
+```
 
-| Padrão                                    | Por que é proibido                                                                                                                                  |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@task` dentro de `flow.py`               | Mistura orquestração e definição de task em um único arquivo; torna as tasks invisíveis para consumidores de `tasks.py`.                            |
-| `@flow` dentro de `tasks.py`              | Viola a responsabilidade única; subflows pertencem a arquivos `flow.py` separados, se necessário.                                                   |
-| `helpers/tasks.py`                        | Tasks não são utilitários. O nome é uma contradição e engana os leitores sobre onde encontrar as definições de task.                                |
-| `if __name__ == "__main__":` em `flow.py` | Flows são executados via deployments do Prefect ou `prefect flow run`, não como scripts. Esse padrão incentiva contornar o mecanismo de deployment. |
+### thin-task
 
-## 7. SQL
+- **Level:** MUST
+- **Check:** review
+- **Rule:** A task does one orchestration operation and delegates domain behavior to a helper or toolkit function.
+- **Why:** Retries and state belong to Prefect. Parsing and I/O behavior need direct unit tests.
 
-### 7.1 A regra
+Compliant:
 
-Nenhuma string SQL em arquivos Python ou em arquivos YAML. Todo SQL vive em arquivos `.sql` dentro de `queries/`, como modelo Jinja que o `Executor` do toolkit renderiza e executa.
+```python
+@task(retries=3)
+def read_items_task(url: str) -> list[Item]:
+    """Read the items."""
+    return read_items(url)
+```
 
-**Justificativa:**
+Non-compliant:
 
-- SQL embutido em strings Python é invisível para linters e editores de SQL, não pode ser testado isoladamente e é mais difícil de revisar em pull requests.
-- As f-strings tornam a query dinâmica de um modo que não pode ser analisado estaticamente.
-- `str.format()` colide com a sintaxe do BigQuery: `STRUCT<field STRING>` e `UNNEST([{}])` contêm o caractere `{`.
-- SQL embutido como parâmetro de schedule no `prefect.yaml` produz arquivos com centenas de linhas de SQL escapado em YAML, ilegíveis para revisão.
+```python
+@task
+def read_items_task(url: str) -> list[Item]:
+    """Read the items."""
+    # 80 lines of HTTP, parsing, validation, and storage behavior
+```
 
-**Exceção:** o parâmetro `read.query` do flow `dump_database` é a consulta nativa de um banco externo, escrita no dialeto dele, e vai no `prefect.yaml` da pipeline.
+### no-prefect-in-helpers
 
-### 7.2 Modelos Jinja e o Executor
+- **Level:** MUST NOT
+- **Check:** `.ast-grep/rules/no-prefect-in-helpers.yaml`
+- **Rule:** Do not import any Prefect module in `helpers.py` or `helpers/`.
+- **Why:** Helpers must run in a unit test without a Prefect runtime.
 
-O `Executor` renderiza o modelo com `StrictUndefined` (uma variável ausente é um erro) e o roda no cliente. Valores entram como `Identifier()` e `Literal()` de `psycopg.sql`, nunca como texto no SQL, e valores de execução como parâmetros (`?`). As regras do modelo estão na [Seção 3.1 do guia do toolkit](packages/toolkit/STYLEGUIDE.md#31-modelos).
+Compliant:
+
+```python
+from toolkit.telemetry import logger
+```
+
+Non-compliant:
+
+```python
+from prefect.runtime import deployment
+```
+
+## 5. Python
+
+### complete-types
+
+- **Level:** MUST
+- **Check:** basedpyright
+- **Rule:** Add a type to every function parameter and return value.
+- **Why:** Types find integration errors before a flow runs.
+
+Compliant:
+
+```python
+def parse_count(value: str) -> int:
+    """Parse the count."""
+    return int(value)
+```
+
+Non-compliant:
+
+```python
+def parse_count(value):
+    return int(value)
+```
+
+### modern-types
+
+- **Level:** MUST
+- **Check:** Ruff and `.ast-grep/rules/no-legacy-typing.yaml`
+- **Rule:** Use `list[str]` and `str | None`, not `List[str]` and `Optional[str]`.
+- **Why:** The repository targets Python 3.14.
+
+Compliant: `dict[str, int] | None`
+
+Non-compliant: `Optional[Dict[str, int]]`
+
+### no-future-import
+
+- **Level:** MUST NOT
+- **Check:** `.ast-grep/rules/no-future-import.yaml`
+- **Rule:** Do not use `__future__` imports in production code.
+- **Why:** The repository targets Python 3.14 and does not need compatibility imports.
+
+Compliant:
+
+```python
+from typing import cast
+```
+
+Non-compliant:
+
+```python
+from __future__ import annotations
+```
+
+### no-private-functions
+
+- **Level:** MUST NOT
+- **Check:** `.ast-grep/rules/no-private-functions.yaml`
+- **Rule:** Do not prefix a production function with `_`.
+- **Why:** The module boundary controls visibility.
+
+Compliant: `def read_rows() -> list[Row]: ...`
+
+Non-compliant: `def _read_rows() -> list[Row]: ...`
+
+### explicit-imports
+
+- **Level:** MUST
+- **Check:** Ruff and `.ast-grep/rules/no-wildcard-import.yaml`
+- **Rule:** Import the names you use. Do not use wildcard imports.
+- **Why:** Explicit imports show dependencies and support static analysis.
+
+Compliant:
+
+```python
+from asyncio import to_thread
+import polars as pl
+```
+
+Non-compliant:
+
+```python
+from helpers import *
+```
+
+Module imports are permitted when the module is an API object, a test monkeypatch target, or a standard data alias (`pl`, `np`, `pa`). Prefer a name import otherwise.
+
+### no-print
+
+- **Level:** MUST NOT
+- **Check:** Ruff `T20` and `.ast-grep/rules/no-print.yaml`
+- **Rule:** Do not call `print()` in repository production code.
+- **Why:** The repository logger sends messages to Prefect and telemetry.
+
+Compliant:
+
+```python
+from toolkit.telemetry import logger
+
+logger.info("Items read: rows=%d", len(rows))
+```
+
+Non-compliant:
+
+```python
+print(f"Read {len(rows)} rows")
+```
+
+### log-safely
+
+- **Level:** MUST
+- **Check:** `.ast-grep/rules/no-stdlib-logger.yaml` and review
+- **Rule:** Use `toolkit.telemetry.logger`, or `get_run_logger()` inside a task when the message needs the task context.
+- **Why:** Other loggers can lose INFO messages and telemetry labels.
+
+Compliant: `logger.info("Load complete: rows=%d", count)`
+
+Non-compliant: `logging.getLogger(__name__).info("done")`
+
+Never log a credential, token, connection string, request body, row value, SQL text, or query string.
+
+### docstrings
+
+- **Level:** MUST
+- **Check:** Ruff `D` and `W505`
+- **Rule:** Give each production module, function, and class a short English Markdown docstring.
+- **Why:** A reader needs the contract without reading the implementation.
+
+Compliant:
+
+```python
+def read_items(path: Path) -> list[Item]:
+    """Read and validate the items.
+
+    Raise `ValueError` if an item has no id.
+    """
+```
+
+Non-compliant:
+
+```python
+def read_items(path: Path) -> list[Item]:
+    ":param path: input file"
+```
+
+### no-base-exception
+
+- **Level:** MUST NOT
+- **Check:** `.ast-grep/rules/no-base-exception.yaml`
+- **Rule:** Do not raise `BaseException`.
+- **Why:** `BaseException` also represents process controls such as `KeyboardInterrupt`.
+
+Compliant: `raise ValueError("The id is empty")`
+
+Non-compliant: `raise BaseException("The id is empty")`
+
+Catching `BaseException` is permitted only to release a resource before the same exception is raised again.
+
+### no-assert-in-production
+
+- **Level:** MUST NOT
+- **Check:** `.ast-grep/rules/no-assert-in-production.yaml`
+- **Rule:** Do not use `assert` to validate production data.
+- **Why:** Python can remove assertions and their errors lack domain context.
+
+Compliant:
+
+```python
+if not rows:
+    raise ValueError("The source returned no rows")
+```
+
+Non-compliant: `assert rows`
+
+### pydantic-v2
+
+- **Level:** MUST
+- **Check:** `.ast-grep/rules/no-pydantic-v1-validator.yaml`
+- **Rule:** Use `field_validator`, not the Pydantic v1 `validator` decorator.
+- **Why:** The repository uses Pydantic v2.
+
+Compliant: `@field_validator("name")`
+
+Non-compliant: `@validator("name")`
+
+### grouped-parameters
+
+- **Level:** SHOULD
+- **Check:** Ruff `PLR0913`, basedpyright, and review
+- **Rule:** Group more than five related parameters in a dataclass or TypedDict.
+- **Why:** A named group is easier to validate and extend.
+
+Compliant:
+
+```python
+@dataclass(frozen=True)
+class FetchConfig:
+    url: str
+    timeout: float
+    page_size: int
+```
+
+Non-compliant: `def fetch(url, timeout, page_size, user, password, retries): ...`
+
+Use a TypedDict for flow and task parameters because Prefect serializes them. Put a group that two modules use in `types.py`.
+
+### constant-location
+
+- **Level:** MUST
+- **Check:** review
+- **Rule:** Keep a module-only constant in that module. Move it to `constants.py` when a second module uses it.
+- **Why:** This keeps one source of truth without creating a dumping ground.
+
+Compliant:
+
+```python
+# helpers/api.py, used only here
+TIMEOUT_SECONDS = 30.0
+```
+
+Compliant when shared:
+
+```python
+# constants.py
+TIMEOUT_SECONDS = 30.0
+```
+
+Non-compliant: duplicate `TIMEOUT_SECONDS = 30.0` in two modules.
+
+## 6. Data and SQL
+
+### dataframe-tools
+
+- **Level:** MUST
+- **Check:** Ruff `TID251`
+- **Rule:** Use Polars for dataframes and the toolkit Executor for DuckDB SQL.
+- **Why:** One data stack gives consistent types and memory behavior.
+
+Compliant:
+
+```python
+frame = pl.scan_parquet(path).filter(pl.col("active")).collect()
+```
+
+Non-compliant:
+
+```python
+import pandas as pd
+import duckdb
+```
+
+### sql-files
+
+- **Level:** MUST
+- **Check:** SQLFluff and review
+- **Rule:** Put executable SQL in one `queries/*.sql` Jinja template per operation.
+- **Why:** SQL files are lintable and reviewable.
+
+Compliant:
 
 ```sql
--- queries/last_update.sql
-{#
-{
-  "kind": "template",
-  "description": "Read the last update of a table.",
-  "inputs": { "table": "Identifier of the table." }
-}
-#}
-SELECT max(last_update) AS last_update FROM {{ table }}
+{# {"kind":"template","description":"Read active items.","inputs":{}} #}
+SELECT id FROM src.items WHERE active
 ```
+
+Non-compliant:
 
 ```python
-# tasks.py
-from pathlib import Path
-
-from psycopg.sql import Identifier
-
-executor = Executor(client, Path(__file__).parent / "queries")
-result = await executor.query("last_update", {"table": Identifier("src", "t")}, expect=LastUpdate)
+query = f"SELECT * FROM `{project}.{dataset}`"
 ```
 
-Cada variante que exija SQL diferente recebe um arquivo `.sql` próprio em `queries/`. O diretório `queries/` é a única fonte de verdade do SQL da pipeline.
+The `read.query` value of a standard `dump_database` schedule is the only pipeline YAML exception. It contains the native source query.
 
-### 7.3 Operações comuns já prontas
+### validate-at-boundary
 
-O toolkit tem funções do `DuckDB` em toda conexão, sem importar nada: `normalize(coluna, separador, minúsculas)`, `clean_text(texto)`, `parse_date(texto)`, `parse_timestamp(texto)`, `ano_particao(texto)`, `mes_particao(texto)`, `data_particao(texto)`, `now_sao_paulo()`, `to_sao_paulo(instante)`, `is_cpf`, `normalize_cpf`, `is_cnpj`, `normalize_cnpj` e `is_phone`. Use-as no SQL, como em `clean_text(nome)` e `normalize(nome, '_', true)`. Os modelos prontos são `extract_chunk`, `select_source` e `fingerprint`. No `dump_database`, `normalize_values` e `transforms` aplicam essas funções dentro do `COPY` de cada chunk. Para os nomes das colunas de uma tabela, use `Executor.normalize_columns(tabela, colunas, separador, minúsculas)`.
+- **Level:** MUST
+- **Check:** review and tests
+- **Rule:** Validate an external dataframe with a Polars schema and validate configuration with Pydantic v2.
+- **Why:** A failure should occur where bad data enters.
 
-### 7.4 O que nunca fazer
+Compliant: `pl.DataFrame(rows, schema=ITEM_SCHEMA)`
+
+Non-compliant: read untyped data and cast fields throughout the pipeline.
+
+## 7. Settings and secrets
+
+### settings-only
+
+- **Level:** MUST
+- **Check:** `.ast-grep/rules/no-environment-read.yaml` and `lint:env`
+- **Rule:** Read environment values through a `ToolkitSettings` subclass in `settings.py`.
+- **Why:** Settings give one validated boundary and clear missing-variable errors.
+
+Compliant:
 
 ```python
-# ❌ SQL em f-string — não testável, não pesquisável
-query = f"""
-    SELECT max(last_update)
-    FROM `my-project.{dataset_id}_staging.{table_id}`
-    WHERE environment = '{environment}'
-"""
-
-# ❌ str.format() — colide com a sintaxe STRUCT<> do BigQuery
-query = """
-    SELECT STRUCT<name STRING, value INT64>(name, value)
-    FROM `{project}.{dataset_id}`
-""".format(project=project, dataset_id=dataset_id)
-
-# ❌ String SQL em constants.py
-FETCH_QUERY = """
-    SELECT * FROM database.table;
-"""
+class Settings(ToolkitSettings):
+    API_TOKEN: SecretStr = required_secret()
 ```
 
-## 8. Agendamento
+Non-compliant: `token = environ["API_TOKEN"]`
 
-### 8.1 Regra
+Use `<SERVICE>_<ATTRIBUTE>` names in upper snake case. Do not put `PROD`, `STAGING`, or the pipeline name in a variable name. Use ADC for Google credentials.
 
-Agendamentos vivem exclusivamente no `prefect.yaml` sob a chave `schedules:` do deployment correspondente. Há uma única fonte de verdade.
+## 8. Prefect deployments
 
-### 8.2 Formato
+### no-if-main-in-flow
+
+- **Level:** MUST NOT
+- **Check:** `.ast-grep/rules/no-if-main-in-flow.yaml`
+- **Rule:** Do not run a flow from an `if __name__ == "__main__"` block.
+- **Why:** Deployments own flow execution.
+
+Compliant: `prefect flow-run execute`
+
+Non-compliant:
+
+```python
+if __name__ == "__main__":
+    rj_sec__items()
+```
+
+### schedules-in-prefect-yaml
+
+- **Level:** MUST
+- **Check:** `lint:layout` and `lint:prefect`
+- **Rule:** Keep production schedules only in `prefect.yaml`. Staging has no schedules.
+- **Why:** One source of truth prevents accidental duplicate runs.
+
+Compliant:
 
 ```yaml
-deployments:
-  - name: rj-secretaria--pipeline--prod
-    schedules:
-      - cron: "0 6 * * 1-5"
-        timezone: America/Sao_Paulo
-        slug: weekday-morning-run
-      - interval: 3600
-        anchor_date: "2024-01-01T00:00:00"
-        timezone: America/Sao_Paulo
-        slug: hourly-run
-        parameters:
-          table_id: some_table
+- name: rj-sec--items--prod
+  schedules:
+    - cron: "0 6 * * *"
+      timezone: America/Sao_Paulo
+      slug: daily
 ```
 
-Sempre defina `timezone: America/Sao_Paulo`, exceto se o schedule for explicitamente baseado em UTC com razão documentada.
+Non-compliant: `schedules.py`
 
-### 8.3 O que é proibido
+### deployment-name
 
-| Artefato                    | Motivo                                                                                                                   |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `schedules.py`              | Gera config que precisa ser copiada para outro lugar — indireção extra, sempre com risco de divergência.                 |
-| `build_prefect_yaml.py`     | Script que regenera o `prefect.yaml` — o arquivo gerado vira a fonte de verdade, mas o script é o que é mantido de fato. |
-| `scheduler*.yaml` (avulsos) | Um segundo equivalente ao `prefect.yaml` que o Prefect não lê.                                                           |
+- **Level:** MUST
+- **Check:** `lint:prefect`
+- **Rule:** Name deployments `rj-<owner>--<pipeline>--staging` and `rj-<owner>--<pipeline>--prod`.
+- **Why:** Tools identify the environment from the name.
 
-## 9. Convenções do `prefect.yaml`
+Compliant: `rj-iplanrio--items--prod`
 
-### 9.1 Nomenclatura de deployments
+Non-compliant: `rj_iplanrio__items_prod`
 
-```
-rj-<secretaria>--<pipeline>--staging
-rj-<secretaria>--<pipeline>--prod
-```
+### deployment-tags
 
-Use letras minúsculas e hífens apenas. O `--` duplo separa segmentos lógicos.
+- **Level:** MUST
+- **Check:** `lint:prefect`
+- **Rule:** Each deployment has `environment`, `severity`, and `code_owner` tags.
+- **Why:** Alerts and searches use these tags.
 
-### 9.2 Work pool e secrets
-
-O work pool depende do acesso de rede da pipeline. Staging e prod de uma mesma pipeline usam o mesmo pool.
-
-- `default-pool` (GKE): para a pipeline que não precisa de um banco interno. O job usa o `ServiceAccount` `pipelines`, sem `namespace` nem `secretName`.
-- `onprem-pool`: para bancos e sistemas internos da `IplanRio`, que exigem VPN. O `namespace` é `pipelines-staging` ou `pipelines-prod`, e o `secretName` é sempre `pipelines-infisical`, com as credenciais de login do `Infisical`.
-- `taxirio-pool`: só a pipeline `rj_iplanrio__taxirio`, que lê um `Secret` sincronizado pelo operador do cluster dela (veja o README da pipeline).
-
-Os dois primeiros pools lêem os segredos do `Infisical` na hora de rodar, com `python -m utils.secrets -- prefect flow-run execute`. O projeto `pipelines` tem uma pasta por pipeline, com o nome dela (`/rj_secretaria__pipeline`), e uma pasta `/shared` com os segredos comuns. O `INFISICAL_PATHS` lista as pastas do job, nesta ordem: `/<pipeline>`, `/shared`. A pasta da pipeline só existe se ela tem segredos próprios. A primeira pasta que tem a chave vence, e uma variável do job nunca é trocada. Criar a pasta no `Infisical` basta para uma pipeline nova: nada muda na infraestrutura. O acesso é limitado pela convenção, e não pelo `Infisical`: cada pipeline lê as pastas que o `prefect.yaml` dela lista.
+Compliant:
 
 ```yaml
-work_pool:
-  name: default-pool
-  work_queue_name: default
-  job_variables:
-    image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-    command: uv run --no-sync --package rj_secretaria__pipeline -- python -m utils.secrets -- prefect flow-run execute
-    image_pull_policy: Always
-    service_account_name: pipelines
-    env:
-      INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
-      INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
-      INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
-      INFISICAL_ENVIRONMENT: staging
-      INFISICAL_PATHS: /rj_secretaria__pipeline,/shared
+tags:
+  - environment:prod
+  - severity:high
+  - code_owner:developer
 ```
+
+Non-compliant:
 
 ```yaml
-work_pool:
-  name: onprem-pool
-  work_queue_name: default
-  job_variables:
-    image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-    command: uv run --no-sync --package rj_secretaria__pipeline -- python -m utils.secrets -- prefect flow-run execute
-    namespace: pipelines-staging
-    secretName: pipelines-infisical
-    image_pull_policy: Always
-    env:
-      INFISICAL_URL: https://infisical.iplan.dados.rio
-      INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
-      INFISICAL_ENVIRONMENT: staging
-      INFISICAL_PATHS: /rj_secretaria__pipeline,/shared
-      GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
+tags:
+  - prod
 ```
 
-### 9.3 Staging vs. prod
+Severity is `low`, `medium`, `high`, or `critical`. Use `unassigned` only until a real owner accepts the pipeline.
 
-Staging não tem a chave `schedules:`. Prod tem agendamentos, e um agendamento desligado leva `active: false`. Em um flow pronto como o `dump_database`, a tabela e a leitura ficam no `schedule`, então uma execução manual no staging copia os `parameters` de um `schedule` da prod. Em staging e em prod, o `INFISICAL_ENVIRONMENT` troca de `staging` para `prod`, e no `onprem-pool` o `namespace` troca de `pipelines-staging` para `pipelines-prod`. Uma pipeline desligada guarda `deployments: []` e não entra no `.allow.json`.
+### work-pool
 
-### 9.4 Sem comentários
+- **Level:** MUST
+- **Check:** `lint:prefect` and review
+- **Rule:** Use `default-pool` for GKE, `onprem-pool` for internal systems, and `taxirio-pool` only for TaxiRio.
+- **Why:** The pool selects network access and credentials.
 
-O `prefect.yaml` não tem comentários. O script de deploy (`scripts/deploy.nu`) lê o arquivo com o `Nushell`, e o leitor de YAML dele falha com comentários em alguns lugares. Escreva a explicação no `README.md` ou na `description` da pipeline. A task `lint:prefect` falha se um `prefect.yaml` tem uma linha de comentário ou se o `Nushell` não consegue lê-lo.
+Compliant: an Oracle pipeline uses `onprem-pool` and `pipelines-prod`.
 
-## 10. `pyproject.toml`
+Non-compliant: an internal Oracle pipeline uses `default-pool`.
 
-### 10.1 `description`
+### schedule-timezone
 
-Uma frase que diga a um leitor — que nunca viu a pipeline antes — o que ela faz e por que existe.
+- **Level:** MUST
+- **Check:** `lint:prefect`
+- **Rule:** Give every schedule a slug and `America/Sao_Paulo`, unless a documented UTC contract requires UTC.
+- **Why:** Explicit timezones prevent daylight and deployment errors.
+
+Compliant: `timezone: America/Sao_Paulo`
+
+Non-compliant: a cron schedule with no timezone.
+
+### data-dependency-first
+
+- **Level:** SHOULD
+- **Check:** review
+- **Rule:** Pass a task result to its consumer instead of using `wait_for` when a data dependency exists.
+- **Why:** Prefect can infer the order and preserve the value contract.
+
+Compliant: `write_task(read_task())`
+
+Non-compliant: `write_task(wait_for=[read_task()])` when `write_task` needs the rows.
+
+## 9. Package metadata
+
+### package-metadata
+
+- **Level:** MUST
+- **Check:** `lint:deps` and review
+- **Rule:** Set pipeline version to `1.0.0`, write a useful English description, and list only imported packages.
+- **Why:** Git identifies releases and the workspace owns shared versions.
+
+Compliant:
 
 ```toml
-# ✅ correto
-description = "Fetches the item list from the Example API and loads it into BigQuery for the secretaria's monitoring."
-
-# ❌ errado — texto gerado automaticamente sem informação
-description = "Pipeline items da secretaria example"
-
-# ❌ errado — padrão do cookiecutter não substituído
-description = "TODO: replace with one sentence describing what this pipeline does and why."
+version = "1.0.0"
+description = "Loads Example API items for service monitoring."
+dependencies = ["prefect_rj_iplanrio", "polars"]
 ```
 
-### 10.2 `version`
-
-Sempre `1.0.0`. O versionamento é tratado no nível do workspace via git tags e pela tag da imagem Docker construída a partir do hash do commit. Versões individuais de pacotes de pipeline não têm significado em um monorepo.
-
-### 10.3 Dependências
-
-A pipeline lista só os pacotes que ela importa, pelo nome, sem versão. A versão de cada pacote compartilhado fica em um lugar só: `constraint-dependencies` no `pyproject.toml` da raiz. O `uv.lock` garante a reprodutibilidade. A pipeline não repete pacotes que `prefect_rj_iplanrio` já fornece, como `prefect` e `prefect-docker`. Não adicione `pandas` (Seção 5.8).
-
-- Para subir a versão de um pacote compartilhado, mude uma linha no `pyproject.toml` da raiz.
-- Um pacote que só uma pipeline usa pode levar a versão na própria pipeline. Use `==` só com um comentário que explique o motivo.
-- Um pacote que vem de um repositório git tem o endereço e o `rev` em `[tool.uv.sources]` da raiz, e a pipeline só escreve o nome.
-- Uma pipeline que importa outra pipeline (um caso a evitar) copia a pasta dela no `Dockerfile`. Fora isso, o `Dockerfile` só se afasta do template para instalar uma ferramenta do sistema.
-- A task `lint:deps` falha se uma pipeline escreve versão ou endereço de um pacote que a raiz já define.
+Non-compliant:
 
 ```toml
-# ✅ correto — pacote compartilhado só pelo nome, pacote só desta pipeline com versão
-dependencies = [
-    "prefect_rj_iplanrio",
-    "pendulum",
-    "lxml==6.1.1", # 6.2 quebra o parser HTML de x
-]
-
-# ❌ errado — versão de um pacote compartilhado, e pacote que o workspace já fornece
-dependencies = ["pendulum==3.0.0", "prefect==3.8.8"]
+version = "2.3"
+description = "TODO"
+dependencies = ["prefect==3.8.8"]
 ```
 
-## 11. `src/utils/` — código compartilhado do workspace
+## 10. Tests
 
-### 11.1 Critérios de promoção
+### test-domain-behavior
 
-Uma função é promovida do `helpers.py` de uma pipeline para `src/utils/` quando **ambas** as condições forem verdadeiras:
+- **Level:** MUST
+- **Check:** pytest and review
+- **Rule:** Test each parser, branch, loop, security path, and money path at the lowest useful level.
+- **Why:** Tests must fail when observable behavior breaks.
 
-1. Duas ou mais pipelines precisam dela.
-2. Não contém lógica específica de nenhuma pipeline.
-
-Promoção especulativa ("isso pode ser útil em outro lugar") não é motivo. Copie uma vez; promova no segundo uso.
-
-### 11.2 API pública atual
-
-| Módulo        | Símbolo                                                                                                                                                                                                                                                   | Propósito                                                                                                            |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `utils.tasks` | `dump_db_to_gcs`, `publish_table_in_bq`, `upload_files_to_gcs`, `dump_bq_to_gcs`, `dump_arcgis_to_gcs`, `dump_gsheet_to_gcs`, `write_sheet`, `request_json`, `write_records`, `read_bq`, `run_bq_sql`, `notify_discord`, `list_delta_tables`, `maintain_delta_table`, `run_dbt` | Tasks compartilhadas sobre o toolkit. Veja o `README.md`.                                                            |
-| `utils.settings` | `WetalkieSettings`, `SfmcSettings`, `DataRelaySettings`, `BifrostSettings`, `NoticeSettings` | Variáveis de ambiente que mais de uma pipeline lê (Seção 5.11). |
-| `utils.flows` | `dump_database`, `dump_arcgis`, `dump_gsheet`, `load_files`, `ingest_api`, `maintain_delta`, `dbt_run`                                                                                                                                                    | Fluxos: o dump de uma fonte para uma tabela `Delta` sem repetir dado, a captura de uma API, a manutenção das tabelas `Delta` e o `dbt`. |
-
-### 11.3 O nome `utils`
-
-O módulo compartilhado se chama `utils`, então a pipeline não pode ter `utils.py` nem `utils/` ao lado do `flow.py`. O código local se chama `helpers.py` (Seção 4.3).
-
-### 11.4 Antes de escrever um helper
-
-Procure primeiro nesta seção e no [README do toolkit](packages/toolkit/README.md).
-
-## 12. Higiene do repositório
-
-### 12.1 Requisitos do `.gitignore`
-
-O `.gitignore` raiz deve cobrir:
-
-```gitignore
-# macOS
-.DS_Store
-
-# Python
-__pycache__/
-*.py[cod]
-.ruff_cache/
-
-# Ambientes
-.env
-.venv
-
-# Pins de versão do Python por pipeline (gerenciados apenas na raiz do workspace)
-pipelines/**/.python-version
-
-# Diretórios egg-info gerados dentro dos pacotes de pipeline
-pipelines/**/*.egg-info/
-```
-
-### 12.2 O que nunca deve ser commitado
-
-Veja a [Seção 3.3](#33-proibidos-nos-diretórios-de-pipeline) para a lista completa. A versão resumida: se um arquivo foi criado para depurar algo, corrigir uma migração ou guardar dados temporários durante o desenvolvimento, ele não pertence ao repositório.
-
-Também não entram no repositório:
-
-- Código comentado em bloco. Use `git log` para recuperar código removido.
-- Arquivos `.py` completamente vazios.
-
-Na dúvida, pergunte: "Um novo membro do time lendo este arquivo entenderia por que ele existe e o que fazer com ele?" Se a resposta for não, apague-o.
-
-### 12.3 Commits
-
-- Use Conventional Commits: `tipo(escopo): resumo no imperativo`, em minúsculas e sem ponto final. O escopo é opcional.
-- Use os tipos `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `data` (dados em produção) e `chore` (CI, ferramentas, dependências e manutenção).
-- Faça uma mudança lógica por commit. Junte os commits de correção (squash) antes do merge.
-- Nunca faça commit nem push sem aprovação explícita. Prepare, resuma e espere.
-
-```text
-refactor(toolkit): move GCS operations to obstore
-```
-
-### 12.4 Documentação
-
-- Escreva frases curtas, na voz ativa, com uma ideia por frase.
-- Deixe cada assunto em um documento só. Aponte para o documento dono com um link, sem copiar o texto.
-- Use exemplos genéricos, exceto se um valor real for necessário.
-- Confira cada afirmação no código, nos templates, nos testes ou em um comando que você rodou.
-
-## 13. Tags de pipeline
-
-### 13.1 O que são tags
-
-Toda pipeline **deve ter tags de metadados** definidas no `prefect.yaml` para indicar:
-
-- **Code owner**: GitHub username do desenvolvedor responsável
-- **Severidade**: Criticidade da pipeline (`low`, `medium`, `high`, `critical`)
-- **Ambiente**: Estágio de execução (`staging`, `prod`)
-
-Tags são metadados da infraestrutura do Prefect, não parâmetros da pipeline. Elas são propagadas a todos os logs estruturados e usadas pelo sistema de observabilidade para atribuição de alertas e priorização de incidentes.
-
-### 13.2 Como definir tags
-
-Tags são definidas na seção `tags:` de cada deployment, usando o padrão semântico `chave:valor`:
-
-```yaml
-deployments:
-  - name: rj-secretaria--pipeline--staging
-    tags:
-      - environment:staging
-      - severity:medium
-      - code_owner:seu_username
-    version: "{{ build-image.tag }}"
-    entrypoint: pipelines/rj_secretaria__pipeline/flow.py:rj_secretaria__pipeline
-    work_pool:
-      name: onprem-pool
-      work_queue_name: default
-      job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --no-sync --package rj_secretaria__pipeline -- prefect flow-run execute
-        namespace: pipelines-staging
-        secretName: pipelines-infisical
-        image_pull_policy: Always
-
-  - name: rj-secretaria--pipeline--prod
-    tags:
-      - environment:prod
-      - severity:high
-      - code_owner:seu_username
-    version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_secretaria__pipeline/flow.py:rj_secretaria__pipeline
-    work_pool:
-      name: onprem-pool
-      work_queue_name: default
-      job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --no-sync --package rj_secretaria__pipeline -- prefect flow-run execute
-        namespace: pipelines-prod
-        secretName: pipelines-infisical
-        image_pull_policy: Always
-```
-
-**Padrão de tags:** Use `chave:valor` para facilitar filtros e buscas no Prefect Cloud.
-
-### 13.3 Valores válidos
-
-| Tag           | Valores válidos                     | Descrição                                                |
-| ------------- | ----------------------------------- | -------------------------------------------------------- |
-| `environment` | `staging`, `prod`                   | Estágio de execução — obrigatório em todo deployment     |
-| `severity`    | `low`, `medium`, `high`, `critical` | Criticidade da pipeline — obrigatório em todo deployment |
-| `code_owner`  | GitHub username, ou `unassigned`    | Responsável pelo código — obrigatório em todo deployment |
-
-### 13.4 Por que tags e não parâmetros
-
-Tags são metadados da infraestrutura. Parâmetros são configuração do flow. Veja a comparação no [Apêndice A](#apêndice-a--por-que-tags-em-vez-de-parâmetros).
-
-### 13.5 Verificação
-
-A revisão do PR verifica as tags sempre que o `prefect.yaml` muda. Ainda não existe verificação automática no CI. Cada deployment deve incluir:
-
-- `environment:staging` ou `environment:prod`
-- `severity` com um dos 4 valores válidos
-- `code_owner` com um GitHub username válido, ou `unassigned` enquanto a pipeline não tem dono
-
-Quem revisa o PR deve recusar um deployment sem tags.
-
-## 14. Testes
-
-### 14.1 O que testar
-
-Lógica com ramificações ou parsing em `helpers.py` **deve** ter teste. Tasks finas não precisam de teste, porque não têm lógica própria (Seção 4.1). **Flows nunca têm teste**: um flow só liga componentes, e confiamos nos testes de cada componente (Seção 4.2). Não escreva teste que roda um flow.
-
-### 14.2 Estrutura
-
-`tests/` fica dentro do diretório da pipeline e espelha os módulos: `helpers.py` é testado por `tests/test_helpers.py`. Fixtures ficam em `tests/fixtures/`. `pytest` é dependência de desenvolvimento da pipeline.
-
-```
-pipelines/rj_secretaria__pipeline/
-├── helpers.py
-└── tests/
-    ├── test_helpers.py
-    └── fixtures/
-        └── response.json
-```
-
-### 14.3 Estilo
-
-Use `pytest` e `@pytest.mark.parametrize`, com `pytest.param(..., id="cenario")` que descreve o cenário. Cada função de teste leva uma `docstring` de uma linha e `-> None`, e a regra `ANN` do `ruff` confere o retorno dos testes. Os testes não usam rede, credenciais nem o runtime do Prefect. Use mocks só para verificar um contrato de interface (por exemplo, que uma função recebeu a query correta), nunca para testar lógica de negócio. Para funções puras de transformação, `hypothesis` é permitido para verificar propriedades como idempotência e preservação do número de linhas.
-
-- Ponha cada teste no nível mais baixo que prova o comportamento. Não repita a mesma verificação em um nível mais alto.
-- Confira valores exatos. Não use `in` sobre texto, a não ser uma regex em texto gerado que seria frágil de comparar inteiro.
-- Use o `hypothesis` só para invariantes sobre entradas geradas.
-- Não teste o armazenamento de campos, valores padrão nem "nenhuma exceção foi levantada".
-- Junte arquivos de teste pequenos que cobrem um módulo.
+Compliant:
 
 ```python
-import pytest
-
-from pipelines.rj_secretaria__pipeline.helpers import parse_value
-
-
 @pytest.mark.parametrize(
     ("raw", "expected"),
-    [pytest.param("1,5", 1.5, id="decimal_comma"), pytest.param("", None, id="empty")],
+    [pytest.param("1,5", 1.5, id="decimal-comma")],
 )
-def test_parse_value(raw: str, expected: float | None) -> None:
+def test_parse_value(raw: str, expected: float) -> None:
+    """Parse a decimal comma."""
     assert parse_value(raw) == expected
 ```
 
-## 15. Checklist antes do pull request
+Non-compliant: a test that only checks that no exception occurs.
 
-Marque cada item antes de pedir revisão.
+Pipeline flows need no direct test when they only connect tasks. Shared flow builders in `src/utils/flows.py` need tests because they implement reusable behavior.
 
-- [ ] O diretório se chama `rj_<secretaria>__<pipeline>` e tem `flow.py`, `pyproject.toml` e `Dockerfile` ([Seção 3](#3-contrato-de-arquivos-da-pipeline)).
-- [ ] Não há `__init__.py`, `env.py`, `schedules.py`, `.python-version` nem arquivos avulsos ([Seção 3.3](#33-proibidos-nos-diretórios-de-pipeline)).
-- [ ] O `flow.py` só orquestra. A função `@flow` tem o mesmo nome do diretório ([Seção 4.1](#41-flowpy)).
-- [ ] As tasks são wrappers finos e a lógica fica em `helpers.py` ([Seções 4.2 e 4.3](#42-taskspy)).
-- [ ] Não há `print()`. O logging usa `get_logger` ([Seção 5.5](#55-logging)).
-- [ ] Toda função tem type hints e `docstring` em Markdown, com resumo de uma linha ([Seções 5.1 e 5.6](#51-type-hints)).
-- [ ] O código novo usa Polars e DuckDB, sem pandas ([Seção 5.8](#58-dados-tabulares)).
-- [ ] Não há SQL em Python nem em YAML. O SQL está em `queries/*.sql` ([Seção 7](#7-sql)).
-- [ ] O `prefect.yaml` não tem comentários ([Seção 9.4](#94-sem-comentários)).
-- [ ] O agendamento está só no `prefect.yaml`, em `America/Sao_Paulo`. O staging não tem `schedules` ([Seções 8 e 9](#8-agendamento)).
-- [ ] Cada deployment tem as tags `environment`, `severity` e `code_owner` ([Seção 13](#13-tags-de-pipeline)).
-- [ ] O `pyproject.toml` tem `version = "1.0.0"`, um `description` real e dependências pelo nome, sem versão dos pacotes compartilhados ([Seção 10](#10-pyprojecttoml)).
-- [ ] Existe teste para a lógica com ramificações ou parsing de `helpers.py` ([Seção 14](#14-testes)).
+Tests use no production network, credentials, or Prefect runtime. Use table cases for multiple inputs. Give each regression test `Regression` in its docstring.
 
-### Quem verifica cada regra
+## 11. Repository hygiene
 
-Rode as verificações com `devenv --profile checks tasks run lint:all test:all`. O CI (`ci.yaml`) roda o mesmo comando em todo `pull request`.
+### no-generated-junk
 
-| Regra                                                                                                                                    | Verificação                                         |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| Estrutura de arquivos (`lint layout`), formatação, lint e tipos das pipelines, SQL e tags                                                | `lint:all` e revisão do PR                          |
-| Formatação, lint e tipos (`ruff`, `basedpyright`) de `src`, `tests`, `pipelines` e do toolkit, SQL do toolkit (`sqlfluff`), versões só na raiz e workflows (`actionlint`) | `lint:all`                                          |
-| Imports de módulos que saíram                                                                                                            | `lint:all` (`lint imports`)                         |
-| Testes unitários                                                                                                                         | `test:all`                                          |
-| Build, deploy dos flows, análise SAST                                                                                                    | CI do GitHub (`.github/workflows/`)                 |
+- **Level:** MUST NOT
+- **Check:** `lint:layout` and `.gitignore`
+- **Rule:** Do not commit caches, local environments, debug exports, generated notes, or empty Python files.
+- **Why:** Git stores source, not workstation state.
 
-## 16. Glossário
+Compliant: put temporary evidence in `/mnt/external/pi`.
 
-| Termo                          | Significado                                                                                                                                                |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| flow                           | A função `@flow` do Prefect. Define quais tasks rodam e em que ordem.                                                                                      |
-| task                           | A função `@task` do Prefect. Tem retries e estado visíveis na UI.                                                                                          |
-| deployment                     | Um flow registrado no Prefect com agendamento, parâmetros e infraestrutura. Fica no `prefect.yaml` ([Seção 9](#9-convenções-do-prefectyaml)).              |
-| work pool                      | Onde o Prefect executa o deployment: `default-pool` (geral) ou `onprem-pool` (acesso interno por VPN).                                                     |
-| work queue                     | Fila dentro do work pool. Neste repositório sempre `default`.                                                                                              |
-| `secretName`                   | Nome do Kubernetes Secret montado no container. Guarda credenciais como variáveis de ambiente.                                                             |
-| Infisical                      | Serviço de segredos. As credenciais chegam ao código por variáveis de ambiente injetadas em runtime.                                                       |
-| tag                            | Metadado `chave:valor` do deployment (`environment`, `severity`, `code_owner`) ([Seção 13](#13-tags-de-pipeline)).                                         |
-| imagem / `Dockerfile`          | Cada pipeline roda em uma imagem Docker construída a partir da imagem base do repositório.                                                                 |
-| workspace e `--package`        | O repositório é um workspace do `uv`. `uv run --no-sync --package <pipeline>` executa uma pipeline com as dependências dela.                                         |
-| staging e prod                 | Os dois ambientes. Staging não tem agendamento. Prod tem.                                                                                                  |
-| promoção                       | Mover uma função de `helpers.py` para `src/utils/` quando uma segunda pipeline precisa dela ([Seção 11](#11-srcutils--código-compartilhado-do-workspace)). |
-| pipeline de dump               | Pipeline que copia dados de um banco para o BigQuery. O template do repositório cria esse tipo.                                                            |
-| `{{ build-image.tag }}`        | Valor que o Prefect preenche no deploy com a tag da imagem construída. Vem do passo `build-image` do `prefect.yaml`.                                       |
-| `{{ get-commit-hash.stdout }}` | Valor que o Prefect preenche no deploy com o hash curto do commit. Vem do passo `get-commit-hash`.                                                         |
+Non-compliant: commit `.venv/`, `__pycache__/`, `.DS_Store`, or `MIGRATION_NOTES.md`.
 
-## Apêndice A — Por que tags em vez de parâmetros
+### commit-style
 
-| Aspecto             | Tags                                             | Parâmetros                                  |
-| ------------------- | ------------------------------------------------ | ------------------------------------------- |
-| **Definição**       | Metadados imutáveis da infraestrutura            | Configuração mutável do flow                |
-| **Escopo**          | Visíveis no Prefect Cloud; usado em filtros      | Passados como argumentos ao flow            |
-| **Mutabilidade**    | Alteradas apenas no `prefect.yaml`               | Podem ser sobrescritas em tempo de execução |
-| **Observabilidade** | Automaticamente propagadas aos logs estruturados | Requerem injeção manual no flow             |
-| **Contaminação**    | O flow fica limpo; sem parâmetros "framework"    | O flow acumula parâmetros de infraestrutura |
+- **Level:** MUST
+- **Check:** review
+- **Rule:** Use one logical change per Conventional Commit: `type(scope): lowercase imperative summary`.
+- **Why:** A focused history supports review and rollback.
 
-Tags separam **infraestrutura** (Prefect) de **negócio** (parâmetros do flow).
+Compliant: `fix(taxirio): preserve month chunk labels`
+
+Non-compliant: `updates`
+
+Valid types are `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `data`, and `chore`.
+
+## 12. Pull request checklist
+
+- [ ] The directory and required files follow section 3.
+- [ ] `flow.py`, `tasks.py`, and helpers follow section 4.
+- [ ] No secret or data value appears in a log or diff.
+- [ ] SQL and settings use their required files.
+- [ ] Staging has no schedule. Production schedules have slugs and timezones.
+- [ ] New behavior has a focused test.
+- [ ] `devenv --profile checks tasks run lint:all test:all` passes.

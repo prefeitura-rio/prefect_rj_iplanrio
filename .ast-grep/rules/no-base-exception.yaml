@@ -1,0 +1,10 @@
+id: no-base-exception
+language: Python
+severity: error
+message: Raise Exception or a more specific exception, not BaseException.
+files:
+  - pipelines/**/*.py
+  - src/**/*.py
+  - packages/toolkit/toolkit/**/*.py
+rule:
+  pattern: raise BaseException($$$A)

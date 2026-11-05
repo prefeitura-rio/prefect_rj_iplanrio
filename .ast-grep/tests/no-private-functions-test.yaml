@@ -1,0 +1,12 @@
+id: no-private-functions
+valid:
+  - |
+      def read_rows():
+        return []
+invalid:
+  - |
+      def _read_rows():
+        return []
+  - |
+      async def _fetch_rows():
+        return []

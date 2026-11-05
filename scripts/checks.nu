@@ -51,18 +51,7 @@ def 'main lint env' []: nothing -> nothing {
         | each {|name| $'($file): ($name) is not UPPER_SNAKE_CASE with single underscores' }
     } | flatten
 
-    let hand_read = (glob pipelines/**/*.py) | append (glob src/**/*.py) | where {|file| not ($file | str contains '/tests/') } | each {|file|
-        open --raw $file
-        | lines
-        | enumerate
-        | where {|row|
-            let line = $row.item
-            ($line =~ 'getenv\(|environ\.get\(|read_env\(') or (($line =~ 'environ\[') and not ($line =~ '\] =') and not ($line | str trim --left | str starts-with 'del '))
-        }
-        | each {|row| $'($file):($row.index + 1): read the variable through a Settings class' }
-    } | flatten
-
-    let problems = $misnamed | append $hand_read
+    let problems = $misnamed
     if ($problems | is-not-empty) {
         fail $'Fix the environment variables:(char nl)($problems | str join (char nl))' {command: 'lint env', span: (metadata $problems).span}
     }
@@ -147,6 +136,33 @@ def 'main lint layout' [...names: string]: nothing -> nothing {
     }
 }
 
+# Keep every documented ast-grep path connected to a rule and a rule test.
+def 'main lint rules' []: nothing -> nothing {
+    let guides = (open --raw STYLEGUIDE.md) + (open --raw packages/toolkit/STYLEGUIDE.md)
+    let documented = $guides
+    | parse --regex '`\.ast-grep/rules/(?<id>[a-z0-9-]+)\.yaml`'
+    | get id
+    | uniq
+    | sort
+    let rules = glob .ast-grep/rules/*.yaml | each { path parse | get stem } | sort
+    let tests = glob .ast-grep/tests/*-test.yaml | each { path parse | get stem | str replace --regex '-test$' '' } | sort
+    let undocumented = $rules | where $it not-in $documented | each {|id| $'.ast-grep/rules/($id).yaml: no path in a style guide' }
+    let missing_rule = $documented | where $it not-in $rules | each {|id| $'.ast-grep/rules/($id).yaml: documented rule does not exist' }
+    let missing_test = $rules | where $it not-in $tests | each {|id| $'.ast-grep/tests/($id)-test.yaml: rule has no test' }
+    let problems = $undocumented | append $missing_rule | append $missing_test
+
+    if ($problems | is-not-empty) {
+        fail $'Fix the style-guide rule paths:(char nl)($problems | str join (char nl))' {command: 'lint rules', span: (metadata $problems).span}
+    }
+}
+
+# Check syntax-aware module boundaries with ast-grep, then test every rule fixture.
+def 'main lint structure' []: nothing -> nothing {
+    main lint rules
+    ^ast-grep scan --config sgconfig.yaml
+    ^ast-grep test --config sgconfig.yaml --skip-snapshot-tests
+}
+
 # Check style, types and layout of the named pipelines, or of all of them. `lint python` and `lint layout` run the same checks for all.
 def 'main lint pipelines' [...names: string]: nothing -> nothing {
     let folders = pipeline-folders $names
@@ -209,6 +225,37 @@ def allow-problems []: nothing -> list<string> {
     } | flatten
 }
 
+# List invalid deployment names, tags and schedules in one prefect.yaml.
+def deployment-problems [file: path]: nothing -> list<string> {
+    let deployments = try { open $file | get deployments } catch { return [] }
+
+    $deployments | each {|deployment|
+        let name = $deployment.name? | default ''
+        let tags = $deployment.tags? | default []
+        let schedules = $deployment.schedules? | default []
+        let valid_name = $name =~ '^rj-[a-z0-9-]+--[a-z0-9-]+--(staging|prod)$'
+        let environment = $tags | any {|tag| $tag =~ '^environment:(staging|prod)$' }
+        let severity = $tags | any {|tag| $tag =~ '^severity:(low|medium|high|critical)$' }
+        let owner = $tags | any {|tag| $tag =~ '^code_owner:[A-Za-z0-9_-]+$' }
+        let staging_schedules = ($name | str ends-with '--staging') and ($schedules | is-not-empty)
+        let schedule_problems = $schedules | enumerate | each {|row|
+            let slug = $row.item.slug? | default ''
+            let timezone = $row.item.timezone? | default ''
+            []
+            | append (if ($slug | is-empty) { [$'($file): ($name) schedule ($row.index) has no slug'] } else { [] })
+            | append (if $timezone != 'America/Sao_Paulo' { [$'($file): ($name) schedule ($slug) has timezone ($timezone)'] } else { [] })
+        } | flatten
+
+        []
+        | append (if $valid_name { [] } else { [$'($file): invalid deployment name ($name)'] })
+        | append (if $environment { [] } else { [$'($file): ($name) has no environment tag'] })
+        | append (if $severity { [] } else { [$'($file): ($name) has no valid severity tag'] })
+        | append (if $owner { [] } else { [$'($file): ($name) has no code_owner tag'] })
+        | append (if $staging_schedules { [$'($file): ($name) staging has schedules'] } else { [] })
+        | append $schedule_problems
+    } | flatten
+}
+
 # Fail when a pipeline `prefect.yaml` has a comment or cannot be read by Nushell, which the deploy script uses, or when `.allow.json` is wrong.
 def 'main lint prefect' []: nothing -> nothing {
     let files = glob pipelines/*/prefect.yaml
@@ -217,6 +264,7 @@ def 'main lint prefect' []: nothing -> nothing {
     let problems = $unreadable
     | each { $'($in): cannot be read' }
     | append ($commented | each { $'($in): has a comment' })
+    | append ($files | each {|file| deployment-problems $file } | flatten)
     | append (allow-problems)
 
     if ($problems | is-not-empty) {

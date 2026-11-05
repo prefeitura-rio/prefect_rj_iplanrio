@@ -1,0 +1,5 @@
+id: types-imports-no-toolkit
+valid:
+  - from collections.abc import Mapping
+invalid:
+  - from toolkit.constants import BATCH_COLUMN

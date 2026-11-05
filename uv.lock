@@ -4147,6 +4147,8 @@ source = { virtual = "pipelines/rj_crm__relatorio_engajamento_hsm" }
 dependencies = [
     { name = "google-api-python-client" },
     { name = "google-cloud-bigquery" },
+    { name = "numpy" },
+    { name = "polars" },
     { name = "prefect-rj-iplanrio" },
     { name = "python-docx" },
 ]
@@ -4155,6 +4157,8 @@ dependencies = [
 requires-dist = [
     { name = "google-api-python-client" },
     { name = "google-cloud-bigquery" },
+    { name = "numpy" },
+    { name = "polars" },
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "python-docx", specifier = ">=1.1.0" },
 ]

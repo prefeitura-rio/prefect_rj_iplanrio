@@ -1,0 +1,15 @@
+id: no-legacy-typing
+language: Python
+severity: error
+message: Use built-in generics and | unions.
+files:
+  - pipelines/**/*.py
+  - src/**/*.py
+  - packages/toolkit/toolkit/**/*.py
+rule:
+  any:
+    - pattern: from typing import Optional
+    - pattern: from typing import List
+    - pattern: from typing import Dict
+    - pattern: from typing import Tuple
+    - pattern: from typing import Union

@@ -1,3 +1,4 @@
+import polars as pl
 import pytest
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.catalog import Catalog
@@ -6,27 +7,15 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.prompts import (
     fill_prompt,
     first_hsm_text,
     format_conversations,
+    format_examples,
     format_judged,
 )
-from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.text import normalize_label, slugify_hsm
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.text import citizen_text, normalize_label
 from pipelines.rj_crm__relatorio_engajamento_hsm.tests.conftest import (
     ClassificationFactory,
     ConversationFactory,
     MessageFactory,
 )
-
-
-@pytest.mark.parametrize(
-    ("name", "expected"),
-    [
-        pytest.param("Campanha 2026 - A!", "campanha_2026_a", id="symbols_become_one_underscore"),
-        pytest.param("__x__", "x", id="edges_are_trimmed"),
-        pytest.param("Ação", "a_o", id="accents_become_underscores"),
-    ],
-)
-def test_an_hsm_name_becomes_a_slug(name: str, expected: str) -> None:
-    """Keep letters and digits in lower case."""
-    assert slugify_hsm(name) == expected
 
 
 @pytest.mark.parametrize(
@@ -127,3 +116,45 @@ def test_the_judge_sees_the_category_and_the_justification(make_classification: 
 
     assert text.endswith("Categoria proposta: CAT\nJustificativa proposta: because")
     assert text.startswith("### CONVERSA 1 (id_sessao_48h=a)")
+
+
+@pytest.mark.parametrize(
+    ("conversation", "expected"),
+    [
+        pytest.param("CIDADÃO: oi\nAGENTE: olá, como ajudo?", "oi", id="the_agent_is_left_out"),
+        pytest.param(
+            "CIDADÃO: linha um\nlinha dois\nAGENTE: x", "linha um\nlinha dois", id="a_line_with_no_label_continues"
+        ),
+        pytest.param("AGENTE: x\nCIDADÃO: a\nAGENTE: y\nCIDADÃO: b", "a\nb", id="two_citizen_turns"),
+        pytest.param("AGENTE: só o agente", "AGENTE: só o agente", id="no_citizen_line_returns_everything"),
+        pytest.param("", "", id="an_empty_conversation"),
+    ],
+)
+def test_the_embedded_text_is_what_the_citizen_said(conversation: str, expected: str) -> None:
+    """Keep the citizen lines, because the category comes from them."""
+    assert citizen_text(conversation) == expected
+
+
+def test_the_examples_block_has_the_conversation_the_categories_and_the_note() -> None:
+    """Give the model the correct categories, and the review note when there is one."""
+    frame = pl.DataFrame(
+        {
+            "conversation": ["CIDADÃO: oi", "x" * 2000],
+            "categories": [["A", "B"], ["C"]],
+            "review_note": ["because", ""],
+        }
+    )
+
+    text = format_examples(frame)
+
+    assert "### EXEMPLO 1\nCIDADÃO: oi\nCategorias corretas: A;B\nObservação da revisão: because" in text
+    assert "### EXEMPLO 2" in text
+    assert "[…]" in text
+    assert text.count("Observação") == 1
+
+
+def test_no_example_gives_the_note_that_there_are_none() -> None:
+    """Say so, so the model knows that the empty section is on purpose."""
+    empty = pl.DataFrame(schema={"conversation": pl.String, "categories": pl.List(pl.String), "review_note": pl.String})
+
+    assert "não há exemplos" in format_examples(empty)

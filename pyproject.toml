@@ -130,6 +130,30 @@ reportUnknownLambdaType = false # lambdas passed to fakes
 reportAny = false # values from untyped fakes
 
 [[tool.basedpyright.executionEnvironments]]
+root = "pipelines/rj_crm__relatorio_engajamento_hsm/tests"
+extraPaths = ["src", "."]
+reportMissingTypeStubs = false # Google and other clients ship no types
+reportUnknownMemberType = false # members of those clients
+reportUnknownVariableType = false # values from those clients
+reportUnknownArgumentType = false # values from those clients
+reportUnknownLambdaType = false # lambdas passed to fakes
+reportUnknownParameterType = false # fake services take any arguments
+reportMissingParameterType = false # pytest fixtures and parametrized arguments arrive untyped
+reportUnannotatedClassAttribute = false # small fake classes
+reportUnusedParameter = false # a fake follows the signature of the real API
+reportAny = false # rows of Polars and arguments of the fake Google calls are `Any`
+reportExplicitAny = false # the fake Google service records any arguments
+
+[[tool.basedpyright.executionEnvironments]]
+root = "pipelines/rj_crm__relatorio_engajamento_hsm"
+extraPaths = ["src", "."]
+reportMissingTypeStubs = false # Google clients ship no types
+reportUnknownMemberType = false # members of those clients
+reportUnknownVariableType = false # values from those clients
+reportUnknownArgumentType = false # values from those clients
+reportAny = false # rows of Polars and answers of the Google clients are `Any`
+
+[[tool.basedpyright.executionEnvironments]]
 root = "pipelines"
 extraPaths = ["src", "."]
 reportMissingTypeStubs = false # Google, gspread and other clients ship no types
@@ -268,9 +292,6 @@ max-doc-length = 88 # a docstring or a comment line holds up to 88 columns, as t
   "ARG002",
   "ARG005",
 ] # a fake follows the signature of the real API, and ignores some arguments
-"src/utils/delta.py" = [
-  "TID251",
-] # it types the store that toolkit.gcs creates
 "pipelines/rj_crm__modelo_qualidade_telefone/**" = [
   "TID251",
 ] # the bucket of the models is in rj-crm-registry, which the HMAC key of toolkit.gcs cannot read

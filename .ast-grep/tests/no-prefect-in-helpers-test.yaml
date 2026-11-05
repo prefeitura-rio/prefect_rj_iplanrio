@@ -1,0 +1,7 @@
+id: no-prefect-in-helpers
+valid:
+  - from toolkit.telemetry import logger
+  - from pipelines.x.tasks import run_task
+invalid:
+  - from prefect.runtime import deployment
+  - from prefect import flow

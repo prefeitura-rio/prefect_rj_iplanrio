@@ -1,0 +1,5 @@
+id: no-assert-in-production
+valid:
+  - pass
+invalid:
+  - assert value

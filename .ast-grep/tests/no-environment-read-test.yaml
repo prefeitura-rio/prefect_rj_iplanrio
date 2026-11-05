@@ -1,0 +1,6 @@
+id: no-environment-read
+valid:
+  - pass
+invalid:
+  - os.getenv("TOKEN")
+  - environ["TOKEN"]

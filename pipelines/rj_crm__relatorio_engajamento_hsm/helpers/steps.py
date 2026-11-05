@@ -10,7 +10,12 @@ from random import Random
 
 from pydantic import JsonValue
 
-from pipelines.rj_crm__relatorio_engajamento_hsm.constants import INCORRECT, NO_CATEGORY, VALID_VERDICTS
+from pipelines.rj_crm__relatorio_engajamento_hsm.constants import (
+    INCORRECT,
+    MAX_DISCOVERY_EXAMPLES,
+    NO_CATEGORY,
+    VALID_VERDICTS,
+)
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.catalog import Catalog
 from pipelines.rj_crm__relatorio_engajamento_hsm.types import Classification, Conversation
 
@@ -28,28 +33,64 @@ def sample_conversations(conversations: Sequence[Conversation], cap: int, seed: 
     return shuffled[:cap]
 
 
-def register_discoveries(answer: Sequence[Mapping[str, JsonValue]], catalog: Catalog) -> tuple[int, int]:
-    """Add the new categories of an answer to the catalog.
+def register_discoveries(
+    answer: Sequence[Mapping[str, JsonValue]], batch: Sequence[Conversation], catalog: Catalog
+) -> tuple[dict[str, list[str]], int]:
+    """Add the new categories of an answer, and return their example session ids.
 
-    Return how many were new and how many items failed.
+    Also return how many items were invalid.
 
-    An item with no `categoria_nova` fails, and one that the catalog already has is not
-    new.
+    An example is the number of a conversation of the batch. A number outside the batch
+    or a repeat is dropped, and a category has at most `MAX_DISCOVERY_EXAMPLES`. An item
+    with no name is invalid, and a category that the catalog already has is not new.
     """
-    new = failed = 0
+    found: dict[str, list[str]] = {}
+    invalid = 0
 
     for item in answer:
         name = text_of(item.get("categoria_nova"))
 
         if not name:
-            failed += 1
+            invalid += 1
             continue
 
-        before = len(catalog.entries)
-        catalog.register(name, text_of(item.get("categoria_nova_descricao")))
-        new += len(catalog.entries) > before
+        if catalog.find(name) is not None:
+            continue
 
-    return new, failed
+        canonical = catalog.register(name, text_of(item.get("categoria_nova_descricao")))
+        ids, bad = example_ids(item.get("exemplos"), batch)
+        invalid += bad
+        found[canonical] = ids
+
+    return found, invalid
+
+
+def example_ids(numbers: JsonValue, batch: Sequence[Conversation]) -> tuple[list[str], int]:
+    """Return the session ids of the example numbers, and how many were invalid."""
+    ids: list[str] = []
+    invalid = 0
+
+    for raw in numbers if isinstance(numbers, list) else []:
+        if isinstance(raw, bool) or not isinstance(raw, int | float | str):
+            invalid += 1
+            continue
+
+        try:
+            position = int(raw)
+        except ValueError:
+            invalid += 1
+            continue
+
+        if not 1 <= position <= len(batch):
+            invalid += 1
+            continue
+
+        session_id = batch[position - 1].session_id
+
+        if session_id not in ids and len(ids) < MAX_DISCOVERY_EXAMPLES:
+            ids.append(session_id)
+
+    return ids, invalid
 
 
 def read_classifications(
@@ -117,6 +158,18 @@ def select_for_judge(
         selected += Random(seed).sample(group, target)
 
     return selected
+
+
+def cap_selection(selected: Sequence[Classification], ceiling: int, seed: int) -> list[Classification]:
+    """Return the selection cut to the ceiling, by a random sample the same for a seed.
+
+    The ceiling keeps the cost of the judge: below it every selected conversation is
+    judged, above it a sample is.
+    """
+    if len(selected) <= ceiling:
+        return list(selected)
+
+    return Random(seed).sample(list(selected), ceiling)
 
 
 def read_verdicts(

@@ -1,0 +1,5 @@
+id: no-bigquery-client-in-toolkit
+valid:
+  - BigQuery(project)
+invalid:
+  - bigquery.Client(project=project)

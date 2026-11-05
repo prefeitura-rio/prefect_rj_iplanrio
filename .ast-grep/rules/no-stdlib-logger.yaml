@@ -1,0 +1,18 @@
+id: no-stdlib-logger
+language: Python
+severity: error
+message: Use toolkit.telemetry.logger, not the standard-library logger.
+files:
+  - pipelines/**/*.py
+  - src/**/*.py
+  - packages/toolkit/toolkit/**/*.py
+ignores:
+  - packages/toolkit/toolkit/telemetry.py
+  - '**/tests/**'
+rule:
+  any:
+    - pattern: import logging
+    - pattern: import logging.$$$A
+    - pattern: from logging import $$$A
+    - pattern: logging.getLogger($$$A)
+    - pattern: getLogger($$$A)

@@ -1,0 +1,14 @@
+id: no-print
+language: Python
+severity: error
+message: Use toolkit.telemetry.logger or Prefect's run logger, not print.
+files:
+  - pipelines/**/*.py
+  - src/**/*.py
+  - packages/toolkit/toolkit/**/*.py
+ignores:
+  - pipelines/**/tests/**
+  - tests/**
+  - packages/toolkit/tests/**
+rule:
+  pattern: print($$$A)

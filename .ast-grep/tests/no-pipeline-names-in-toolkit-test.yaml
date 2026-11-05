@@ -1,0 +1,5 @@
+id: no-pipeline-names-in-toolkit
+valid:
+  - 'name = "example"'
+invalid:
+  - 'name = "rj_iplanrio__taxirio"'

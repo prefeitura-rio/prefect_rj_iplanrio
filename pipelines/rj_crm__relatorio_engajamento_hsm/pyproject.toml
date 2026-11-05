@@ -7,6 +7,8 @@ dependencies = [
     "google-cloud-bigquery",
     "google-api-python-client",
     "python-docx>=1.1.0",
+    "numpy",
+    "polars",
 ]
 
 [tool.uv.sources]

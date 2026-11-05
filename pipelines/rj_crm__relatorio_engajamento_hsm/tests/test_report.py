@@ -6,20 +6,22 @@ import pytest
 from docx import Document
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.report import (
+    auto_catalog_frame,
     build_categories,
     build_docx,
-    categories_csv,
+    conversations_frame,
     cut_text,
     describe_precision,
-    detail_csv,
     margin_of,
     precision_of,
-    report_slug,
-    to_csv,
+    publish_round,
+    round_name,
     wilson_margin,
 )
-from pipelines.rj_crm__relatorio_engajamento_hsm.tests.conftest import ClassificationFactory
-from pipelines.rj_crm__relatorio_engajamento_hsm.types import Category, Dispatch, Report
+from pipelines.rj_crm__relatorio_engajamento_hsm.tests.conftest import ClassificationFactory, RecorderFactory
+from pipelines.rj_crm__relatorio_engajamento_hsm.types import Category, Dispatch, Report, RoundFiles, Window
+
+WINDOW = Window("camp", "nome_campanha", date(2026, 7, 1), date(2026, 7, 17))
 
 
 @pytest.mark.parametrize(
@@ -81,35 +83,98 @@ def test_a_long_text_is_cut_with_a_mark() -> None:
     assert cut_text("x" * 20, 10) == "xxxxxxxxxx […]"
 
 
-def test_the_slug_of_a_report_has_the_hsm_and_the_day() -> None:
-    """Never put a time in it, so a repeat finds the same name."""
-    assert report_slug("Camp A", date(2026, 7, 17)) == "relatorio_engajamento_camp_a__geracao_2026-07-17"
+@pytest.mark.parametrize(
+    ("quick", "expected"),
+    [
+        pytest.param(False, "2026-11-05_08h__disparos_2026-11-01_a_2026-11-04", id="an_engagement_round"),
+        pytest.param(True, "2026-11-05_08h__disparos_2026-11-01_a_2026-11-04__catalogo_automatico", id="a_quick_round"),
+    ],
+)
+def test_the_round_folder_has_the_hour_the_period_and_the_quick_suffix(quick: bool, expected: str) -> None:
+    """Name the folder of one generation, so a later one never replaces it."""
+    generated = datetime(2026, 11, 5, 8, 30, tzinfo=UTC)
+
+    assert round_name(generated, date(2026, 11, 1), date(2026, 11, 4), quick=quick) == expected
 
 
-def test_a_csv_uses_semicolons_and_leaves_nothing_empty() -> None:
-    """Quote what needs it."""
-    content = to_csv(["a", "b"], [("x;y", None), (1, 0.5)]).decode()
-
-    assert content == 'a;b\n"x;y";\n1;0.5\n'
-
-
-def test_the_csv_files_have_the_columns_of_the_contract(make_classification: ClassificationFactory) -> None:
-    """Keep the names of the columns that the readers of the files know."""
+def test_the_conversations_sheet_has_no_cpf_and_no_phone(make_classification: ClassificationFactory) -> None:
+    """Publish the session, the category, the verdict and the review columns only."""
     items = [make_classification("a1", "A", verdict="CORRETO", judge_note="ok")]
-    categories = build_categories(items, {"A": "about a"}, 5)
 
-    by_category = categories_csv(categories).decode().splitlines()
-    by_conversation = detail_csv(items).decode().splitlines()
+    frame = conversations_frame(items, with_review=True)
 
-    assert (
-        by_category[0] == "categoria;descricao;qtd;pct_do_engajamento;n_avaliadas_juiz;precisao;margem_erro_wilson_95"
+    assert frame.columns == [
+        "id_sessao",
+        "categoria",
+        "justificativa",
+        "resumo",
+        "conversa",
+        "juiz_veredito",
+        "juiz_categoria_esperada",
+        "juiz_justificativa",
+        "revisao",
+        "categorias_corretas",
+        "justificativa_revisao",
+        "avaliacao_resposta_bot",
+        "justificativa_avaliacao_bot",
+    ]
+    assert frame.row(0)[:8] == ("a1", "A", "why", "sum", "CIDADÃO: oi", "CORRETO", "", "ok")
+    assert set(frame.row(0)[8:]) == {""}
+    assert "123" not in str(frame.rows())
+    assert "5521" not in str(frame.rows())
+
+
+def test_a_quick_report_has_no_review_columns(make_classification: ClassificationFactory) -> None:
+    """Leave the review to the engagement report, whose examples feed the next run."""
+    frame = conversations_frame([make_classification("a1", "A")], with_review=False)
+
+    assert "revisao" not in frame.columns
+    assert frame.width == 8
+
+
+def test_the_automatic_catalog_lists_each_category_with_examples_and_count(
+    make_classification: ClassificationFactory,
+) -> None:
+    """Show the discovery examples and how many conversations each category got."""
+    categories = build_categories([make_classification("a1", "A")], {"A": "about a", "B": "about b"}, 5)
+
+    frame = auto_catalog_frame({"A": "about a", "B": "about b"}, {"A": ["a1", "a2"]}, categories)
+
+    assert frame.columns == ["Categoria", "Descrição", "Exemplos de conversas", "Qtd. de conversas"]
+    assert frame.rows() == [("A", "about a", "a1; a2", 1), ("B", "about b", "", 0)]
+
+
+def test_a_round_is_published_in_a_new_folder_with_a_doc_and_a_sheet(
+    make_recorder: RecorderFactory, make_classification: ClassificationFactory
+) -> None:
+    """Create the folder, upload the Google Doc, and create the conversations sheet."""
+    frame = conversations_frame([make_classification("a1", "A")], with_review=True)
+    drive = make_recorder(
+        files__list={"files": []},
+        files__create=[
+            {"id": "round"},
+            {"id": "doc", "webViewLink": "https://doc"},
+            {"id": "sheet", "name": "conversas_classificadas"},
+        ],
     )
-    assert by_category[1] == "A;about a;1;100.0;1;1.0;0.0"
-    assert by_conversation[0] == (
-        "id_sessao_48h;cpf;telefone;categoria;categoria_justificativa;resumo_gerado;"
-        "juiz_veredito;juiz_categoria_esperada;juiz_justificativa"
+    sheets = make_recorder(
+        spreadsheets__get={"sheets": [{"properties": {"sheetId": 0, "title": "Sheet1"}}]},
+        spreadsheets__values__get={"values": [frame.columns]},
     )
-    assert by_conversation[1] == "a1;123;5521;A;why;sum;CORRETO;;ok"
+
+    link = publish_round(drive, sheets, "campaign", RoundFiles("2026-11-05_08h__x", b"docx", frame))
+
+    assert link == "https://drive.google.com/drive/folders/round"
+    creates = [kwargs["body"] for path, kwargs in drive.calls if path == "files.create"]
+    assert creates[0]["mimeType"] == "application/vnd.google-apps.folder"
+    assert creates[0]["parents"] == ["campaign"]
+    assert (creates[1]["name"], creates[1]["mimeType"], creates[1]["parents"]) == (
+        "relatorio_engajamento",
+        "application/vnd.google-apps.document",
+        ["round"],
+    )
+    assert (creates[2]["name"], creates[2]["parents"]) == ("conversas_classificadas", ["round"])
+    assert len(creates) == 3
 
 
 def test_the_word_report_has_the_summary_the_notes_the_query_and_the_categories(
@@ -117,10 +182,10 @@ def test_the_word_report_has_the_summary_the_notes_the_query_and_the_categories(
 ) -> None:
     """Build the document and read it back."""
     items = [make_classification("a1", "A", verdict="CORRETO"), make_classification("a2", "A")]
-    report = Report(Dispatch("camp", date(2026, 7, 1)), date(2026, 7, 17), items, {"A": "about a"}, 10, 2)
+    report = Report(Dispatch("camp", date(2026, 7, 1)), date(2026, 7, 17), items, {"A": "about a"}, 10, 2, WINDOW)
     categories = build_categories(items, report.catalog, 5)
 
-    content = build_docx(report, categories, "select 1", ["c.csv", "d.csv"], datetime(2026, 7, 17, 8, 30, tzinfo=UTC))
+    content = build_docx(report, categories, "select 1", datetime(2026, 7, 17, 8, 30, tzinfo=UTC))
 
     text = "\n".join(paragraph.text for paragraph in Document(BytesIO(content)).paragraphs)
     assert "Relatório de Engajamento — camp" in text
@@ -131,6 +196,34 @@ def test_the_word_report_has_the_summary_the_notes_the_query_and_the_categories(
     assert "Conversas classificadas: 2 (100.0% das respostas)" in text
     assert "Conversas avaliadas pelo juiz: 1 (50.0% das classificadas)" in text
     assert "HSM enviado:" in text
-    assert "'c.csv' e 'd.csv'" in text
+    assert "'conversas_classificadas'" in text
     assert "select 1" in text
     assert "about a" in text
+
+
+def test_the_word_report_lists_the_notes_and_the_suggested_categories(
+    make_classification: ClassificationFactory,
+) -> None:
+    """Add the notes of the run and the suggestions that stay out of the catalog."""
+    items = [make_classification("a1", "A")]
+    report = Report(
+        Dispatch("camp", date(2026, 7, 1)),
+        date(2026, 7, 17),
+        items,
+        {"A": "about a"},
+        10,
+        2,
+        WINDOW,
+        notes=("2 categoria(s) sem decisão no Catálogo foram ignoradas",),
+        suggestions={"New topic": "about it"},
+    )
+
+    content = build_docx(
+        report, build_categories(items, report.catalog, 5), "select 1", datetime(2026, 7, 17, tzinfo=UTC)
+    )
+
+    text = "\n".join(paragraph.text for paragraph in Document(BytesIO(content)).paragraphs)
+    assert "2 categoria(s) sem decisão no Catálogo foram ignoradas" in text
+    assert "Sugestões de categorias novas" in text
+    assert "New topic" in text
+    assert "about it" in text

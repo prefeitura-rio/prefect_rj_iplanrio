@@ -1,0 +1,9 @@
+id: no-pipeline-names-in-toolkit
+language: Python
+severity: error
+message: Do not put a pipeline name in the toolkit.
+files:
+  - packages/toolkit/toolkit/**/*.py
+rule:
+  kind: string
+  regex: rj[_-][a-z0-9_-]+(__|--)[a-z0-9_-]+

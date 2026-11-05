@@ -1,0 +1,27 @@
+id: no-environment-read
+language: Python
+severity: error
+message: Read environment values through a Settings class.
+files:
+  - pipelines/**/*.py
+  - src/**/*.py
+ignores:
+  - pipelines/**/settings.py
+  - src/utils/settings.py
+  - '**/tests/**'
+rule:
+  any:
+    - pattern: getenv($$$A)
+    - pattern: os.getenv($$$A)
+    - pattern: environ.get($$$A)
+    - pattern: os.environ.get($$$A)
+    - all:
+        - pattern: environ[$A]
+        - not:
+            inside:
+              pattern: environ[$A] = $V
+    - all:
+        - pattern: os.environ[$A]
+        - not:
+            inside:
+              pattern: os.environ[$A] = $V

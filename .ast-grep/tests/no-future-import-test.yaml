@@ -1,0 +1,5 @@
+id: no-future-import
+valid:
+  - from typing import cast
+invalid:
+  - from __future__ import annotations

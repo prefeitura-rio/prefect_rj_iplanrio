@@ -1,0 +1,24 @@
+id: no-flow-in-tasks
+language: Python
+severity: error
+message: A flow belongs in flow.py, not tasks.py.
+files:
+  - pipelines/**/tasks.py
+rule:
+  any:
+    - pattern: |
+        @flow
+        def $F($$$A):
+          $$$B
+    - pattern: |
+        @flow($$$K)
+        def $F($$$A):
+          $$$B
+    - pattern: |
+        @flow
+        async def $F($$$A):
+          $$$B
+    - pattern: |
+        @flow($$$K)
+        async def $F($$$A):
+          $$$B

@@ -1,0 +1,5 @@
+id: no-deltalake-outside-delta
+valid:
+  - pass
+invalid:
+  - from deltalake import DeltaTable
