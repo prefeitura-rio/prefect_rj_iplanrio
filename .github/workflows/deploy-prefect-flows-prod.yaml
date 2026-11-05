@@ -1,6 +1,11 @@
 name: Deploy Prefect flows (prod)
 
 on:
+  push:
+    branches:
+      - master
+    paths:
+      - pipelines/**
   workflow_dispatch:
     inputs:
       force_deploy:
@@ -36,7 +41,6 @@ on:
 jobs:
   deploy-prefect-prod-flows:
     name: Deploy Prefect prod flows
-    if: vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

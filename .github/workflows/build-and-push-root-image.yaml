@@ -1,6 +1,11 @@
 name: Build and push root image
 
 on:
+  push:
+    branches:
+      - master
+    paths:
+      - Dockerfile
   workflow_dispatch:
     inputs:
       pipeline:
@@ -11,7 +16,6 @@ on:
 jobs:
   build-and-push-root-image:
     name: Build and push root image
-    if: vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
