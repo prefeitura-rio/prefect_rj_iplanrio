@@ -12,8 +12,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.cleanup import raise_f
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.dbt import should_run_dbt
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import environment_from_deployment
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_format import flow_run_url
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify import LoadNotifier, NotifierConfig
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.stages import Step, TableStep
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify import LoadNotifier
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
     create_oracle_indexes_task,
     delete_gcs_files_task,
@@ -38,7 +37,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
     validate_row_count_task,
     wait_inmemory_task,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import Dbt, Load, Source
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import Dbt, Load, NotifierConfig, Source, Step, TableStep
 
 DEFAULT_SOURCE = Source()
 DEFAULT_LOAD = Load()

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import RawTextEncoding
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import RawTextEncoding
 
 
 @dataclass(frozen=True)
@@ -40,3 +40,26 @@ class Outcome:
     source: str
     target: str
     divergences: int
+
+
+@dataclass(frozen=True)
+class ValidationRequest:
+    """The table to validate and the options of the validation.
+
+    `project`, `dataset_id` and `table_id` name the BigQuery source, and the original
+    table in Oracle has the same name. `template_schema` is the schema of the original
+    table in Oracle. `excluded_columns` are the columns of the original that the load
+    does not create (besides the `ROWID` columns that BigQuery lacks, which are excluded
+    on their own). `compute_column_metrics` says whether to compute the metrics for each
+    column, which read the whole table in both databases. `raw_text_encoding` is the
+    encoding of the text of the `RAW` columns in BigQuery (`base64` or `hex`), the one
+    that the load uses.
+    """
+
+    project: str
+    dataset_id: str
+    table_id: str
+    template_schema: str
+    excluded_columns: tuple[str, ...]
+    compute_column_metrics: bool
+    raw_text_encoding: RawTextEncoding = "base64"

@@ -1,9 +1,9 @@
 from dataclasses import replace
 from decimal import Decimal
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import OracleColumn
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import (
     IndexDefinition,
+    OracleColumn,
     Partitioning,
     PartitionStorage,
     TablePartition,

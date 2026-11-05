@@ -5,8 +5,7 @@ It gives the equivalent DDL for the loaded table.
 
 from dataclasses import replace
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_ddl import describe_partitioning
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import (
     FUNCTION_BASED_INDEX_TYPE,
     INDEX_NAME_PATTERN,
     INMEMORY_COMPRESSIONS,
@@ -16,8 +15,11 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models impor
     SNAPSHOT_INDEX_PREFIX,
     SUPPORTED_INDEX_TYPES,
     SUPPORTED_PARTITIONING,
+)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_ddl import describe_partitioning
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import IndexExpression
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import (
     IndexDefinition,
-    IndexExpression,
     Partitioning,
     PartitionStorage,
     StructurePlan,

@@ -11,8 +11,6 @@ from pipelines.rj_smfp__nota_carioca_carga_completa.constants import (
 )
 from pipelines.rj_smfp__nota_carioca_carga_completa.types import ChildRun
 
-NOT_STARTED = "Carga completa não iniciada"
-
 
 def build_run_tags(current_tags: Iterable[str]) -> list[str]:
     """Return the tags of the child runs: the one of the chain and the audit ones.

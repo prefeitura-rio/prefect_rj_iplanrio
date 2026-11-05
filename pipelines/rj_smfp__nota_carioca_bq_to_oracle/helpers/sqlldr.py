@@ -1,7 +1,6 @@
 """Load into Oracle with SQL*Loader in direct path, reading gzip CSV from GCS."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from gzip import GzipFile
 from os import environ
 from pathlib import Path
@@ -17,13 +16,16 @@ from typing import BinaryIO
 from toolkit.gcs import ObjectReader, create_store
 from toolkit.telemetry import logger
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import ExportedFile
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import LoaderField
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import OracleConfig
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr_progress import (
-    CountingReader,
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr_progress import CountingReader
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import (
+    ExportedFile,
+    LoaderField,
+    LoadJob,
+    LoadResult,
+    OracleConfig,
     ProgressSnapshot,
     SessionProgress,
+    SessionResult,
 )
 
 SQLLDR_BIN = "sqlldr"
@@ -36,40 +38,6 @@ LOADED_PATTERN = compile_pattern(r"^\s*(\d+) Rows? successfully loaded\.", MULTI
 
 
 POLL_SECONDS = 0.5
-
-
-@dataclass(frozen=True)
-class LoadJob:
-    """The load of one table from the files that BigQuery exported.
-
-    `table` is the target table in Oracle, already empty. `fields` are the fields of the
-    CSV, in the order of the BigQuery schema. `files` are the exported `.csv.gz` files,
-    with their sizes. `sessions` is the most SQL*Loader sessions at the same time.
-    """
-
-    table: str
-    fields: list[LoaderField]
-    bucket: str
-    files: list[ExportedFile]
-    sessions: int
-
-
-@dataclass(frozen=True)
-class SessionResult:
-    """The result of one SQL*Loader session: its number, files sent and rows."""
-
-    index: int
-    files: int
-    rows: int
-
-
-@dataclass(frozen=True)
-class LoadResult:
-    """The result of the load of one table: rows, sessions and time."""
-
-    rows: int
-    sessions: list[SessionResult]
-    elapsed_seconds: float
 
 
 def build_control_file(schema: str, table: str, fields: list[LoaderField]) -> str:

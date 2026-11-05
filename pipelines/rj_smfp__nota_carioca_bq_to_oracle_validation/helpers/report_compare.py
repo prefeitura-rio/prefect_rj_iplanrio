@@ -2,20 +2,15 @@
 
 from re import compile as compile_pattern
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import OracleColumn
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import storage_matches
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import (
-    USABLE_INDEX_STATUSES,
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import USABLE_INDEX_STATUSES
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import (
     IndexDefinition,
+    OracleColumn,
     Partitioning,
     TablePartition,
 )
-
-STATUS_OK = "OK"
-
-
-STATUS_DIVERGE = "DIVERGE"
-
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.constants import STATUS_DIVERGE, STATUS_OK
 
 DATE_BOUND_PATTERN = compile_pattern(r"^TO_DATE\('\s*([0-9-]+ [0-9:]+)'")
 

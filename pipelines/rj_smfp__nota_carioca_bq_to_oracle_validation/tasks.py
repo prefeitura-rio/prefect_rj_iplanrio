@@ -6,10 +6,10 @@ from toolkit.telemetry import logger
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import list_tables
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import read_oracle_config, validate_identifier
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.inspect import ValidationRequest, validate_table
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.inspect import validate_table
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.inspect_sections import describe_session
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.report import format_text_table
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.types import Options, Outcome, Source
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.types import Options, Outcome, Source, ValidationRequest
 
 
 @task

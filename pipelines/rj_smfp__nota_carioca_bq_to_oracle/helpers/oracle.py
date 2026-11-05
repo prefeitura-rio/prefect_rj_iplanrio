@@ -1,19 +1,14 @@
 """Access the target Oracle: configuration, protected creation and table counts."""
 
-from dataclasses import dataclass
 from re import compile as compile_pattern
 
 import oracledb
 
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import MANAGED_TABLE_MARKER, TABLE_PREFIX
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_query import QUERIES_ANCHOR, fetch_all
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.settings import Settings
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import OracleConfig
 from utils.utils import render_query
-
-TABLE_PREFIX = "BQLOAD_"
-
-
-MANAGED_TABLE_MARKER = "rj_smfp__nota_carioca_bq_to_oracle"
-
 
 # Os sinônimos ficam também nos schemas dos consumidores, o que exige CREATE ANY SYNONYM
 # até do dono.
@@ -42,27 +37,6 @@ KEEPALIVE_MINUTES = 2
 
 
 IDENTIFIER_PATTERN = compile_pattern(r"^[A-Z][A-Z0-9_$#]{0,127}$")
-
-
-@dataclass(frozen=True)
-class OracleConfig:
-    """The connection to the target Oracle, read from Infisical.
-
-    `host` is the host or IP of the database, `port` is the port of the listener, and
-    `service_name` is its service name. `schema` is where the tables are created.
-    """
-
-    user: str
-    password: str
-    host: str
-    port: str
-    service_name: str
-    schema: str
-
-    @property
-    def dsn(self) -> str:
-        """Return the DSN in the easy connect format (`host:port/service`)."""
-        return f"{self.host}:{self.port}/{self.service_name}"
 
 
 def validate_identifier(name: str) -> str:

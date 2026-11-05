@@ -3,8 +3,8 @@
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import RawTextEncoding
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.report_compare import STATUS_DIVERGE, STATUS_OK
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import RawTextEncoding
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.constants import STATUS_DIVERGE, STATUS_OK
 
 NUMERIC_KINDS = {"nao_nulos", "soma", "minimo_num", "maximo_num", "comprimento_total", "comprimento_maximo"}
 

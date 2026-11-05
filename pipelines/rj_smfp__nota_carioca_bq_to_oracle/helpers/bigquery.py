@@ -3,7 +3,6 @@
 import time
 from asyncio import run
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from google.cloud import bigquery
@@ -11,18 +10,7 @@ from toolkit.gcs import create_store, delete_keys, list_sizes
 from toolkit.telemetry import logger
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.dbt import skip_initial_quiet_wait
-
-
-@dataclass(frozen=True)
-class ExportedFile:
-    """A gzip CSV file that the extract wrote to GCS.
-
-    `name` is the name of the object in the bucket, and `size` is its compressed size in
-    bytes.
-    """
-
-    name: str
-    size: int
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import ExportedFile, SnapshotRequest, TableSchema, TableSnapshot
 
 
 def list_tables(project: str, dataset_id: str) -> list[str]:
@@ -30,17 +18,6 @@ def list_tables(project: str, dataset_id: str) -> list[str]:
     client = bigquery.Client(project=project)
     tables = client.list_tables(f"{project}.{dataset_id}")
     return sorted(table.table_id for table in tables if table.table_type == "TABLE")
-
-
-@dataclass(frozen=True)
-class TableSchema:
-    """The schema of a BigQuery table and its number of rows.
-
-    `fields` has the `name`, `type` and `mode` of each column.
-    """
-
-    fields: list[dict[str, str]]
-    num_rows: int
 
 
 def get_table_schema(project: str, dataset_id: str, table_id: str) -> TableSchema:
@@ -95,44 +72,6 @@ def delete_blobs(bucket: str, blob_names: list[str]) -> None:
     """Delete the exported files from GCS, one object for each request."""
     run(delete_keys(create_store(bucket), blob_names))
     logger.info("Removidos %d arquivos de gs://%s", len(blob_names), bucket)
-
-
-@dataclass(frozen=True)
-class SnapshotRequest:
-    """The tables to export together, as one snapshot of BigQuery.
-
-    `prefix` is the prefix of the objects in the bucket, and it is private to the flow
-    run. `quiet_seconds` is the least time without changes in any table before the
-    extract. `max_attempts` is the most extracts that a change during the export may
-    discard. `max_wait_seconds` is the longest total wait for a period without changes.
-    `dbt_finished_at` is the end of the dbt run before the load, in UTC. If no table
-    changed after it, the first wait is skipped.
-    """
-
-    project: str
-    dataset_id: str
-    table_ids: list[str]
-    bucket: str
-    prefix: str
-    quiet_seconds: float
-    max_attempts: int = 5
-    max_wait_seconds: float = 3600.0
-    dbt_finished_at: datetime | None = None
-
-
-@dataclass(frozen=True)
-class TableSnapshot:
-    """A table that the snapshot of BigQuery exported.
-
-    `schema` has the schema and the row count, read in the same snapshot as the extract.
-    `last_modified` is the last change of the table in the snapshot, the same before and
-    after the extract. `files` are the exported files.
-    """
-
-    table_id: str
-    schema: TableSchema
-    last_modified: datetime
-    files: list[ExportedFile]
 
 
 def quiet_wait_seconds(last_modified: list[datetime], now: datetime, quiet_seconds: float) -> float:

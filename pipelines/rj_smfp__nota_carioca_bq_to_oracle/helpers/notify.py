@@ -21,59 +21,31 @@ import time
 from asyncio import CancelledError
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import UTC, datetime
 from threading import Event, RLock, Thread, current_thread
-from typing import Literal, final
+from typing import final
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import (
     DiscordStatusMessage,
-    Environment,
     Warner,
     never_raises,
     resolve_webhook,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import build_announcement, build_payload
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import RunStatus
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify_view import (
-    RunState,
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify_view import RunState, build_view, stage_key
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import (
+    Environment,
+    NotifierConfig,
+    ProgressSnapshot,
+    Step,
     TableState,
-    build_view,
-    stage_key,
+    TableStep,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr_progress import ProgressSnapshot
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.stages import Step, TableStep
 
 CANCELLATIONS = (KeyboardInterrupt, SystemExit, CancelledError)
-DEFAULT_HEARTBEAT_SECONDS = 60.0
 HEARTBEAT_JOIN_TIMEOUT_SECONDS = 2.0
-
-
-@dataclass(frozen=True)
-class NotifierConfig:
-    """How to create the notifier.
-
-    `url` is the link of the flow run, or `None` without a Prefect URL. `run_name` goes
-    in the footer. `table_ids` are the tables of the run (empty until the listing, and
-    also in `synonyms_only`). `sessions` are the SQL*Loader sessions that were asked
-    for. `run_dbt` says whether dbt runs before, and `mode` is `full` or
-    `synonyms_only`. `enabled=False` (`discord_notifications=false`) turns Discord off.
-    `heartbeat_seconds` is the interval of the heartbeat that publishes the message
-    again, and `0` or less turns it off. `environment` is the one of the deployment:
-    staging marks the messages with `🧪 STAGING · `.
-    """
-
-    dataset_id: str
-    url: str | None
-    run_name: str
-    table_ids: tuple[str, ...]
-    sessions: int
-    run_dbt: bool
-    mode: Literal["full", "synonyms_only"]
-    enabled: bool
-    heartbeat_seconds: float = DEFAULT_HEARTBEAT_SECONDS
-    cancellations: tuple[type[BaseException], ...] = ()
-    environment: Environment = Environment.PROD
 
 
 def is_cancellation(error: BaseException, extra: tuple[type[BaseException], ...] = ()) -> bool:

@@ -5,13 +5,14 @@ from pathlib import Path
 import oracledb
 from google.cloud import bigquery
 
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import CONSUMER_GRANTS, TABLE_PREFIX
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.inmemory import oracle_message, read_status
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import TABLE_PREFIX, OracleConfig, connect
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import connect
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_query import fetch_all, fetch_one, fetch_scalar, to_int
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_read import fetch_rows
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import CONSUMER_GRANTS, parse_load_comment
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import parse_load_comment
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import plan_structure, slot_indexes
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import TableLayout
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import OracleConfig, TableLayout
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.report import (
     count_divergences,
     format_key_values,

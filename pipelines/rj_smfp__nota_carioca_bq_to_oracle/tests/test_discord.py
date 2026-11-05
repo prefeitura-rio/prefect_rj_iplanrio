@@ -7,10 +7,15 @@ from typing import final
 import httpx2
 import pytest
 
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import (
+    COLOR_CANCELLED,
+    COLOR_FAILURE,
+    COLOR_RUNNING,
+    COLOR_SUCCESS,
+)
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import discord as discord_module
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import (
     DiscordStatusMessage,
-    Environment,
     environment_from_deployment,
     never_raises,
     resolve_webhook,
@@ -26,17 +31,13 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_format import 
     format_short_duration,
     progress_bar,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import (
-    COLOR_CANCELLED,
-    COLOR_FAILURE,
-    COLOR_RUNNING,
-    COLOR_SUCCESS,
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import RunStatus, RunView
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import (
     ChecklistItem,
     CountSide,
+    Environment,
     Fact,
     ItemStatus,
-    RunStatus,
-    RunView,
     TableView,
     ValidationLine,
 )

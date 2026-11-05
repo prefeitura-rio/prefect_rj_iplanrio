@@ -1,30 +1,6 @@
 """The steps of the load, the stages of each table and the progress weights."""
 
-from enum import IntEnum
-
-
-class Step(IntEnum):
-    """Passos da execução, em ordem; o valor é a posição no checklist."""
-
-    DBT = 0
-    EXPORT = 1
-    TABLES = 2
-    INMEMORY_WAIT = 3
-    SWAP = 4
-
-
-class TableStep(IntEnum):
-    """The stages of each table, in order. `DONE` is a finished table."""
-
-    PREPARATION = 0
-    LOAD = 1
-    VALIDATION = 2
-    INDEXES = 3
-    STATS = 4
-    ACCESS = 5
-    INMEMORY = 6
-    DONE = 7
-
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import Step, TableStep
 
 STEP_WEIGHTS = {Step.DBT: 20.0, Step.EXPORT: 5.0, Step.TABLES: 70.0, Step.INMEMORY_WAIT: 4.0, Step.SWAP: 1.0}
 STEP_LABELS = {

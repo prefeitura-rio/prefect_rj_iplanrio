@@ -5,15 +5,10 @@ from datetime import UTC, datetime
 
 import oracledb
 
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import MANAGED_TABLE_MARKER
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import get_last_modified, get_table_schema
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import RawTextEncoding, build_load_plan
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import (
-    MANAGED_TABLE_MARKER,
-    OracleConfig,
-    connect,
-    oracle_table_name,
-    validate_identifier,
-)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import build_load_plan
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import connect, oracle_table_name, validate_identifier
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_query import fetch_one, fetch_scalar, to_int
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_read import (
     read_column_definitions,
@@ -25,6 +20,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import (
     synonym_owners,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots_oracle import read_synonyms
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import OracleConfig
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.inspect_sections import (
     QUERIES_ANCHOR,
     describe_load,
@@ -47,30 +43,8 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.report_comp
     compare_columns,
     compare_synonyms,
 )
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.types import ValidationRequest
 from utils.utils import render_query
-
-
-@dataclass(frozen=True)
-class ValidationRequest:
-    """The table to validate and the options of the validation.
-
-    `project`, `dataset_id` and `table_id` name the BigQuery source, and the original
-    table in Oracle has the same name. `template_schema` is the schema of the original
-    table in Oracle. `excluded_columns` are the columns of the original that the load
-    does not create (besides the `ROWID` columns that BigQuery lacks, which are excluded
-    on their own). `compute_column_metrics` says whether to compute the metrics for each
-    column, which read the whole table in both databases. `raw_text_encoding` is the
-    encoding of the text of the `RAW` columns in BigQuery (`base64` or `hex`), the one
-    that the load uses.
-    """
-
-    project: str
-    dataset_id: str
-    table_id: str
-    template_schema: str
-    excluded_columns: tuple[str, ...]
-    compute_column_metrics: bool
-    raw_text_encoding: RawTextEncoding = "base64"
 
 
 @dataclass

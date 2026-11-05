@@ -7,29 +7,15 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal, Protocol
+from typing import Literal
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import default_dbt_parameters
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import COMPLETED, FINAL_STATE_TYPES, default_dbt_parameters
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import RunClient
 from utils.runs import RunStatus
-
-COMPLETED = "COMPLETED"
-FINAL_STATE_TYPES = frozenset({COMPLETED, "FAILED", "CRASHED", "CANCELLED"})
 
 
 class DbtRunError(RuntimeError):
     """O run de dbt não terminou com sucesso."""
-
-
-class RunClient(Protocol):
-    """Operações sobre o run filho de dbt."""
-
-    def read_status(self, run_id: str) -> RunStatus:
-        """Lê o estado atual do run."""
-        ...
-
-    def cancel(self, run_id: str) -> None:
-        """Pede o cancelamento do run."""
-        ...
 
 
 def should_run_dbt(run_dbt: bool, mode: Literal["full", "synonyms_only"]) -> bool:
