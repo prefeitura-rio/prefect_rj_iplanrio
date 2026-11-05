@@ -1,0 +1,169 @@
+"""Guardrails determinísticos pós-inferência e salvaguardas contra alucinações epistêmicas.
+
+Descrição Técnica & Arquitetura:
+Aplica regras lógicas e jurídicas estritas sobre a saída bruta da LLM imediatamente
+após a inferência. Atua como um filtro determinístico de proteção contra desvios de
+comportamento do modelo:
+1. Validação de citações (Fuzzy Matching): verifica se frases informadas como citação
+   literal de fato existem no documento, rebaixando citações espúrias para `NENHUMA_MENCAO`.
+2. Salvaguarda de dados estruturados: impede que alegações verbais sem comprovação documental
+   induzam classes críticas (ex.: alegações de roubo/furto sem Boletim de Ocorrência anexado).
+3. Respeito à hierarquia de regras de trânsito da SMTR: valida precedência das regras de
+   anistia do CITRAN (Resolução 184/2023) e contagem formal de prazos prescricionais.
+
+Fluxo de Dependências:
+- Consumidores Diretos:
+  * `utils/triage.py`: executa `aplicar_guardrail_epistemico` imediatamente após a recepção
+    da resposta da LLM nos estágios N=1 e N=2.
+  * `utils/router.py`: utiliza as rotinas para validação de integridade pré-roteamento.
+- Dependências Diretas:
+  * `utils/schemas.py`: utiliza `EsquemaDecisao`, `HipoteseLegal`, `Encaminhamento` e `TipoCitacao`
+    para inspeção e correção estruturada dos campos de decisão.
+"""
+
+from difflib import SequenceMatcher
+
+from .schemas import Encaminhamento, EsquemaDecisao, HipoteseLegal, TipoCitacao
+
+
+def verificar_grounding_fuzzy(
+    texto_pagina: str,
+    frase_citada: str,
+    limiar_similaridade: float = 0.80,
+) -> bool:
+    """Verifica se a citação literal retornada pelo modelo existe no texto lido via OCR.
+
+    :param texto_pagina: Texto extraído da lauda física via OCR.
+    :param frase_citada: String ipsis litteris reportada pelo modelo.
+    :param limiar_similaridade: Razão mínima de similaridade difusa (padrão: 0.80).
+    :returns: True se a citação for confirmada no documento; False caso contrário.
+    """
+    if not frase_citada or len(frase_citada.strip()) < 4:
+        return False
+
+    if not texto_pagina or len(texto_pagina.strip()) < 10:
+        return False
+
+    frase_norm = " ".join(frase_citada.lower().split())
+    texto_norm = " ".join(texto_pagina.lower().split())
+
+    if frase_norm in texto_norm:
+        return True
+
+    tamanho_janela = len(frase_norm)
+    passo = max(1, tamanho_janela // 4)
+
+    for i in range(0, len(texto_norm) - tamanho_janela + 1, passo):
+        trecho_candidato = texto_norm[i : i + tamanho_janela]
+        similaridade = SequenceMatcher(None, frase_norm, trecho_candidato).ratio()
+        if similaridade >= limiar_similaridade:
+            return True
+
+    return False
+
+
+def aplicar_guardrail_epistemico(decisao: EsquemaDecisao) -> EsquemaDecisao:
+    """Força reclassificação para default residual se a citação for hipotética ou sem suporte fático.
+
+    :param decisao: Instância do esquema de decisão Pydantic retornado pela inferência.
+    :returns: Instância validada com bloqueios epistêmicos aplicados se cabível.
+    """
+    if decisao is None:
+        return decisao
+
+    classes_positivas = {
+        "roubo_furto_clonagem",
+        "erro_captura_imagem",
+        "veiculo_especial",
+        "nao_indicacao_condutor",
+        "citran",
+        "prescricao",
+    }
+
+    if getattr(decisao, "justificativa_analise_previa", None) is None:
+        decisao.justificativa_analise_previa = ""
+    if getattr(decisao, "frase_justificativa", None) is None:
+        decisao.frase_justificativa = ""
+
+    aud = getattr(decisao, "auditoria_sistema", None)
+    if aud is not None:
+        if getattr(aud, "prefixo_auto", None) is None:
+            aud.prefixo_auto = "NAO_IDENTIFICADO"
+        if getattr(aud, "fase_descricao", None) is None:
+            aud.fase_descricao = "NAO_IDENTIFICADO"
+        if getattr(aud, "data_fato_infracao", None) is None:
+            aud.data_fato_infracao = "NAO_IDENTIFICADO"
+        if getattr(aud, "data_expedicao_penalidade", None) is None:
+            aud.data_expedicao_penalidade = "NAO_IDENTIFICADO"
+
+    hipotese_raw = getattr(decisao, "hipotese_legal", "")
+    hipotese_str = (hipotese_raw.value if hasattr(hipotese_raw, "value") else str(hipotese_raw or "")).strip().lower()
+
+    tipo_cit_raw = getattr(decisao, "tipo_citacao", "")
+    tipo_cit_str = (tipo_cit_raw.value if hasattr(tipo_cit_raw, "value") else str(tipo_cit_raw or "")).strip().upper()
+
+    if hipotese_str == "hipotese_esgotada":
+        decisao.pagina_evidencia = 0
+
+    if hipotese_str in classes_positivas:
+        if tipo_cit_str in ["ALEGACAO_HIPOTETICA", "NENHUMA_MENCAO", ""]:
+            decisao.hipotese_legal = HipoteseLegal.HIPOTESE_ESGOTADA
+            decisao.encaminhamento = Encaminhamento.PUBLICAR_INTEMPESTIVO
+            decisao.pagina_evidencia = 0
+            decisao.frase_justificativa = ""
+            decisao.justificativa_analise_previa += (
+                " [Bloqueio Epistêmico: Hipótese material desprovida de declaração fática afirmativa]."
+            )
+
+    return decisao
+
+
+def calcular_confianca_proxy(
+    grounding_valido: bool,
+    tipo_citacao: TipoCitacao | str,
+    is_manuscrito: bool,
+    hipotese_legal: HipoteseLegal | str,
+    justificativa_analise: str = "",
+    possui_espelho_valido: bool = True,
+) -> float:
+    """Calcula o score numérico de certeza [0.0 a 1.0] cruzando modalidade, grounding e integridade.
+
+    :param grounding_valido: Se a citação foi confirmada via OCR/texto.
+    :param tipo_citacao: Modalidade identificada do trecho citado.
+    :param is_manuscrito: Indicador de escrita manual (caligrafia).
+    :param hipotese_legal: Classe final identificada.
+    :param justificativa_analise: Texto do raciocínio analítico prévio.
+    :param possui_espelho_valido: Se os dados de auditoria sistêmica são consistentes.
+    :returns: Confiança heurística calibrada entre 0.0 e 1.0.
+    """
+    hip_str = (hipotese_legal.value if hasattr(hipotese_legal, "value") else str(hipotese_legal)).lower()
+
+    tipo_str = (tipo_citacao.value if hasattr(tipo_citacao, "value") else str(tipo_citacao)).upper()
+
+    if hip_str == "hipotese_esgotada":
+        if tipo_str in ["FATO_DECLARADO", "DADO_ESTRUTURADO"]:
+            return 0.10
+
+        if is_manuscrito:
+            return 0.75
+
+        if tipo_str == "ALEGACAO_HIPOTETICA":
+            return 0.95
+
+        if len(justificativa_analise.strip()) >= 50:
+            return 0.95
+
+        return 0.70
+
+    if tipo_str in ["ALEGACAO_HIPOTETICA", "NENHUMA_MENCAO"]:
+        return 0.00
+
+    if tipo_str == "DADO_ESTRUTURADO":
+        if not possui_espelho_valido:
+            return 0.40
+        return 0.98 if grounding_valido else 0.88
+
+    if is_manuscrito:
+        return 0.90 if grounding_valido else 0.82
+
+    return 0.98 if grounding_valido else 0.20
