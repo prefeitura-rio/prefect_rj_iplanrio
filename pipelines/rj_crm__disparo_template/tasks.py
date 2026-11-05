@@ -181,8 +181,8 @@ async def whitelist_task(phones: list[str], delivery: Delivery, campaign: str) -
 
 
 @task
-async def send_file_task(frame: pl.DataFrame, delivery: Delivery, campaign: str) -> Csv:
-    """Write the file of a batch and send it to the SFTP.
+async def send_file_task(frame: pl.DataFrame, delivery: Delivery, campaign: str, index: int) -> Csv:
+    """Write the file of the batch number `index` and send it to the SFTP.
 
     Return the file, with the time of the dispatch.
     """
@@ -195,7 +195,7 @@ async def send_file_task(frame: pl.DataFrame, delivery: Delivery, campaign: str)
         port=settings.SFTP_PORT or 22,
         remote_path=settings.SFTP_PATH or delivery.remote_path,
     )
-    csv = build_csv(frame, delivery.data_extension or campaign, delivery.columns, delivery.separator, now())
+    csv = build_csv(frame, delivery.data_extension or campaign, delivery, now(), index)
     await upload(target, csv)
 
     return csv
@@ -353,7 +353,7 @@ async def deliver_task(current: pl.DataFrame, campaign: Campaign, delivery: Deli
     for number, batch in enumerate(batches, start=1):
         logger.info("Batch %d of %d: recipients=%d", number, len(batches), batch.height)
         await wait_task.fn(delivery.sleep_minutes)
-        csv = await send_file_task.fn(batch, delivery, campaign.name)
+        csv = await send_file_task.fn(batch, delivery, campaign.name, number)
         last_date = csv.dispatch_date
 
         if not campaign.test_mode:

@@ -1,13 +1,18 @@
 from dataclasses import replace
 from decimal import Decimal
 
+import pytest
+
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import LOADED_TABLE_INMEMORY
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import (
     IndexDefinition,
     OracleColumn,
     Partitioning,
     PartitionStorage,
+    TableLayout,
     TablePartition,
 )
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.inspect_sections import structure_sections
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.report import (
     compare_metrics,
     count_divergences,
@@ -287,3 +292,27 @@ def test_metric_specs_keep_base64_decoding_by_default_and_ignore_the_encoding_fo
     assert metric_specs(raw, {"PESSOA_EMITENTE": "RAW"}) == metric_specs(raw, {"PESSOA_EMITENTE": "RAW"}, "base64")
     text = [field("nome", "STRING")]
     assert metric_specs(text, {"NOME": "VARCHAR2"}, "hex") == metric_specs(text, {"NOME": "VARCHAR2"}, "base64")
+
+
+@pytest.mark.parametrize(
+    ("partitioning", "loaded_inmemory", "divergences"),
+    [
+        pytest.param(None, LOADED_TABLE_INMEMORY, 0, id="no_partitions_in_memory_as_the_load_leaves_it"),
+        pytest.param(None, None, 1, id="no_partitions_out_of_memory"),
+        pytest.param(MONTHLY, None, 0, id="partitioned_with_no_in_memory_on_the_table"),
+        pytest.param(MONTHLY, LOADED_TABLE_INMEMORY, 1, id="partitioned_with_in_memory_on_the_table"),
+    ],
+)
+def test_the_in_memory_of_the_table_follows_the_way_the_load_leaves_it(
+    partitioning: Partitioning | None, loaded_inmemory: str | None, divergences: int
+) -> None:
+    """A table with no partitions is whole in memory, and a partitioned one is not."""
+    original = TableLayout("DFEN_BIG_DATA", partitioning)
+    loaded = TableLayout("DFEN_BIG_DATA", partitioning, inmemory=loaded_inmemory)
+
+    count, sections = structure_sections(original, loaded, ["DATA_COMPETENCIA_MUNICIPIO"], "A")
+
+    assert count == divergences
+    assert ("(DIVERGE)" in next(section for section in sections if section.startswith("In-Memory"))) is bool(
+        divergences
+    )

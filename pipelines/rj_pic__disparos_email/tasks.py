@@ -1,8 +1,12 @@
 """Tasks of rj_pic__disparos_email."""
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from httpx2 import AsyncClient
 from prefect import task
 from pydantic import TypeAdapter
+from toolkit.constants import TIMEZONE
 from toolkit.telemetry import logger
 
 from pipelines.rj_pic__disparos_email.constants import EMAIL_COLUMN, TEMPLATE_DIR
@@ -44,10 +48,11 @@ async def send_mails_task(rows: list[dict[str, str]], subject: str) -> Delivery:
     relay = relay_from(Settings())
     pacer = Pacer(relay.throttle_delay)
     sent = 0
+    now = datetime.now(ZoneInfo(TIMEZONE))
 
     async with AsyncClient() as client:
         for position, row in enumerate(rows, start=1):
-            mail = build_mail(row, subject, TEMPLATE_DIR)
+            mail = build_mail(row, subject, TEMPLATE_DIR, now)
 
             if mail is None:
                 logger.warning("Row %d has no %s: skipped", position, EMAIL_COLUMN)

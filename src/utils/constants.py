@@ -60,7 +60,10 @@ TOKEN_KEYS: Final = ("token", "access_token", "authToken", "jwt")
 BIFROST_BASE_URL: Final = "https://bifrost.iplan.dados.rio"
 """The address of the Bifrost AI gateway."""
 
-BIFROST_MODEL: Final = "vertex/gemini-3.6-flash"
+BIFROST_GENAI_URL: Final = f"{BIFROST_BASE_URL}/genai"
+"""The Gemini route of the gateway, which the `google-genai` SDK calls with `v1beta`."""
+
+BIFROST_MODEL: Final = "vertex/gemini-3.7-flash"
 """The model that a pipeline asks the gateway for, unless it picks another."""
 
 BIFROST_ATTEMPTS: Final = 3
@@ -68,6 +71,15 @@ BIFROST_ATTEMPTS: Final = 3
 
 BIFROST_FIRST_WAIT_SECONDS: Final = 2.0
 """How long the gateway waits before the second try. Each next wait doubles it."""
+
+BIFROST_RETRY_STATUSES: Final = (429, 500, 502, 503, 504)
+"""The statuses of the gateway that a question asks again."""
+
+BIFROST_THINKING: Final = {"generationConfig": {"thinkingConfig": {"thinkingBudget": 0, "includeThoughts": True}}}
+"""The body that turns the thinking of the model off, where the model allows it.
+
+It is in camelCase, as the gateway reads it. The SDK writes snake_case.
+"""
 
 BIFROST_CALIBRATED_BATCH: Final = 50
 BIFROST_CALIBRATED_TOKENS: Final = 8192
@@ -100,7 +112,10 @@ INFISICAL_SECRETS_PATH: Final = "/api/v3/secrets/raw"
 
 SERVICE_ACCOUNT_TOKEN: Final = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 """The file where Kubernetes mounts the token of the service account of a pod."""
-EMBEDDING_MODEL: Final = "gemini-embedding-001"
-"""The embedding model that the Bifrost gateway serves."""
+EMBEDDING_MODEL: Final = "vertex/text-embedding-005"
+"""The embedding model of the Bifrost gateway, with 768 dimensions.
+
+The organisation policy of Google blocks `gemini-embedding-001`.
+"""
 EMBEDDING_BATCH: Final = 100
 """The texts of one embedding request."""

@@ -2,6 +2,7 @@
 
 from ast import literal_eval
 from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path
 from typing import cast
 
@@ -79,8 +80,11 @@ def render_body(template_dir: Path, variables: Mapping[str, object]) -> str:
     return environment.get_template(TEMPLATE_NAME).render(**variables)
 
 
-def build_mail(row: Mapping[str, str], subject: str, template_dir: Path) -> Mail | None:
-    """Return the mail of a row, or nothing if the row has no address."""
+def build_mail(row: Mapping[str, str], subject: str, template_dir: Path, now: datetime) -> Mail | None:
+    """Return the mail of a row, or nothing if the row has no address.
+
+    The footer of the template shows the date and the hour of `now`.
+    """
     email = row.get(EMAIL_COLUMN, "").strip()
 
     if not email:
@@ -96,6 +100,8 @@ def build_mail(row: Mapping[str, str], subject: str, template_dir: Path) -> Mail
             "alunos": students,
             "data_atualizacao": row.get("data_atualizacao", ""),
             "total_alunos": len(students),
+            "data": f"{now:%d/%m/%Y}",
+            "hora": f"{now:%H:%M:%S}",
         },
     )
 

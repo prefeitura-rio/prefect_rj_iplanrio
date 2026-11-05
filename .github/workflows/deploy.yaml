@@ -53,7 +53,7 @@ env:
 jobs:
   plan:
     name: Choose the pipelines
-    if: vars.DEPLOY_ENABLED == 'true'
+    if: contains(format(',{0},', vars.DEPLOY_BRANCHES), format(',{0},', github.ref_name))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

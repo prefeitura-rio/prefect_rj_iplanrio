@@ -1,6 +1,5 @@
-"""A client of the Bifrost AI gateway, which serves Gemini."""
+"""A client of the Bifrost AI gateway for Gemini, over the `google-genai` SDK."""
 
-from asyncio import sleep
 from collections.abc import Sequence
 from dataclasses import dataclass
 from json import JSONDecodeError, loads
@@ -10,27 +9,30 @@ from re import sub as replace_pattern
 from types import TracebackType
 from typing import Self, final
 
-from httpx2 import AsyncClient, HTTPError
+from google import genai
+from google.genai import errors, types
+from httpx import HTTPError
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from .constants import (
     BIFROST_ATTEMPTS,
-    BIFROST_BASE_URL,
     BIFROST_CALIBRATED_BATCH,
     BIFROST_CALIBRATED_TOKENS,
     BIFROST_FIRST_WAIT_SECONDS,
+    BIFROST_GENAI_URL,
     BIFROST_MODEL,
+    BIFROST_RETRY_STATUSES,
+    BIFROST_THINKING,
     EMBEDDING_BATCH,
     EMBEDDING_MODEL,
 )
-from .records import dig
 from .settings import BifrostSettings
 
 JSON: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
 
 class BifrostError(RuntimeError):
-    """The gateway failed: a network error, an error status or body, or no text."""
+    """The gateway failed: a network error, an error status, or a wrong answer."""
 
 
 def scale_output_tokens(batch_size: int) -> int:
@@ -55,21 +57,42 @@ def strip_code_fence(text: str) -> str:
     )
 
 
+def parse_json(text: str) -> JsonValue:
+    """Return the JSON value in a model answer, without its code fence.
+
+    Raise `ValueError` if the answer is not JSON.
+    """
+    try:
+        return JSON.validate_python(loads(strip_code_fence(text), strict=False))
+    except (JSONDecodeError, ValidationError) as error:
+        raise ValueError(f"The answer is not JSON (raw: {text[:200]!r})") from error
+
+
 def parse_json_list(text: str) -> list[dict[str, JsonValue]]:
     """Return the objects of a JSON list in a model answer, without its code fence.
 
     Anything in the list that is not an object is dropped. Raise `ValueError` if the
     answer is not a JSON list.
     """
-    try:
-        parsed = JSON.validate_python(loads(strip_code_fence(text), strict=False))
-    except (JSONDecodeError, ValidationError) as error:
-        raise ValueError(f"The answer is not JSON (raw: {text[:200]!r})") from error
+    parsed = parse_json(text)
 
     if not isinstance(parsed, list):
         raise ValueError(f"The answer is not a JSON list (raw: {text[:200]!r})")
 
     return [item for item in parsed if isinstance(item, dict)]
+
+
+def parse_json_object(text: str) -> dict[str, JsonValue]:
+    """Return the JSON object in an answer of the model, without its code fence.
+
+    Raise `ValueError` if the answer is not a JSON object.
+    """
+    parsed = parse_json(text)
+
+    if not isinstance(parsed, dict):
+        raise ValueError(f"The answer is not a JSON object (raw: {text[:200]!r})")
+
+    return parsed
 
 
 @dataclass(frozen=True)
@@ -86,91 +109,34 @@ class Answer:
     cache_tokens: int | None = None
 
 
-def parse_json_object(text: str) -> dict[str, JsonValue]:
-    """Return the JSON object in an answer of the model, without its code fence.
-
-    Raise `ValueError` if the answer is not a JSON object.
-    """
-    try:
-        parsed = JSON.validate_python(loads(strip_code_fence(text), strict=False))
-    except (JSONDecodeError, ValidationError) as error:
-        raise ValueError(f"The answer is not JSON (raw: {text[:200]!r})") from error
-
-    if not isinstance(parsed, dict):
-        raise ValueError(f"The answer is not a JSON object (raw: {text[:200]!r})")
-
-    return parsed
-
-
-def read_count(value: JsonValue) -> int | None:
-    """Return a gateway token count as a whole number, or nothing if it is not one."""
-    return value if isinstance(value, int) and not isinstance(value, bool) else None
-
-
-def read_answer(body: JsonValue) -> Answer:
-    """Return the gateway answer: the text of its non-thought parts, and the usage.
-
-    Raise `BifrostError` if the body is an error or has no part.
-    """
-    if error := dig(body, "error"):
-        code, status, message = dig(error, "code"), dig(error, "status"), dig(error, "message")
-        raise BifrostError(f"The gateway answered with the error {code} ({status}): {message}")
-
-    parts = dig(body, "candidates")
-    parts = dig(parts[0], "content", "parts") if isinstance(parts, list) and parts else None
-
-    if not isinstance(parts, list):
-        raise BifrostError("The answer of the gateway has no candidate with parts")
-
-    text = "".join(
-        str(dig(part, "text"))
-        for part in parts
-        if isinstance(part, dict) and not part.get("thought") and "text" in part
-    )
-
-    return Answer(
-        text,
-        read_count(dig(body, "usageMetadata", "promptTokenCount")),
-        read_count(dig(body, "usageMetadata", "candidatesTokenCount")),
-        read_count(dig(body, "usageMetadata", "totalTokenCount")),
-        read_count(dig(body, "usageMetadata", "cachedContentTokenCount")),
-    )
-
-
-def read_text(body: JsonValue) -> str:
-    """Return the text of an answer of the gateway.
-
-    Raise `BifrostError` if the body is an error or has no part.
-    """
-    return read_answer(body).text
-
-
 @final
 class Bifrost:
     """A gateway client for a model.
 
-    It asks again with a growing wait when a question fails.
+    The SDK asks again with a growing wait when a question fails with a status that
+    `BIFROST_RETRY_STATUSES` lists.
     """
 
-    def __init__(
-        self,
-        client: AsyncClient,
-        model: str,
-        wait: float = BIFROST_FIRST_WAIT_SECONDS,
-        attempts: int = BIFROST_ATTEMPTS,
-    ) -> None:
-        """Wrap a client with the gateway address, key, model, first wait and tries."""
+    def __init__(self, client: genai.Client, model: str) -> None:
+        """Wrap an SDK client and the model that it asks."""
         self.client = client
         self.model = model
-        self.wait = wait
-        self.attempts = attempts
 
     @classmethod
     def connect(cls, model: str = BIFROST_MODEL, timeout: float = 120) -> Self:
         """Return a client with the key of the settings, to use with `async with`."""
-        key = BifrostSettings().BIFROST_API_KEY.get_secret_value()
+        retry = types.HttpRetryOptions(
+            attempts=BIFROST_ATTEMPTS,
+            initial_delay=BIFROST_FIRST_WAIT_SECONDS,
+            exp_base=2.0,
+            http_status_codes=list(BIFROST_RETRY_STATUSES),
+        )
+        options = types.HttpOptions(
+            base_url=BIFROST_GENAI_URL, api_version="v1beta", timeout=round(timeout * 1000), retry_options=retry
+        )
+        client = genai.Client(api_key=BifrostSettings().BIFROST_API_KEY.get_secret_value(), http_options=options)
 
-        return cls(AsyncClient(base_url=BIFROST_BASE_URL, headers={"x-goog-api-key": key}, timeout=timeout), model)
+        return cls(client, model)
 
     async def __aenter__(self) -> Self:
         """Return the client."""
@@ -180,148 +146,74 @@ class Bifrost:
         self, error_type: type[BaseException] | None, error: BaseException | None, trace: TracebackType | None
     ) -> None:
         """Close the HTTP client."""
-        await self.client.aclose()
+        await self.client.aio.aclose()
 
-    async def send(self, payload: dict[str, JsonValue]) -> Answer:
-        """Send one question and return the answer.
-
-        Raise `BifrostError` for a network error, an error status, an error in the body,
-        or no text.
-        """
-        try:
-            response = await self.client.post(f"/genai/v1beta/models/{self.model}:generateContent", json=payload)
-        except HTTPError as error:
-            raise BifrostError(f"The request to the gateway failed: {error}") from error
-
-        try:
-            body = JSON.validate_json(response.content)
-        except ValidationError as error:
-            if response.is_error:
-                raise BifrostError(f"The gateway answered {response.status_code} with no JSON") from error
-
-            raise BifrostError(f"The gateway answered {response.status_code} with a body that is not JSON") from error
-
-        if response.is_error and not dig(body, "error"):
-            raise BifrostError(f"The gateway answered {response.status_code}")
-
-        return read_answer(body)
-
-    async def answer(
-        self,
-        prompt: str,
-        *,
-        system: str = "Responda em PT-BR.",
-        max_output_tokens: int = 512,
-        thinking_budget: int = 0,
-    ) -> Answer:
+    async def answer(self, prompt: str, *, system: str = "Responda em PT-BR.", max_output_tokens: int = 512) -> Answer:
         """Ask the model and return its answer with the usage.
 
-        It tries `attempts` times with a growing wait.
-
-        The wait doubles between the tries.
-
         The temperature is 0, so the same question gets the same answer as far as the
-        model allows.
+        model allows. The text has no thought of the model.
 
         Raise `BifrostError` after the last try.
         """
-        payload: dict[str, JsonValue] = {
-            "systemInstruction": {"parts": [{"text": system}]},
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "maxOutputTokens": max_output_tokens,
-                "temperature": 0.0,
-                "thinkingConfig": {"thinkingBudget": thinking_budget, "includeThoughts": True},
-            },
-        }
-
-        for attempt in range(1, self.attempts):
-            try:
-                return await self.send(payload)
-            except BifrostError:
-                await sleep(self.wait * (1 << (attempt - 1)))
-
-        return await self.send(payload)
-
-    async def embed_batch(self, model: str, batch: Sequence[str]) -> list[list[float]]:
-        """Send one embedding request and return the raw vectors of the batch.
-
-        Raise `BifrostError` for a network error, an error status, or a wrong answer.
-        """
-        payload: dict[str, JsonValue] = {
-            "requests": [{"model": f"models/{model}", "content": {"parts": [{"text": text}]}} for text in batch]
-        }
+        config = types.GenerateContentConfig(
+            system_instruction=system,
+            max_output_tokens=max_output_tokens,
+            temperature=0.0,
+            http_options=types.HttpOptions(extra_body=BIFROST_THINKING),
+        )
 
         try:
-            response = await self.client.post(f"/genai/v1beta/models/{model}:batchEmbedContents", json=payload)
-        except HTTPError as error:
-            raise BifrostError(f"The embedding request failed: {error}") from error
+            response = await self.client.aio.models.generate_content(model=self.model, contents=prompt, config=config)
+        except (errors.APIError, HTTPError, ValueError) as error:
+            raise BifrostError(f"The gateway failed: {error}") from error
 
-        if response.is_error:
-            raise BifrostError(f"The embedding gateway answered {response.status_code}")
+        usage = response.usage_metadata
 
-        try:
-            body = JSON.validate_json(response.content)
-        except ValidationError as error:
-            raise BifrostError(f"The embedding gateway answered {response.status_code} with no JSON") from error
-
-        embeddings = dig(body, "embeddings")
-
-        if not isinstance(embeddings, list) or len(embeddings) != len(batch):
-            got = len(embeddings) if isinstance(embeddings, list) else 0
-            raise BifrostError(f"The gateway returned {got} embeddings, expected {len(batch)} embeddings")
-
-        vectors: list[list[float]] = []
-
-        for embedding in embeddings:
-            values = dig(embedding, "values")
-
-            raw = values if isinstance(values, list) else []
-            numbers = [item for item in raw if isinstance(item, int | float)]
-
-            if not numbers or len(numbers) != len(raw):
-                raise BifrostError("The gateway returned an invalid embedding vector")
-
-            vectors.append([float(item) for item in numbers])
-
-        return vectors
+        return Answer(
+            response.text or "",
+            usage.prompt_token_count if usage else None,
+            usage.candidates_token_count if usage else None,
+            usage.total_token_count if usage else None,
+            usage.cached_content_token_count if usage else None,
+        )
 
     async def embed(
         self, texts: Sequence[str], *, model: str = EMBEDDING_MODEL, batch_size: int = EMBEDDING_BATCH
     ) -> list[list[float]]:
-        """Return one unit vector for each text, in batches.
+        """Return one unit vector for each text, in batches of `batch_size`.
 
-        Each batch tries `attempts` times with a growing wait, like a question.
-
-        Raise `BifrostError` after the last try, or for a zero vector.
+        Raise `BifrostError` after the last try, for a missing embedding, or for a zero
+        vector.
         """
         result: list[list[float]] = []
 
         for start in range(0, len(texts), batch_size):
-            batch = texts[start : start + batch_size]
+            batch: list[types.ContentUnion] = [*texts[start : start + batch_size]]
 
-            for attempt in range(1, self.attempts):
-                try:
-                    vectors = await self.embed_batch(model, batch)
-                    break
-                except BifrostError:
-                    await sleep(self.wait * (1 << (attempt - 1)))
-            else:
-                vectors = await self.embed_batch(model, batch)
+            try:
+                response = await self.client.aio.models.embed_content(model=model, contents=batch)
+            except (errors.APIError, HTTPError, ValueError) as error:
+                raise BifrostError(f"The embedding request failed: {error}") from error
 
-            for vector in vectors:
-                norm = sqrt(sum(value * value for value in vector))
+            embeddings = response.embeddings or []
+
+            if len(embeddings) != len(batch):
+                raise BifrostError(
+                    f"The gateway returned {len(embeddings)} embeddings, expected {len(batch)} embeddings"
+                )
+
+            for embedding in embeddings:
+                values = embedding.values or []
+                norm = sqrt(sum(value * value for value in values))
 
                 if norm == 0:
                     raise BifrostError("The gateway returned a zero embedding vector")
 
-                result.append([value / norm for value in vector])
+                result.append([value / norm for value in values])
 
         return result
 
     async def ask(self, prompt: str, *, system: str = "Responda em PT-BR.", max_output_tokens: int = 512) -> str:
-        """Ask the model and return the text of its answer.
-
-        See `answer` for the retries.
-        """
+        """Ask the model and return the text of its answer."""
         return (await self.answer(prompt, system=system, max_output_tokens=max_output_tokens)).text

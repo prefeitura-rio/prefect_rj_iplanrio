@@ -20,7 +20,7 @@ from pipelines.rj_crm__disparo_template.helpers.frames import (
     validate_frame,
 )
 from pipelines.rj_crm__disparo_template.tests.conftest import NOW
-from pipelines.rj_crm__disparo_template.types import Audience
+from pipelines.rj_crm__disparo_template.types import Audience, Delivery
 
 type Frames = Callable[..., pl.DataFrame]
 
@@ -252,23 +252,25 @@ def test_the_file_of_a_batch_has_the_columns_that_were_asked_for(make_frame: Fra
     """
     frame = make_frame(("111", "5521999", ["x"]), nome=["Ana"], interno=["x"])
 
-    csv = build_csv(frame, "whatsapp_teste", ["nome"], ";", NOW)
+    csv = build_csv(frame, "whatsapp_teste", Delivery(columns=["nome"]), NOW, 1)
 
-    assert csv.name == "whatsapp_teste_20260717093005.csv"
+    assert csv.name == "whatsapp_teste_20260717093005_001.csv"
     assert csv.dispatch_date == "2026-07-17 09:30:05"
     assert csv.text == "telefone;SubscriberKey;nome;LOCALE\n5521999;111;Ana;BR\n"
 
 
 def test_the_file_without_columns_drops_only_others(make_frame: Frames) -> None:
     """Keep everything but `others`."""
-    csv = build_csv(make_frame(("111", "5521999", ["x"]), nome=["Ana"]), "stem", None, ",", NOW)
+    csv = build_csv(make_frame(("111", "5521999", ["x"]), nome=["Ana"]), "stem", Delivery(separator=","), NOW, 1)
 
     assert csv.text == "SubscriberKey,telefone,nome,LOCALE\n111,5521999,Ana,BR\n"
 
 
 def test_the_file_can_have_its_own_name_as_a_column(make_frame: Frames) -> None:
     """Fill `NOME_ARQUIVO` with the name of the file."""
-    csv = build_csv(make_frame(("111", "5521999", None), NOME_ARQUIVO=["x"]), "stem", ["NOME_ARQUIVO"], ";", NOW)
+    frame = make_frame(("111", "5521999", None), NOME_ARQUIVO=["x"])
+
+    csv = build_csv(frame, "stem", Delivery(columns=["NOME_ARQUIVO"]), NOW, 1)
 
     assert csv.text == f"telefone;SubscriberKey;NOME_ARQUIVO;LOCALE\n5521999;111;{csv.name};BR\n"
 
@@ -277,7 +279,7 @@ def test_a_column_of_lists_is_written_as_json_in_the_file() -> None:
     """Write a nested value as JSON text, not as a polars error."""
     frame = pl.DataFrame({"cpf": ["1"], "telefone": ["2"], "itens": [["a", "b"]]})
 
-    csv = build_csv(frame, "stem", ["itens"], ";", NOW)
+    csv = build_csv(frame, "stem", Delivery(columns=["itens"]), NOW, 1)
 
     assert '"[""a"", ""b""]"' in csv.text
 

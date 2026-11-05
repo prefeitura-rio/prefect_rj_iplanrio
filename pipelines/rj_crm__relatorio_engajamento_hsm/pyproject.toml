@@ -6,6 +6,7 @@ dependencies = [
     "prefect_rj_iplanrio",
     "google-cloud-bigquery",
     "google-api-python-client",
+    "google-genai",
     "python-docx>=1.1.0",
     "numpy",
     "polars",

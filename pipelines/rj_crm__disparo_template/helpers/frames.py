@@ -11,7 +11,7 @@ from toolkit.telemetry import logger
 
 from pipelines.rj_crm__disparo_template.constants import CPF_ALIASES, REQUIRED_COLUMNS, VALIDATION_SAMPLE
 from pipelines.rj_crm__disparo_template.helpers.clock import today
-from pipelines.rj_crm__disparo_template.types import Audience, Csv
+from pipelines.rj_crm__disparo_template.types import Audience, Csv, Delivery
 
 FIXED_COLUMNS = frozenset({"dispatch_date", "campaign_name", "SubscriberKey", "telefone"})
 ROWS: TypeAdapter[list[dict[str, JsonValue]]] = TypeAdapter(list[dict[str, JsonValue]])
@@ -222,16 +222,18 @@ def dump_value(value: object) -> str | None:
     return None if value is None else dumps(value, ensure_ascii=False, default=str)
 
 
-def build_csv(frame: pl.DataFrame, stem: str, columns: Sequence[str] | None, separator: str, now: datetime) -> Csv:
-    """Return the file of a batch for the SFTP.
+def build_csv(frame: pl.DataFrame, stem: str, delivery: Delivery, now: datetime, index: int) -> Csv:
+    """Return the file of the batch number `index` for the SFTP.
 
-    With `columns`, the file has `telefone`, `SubscriberKey` (the CPF) and those
-    columns, and the others are dropped, including `others`. Without them, only `others`
-    goes away. `LOCALE` is `BR`, and `NOME_ARQUIVO`, if asked for, is the name of the
-    file. The name is `<stem>_<time>.csv`.
+    With `delivery.columns`, the file has `telefone`, `SubscriberKey` (the CPF) and
+    those columns, and the others are dropped, including `others`. Without them, only
+    `others` goes away. `LOCALE` is `BR`, and `NOME_ARQUIVO`, if asked for, is the name
+    of the file. The name is `<stem>_<time>_<index>.csv`: the index keeps two batches of
+    the same second apart, so one never replaces the other.
     """
+    columns = delivery.columns
     named = frame.rename({"cpf": "SubscriberKey"}) if "cpf" in frame.columns else frame
-    name = f"{stem}_{now:%Y%m%d%H%M%S}.csv"
+    name = f"{stem}_{now:%Y%m%d%H%M%S}_{index:03d}.csv"
 
     if columns is not None:
         keep = [column for column in dict.fromkeys(["telefone", "SubscriberKey", *columns]) if column in named.columns]
@@ -244,7 +246,7 @@ def build_csv(frame: pl.DataFrame, stem: str, columns: Sequence[str] | None, sep
     if columns is not None and "NOME_ARQUIVO" in columns:
         named = named.with_columns(pl.lit(name).alias("NOME_ARQUIVO"))
 
-    text = nested_to_text(named).write_csv(separator=separator)
+    text = nested_to_text(named).write_csv(separator=delivery.separator)
 
     return Csv(name=name, text=text, dispatch_date=f"{now:%Y-%m-%d %H:%M:%S}")
 
