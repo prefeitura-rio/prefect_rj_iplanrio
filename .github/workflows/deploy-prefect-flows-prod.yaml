@@ -1,11 +1,6 @@
 name: Deploy Prefect flows (prod)
 
 on:
-  push:
-    branches:
-      - master
-    paths:
-      - pipelines/**
   workflow_dispatch:
     inputs:
       force_deploy:

@@ -1,11 +1,6 @@
 name: Build and push root image
 
 on:
-  push:
-    branches:
-      - master
-    paths:
-      - Dockerfile
   workflow_dispatch:
     inputs:
       pipeline:
