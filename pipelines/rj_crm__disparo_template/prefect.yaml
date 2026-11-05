@@ -72,8 +72,8 @@ deployments:
       - cron: "0 11 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
-        slug: daily-smtr-multa-holdout-staging
-        flow_run_name: smtr-multa-holdout-staging
+        slug: daily-smtr-multa-holdout
+        flow_run_name: smtr-multa-holdout
         parameters:
           campaign:
             environment: production
@@ -136,25 +136,6 @@ deployments:
         dataset_id: brutos_wetalkie
         table_id: disparos_efetuados_sf
     schedules:
-      - cron: "0 11 * * 1-5"
-        timezone: America/Sao_Paulo
-        active: true
-        slug: daily-smtr-multa-holdout
-        flow_run_name: smtr-multa-holdout
-        parameters:
-          campaign:
-            environment: production
-            name: smtrmultasdetransitov1
-          table:
-            dataset_id: brutos_salesforce
-            table_id: disparos_efetuados
-          audience:
-            replacements: {"cota_inicial_placeholder": 500, "incremento_cota_placeholder": 50, "cota_maxima_placeholder": 5000, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5, "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}
-            drop_duplicate_cpfs: true
-            query_file: queries/smtr_multa_holdout.sql
-          delivery:
-            data_extension: whatsapp_smtr_multas_transito
-            columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo", "id_autuacao"]
       - cron: "0 11 * * *"
         timezone: America/Sao_Paulo
         active: false
