@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.14.*"
 resolution-markers = [
     "sys_platform == 'win32'",
@@ -34,6 +34,7 @@ members = [
     "rj-iplanrio-bcadastro-chcpf",
     "rj-iplanrio-betterstack-api",
     "rj-iplanrio-cor-alerts-aggregator",
+    "rj-iplanrio-czrm-salesforce-datacloud",
     "rj-iplanrio-dados-mestres",
     "rj-iplanrio-equipamentos-arcgis",
     "rj-iplanrio-maintain-delta",
@@ -4301,6 +4302,21 @@ dependencies = [
 requires-dist = [
     { name = "gspread" },
     { name = "prefect-rj-iplanrio", editable = "." },
+]
+
+[[package]]
+name = "rj-iplanrio-czrm-salesforce-datacloud"
+version = "1.0.0"
+source = { virtual = "pipelines/rj_iplanrio__czrm_salesforce_datacloud" }
+dependencies = [
+    { name = "prefect-rj-iplanrio" },
+    { name = "toolkit" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "toolkit", editable = "packages/toolkit" },
 ]
 
 [[package]]
