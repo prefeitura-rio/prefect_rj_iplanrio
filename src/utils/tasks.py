@@ -9,6 +9,8 @@ from tempfile import TemporaryDirectory
 from typing import cast
 from zoneinfo import ZoneInfo
 
+from duckdb import BinderException
+from google.api_core.exceptions import NotFound
 from httpx2 import AsyncClient
 from polars import DataFrame, DataType, Float64, Int64, String
 from prefect import task
@@ -360,6 +362,22 @@ async def read_bq(query: str, *, project: str) -> DataFrame:
     use `dump_bq_to_gcs` for a large one.
     """
     return await read_dataframe(bigquery_source(project, read_request("bigquery", {"query": query}, batched=False)))
+
+
+async def read_bq_if_exists(query: str, *, project: str) -> DataFrame | None:
+    """Run a BigQuery query and return its rows, or nothing if the table does not exist.
+
+    The client reports a missing table as `NotFound`, and the DuckDB BigQuery extension
+    reports a missing dataset as a `BinderException` whose text has "Not found". Any
+    other binder error is a real failure and is raised.
+    """
+    try:
+        return await read_bq(query, project=project)
+    except (NotFound, BinderException) as error:
+        if isinstance(error, BinderException) and "Not found" not in str(error):
+            raise
+
+        return None
 
 
 @task

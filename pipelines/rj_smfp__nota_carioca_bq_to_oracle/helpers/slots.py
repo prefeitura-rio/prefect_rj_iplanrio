@@ -3,66 +3,20 @@
 The load goes to the idle one, and the swap only points the synonyms again.
 """
 
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from re import compile as compile_pattern
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import (
-    MANAGED_TABLE_MARKER,
-    validate_identifier,
-)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import CONSUMER_SYNONYM_OWNERS, MANAGED_TABLE_MARKER
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import validate_identifier
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import SlotPlan, SynonymTarget
 
 SLOTS = ("A", "B")
-
-
-CONSUMER_SYNONYM_OWNERS = ("NFSE_SIGA", "NFSE_USER", "NFSE_OWNER")
-
-
-CONSUMER_GRANTS = (
-    ("RL_NFSE", "SELECT"),
-    ("RL_NFSE_SIGA", "SELECT"),
-    ("RL_NFSEOWNER_DRL", "SELECT"),
-    ("NFSE_OWNER", "SELECT, ALTER, DELETE"),
-)
-
-
-# Tabela particionada aparece em all_objects também como TABLE PARTITION/SUBPARTITION,
-# com o nome da tabela.
-REPLACEABLE_OBJECT_TYPES = {"TABLE", "TABLE PARTITION", "TABLE SUBPARTITION", "SYNONYM"}
 
 
 SNAPSHOT_PATTERN = compile_pattern(r"snapshot do BigQuery de ([0-9-]+ [0-9:]+) UTC; carregada em ([0-9-]+ [0-9:]+) UTC")
 
 
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
-
-
-@dataclass(frozen=True)
-class SynonymTarget:
-    """A synonym and the object that it points to, as in `all_synonyms`."""
-
-    owner: str
-    table_owner: str
-    table_name: str
-
-
-@dataclass(frozen=True)
-class SlotPlan:
-    """Which physical table is in use and which one receives the load.
-
-    `base` is the stable name that the application uses (`BQLOAD_<table>`), given to the
-    synonyms. `active` is the physical table that the synonyms point to, or `None`
-    before the first swap. `inactive` is the physical table that receives the load.
-    """
-
-    base: str
-    active: str | None
-    inactive: str
-
-    @property
-    def slot(self) -> str:
-        """Return the suffix (`A` or `B`) of the table that receives the load."""
-        return self.inactive.rsplit("_", 1)[1]
 
 
 def slot_table_name(base: str, slot: str) -> str:

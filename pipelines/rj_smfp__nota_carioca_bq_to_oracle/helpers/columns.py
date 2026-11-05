@@ -3,17 +3,16 @@
 The fields come from BigQuery.
 """
 
-from dataclasses import dataclass
 from decimal import Decimal
 from math import ceil
 from re import compile as compile_pattern
-from typing import Literal
+
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import CHARACTER_TYPES
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import LoaderField, LoadPlan, OracleColumn, RawTextEncoding
 
 COLUMN_NAME_PATTERN = compile_pattern(r"^[A-Z_][A-Z0-9_$#]{0,127}$")
 SIMPLE_NAME_PATTERN = compile_pattern(r"^[A-Z][A-Z0-9_$#]{0,127}$")
-CHARACTER_TYPES = ("VARCHAR2", "CHAR", "NVARCHAR2", "NCHAR")
 ROWID_TYPES = ("ROWID", "UROWID")
-TIMESTAMP_TYPE_PATTERN = compile_pattern(r"^TIMESTAMP\(\d\)( WITH TIME ZONE)?$")
 # Data guardada como texto no BigQuery é sempre ``AAAA-MM-DDTHH:MI:SS`` (19 caracteres,
 # sem fração, fuso ou espaço). O campo ``DATE`` com máscara é convertido pelo próprio
 # SQL*Loader, sem expressão SQL por linha. O ``T`` literal vai entre aspas duplas
@@ -30,77 +29,6 @@ NUMBER_FIELD = "CHAR(64)"
 # mantém nulo e vazio como nulo.
 RAW_FROM_BASE64 = "CASE WHEN :{name} IS NOT NULL THEN UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(:{name})) END"
 RAW_TEXT_MIN_CHARS = 64
-RawTextEncoding = Literal["base64", "hex"]
-
-
-@dataclass(frozen=True)
-class OracleColumn:
-    """The definition of a column in Oracle, as in `all_tab_columns`.
-
-    `data_type` is the base type (`VARCHAR2`, `NUMBER`, `DATE`...), and `data_length` is
-    the size in bytes. `char_used` is `B` for a size in bytes and `C` for characters.
-    `precision` and `scale` are those of a `NUMBER`, or `None`.
-    """
-
-    name: str
-    data_type: str
-    data_length: int | None
-    char_used: str | None
-    precision: int | None
-    scale: int | None
-    nullable: bool
-
-    @property
-    def ddl_type(self) -> str:
-        """Return the type in the format of `CREATE TABLE`.
-
-        Raise `NotImplementedError` if the load does not support the type.
-        """
-        if self.data_type in CHARACTER_TYPES:
-            unit = "CHAR" if self.char_used == "C" else "BYTE"
-            return f"{self.data_type}({self.data_length} {unit})"
-        if self.data_type == "NUMBER":
-            if self.precision is None:
-                return "NUMBER" if self.scale is None else f"NUMBER(*,{self.scale})"
-            return f"NUMBER({self.precision},{self.scale or 0})"
-        if self.data_type == "RAW":
-            return f"RAW({self.data_length})"
-        if self.data_type == "DATE" or TIMESTAMP_TYPE_PATTERN.match(self.data_type):
-            return self.data_type
-        raise NotImplementedError(f"Coluna {self.name}: tipo {self.data_type} sem suporte na carga.")
-
-    @property
-    def definition(self) -> str:
-        """Return the column in `CREATE TABLE`, with `NOT NULL` if it applies."""
-        return f'"{self.name}" {self.ddl_type}' + ("" if self.nullable else " NOT NULL")
-
-
-@dataclass(frozen=True)
-class LoaderField:
-    """A field of the CSV in the control file of SQL*Loader.
-
-    `name` is in upper case, and it is the name of the column when the field loads.
-    `spec` is the specification of the field, with the SQL conversion or `FILLER`.
-    """
-
-    name: str
-    spec: str
-
-
-@dataclass(frozen=True)
-class LoadPlan:
-    """How a BigQuery table loads into the copy of the original table.
-
-    `columns` are the columns of the target table, in the order of the original.
-    `fields` are the fields of the exported CSV, in the order of the BigQuery schema.
-    `ignored` are the BigQuery columns that the original does not have. `excluded` are
-    the columns of the original that the target does not create.
-    """
-
-    columns: list[OracleColumn]
-    fields: list[LoaderField]
-    ignored: list[str]
-    excluded: list[str]
 
 
 def read_int(value: object) -> int | None:

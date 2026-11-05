@@ -12,7 +12,12 @@ from prefect.cache_policies import NO_CACHE
 from prefect.logging import get_logger
 from prefect.runtime import flow_run
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import BRASILIA, DBT_POLL_SECONDS
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import (
+    BRASILIA,
+    CONSUMER_GRANTS,
+    DBT_POLL_SECONDS,
+    TABLE_PREFIX,
+)
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import (
     bigquery,
     dbt,
@@ -20,19 +25,32 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import (
     oracle,
     oracle_ddl,
     oracle_read,
-    slots,
     slots_oracle,
     sqlldr,
     sqlldr_progress,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import TableSchema
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import LoadPlan, build_load_plan
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import build_load_plan
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify import current as current_notifier
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import OracleConfig
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import plan_structure, slot_indexes
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_ddl import describe_partitioning
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import IndexDefinition, StructurePlan
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import Dbt, Load, Source
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import (
+    Dbt,
+    ExportedFile,
+    IndexDefinition,
+    Load,
+    LoadJob,
+    LoadPlan,
+    LoadResult,
+    OracleConfig,
+    ProgressSnapshot,
+    SlotPlan,
+    SnapshotRequest,
+    Source,
+    StructurePlan,
+    TableDefinition,
+    TableSchema,
+    TableSnapshot,
+)
 from utils.runs import PrefectRuns, start_deployment_run
 
 logger = get_logger("toolkit")
@@ -68,10 +86,10 @@ def list_tables_task(source: Source) -> list[str]:
 @task(cache_policy=NO_CACHE)
 def export_snapshot_task(
     source: Source, load: Load, table_ids: list[str], dbt_finished_at: datetime | None
-) -> dict[str, bigquery.TableSnapshot]:
+) -> dict[str, TableSnapshot]:
     """Export every table as one BigQuery snapshot, under a prefix of this flow run."""
     prefix = f"{source.dataset_id}/{flow_run.get_id()}"
-    request = bigquery.SnapshotRequest(
+    request = SnapshotRequest(
         project=source.project,
         dataset_id=source.dataset_id,
         table_ids=table_ids,
@@ -122,7 +140,7 @@ def plan_structure_task(load: Load, table_id: str, plan: LoadPlan) -> StructureP
         template_schema=oracle.validate_identifier(load.template_schema or config.schema),
         table=oracle.validate_identifier(table_id),
     )
-    structure = plan_structure(template, [column.name for column in plan.columns], oracle.TABLE_PREFIX)
+    structure = plan_structure(template, [column.name for column in plan.columns], TABLE_PREFIX)
     indexes = ", ".join(index.name for index in structure.layout.indexes) or "nenhum"
     logger.info(
         f"{table_id}: tablespace {structure.layout.tablespace or '(padrão do schema)'}, "
@@ -138,7 +156,7 @@ def plan_structure_task(load: Load, table_id: str, plan: LoadPlan) -> StructureP
 
 
 @task(cache_policy=NO_CACHE)
-def resolve_slots_task(table_id: str) -> slots.SlotPlan:
+def resolve_slots_task(table_id: str) -> SlotPlan:
     """Find the physical table in use and the one that receives the load.
 
     Fix interrupted swaps.
@@ -156,7 +174,7 @@ def ensure_oracle_table_task(
     source: Source, table_id: str, table: str, plan: LoadPlan, structure: StructurePlan
 ) -> str:
     """Cria ou confere a tabela física que recebe a carga e retorna o nome dela."""
-    definition = oracle_ddl.TableDefinition(
+    definition = TableDefinition(
         columns=plan.columns, layout=structure.layout, source=f"{source.project}.{source.dataset_id}.{table_id}"
     )
     logger.info(oracle_ddl.ensure_table(config=oracle.read_oracle_config(), table=table, definition=definition))
@@ -180,11 +198,11 @@ def truncate_oracle_table_task(table: str) -> str:
     return table
 
 
-def progress_reporter(table: str, artifact_id: UUID) -> Callable[[sqlldr_progress.ProgressSnapshot], None]:
+def progress_reporter(table: str, artifact_id: UUID) -> Callable[[ProgressSnapshot], None]:
     """Return the callback that reports the progress of the load."""
     notifier = current_notifier()
 
-    def report(snapshot: sqlldr_progress.ProgressSnapshot) -> None:
+    def report(snapshot: ProgressSnapshot) -> None:
         """Log the snapshot, and update the artifact and the notice."""
         logger.info(sqlldr_progress.format_progress(table, snapshot))
         update_progress_artifact(artifact_id=artifact_id, progress=sqlldr_progress.progress_percent(snapshot))
@@ -194,7 +212,7 @@ def progress_reporter(table: str, artifact_id: UUID) -> Callable[[sqlldr_progres
     return report
 
 
-def describe_sessions(result: sqlldr.LoadResult) -> str:
+def describe_sessions(result: LoadResult) -> str:
     """Return the files and the rows that each session of the load handled."""
     return ", ".join(
         f"sessão {item.index}: {item.files} arquivos, {sqlldr_progress.format_count(item.rows)} linhas"
@@ -203,15 +221,13 @@ def describe_sessions(result: sqlldr.LoadResult) -> str:
 
 
 @task(cache_policy=NO_CACHE)
-def load_into_oracle_task(
-    table: str, plan: LoadPlan, files: list[bigquery.ExportedFile], source: Source, load: Load
-) -> int:
+def load_into_oracle_task(table: str, plan: LoadPlan, files: list[ExportedFile], source: Source, load: Load) -> int:
     """Load the files with SQL*Loader direct path and report the progress.
 
     Return the rows that were loaded.
     """
     sessions = load.sessions
-    job = sqlldr.LoadJob(table=table, fields=plan.fields, bucket=source.bucket, files=files, sessions=sessions)
+    job = LoadJob(table=table, fields=plan.fields, bucket=source.bucket, files=files, sessions=sessions)
     artifact_id = cast("UUID", create_progress_artifact(progress=0.0, description=f"Carga de {table}"))
     total_size = sqlldr_progress.format_size(sum(exported.size for exported in files))
     logger.info(
@@ -258,13 +274,13 @@ def validate_row_count_task(table: str, table_schema: TableSchema, loaded_rows: 
 def grant_access_task(table: str) -> str:
     """Concede aos consumidores o acesso à tabela física e retorna o nome dela."""
     slots_oracle.grant_access(config=oracle.read_oracle_config(), table=table)
-    grantees = ", ".join(f"{grantee} ({privileges})" for grantee, privileges in slots.CONSUMER_GRANTS)
+    grantees = ", ".join(f"{grantee} ({privileges})" for grantee, privileges in CONSUMER_GRANTS)
     logger.info(f"{table}: acesso concedido a {grantees}")
     return table
 
 
 @task(cache_policy=NO_CACHE)
-def delete_gcs_files_task(source: Source, files: list[bigquery.ExportedFile]) -> None:
+def delete_gcs_files_task(source: Source, files: list[ExportedFile]) -> None:
     """Delete the exported files from GCS.
 
     The flow submits this task in the background, after the validation of the count, and
@@ -324,8 +340,8 @@ def gather_oracle_stats_task(table: str, load: Load) -> str:
 
 @task(cache_policy=NO_CACHE)
 def record_load_task(
-    plan: slots.SlotPlan, table: str, source: Source, table_id: str, snapshot_modified: datetime
-) -> slots.SlotPlan:
+    plan: SlotPlan, table: str, source: Source, table_id: str, snapshot_modified: datetime
+) -> SlotPlan:
     """Write the loaded snapshot in the table comment, and return the swap plan."""
     comment = slots_oracle.record_load(
         config=oracle.read_oracle_config(),
@@ -350,7 +366,7 @@ def disable_inmemory_task(table: str) -> str:
 
 
 @task(cache_policy=NO_CACHE)
-def release_inmemory_task(plans: list[slots.SlotPlan], load: Load) -> list[str]:
+def release_inmemory_task(plans: list[SlotPlan], load: Load) -> list[str]:
     """Take the tables that left use in the swap out of the In-Memory.
 
     Return those that could not be freed. It waits for
@@ -402,7 +418,7 @@ def enable_inmemory_task(table: str, structure: StructurePlan, load: Load) -> No
 
 
 @task(cache_policy=NO_CACHE)
-def wait_inmemory_task(plans: list[slots.SlotPlan], load: Load) -> list[slots.SlotPlan]:
+def wait_inmemory_task(plans: list[SlotPlan], load: Load) -> list[SlotPlan]:
     """Wait for the loaded tables to reach the In-Memory before the swap.
 
     Return the plans.
@@ -427,7 +443,7 @@ def wait_inmemory_task(plans: list[slots.SlotPlan], load: Load) -> list[slots.Sl
 
 
 @task(cache_policy=NO_CACHE)
-def swap_synonyms_task(plans: list[slots.SlotPlan]) -> None:
+def swap_synonyms_task(plans: list[SlotPlan]) -> None:
     """Point the synonyms of all tables to the ones just loaded, one table at a time."""
     config = oracle.read_oracle_config()
     for plan in plans:

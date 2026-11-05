@@ -46,3 +46,12 @@ FALLBACK_STEPS: Final = (
     Step("opencage", "OPENCAGE_API_KEY", 10, 1.1),
 )
 """The services of the fallback, in the order they run, with the key setting."""
+
+
+OK: Final = 200
+
+
+PAYMENT_REQUIRED: Final = 402
+
+
+TOO_MANY_REQUESTS: Final = 429

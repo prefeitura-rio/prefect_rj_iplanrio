@@ -12,7 +12,6 @@ it by a documented argument and still checks the signature of the server.
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
-from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Protocol, final
@@ -21,22 +20,7 @@ from asyncssh import SFTPClient, SSHClientConnection, connect, import_public_key
 from toolkit.telemetry import logger
 
 from pipelines.rj_crm__disparo_template.constants import SFTP_KEEPALIVE, SFTP_TIMEOUT
-from pipelines.rj_crm__disparo_template.types import Csv
-
-
-@dataclass(frozen=True)
-class SftpTarget:
-    """The SFTP server, its login, its pinned host key and the folder of the files.
-
-    The host key is a line of `known_hosts`.
-    """
-
-    host: str
-    user: str
-    password: str
-    host_key: str
-    port: int = 22
-    remote_path: str = "/"
+from pipelines.rj_crm__disparo_template.types import Csv, SftpTarget
 
 
 class Uploader(Protocol):

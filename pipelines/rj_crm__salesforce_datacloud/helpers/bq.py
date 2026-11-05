@@ -6,8 +6,8 @@ from typing import cast
 from google.cloud import bigquery
 from toolkit.telemetry import logger
 
-from pipelines.rj_crm__salesforce_datacloud.constants import PARTITION_COLUMN
-from pipelines.rj_crm__salesforce_datacloud.helpers.schemas import PARTITIONED_TABLES, SCHEMAS
+from pipelines.rj_crm__salesforce_datacloud.constants import PARTITION_COLUMN, PARTITIONED_TABLES
+from pipelines.rj_crm__salesforce_datacloud.helpers.schemas import SCHEMAS
 from pipelines.rj_crm__salesforce_datacloud.types import Row
 
 

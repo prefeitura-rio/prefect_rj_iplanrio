@@ -3,8 +3,6 @@
 from asyncio import to_thread
 
 import polars as pl
-from duckdb import BinderException
-from google.api_core.exceptions import NotFound
 from prefect import task
 from toolkit.telemetry import logger
 
@@ -15,18 +13,16 @@ from pipelines.rj_cor__precipitacao_alertario_sftp.helpers import (
     list_new_files,
     parse_xml,
 )
-from utils.tasks import read_bq
+from utils.tasks import read_bq_if_exists
 from utils.utils import render_query
 
 
 @task(retries=3, retry_delay_seconds=10)
 async def read_watermark_task(table: str, project: str) -> str | None:
     """Return the latest `data_medicao` of the table, or nothing if it is empty."""
-    try:
-        frame = await read_bq(render_query(__file__, "get_max_update", table=table), project=project)
-    except (NotFound, BinderException) as error:
-        if isinstance(error, BinderException) and "Not found" not in str(error):
-            raise
+    frame = await read_bq_if_exists(render_query(__file__, "get_max_update", table=table), project=project)
+
+    if frame is None:
         logger.info("The table does not exist yet: table=%s", table)
         return None
 

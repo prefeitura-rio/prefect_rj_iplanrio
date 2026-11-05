@@ -14,6 +14,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.dbt import (
     should_run_dbt,
     skip_initial_quiet_wait,
 )
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import ExportedFile, SnapshotRequest, TableSchema
 from utils.runs import RunStatus
 
 T0 = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
@@ -214,16 +215,16 @@ def fake_bigquery(monkeypatch: pytest.MonkeyPatch, modified_reads: list[dict[str
 
         return next(reads)[table_id]
 
-    def schema(project: str, dataset_id: str, table_id: str) -> bigquery.TableSchema:
+    def schema(project: str, dataset_id: str, table_id: str) -> TableSchema:
         del project, dataset_id, table_id
 
-        return bigquery.TableSchema(fields=[], num_rows=1)
+        return TableSchema(fields=[], num_rows=1)
 
-    def extract(project: str, dataset_id: str, table_id: str, bucket: str, prefix: str) -> list[bigquery.ExportedFile]:
+    def extract(project: str, dataset_id: str, table_id: str, bucket: str, prefix: str) -> list[ExportedFile]:
         del project, dataset_id, table_id, bucket
         extracted.append(prefix)
 
-        return [bigquery.ExportedFile(name=f"{prefix}/part-0.csv.gz", size=1)]
+        return [ExportedFile(name=f"{prefix}/part-0.csv.gz", size=1)]
 
     def delete(bucket: str, blob_names: list[str]) -> None:
         del bucket, blob_names
@@ -237,9 +238,9 @@ def fake_bigquery(monkeypatch: pytest.MonkeyPatch, modified_reads: list[dict[str
     return extracted
 
 
-def request(dbt_finished_at: datetime | None) -> bigquery.SnapshotRequest:
+def request(dbt_finished_at: datetime | None) -> SnapshotRequest:
     """Return the request."""
-    return bigquery.SnapshotRequest(
+    return SnapshotRequest(
         project="p",
         dataset_id="d",
         table_ids=["A", "B"],

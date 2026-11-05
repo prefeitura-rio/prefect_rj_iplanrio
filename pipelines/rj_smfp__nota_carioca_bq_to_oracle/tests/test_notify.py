@@ -7,31 +7,39 @@ import httpx2
 import pytest
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle import tasks as tasks_module
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import discord as discord_module
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import oracle, sqlldr, sqlldr_progress
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import ExportedFile
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import LoadPlan
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import DiscordStatusMessage, Environment
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import format_validation_line
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import (
     COLOR_CANCELLED,
     COLOR_FAILURE,
     COLOR_RUNNING,
     COLOR_SUCCESS,
-    ItemStatus,
-    RunStatus,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify import LoadNotifier, NotifierConfig, current
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import discord as discord_module
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import oracle, sqlldr
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import DiscordStatusMessage
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import format_validation_line
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import RunStatus
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify import LoadNotifier, current
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.notify_view import (
     RunState,
-    TableState,
     build_view,
     overall_fraction,
     table_fraction,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.stages import Step, TableStep
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tests.conftest import silence
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import Load, Source
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import (
+    Environment,
+    ExportedFile,
+    ItemStatus,
+    Load,
+    LoadPlan,
+    LoadResult,
+    NotifierConfig,
+    ProgressSnapshot,
+    Source,
+    Step,
+    TableState,
+    TableStep,
+)
 
 NOW = datetime(2026, 10, 9, 15, 0, 0, tzinfo=UTC)
 GIB = 1024**3
@@ -82,11 +90,9 @@ def make(
     return LoadNotifier(config, message)
 
 
-def snapshot(done: int, total: int = 100 * GIB, elapsed: float = 100.0) -> sqlldr_progress.ProgressSnapshot:
+def snapshot(done: int, total: int = 100 * GIB, elapsed: float = 100.0) -> ProgressSnapshot:
     """Return the snapshot."""
-    return sqlldr_progress.ProgressSnapshot(
-        files_done=3, files_total=10, bytes_done=done, bytes_total=total, elapsed_seconds=elapsed
-    )
+    return ProgressSnapshot(files_done=3, files_total=10, bytes_done=done, bytes_total=total, elapsed_seconds=elapsed)
 
 
 @pytest.fixture(autouse=True)
@@ -431,13 +437,11 @@ def test_load_task_feeds_the_active_notifier_without_receiving_it(monkeypatch: p
     monkeypatch.setattr(tasks_module, "update_progress_artifact", fake_progress)
     monkeypatch.setattr(oracle, "read_oracle_config", fake_config)
 
-    def fake_load(
-        config: object, job: object, on_progress: object, progress_interval_seconds: float
-    ) -> sqlldr.LoadResult:
+    def fake_load(config: object, job: object, on_progress: object, progress_interval_seconds: float) -> LoadResult:
         del config, job, progress_interval_seconds
         assert callable(on_progress)
         on_progress(snap)
-        return sqlldr.LoadResult(rows=5, sessions=[], elapsed_seconds=1.0)
+        return LoadResult(rows=5, sessions=[], elapsed_seconds=1.0)
 
     monkeypatch.setattr(sqlldr, "load_from_gcs", fake_load)
     plan = LoadPlan(columns=[], fields=[], ignored=[], excluded=[])

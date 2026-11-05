@@ -19,61 +19,29 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_format import 
     format_duration,
     format_size,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import (
-    ChecklistItem,
-    CountSide,
-    Fact,
-    ItemStatus,
-    RunStatus,
-    RunView,
-    TableView,
-    ValidationLine,
-)
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr_progress import ProgressSnapshot
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import RunStatus, RunView
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.stages import (
     STEP_LABELS,
     STEP_WEIGHTS,
     TABLE_STEP_LABELS,
     TABLE_WEIGHT_TOTAL,
     TABLE_WEIGHTS,
+)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import (
+    ChecklistItem,
+    CountSide,
+    Fact,
+    ItemStatus,
+    ProgressSnapshot,
     Step,
+    TableState,
     TableStep,
+    TableView,
+    ValidationLine,
 )
 
 FLOW_LABEL = "BigQuery → Oracle"
 MIN_STEP_ELAPSED_SECONDS = 60.0
-
-
-@dataclass(frozen=True)
-class TableState:
-    """The state of a table.
-
-    `name` is the name in BigQuery. `weight` is the weight among the tables (the bytes
-    exported), 1 if unknown. `step` is the current stage, and `None` if the table has
-    not started. `slot` is the A or B slot that receives the load, and `load` is the
-    last SQL*Loader progress. `indexes_done` and `indexes_total` count the indexes.
-    `rows` is the validated rows of a finished table. `physical_table` is the Oracle
-    table that receives the load (`BQLOAD_<table>_A` or `_B`). `bq_rows` is the rows of
-    the table in the exported BigQuery snapshot, `loaded_rows` the rows that SQL*Loader
-    loaded, and `oracle_rows` the rows counted in Oracle after the load, in the
-    validation. `seconds` is the duration of a finished table, and `failed` says whether
-    it failed.
-    """
-
-    name: str
-    weight: float = 1.0
-    step: TableStep | None = None
-    slot: str | None = None
-    load: ProgressSnapshot | None = None
-    indexes_done: int = 0
-    indexes_total: int = 0
-    rows: int | None = None
-    physical_table: str | None = None
-    bq_rows: int | None = None
-    loaded_rows: int | None = None
-    oracle_rows: int | None = None
-    seconds: float | None = None
-    failed: bool = False
 
 
 @dataclass(frozen=True)

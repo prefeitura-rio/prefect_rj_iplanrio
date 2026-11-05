@@ -5,13 +5,11 @@ from datetime import date
 from pathlib import Path
 
 import polars as pl
-from duckdb import BinderException
-from google.api_core.exceptions import NotFound
 from prefect import task
 from toolkit.telemetry import logger
 
 from pipelines.rj_smfp__crf.helpers import list_names, parse_date, process_zip, select_zip_names
-from utils.tasks import read_bq
+from utils.tasks import read_bq_if_exists
 from utils.utils import render_query
 
 
@@ -22,11 +20,9 @@ async def read_watermark_task(table: str, project: str) -> date | None:
     Nothing also means that the table does not exist yet. The ZIP files after that day
     are the ones to load.
     """
-    try:
-        frame = await read_bq(render_query(__file__, "get_max_partition", table=table), project=project)
-    except (NotFound, BinderException) as error:
-        if isinstance(error, BinderException) and "Not found" not in str(error):
-            raise
+    frame = await read_bq_if_exists(render_query(__file__, "get_max_partition", table=table), project=project)
+
+    if frame is None:
         logger.info("The table does not exist yet: table=%s", table)
         return None
 

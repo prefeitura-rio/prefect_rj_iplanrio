@@ -48,9 +48,9 @@ from pipelines.rj_crm__disparo_template.helpers.notices import (
     success_notice,
     unknown_campaign_notice,
 )
-from pipelines.rj_crm__disparo_template.helpers.sftp import SftpTarget, upload
+from pipelines.rj_crm__disparo_template.helpers.sftp import upload
 from pipelines.rj_crm__disparo_template.settings import SftpSettings
-from pipelines.rj_crm__disparo_template.types import Audience, Campaign, Csv, Delivered, Delivery, Report
+from pipelines.rj_crm__disparo_template.types import Audience, Campaign, Csv, Delivered, Delivery, Report, SftpTarget
 from utils import dispatch as dispatch_module
 from utils.dispatch import Switch, decide_switch, no_destinations_notice, post_notice
 from utils.tasks import publish_table_in_bq, read_bq, run_dbt, upload_files_to_gcs, write_records

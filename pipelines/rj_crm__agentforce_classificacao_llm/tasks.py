@@ -10,12 +10,15 @@ from pydantic import JsonValue, TypeAdapter
 from toolkit.telemetry import logger
 
 from pipelines.rj_crm__agentforce_classificacao_llm.constants import (
+    COLUMNS,
     DEFAULT_HSM_MAX_DAYS_BEFORE,
     DEFAULT_LOOKBACK_DAYS,
     DEFAULT_MAX_WORKERS,
     LLM_MAX_OUTPUT_TOKENS,
     LLM_TIMEOUT,
     MACROTHEME_PROMPT_VERSION,
+    OUTSIDE,
+    PRIMARY_KEY,
     SECRETARIAT_PROMPT_VERSION,
 )
 from pipelines.rj_crm__agentforce_classificacao_llm.helpers import bq
@@ -23,7 +26,6 @@ from pipelines.rj_crm__agentforce_classificacao_llm.helpers.hsm import build_but
 from pipelines.rj_crm__agentforce_classificacao_llm.helpers.labels import build_classified_row
 from pipelines.rj_crm__agentforce_classificacao_llm.helpers.routing import (
     MACROTHEME_LABELS,
-    OUTSIDE,
     SECRETARIAT_LABELS,
     candidate_secretariats,
     canonical,
@@ -31,7 +33,6 @@ from pipelines.rj_crm__agentforce_classificacao_llm.helpers.routing import (
     macrotheme_prompt,
     secretariat_prompt,
 )
-from pipelines.rj_crm__agentforce_classificacao_llm.helpers.schema import COLUMNS, PRIMARY_KEY
 from pipelines.rj_crm__agentforce_classificacao_llm.types import (
     ButtonRow,
     Llm,

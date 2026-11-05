@@ -2,10 +2,10 @@
 
 from asyncio import Semaphore
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
-from httpx2 import AsyncClient
+from httpx2 import AsyncClient, Response
 
 type Strategy = Literal["nominatim", "fallback", "geoapify_batch"]
 type Source = Literal["citizens", "chamados"]
@@ -44,3 +44,25 @@ class Run:
     today: str
     wait: float
     pause: Pause
+
+
+@dataclass(frozen=True)
+class Query:
+    """A GET request to a service."""
+
+    url: str
+    params: dict[str, str] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Provider:
+    """A geocoding service: its `geocode` name, its request and its reader.
+
+    `parse` takes the address, the response and the day, and gives the geocode or
+    nothing.
+    """
+
+    name: str
+    build: Callable[[str], Query]
+    parse: Callable[[Response, str], Geocode | None]

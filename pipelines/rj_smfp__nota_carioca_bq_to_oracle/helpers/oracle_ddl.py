@@ -1,22 +1,12 @@
 """DDL no Oracle de destino: criar, truncar, indexar e contar as tabelas gerenciadas."""
 
-from dataclasses import dataclass
-
 import oracledb
 from toolkit.telemetry import logger
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import OracleColumn
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import (
-    MANAGED_TABLE_MARKER,
-    TABLE_PREFIX,
-    OracleConfig,
-    assert_managed_table,
-    assert_privileges,
-    connect,
-)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import MANAGED_TABLE_MARKER, TABLE_PREFIX
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import assert_managed_table, assert_privileges, connect
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_query import (
     QUERIES_ANCHOR,
-    Row,
     column_definitions,
     fetch_one,
     to_int,
@@ -24,7 +14,12 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_query import (
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_read import read_column_definitions, read_table_layout
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import layout_differences
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_ddl import index_statement_parts, storage_clause
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import IndexDefinition, TableLayout
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import (
+    IndexDefinition,
+    OracleConfig,
+    Row,
+    TableDefinition,
+)
 from utils.utils import render_query
 
 
@@ -41,19 +36,6 @@ def definition_differences(existing: list[str], expected: list[str]) -> list[str
         for found, wanted in zip(padded_existing, padded_expected, strict=True)
         if found != wanted
     ]
-
-
-@dataclass(frozen=True)
-class TableDefinition:
-    """The full definition of the target table.
-
-    `columns` are in the order of the original table, `layout` has its tablespace and
-    partitioning, and `source` is the source table, written in the comment.
-    """
-
-    columns: list[OracleColumn]
-    layout: TableLayout
-    source: str
 
 
 def create_managed_table(cursor: oracledb.Cursor, schema: str, table: str, definition: TableDefinition) -> None:

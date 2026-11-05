@@ -4,8 +4,8 @@ from collections.abc import Mapping
 
 import oracledb
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import OracleColumn, oracle_column
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import OracleConfig, connect
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import oracle_column
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import connect
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_query import QUERIES_ANCHOR, column_names, fetch_all
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import (
     index_from_dictionary,
@@ -13,7 +13,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import (
     inmemory_from_dictionary,
     partitioning_from_dictionary,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import TableLayout
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import OracleColumn, OracleConfig, TableLayout
 from utils.utils import render_query
 
 

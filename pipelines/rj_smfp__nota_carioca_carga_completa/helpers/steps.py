@@ -5,12 +5,8 @@ from time import monotonic
 
 from toolkit.telemetry import logger
 
-from pipelines.rj_smfp__nota_carioca_carga_completa.helpers.chain import (
-    NOT_STARTED,
-    format_duration,
-    is_done,
-    unfinished,
-)
+from pipelines.rj_smfp__nota_carioca_carga_completa.constants import NOT_STARTED
+from pipelines.rj_smfp__nota_carioca_carga_completa.helpers.chain import format_duration, is_done, unfinished
 from pipelines.rj_smfp__nota_carioca_carga_completa.tasks import (
     ensure_idle_task,
     find_children_task,

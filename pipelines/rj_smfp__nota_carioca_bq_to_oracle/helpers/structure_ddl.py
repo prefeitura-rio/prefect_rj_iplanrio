@@ -1,11 +1,7 @@
 """The DDL of the physical structure: partitions, storage and index commands."""
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import (
-    IndexDefinition,
-    IndexExpression,
-    Partitioning,
-    TableLayout,
-)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import IndexExpression
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import IndexDefinition, Partitioning, TableLayout
 
 
 def quote(name: str) -> str:

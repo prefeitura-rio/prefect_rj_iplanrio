@@ -34,3 +34,6 @@ DISPATCH_TAG: Final = "disparo:carga-completa"
 ITEM_TAG_PREFIX: Final = "carga-completa-item:"
 """The tag with the position of a child run among the sets of parameters."""
 INHERITED_TAG_PREFIXES: Final = ("disparo:", "discord-user:")
+
+
+NOT_STARTED = "Carga completa não iniciada"

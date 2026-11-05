@@ -4,26 +4,22 @@ from datetime import UTC, datetime
 
 import oracledb
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import (
-    OracleConfig,
-    assert_managed_table,
-    assert_privileges,
-    connect,
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import (
+    CONSUMER_GRANTS,
+    CONSUMER_SYNONYM_OWNERS,
+    REPLACEABLE_OBJECT_TYPES,
 )
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import assert_managed_table, assert_privileges, connect
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_ddl import assert_managed_existing_table
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_query import QUERIES_ANCHOR
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_read import fetch_rows
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import (
-    CONSUMER_GRANTS,
-    CONSUMER_SYNONYM_OWNERS,
-    REPLACEABLE_OBJECT_TYPES,
-    SlotPlan,
-    SynonymTarget,
     choose_slots,
     load_comment,
     synonym_owners,
     synonyms_to_realign,
 )
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import OracleConfig, SlotPlan, SynonymTarget
 from utils.utils import render_query
 
 

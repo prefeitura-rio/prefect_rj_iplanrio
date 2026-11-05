@@ -5,46 +5,25 @@ parser gives nothing when the answer has no match, or the service refuses the re
 with the status of an exhausted quota.
 """
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
 from typing import Final
 
 from httpx2 import Response
 from pydantic import JsonValue
 from unidecode import unidecode
 
-from pipelines.rj_crm__geolocalizacao_residencia.constants import RIO_CONTEXT, WAZE_BOUNDS
-from pipelines.rj_crm__geolocalizacao_residencia.types import Geocode
+from pipelines.rj_crm__geolocalizacao_residencia.constants import (
+    OK,
+    PAYMENT_REQUIRED,
+    RIO_CONTEXT,
+    TOO_MANY_REQUESTS,
+    WAZE_BOUNDS,
+)
+from pipelines.rj_crm__geolocalizacao_residencia.types import Geocode, Provider, Query
 from utils.records import dig, read_json
 
-OK: Final = 200
-PAYMENT_REQUIRED: Final = 402
-TOO_MANY_REQUESTS: Final = 429
 CONFIDENCE_SCALE: Final = 10
 LOCATIONIQ_CITY_PART: Final = 2
 LOCATIONIQ_STATE_PART: Final = 4
-
-
-@dataclass(frozen=True)
-class Query:
-    """A GET request to a service."""
-
-    url: str
-    params: dict[str, str] = field(default_factory=dict)
-    headers: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class Provider:
-    """A geocoding service: its `geocode` name, its request and its reader.
-
-    `parse` takes the address, the response and the day, and gives the geocode or
-    nothing.
-    """
-
-    name: str
-    build: Callable[[str], Query]
-    parse: Callable[[Response, str], Geocode | None]
 
 
 def fold(value: JsonValue, *, strip: bool = True) -> str | None:

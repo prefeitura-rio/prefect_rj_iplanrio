@@ -10,20 +10,13 @@ from obstore import put_async
 from obstore.store import MemoryStore
 from toolkit.gcs import list_sizes
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import bigquery, oracle, oracle_ddl, slots_oracle
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import CONSUMER_GRANTS, MANAGED_TABLE_MARKER
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import bigquery, oracle_ddl, slots_oracle
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import changed_tables, quiet_wait_seconds
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import (
-    LoaderField,
-    OracleColumn,
-    build_load_plan,
-    loader_spec,
-    oracle_column,
-)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import build_load_plan, loader_spec, oracle_column
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.inmemory import InMemoryStatus
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import (
     CROSS_SCHEMA_PRIVILEGES,
-    MANAGED_TABLE_MARKER,
-    OracleConfig,
     assert_managed_table,
     missing_privileges,
     oracle_table_name,
@@ -32,9 +25,6 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import (
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_ddl import definition_differences, foreign_indexes
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_query import QUERIES_ANCHOR, column_definitions
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import (
-    CONSUMER_GRANTS,
-    SlotPlan,
-    SynonymTarget,
     choose_slots,
     load_comment,
     parse_load_comment,
@@ -44,8 +34,6 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import (
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr import build_control_file, split_round_robin
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr_progress import (
     CountingReader,
-    ProgressSnapshot,
-    SessionProgress,
     format_count,
     format_duration,
     format_progress,
@@ -62,13 +50,23 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import (
     slot_indexes,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_ddl import index_statement_parts, storage_clause
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import IndexExpression
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import (
+    ExportedFile,
     IndexDefinition,
-    IndexExpression,
+    LoaderField,
+    OracleColumn,
+    OracleConfig,
     Partitioning,
     PartitionStorage,
+    ProgressSnapshot,
+    SessionProgress,
+    SlotPlan,
+    SnapshotRequest,
+    SynonymTarget,
     TableLayout,
     TablePartition,
+    TableSchema,
 )
 from utils.utils import render_query
 
@@ -358,9 +356,9 @@ def test_quiet_wait_and_changed_tables() -> None:
     assert changed_tables({"A": T0, "B": T0}, {"A": T0, "B": T0 + timedelta(seconds=1)}) == ["B"]
 
 
-def snapshot_request(max_wait_seconds: float = 3600, max_attempts: int = 3) -> bigquery.SnapshotRequest:
+def snapshot_request(max_wait_seconds: float = 3600, max_attempts: int = 3) -> SnapshotRequest:
     """Return the snapshot request."""
-    return bigquery.SnapshotRequest(
+    return SnapshotRequest(
         project="p",
         dataset_id="d",
         table_ids=["DET", "EXI"],
@@ -407,16 +405,16 @@ def fake_bigquery(
 
         return next(reads)[table_id]
 
-    def schema(project: str, dataset_id: str, table_id: str) -> bigquery.TableSchema:
+    def schema(project: str, dataset_id: str, table_id: str) -> TableSchema:
         del project, dataset_id, table_id
 
-        return bigquery.TableSchema(fields=[], num_rows=1)
+        return TableSchema(fields=[], num_rows=1)
 
-    def extract(project: str, dataset_id: str, table_id: str, bucket: str, prefix: str) -> list[bigquery.ExportedFile]:
+    def extract(project: str, dataset_id: str, table_id: str, bucket: str, prefix: str) -> list[ExportedFile]:
         del project, dataset_id, table_id, bucket
         extracted.append(prefix)
 
-        return [bigquery.ExportedFile(name=f"{prefix}/part-0.csv.gz", size=1)]
+        return [ExportedFile(name=f"{prefix}/part-0.csv.gz", size=1)]
 
     def delete(bucket: str, blob_names: list[str]) -> None:
         del bucket
@@ -462,7 +460,7 @@ def test_export_consistent_snapshot_waits_for_quiet_period_and_retries_on_change
     assert deleted == ["d/run/tentativa-1/DET/part-0.csv.gz", "d/run/tentativa-1/EXI/part-0.csv.gz"]
     assert "mudou durante o extract em ['EXI']" in messages[1]
     assert snapshot["DET"].last_modified == old
-    assert snapshot["EXI"].files == [bigquery.ExportedFile("d/run/tentativa-2/EXI/part-0.csv.gz", 1)]
+    assert snapshot["EXI"].files == [ExportedFile("d/run/tentativa-2/EXI/part-0.csv.gz", 1)]
 
 
 def test_export_consistent_snapshot_gives_up(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1458,7 +1456,7 @@ def test_count_rows_sends_the_parallel_hint_to_oracle(
 
         return CountConnection(executed)
 
-    config = oracle.OracleConfig("DFEN", "p", "h", "1", "s", "DFEN")
+    config = OracleConfig("DFEN", "p", "h", "1", "s", "DFEN")
     monkeypatch.setattr(oracle_ddl, "connect", connect)
     assert oracle_ddl.count_rows(config, "BQLOAD_X_A", parallel_degree=requested) == 7
     assert executed == [f'SELECT /*+ PARALLEL({hinted}) */ COUNT(*)\nFROM "DFEN"."BQLOAD_X_A"\n']

@@ -23,14 +23,15 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import (
     DDL_ATTEMPTS,
     DDL_LOCK_TIMEOUT_SECONDS,
     DDL_RETRY_SECONDS,
+    LOADED_TABLE_INMEMORY,
     RESOURCE_BUSY,
     UPPER_BOUND_PATTERN,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import OracleConfig, connect
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import connect
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_ddl import assert_managed_existing_table
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_query import QUERIES_ANCHOR, to_int
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_read import fetch_rows
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import LOADED_TABLE_INMEMORY
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import OracleConfig
 from utils.utils import render_query
 
 

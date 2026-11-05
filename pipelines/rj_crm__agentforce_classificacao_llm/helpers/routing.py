@@ -3,15 +3,12 @@
 from functools import cache
 from pathlib import Path
 
-from pydantic import JsonValue, TypeAdapter
+from pydantic import JsonValue
 
+from pipelines.rj_crm__agentforce_classificacao_llm.constants import MACROTHEME_CATALOG, OUTSIDE, SECRETARIAT_CATALOG
 from pipelines.rj_crm__agentforce_classificacao_llm.helpers.hsm import normalize_text
-from pipelines.rj_crm__agentforce_classificacao_llm.types import MacrothemeCatalog, SecretariatCatalog
 
 ROOT = Path(__file__).parent.parent
-MACROTHEME_CATALOG = TypeAdapter(list[MacrothemeCatalog])
-SECRETARIAT_CATALOG = TypeAdapter(list[SecretariatCatalog])
-OUTSIDE = "OUTRA"
 NO_HSM = "(Nenhum HSM identificado para esta sessão.)"
 FULL_OUTSIDE_RULE = "3. Se o assunto não for responsabilidade de nenhum órgão da lista, os dois campos devem ser null."
 FILTERED_OUTSIDE_RULE = (

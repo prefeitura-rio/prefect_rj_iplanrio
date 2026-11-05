@@ -8,12 +8,9 @@ import oracledb
 import pytest
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle import tasks as tasks_module
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import DDL_RETRY_SECONDS
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import DDL_RETRY_SECONDS, LOADED_TABLE_INMEMORY
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import inmemory, oracle
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import OracleConfig
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import SlotPlan
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import LOADED_TABLE_INMEMORY
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import Load
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import Load, OracleConfig, SlotPlan
 
 
 def bound(day: str) -> str:

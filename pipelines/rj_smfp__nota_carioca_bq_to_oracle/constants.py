@@ -51,3 +51,142 @@ RESOURCE_BUSY = 54
 
 UPPER_BOUND_PATTERN: Pattern[str] = compile_pattern(r"TO_DATE\(\s*'\s*(\d{4})-(\d{2})-(\d{2})")
 """The upper bound of a `RANGE` partition by date, as in `TO_DATE(' 2026-08-01 ...`."""
+
+
+INDEX_NAME_PATTERN = compile_pattern(r"^[A-Z][A-Z0-9_$#]{0,127}$")
+
+
+# O Oracle cria I_SNAP$_<mview> sozinho para o fast refresh de views materializadas;
+# numa tabela comum não tem uso.
+SNAPSHOT_INDEX_PREFIX = "I_SNAP$"
+
+
+SUPPORTED_PARTITIONING = ("RANGE", "LIST")
+
+
+SUPPORTED_INDEX_TYPES = ("NORMAL", "BITMAP", "FUNCTION-BASED NORMAL")
+
+
+FUNCTION_BASED_INDEX_TYPE = "FUNCTION-BASED NORMAL"
+
+
+# MAXEXTENTS UNLIMITED, as the dictionary gives it.
+UNLIMITED_EXTENTS = 2147483645
+
+
+# Valores de all_tables e all_part_tables aceitos no INMEMORY; o texto entra no DDL como
+# está.
+INMEMORY_PRIORITIES = ("NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL")
+
+
+INMEMORY_COMPRESSIONS = (
+    "NO MEMCOMPRESS",
+    "FOR DML",
+    "FOR QUERY LOW",
+    "FOR QUERY HIGH",
+    "FOR CAPACITY LOW",
+    "FOR CAPACITY HIGH",
+    "AUTO",
+)
+
+
+INMEMORY_DISTRIBUTES = ("AUTO", "BY ROWID RANGE", "BY PARTITION", "BY SUBPARTITION")
+
+
+INMEMORY_DUPLICATES = ("NO DUPLICATE", "DUPLICATE", "DUPLICATE ALL")
+
+
+# A tabela carregada nasce NO INMEMORY. Depois da carga, só as partições da janela
+# recebem esta cláusula, com as opções das MVT_ originais (helpers/inmemory.py), e a
+# tabela sai do In-Memory inteira quando deixa de ser a tabela em uso.
+LOADED_TABLE_INMEMORY = "INMEMORY PRIORITY HIGH MEMCOMPRESS FOR QUERY HIGH DISTRIBUTE AUTO NO DUPLICATE"
+
+
+COLOR_RUNNING = 3447003
+
+
+COLOR_SUCCESS = 3066993
+
+
+COLOR_FAILURE = 15158332
+
+
+COLOR_CANCELLED = 9807270
+
+
+TITLE_LIMIT = 256
+
+
+DESCRIPTION_LIMIT = 4096
+
+
+FIELD_NAME_LIMIT = 256
+
+
+FIELD_VALUE_LIMIT = 1024
+
+
+FOOTER_LIMIT = 2048
+
+
+MAX_FIELDS = 25
+
+
+# Limite do Discord é 6000 para a soma de título, descrição, campos e rodapé; sobra
+# margem para contagem por pontos de código diferente da do Discord.
+TOTAL_BUDGET = 5800
+
+
+MIN_DESCRIPTION = 300
+
+
+CONTENT_LIMIT = 2000
+
+
+SHORT_ERROR_LIMIT = 200
+
+
+VALIDATION_LINE_LIMIT = 300
+
+
+MISSING_COUNT = "—"
+
+
+NO_MENTIONS = {"parse": []}
+
+
+TABLE_PREFIX = "BQLOAD_"
+
+
+MANAGED_TABLE_MARKER = "rj_smfp__nota_carioca_bq_to_oracle"
+
+
+CONSUMER_SYNONYM_OWNERS = ("NFSE_SIGA", "NFSE_USER", "NFSE_OWNER")
+
+
+CONSUMER_GRANTS = (
+    ("RL_NFSE", "SELECT"),
+    ("RL_NFSE_SIGA", "SELECT"),
+    ("RL_NFSEOWNER_DRL", "SELECT"),
+    ("NFSE_OWNER", "SELECT, ALTER, DELETE"),
+)
+
+
+# Tabela particionada aparece em all_objects também como TABLE PARTITION/SUBPARTITION,
+# com o nome da tabela.
+REPLACEABLE_OBJECT_TYPES = {"TABLE", "TABLE PARTITION", "TABLE SUBPARTITION", "SYNONYM"}
+
+
+CHARACTER_TYPES = ("VARCHAR2", "CHAR", "NVARCHAR2", "NCHAR")
+
+
+TIMESTAMP_TYPE_PATTERN = compile_pattern(r"^TIMESTAMP\(\d\)( WITH TIME ZONE)?$")
+
+
+COMPLETED = "COMPLETED"
+
+
+FINAL_STATE_TYPES = frozenset({COMPLETED, "FAILED", "CRASHED", "CANCELLED"})
+
+
+DEFAULT_HEARTBEAT_SECONDS = 60.0

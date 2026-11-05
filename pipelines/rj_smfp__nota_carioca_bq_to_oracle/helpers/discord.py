@@ -15,7 +15,6 @@ is a secret and never goes to the log.
 
 import time
 from collections.abc import Callable, Mapping
-from enum import StrEnum
 from functools import wraps
 from threading import Lock
 from typing import final
@@ -23,6 +22,7 @@ from typing import final
 import httpx2
 from toolkit.telemetry import logger
 
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import Environment
 from utils.records import dig, read_json
 from utils.settings import NoticeSettings
 
@@ -90,13 +90,6 @@ def never_raises[**P](func: Callable[P, None]) -> Callable[P, None]:
             warn(f"Notificação do Discord falhou em {func.__name__}: {type(error).__name__}: {error}")
 
     return wrapper
-
-
-class Environment(StrEnum):
-    """The environment of the running deployment, which marks the messages."""
-
-    PROD = "prod"
-    STAGING = "staging"
 
 
 def environment_from_deployment(name: str | None) -> Environment:

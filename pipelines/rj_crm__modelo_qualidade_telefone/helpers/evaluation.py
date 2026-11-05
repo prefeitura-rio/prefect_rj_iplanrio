@@ -6,9 +6,7 @@ It has a row for each metric of training, SHAP, simulation and gate.
 from json import dumps
 
 from pipelines.rj_crm__modelo_qualidade_telefone.constants import HEURISTIC, NEW_MODEL, SUMMARY_METRICS
-from pipelines.rj_crm__modelo_qualidade_telefone.types import Gate, Simulation, Training
-
-type Row = dict[str, str | float | None]
+from pipelines.rj_crm__modelo_qualidade_telefone.types import Gate, Row, Simulation, Training
 
 
 def make_row(origin: str, metric: str, value: float, algorithm: str | None = None, detail: str | None = None) -> Row:

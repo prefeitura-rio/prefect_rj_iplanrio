@@ -10,6 +10,25 @@ fields, and 6000 characters in the whole embed.
 from datetime import timedelta
 from itertools import pairwise
 
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import (
+    COLOR_CANCELLED,
+    COLOR_FAILURE,
+    COLOR_RUNNING,
+    COLOR_SUCCESS,
+    CONTENT_LIMIT,
+    DESCRIPTION_LIMIT,
+    FIELD_NAME_LIMIT,
+    FIELD_VALUE_LIMIT,
+    FOOTER_LIMIT,
+    MAX_FIELDS,
+    MIN_DESCRIPTION,
+    MISSING_COUNT,
+    NO_MENTIONS,
+    SHORT_ERROR_LIMIT,
+    TITLE_LIMIT,
+    TOTAL_BUDGET,
+    VALIDATION_LINE_LIMIT,
+)
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_format import (
     clip,
     format_clock,
@@ -21,33 +40,8 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_format import 
     mark_staging,
     progress_bar,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import (
-    COLOR_CANCELLED,
-    COLOR_FAILURE,
-    COLOR_RUNNING,
-    COLOR_SUCCESS,
-    CONTENT_LIMIT,
-    DESCRIPTION_LIMIT,
-    FIELD_NAME_LIMIT,
-    FIELD_VALUE_LIMIT,
-    FOOTER_LIMIT,
-    ITEM_ICON,
-    MAX_FIELDS,
-    MIN_DESCRIPTION,
-    MISSING_COUNT,
-    NO_MENTIONS,
-    SHORT_ERROR_LIMIT,
-    STATUS_LINE,
-    TITLE_LIMIT,
-    TOTAL_BUDGET,
-    VALIDATION_LINE_LIMIT,
-    CountSide,
-    ItemStatus,
-    RunStatus,
-    RunView,
-    TableView,
-    ValidationLine,
-)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import ITEM_ICON, STATUS_LINE, RunStatus, RunView
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import CountSide, ItemStatus, TableView, ValidationLine
 
 
 def status_color(status: RunStatus) -> int:

@@ -6,14 +6,11 @@ from typing import cast
 
 import oracledb
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import OracleColumn
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import OracleColumn, Row
 
 # load_query resolve queries/ no diretório pai do caminho recebido; a pasta utils/
 # aponta para a raiz da pipeline.
 QUERIES_ANCHOR = str(Path(__file__).parent)
-
-
-type Row = tuple[object, ...]
 
 
 def fetch_all(cursor: oracledb.Cursor) -> list[Row]:

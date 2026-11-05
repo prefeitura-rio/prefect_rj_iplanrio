@@ -18,7 +18,7 @@ from google.cloud.bigquery_storage_v1 import BigQueryReadClient
 from toolkit.telemetry import logger
 
 from pipelines.rj_crm__modelo_qualidade_telefone.constants import PROJECT_ID
-from pipelines.rj_crm__modelo_qualidade_telefone.helpers.evaluation import Row
+from pipelines.rj_crm__modelo_qualidade_telefone.types import Row
 from utils.utils import load_credentials, render_query
 
 EVALUATION_SCHEMA = [

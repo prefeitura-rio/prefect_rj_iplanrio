@@ -12,7 +12,7 @@ from google.cloud import bigquery
 from pydantic import JsonValue
 from toolkit.telemetry import logger
 
-from pipelines.rj_crm__agentforce_classificacao_llm.helpers.schema import PRIMARY_KEY, SCHEMA
+from pipelines.rj_crm__agentforce_classificacao_llm.constants import PRIMARY_KEY, SCHEMA
 from utils.utils import load_credentials
 
 

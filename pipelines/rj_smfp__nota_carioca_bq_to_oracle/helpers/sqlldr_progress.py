@@ -1,49 +1,11 @@
 """Progresso da carga com SQL*Loader: contagem de bytes lidos e texto do andamento."""
 
-from dataclasses import dataclass, field
 from io import UnsupportedOperation
-from threading import Lock
 from typing import Protocol, final
 
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.types import ProgressSnapshot, SessionProgress
+
 GIGABYTE = 1024**3
-
-
-@dataclass(frozen=True)
-class ProgressSnapshot:
-    """A picture of the load progress at one moment.
-
-    `files_done` are the files that went whole to SQL*Loader, and `bytes_done` are the
-    compressed bytes that were read from GCS and sent. `files_total` and `bytes_total`
-    are the totals of the load, and `elapsed_seconds` is the time since it started.
-    """
-
-    files_done: int
-    files_total: int
-    bytes_done: int
-    bytes_total: int
-    elapsed_seconds: float
-
-
-@dataclass
-class SessionProgress:
-    """The counters of one session, which the thread that sends the files updates.
-
-    `lock` protects the counters between threads.
-    """
-
-    bytes_done: int = 0
-    files_done: int = 0
-    lock: Lock = field(default_factory=Lock)
-
-    def add_bytes(self, amount: int) -> None:
-        """Soma bytes lidos."""
-        with self.lock:
-            self.bytes_done += amount
-
-    def add_file(self) -> None:
-        """Soma um arquivo concluído."""
-        with self.lock:
-            self.files_done += 1
 
 
 class Readable(Protocol):
