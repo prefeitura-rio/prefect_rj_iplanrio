@@ -1,4 +1,3 @@
--- ============================================================
 -- Base CSV - Protocolo CadÚnico Atualizado
 --
 -- Público:
@@ -18,7 +17,6 @@
 --
 -- Seed: 28031994
 -- Saída: tabela pronta para exportação em CSV
--- ============================================================
 
 WITH params AS (
   SELECT
@@ -32,12 +30,8 @@ WITH params AS (
     30 AS cooldown_days
 ),
 
--- ============================================================
--- 1) PROTOCOLOS IRREGULARES
---
 -- Identifica as crianças classificadas como irregulares no
 -- protocolo de atualização do CadÚnico.
--- ============================================================
 
 protocolo_irregular AS (
   SELECT DISTINCT
@@ -67,15 +61,11 @@ protocolo_irregular AS (
   WHERE protocolo_status = 'irregular'
 ),
 
--- ============================================================
--- 2) PARTICIPANTES ATIVOS DO PIC
---
 -- Recupera os dados da criança, da família e um telefone
 -- alternativo existente no cadastro do participante.
 --
 -- O filtro p.pic.status = 'ativo' garante que somente crianças
 -- atualmente ativas no programa entrem na base.
--- ============================================================
 
 participantes AS (
   SELECT
@@ -131,12 +121,8 @@ participantes AS (
     AND p.pic.status = 'ativo'
 ),
 
--- ============================================================
--- 2.1) ENDEREÇO DA FAMÍLIA
---
 -- Recupera um bairro para cada id_familia e produz uma versão
 -- normalizada para comparação com a lista da 15ª RA.
--- ============================================================
 
 cadunico_endereco AS (
   SELECT
@@ -173,9 +159,6 @@ cadunico_endereco AS (
   ) = 1
 ),
 
--- ============================================================
--- 3) RESPONSÁVEL FAMILIAR NO RMI
---
 -- Seleciona um responsável elegível por família:
 --   - maior de idade;
 --   - não falecido;
@@ -184,7 +167,6 @@ cadunico_endereco AS (
 --   - celular;
 --   - sem opt-out;
 --   - sem quarentena.
--- ============================================================
 
 responsavel_rmi AS (
   SELECT
@@ -302,12 +284,8 @@ responsavel_rmi AS (
   ) = 1
 ),
 
--- ============================================================
--- 4) BAIRROS DA 15ª RA
---
 -- Lista os nomes oficiais, abreviações e erros de digitação
 -- previstos para os bairros que devem ser excluídos.
--- ============================================================
 
 bairros_15ra AS (
   SELECT DISTINCT
@@ -402,11 +380,7 @@ bairros_15ra AS (
   ]) AS bairro_original
 ),
 
--- ============================================================
--- 5) BASE ELEGÍVEL ANTES DA EXCLUSÃO TERRITORIAL
---
 -- Combina protocolo, criança ativa, responsável e endereço.
--- ============================================================
 
 base_elegivel_pre AS (
   SELECT
@@ -476,12 +450,8 @@ base_elegivel_pre AS (
     AND r.celular_disparo IS NOT NULL
 ),
 
--- ============================================================
--- 5.1) EXCLUI A 15ª RA
---
 -- Faz correspondência exata após normalização ou correspondência
 -- aproximada para pequenos erros de digitação.
--- ============================================================
 
 base_elegivel AS (
   SELECT
@@ -519,11 +489,7 @@ base_elegivel AS (
   WHERE br.bairro_norm IS NULL
 ),
 
--- ============================================================
--- 6) REMOVE QUEM JÁ RECEBEU A MESMA HSM NO COOLDOWN
---
 -- A verificação é feita pelo CPF do responsável.
--- ============================================================
 
 filtra_disparados AS (
   SELECT
@@ -556,12 +522,8 @@ filtra_disparados AS (
   WHERE fl.targetexternalid IS NULL
 ),
 
--- ============================================================
--- 7) ESCOLHE UMA CRIANÇA POR RESPONSÁVEL
---
 -- Quando um responsável está associado a mais de uma criança
 -- irregular, seleciona deterministicamente apenas uma criança.
--- ============================================================
 
 dedup_responsavel AS (
   SELECT
@@ -600,12 +562,8 @@ dedup_responsavel AS (
   ) = 1
 ),
 
--- ============================================================
--- 7.1) GARANTE UM ÚNICO RESPONSÁVEL POR TELEFONE
---
 -- Se o mesmo telefone estiver associado a CPFs diferentes,
 -- seleciona deterministicamente apenas um responsável.
--- ============================================================
 
 dedup_telefone AS (
   SELECT
@@ -636,12 +594,8 @@ dedup_telefone AS (
   ) = 1
 ),
 
--- ============================================================
--- 8) RANDOMIZAÇÃO NO NÍVEL RESPONSÁVEL / TELEFONE
---
 -- Neste ponto, cada CPF responsável e cada celular_disparo
 -- aparecem no máximo uma vez.
--- ============================================================
 
 sorteio AS (
   SELECT
@@ -686,10 +640,6 @@ sorteio AS (
   CROSS JOIN params AS prm
 ),
 
--- ============================================================
--- 8.1) SELECIONA ATÉ 1.000 RESPONSÁVEIS / TELEFONES
--- ============================================================
-
 amostra AS (
   SELECT
     s.*
@@ -701,12 +651,8 @@ amostra AS (
   WHERE s.ordem_sorteio <= prm.sample_n
 ),
 
--- ============================================================
--- 9) TELEFONES ALTERNATIVOS
---
 -- Como a saída é CSV, os telefones alternativos são reunidos
 -- em uma string separada por ponto e vírgula.
--- ============================================================
 
 amostra_com_others AS (
   SELECT
@@ -729,11 +675,7 @@ amostra_com_others AS (
   FROM amostra
 )
 
--- ============================================================
--- 10) SAÍDA FINAL TABULAR / CSV
---
 -- Cada linha representa uma unidade responsável/telefone.
--- ============================================================
 
 SELECT
   -- Ordenação e unidade de seleção
@@ -801,4 +743,3 @@ WHERE EXTRACT(
 and celular_disparo is not null and cpf_responsavel is not null
 
 ORDER BY ordem_sorteio;
-

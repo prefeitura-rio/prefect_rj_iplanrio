@@ -22,12 +22,7 @@ def add_base_fields(extra: list[bigquery.SchemaField]) -> list[bigquery.SchemaFi
     return [*extra, bigquery.SchemaField("_loaded_at", TIMESTAMP), bigquery.SchemaField("data_particao", DATE)]
 
 
-# ---------------------------------------------------------------------------
-# Schemas por tabela
-# ---------------------------------------------------------------------------
-
 SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
-    # --- Agentforce (STDM) ---
     "ai_agent_session": add_base_fields(
         [
             bigquery.SchemaField("id", STRING),
@@ -206,7 +201,6 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
             bigquery.SchemaField("modality", STRING),
         ]
     ),
-    # --- Messaging ---
     "messaging_end_user": add_base_fields(
         [
             bigquery.SchemaField("id", STRING),
@@ -237,7 +231,7 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
             bigquery.SchemaField("last_modified_date", TIMESTAMP),
         ]
     ),
-    # Staging das duas acima — write_mode='merge' (ver flow.py): carrega aqui via
+    # Staging das duas acima — write_mode='merge': carrega aqui via
     # load_chunk_to_staging, depois MERGE pra tabela final via merge_staging_to_target
     # (mesmo padrão de telemetry_trace_span_staging). Substituiu write_mode='replace',
     # que apagava a partição do dia inteiro a cada execução — seguro rodando 1x/dia,
@@ -317,7 +311,6 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
             bigquery.SchemaField("kq_id", STRING),
         ]
     ),
-    # --- Tracing ---
     "telemetry_trace_span": add_base_fields(
         [
             bigquery.SchemaField("id", STRING),
@@ -356,7 +349,6 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
             bigquery.SchemaField("kq_id", STRING),
         ]
     ),
-    # --- Eventos WhatsApp ---
     "messaging_events_whatsapp": add_base_fields(list(MESSAGING_EVENTS_WHATSAPP_FIELDS)),
     "messaging_events_whatsapp_staging": add_base_fields(list(MESSAGING_EVENTS_WHATSAPP_FIELDS)),
     "sfmc_whatsapp_send_event": add_base_fields(list(SFMC_WHATSAPP_SEND_EVENT_FIELDS)),

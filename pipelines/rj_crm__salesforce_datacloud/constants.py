@@ -118,10 +118,8 @@ FLOAT64 = bigquery.enums.SqlTypeNames.FLOAT64
 BOOL = bigquery.enums.SqlTypeNames.BOOLEAN
 
 
-# --- Eventos WhatsApp (DLL MessagingEventsWhatsAppV2_00Das_4CAB1BC2__dll) ---
-# Nomes = saída de _clean_dc_field_name (transform.py) sobre as colunas de
-# sql/messaging_events_whatsapp.sql. Chave do MERGE: event_id (EventId__c —
-# conferido único e nunca vazio no histórico todo em 2026-09-29).
+# Eventos WhatsApp (DLL MessagingEventsWhatsAppV2_00Das_4CAB1BC2__dll). Chave do MERGE:
+# event_id (EventId__c), conferido único e nunca vazio no histórico todo em 2026-09-29.
 MESSAGING_EVENTS_WHATSAPP_FIELDS = [
     bigquery.SchemaField("event_id", STRING),
     bigquery.SchemaField("event_date_time", TIMESTAMP),
@@ -169,10 +167,8 @@ MESSAGING_EVENTS_WHATSAPP_FIELDS = [
 ]
 
 
-# --- Send events WhatsApp do SFMC (DLL sfmc_whatsapp_send_event_534019838__dll) ---
-# Nomes = saída de _clean_dc_field_name sobre as colunas de
-# sql/sfmc_whatsapp_send_event.sql. Chave do MERGE: id (ID__c — conferido
-# único e nunca vazio no histórico todo em 2026-10-02).
+# Send events WhatsApp do SFMC (DLL sfmc_whatsapp_send_event_534019838__dll). Chave do
+# MERGE: id (ID__c), conferido único e nunca vazio no histórico todo em 2026-10-02.
 SFMC_WHATSAPP_SEND_EVENT_FIELDS = [
     bigquery.SchemaField("id", STRING),
     bigquery.SchemaField("engagement_date_time", TIMESTAMP),

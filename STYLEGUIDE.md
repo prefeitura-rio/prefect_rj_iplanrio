@@ -428,6 +428,26 @@ def read_items(path: Path) -> list[Item]:
     ":param path: input file"
 ```
 
+### no-section-comments
+
+- **Level:** MUST NOT
+- **Check:** `.ast-grep/rules/no-section-comments.yaml` and review
+- **Rule:** Do not write a divider comment, a banner comment, or a title comment above a block of code. Give the block a function or a module with a clear name. This applies to Python, SQL, Nushell, and YAML files.
+- **Why:** A divider repeats what the names show. It also becomes wrong when the code moves.
+
+Compliant:
+
+```python
+def read_items(path: Path) -> list[Item]:
+    """Read and validate the items."""
+```
+
+Non-compliant:
+
+```python
+# --- Items ---
+```
+
 ### no-base-exception
 
 - **Level:** MUST NOT

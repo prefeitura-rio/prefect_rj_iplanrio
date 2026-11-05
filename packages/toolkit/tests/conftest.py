@@ -37,8 +37,6 @@ from toolkit.executor.sources.protocols import Source
 from toolkit.executor.types import Origin
 from toolkit.types import Columns, QueryParams
 
-# The tests check what a function returns, not how long it takes. Hypothesis fails an
-# example that takes more than 200 ms, so a busy machine made a correct test fail.
 settings.register_profile("toolkit", deadline=None)
 settings.load_profile("toolkit")
 

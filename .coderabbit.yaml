@@ -2,10 +2,7 @@
 # Complete reference: https://docs.coderabbit.ai/reference/configuration
 # Copy this file to .coderabbit.yaml in your repository root
 
-# =============================================================================
-# GLOBAL SETTINGS
 # These settings apply to your entire CodeRabbit configuration
-# =============================================================================
 
 # Set the language for reviews by using the corresponding ISO language code.
 # Options: de, de-DE, de-AT, de-CH, en, en-US, en-AU, en-GB, en-CA, en-NZ, en-ZA, es, es-AR, fr, fr-CA, fr-CH, fr-BE, nl, nl-BE, pt-AO, pt, pt-BR, pt-MZ, pt-PT, ar, ast-ES, ast, be-BY, be, br-FR, br, ca-ES, ca, ca-ES-valencia, ca-ES-balear, da-DK, da, de-DE-x-simple-language, el-GR, el, eo, fa, ga-IE, ga, gl-ES, gl, it, ja-JP, ja, km-KH, km, ko-KR, ko, pl-PL, pl, ro-RO, ro, ru-RU, ru, sk-SK, sk, sl-SI, sl, sv, ta-IN, ta, tl-PH, tl, tr, uk-UA, uk, zh-CN, zh, crh-UA, crh, cs-CZ, cs, nb, no, nl-NL, de-DE-x-simple-language-DE, es-ES, it-IT, fa-IR, sv-SE, de-LU, fr-FR, bg-BG, bg, he-IL, he, hi-IN, hi, vi-VN, vi, th-TH, th, bn-BD, bn
@@ -24,10 +21,7 @@ early_access: false
 # Default: true
 enable_free_tier: true
 
-# =============================================================================
-# REVIEWS
 # Settings related to reviews.
-# =============================================================================
 
 # Settings related to reviews.
 # Default: {}
@@ -729,10 +723,7 @@ reviews:
       # Default: true
       enabled: true
 
-# =============================================================================
-# CHAT
 # Configuration for chat
-# =============================================================================
 
 # Configuration for chat
 # Default: {}
@@ -768,10 +759,7 @@ chat:
       # Default: "auto"
       usage: "auto"
 
-# =============================================================================
-# KNOWLEDGE BASE
 # Configuration for knowledge base
-# =============================================================================
 
 # Configuration for knowledge base
 # Default: {}
@@ -867,10 +855,7 @@ knowledge_base:
     # Default: []
     disabled_servers: []
 
-# =============================================================================
-# CODE GENERATION
 # Configuration for code generation
-# =============================================================================
 
 # Configuration for code generation
 # Default: {}

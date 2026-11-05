@@ -116,9 +116,6 @@ def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
     return fake
 
 
-# --- heartbeat thread
-
-
 def test_heartbeat_republishes_the_view_while_nothing_else_happens(warnings: list[str]) -> None:
     # Given a live notifier that is begun and then goes idle (no step change, no
     # progress)
@@ -262,9 +259,6 @@ def test_a_failing_publish_neither_kills_the_heartbeat_nor_raises(warnings: list
     assert survived
     assert notifier.state.status is RunStatus.SUCCESS
     assert warnings == ["Batimento do Discord falhou: RuntimeError: boom"]
-
-
-# --- elapsed time
 
 
 def test_heartbeat_makes_the_elapsed_and_the_step_elapsed_advance(clock: Clock, warnings: list[str]) -> None:

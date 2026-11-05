@@ -1,6 +1,4 @@
--- =====================================================================
 -- 02 — Eventos × candidatos (pool pra simulação/avaliação)
--- =====================================================================
 -- Porta pra SQL a lógica das seções 2-3 de
 -- qualidade_telefone/modelo/03_avaliacao.ipynb: para cada disparo real
 -- dos últimos `janela_recente_dias` dias com CPF conhecido, monta o pool
@@ -27,7 +25,6 @@
 -- motivo (SHAP = 0.0). One-hot de ddd_categoria/telefone_qualidade feito
 -- aqui em SQL (não em Python), mesma decisão de features_telefone.sql —
 -- ver comentário lá.
--- =====================================================================
 
 WITH disparos_base AS (
   SELECT
@@ -63,7 +60,6 @@ aparicoes AS (
   WHERE ap.sistema_nome != 'whatsapp'
 ),
 
--- ---- 1) disparos recentes elegíveis pra avaliação -----------------------
 periodo_recente AS (
   SELECT TIMESTAMP_SUB(MAX(envio_datahora), INTERVAL {{ janela_recente_dias }} DAY) AS data_min_avaliacao
   FROM disparos
@@ -76,7 +72,6 @@ disparos_avaliar AS (
     AND d.cpf IS NOT NULL
 ),
 
--- ---- 2) pool de candidatos: todo telefone elegível já associado ao CPF -
 telefones_elegiveis AS (
   SELECT DISTINCT telefone
   FROM aparicoes
@@ -98,7 +93,6 @@ eventos AS (
   JOIN cpf_telefones_elegivel ct ON ct.cpf = d.cpf
 ),
 
--- ---- 3) features por evento, mesma lógica leakage-safe de 01 ----------
 disparo_evento AS (
   SELECT e.id_interacao, e.telefone, e.data_corte, d.envio_datahora, d.status_disparo
   FROM eventos e
@@ -124,7 +118,6 @@ feat_disparo_evento AS (
   GROUP BY id_interacao, telefone
 ),
 
--- ---- 2b) dias_desde_ultima_resposta: por TELEFONE, não por disparo/sessão --
 -- (mesma lógica de features_telefone.sql — ver comentário de cabeçalho
 -- daquele arquivo)
 mensagens_resposta AS (
@@ -224,7 +217,6 @@ feat_cpf_evento AS (
   GROUP BY id_interacao, telefone
 ),
 
--- ---- 3b) volatilidade: quantos telefones o CPF mais recente já usou ---
 -- mesma lógica de features_telefone.sql — ver comentário de cabeçalho
 -- daquele arquivo. cpf_pares_global sem corte de leakage ainda (aplicado
 -- por evento, contra o data_corte de CADA um).
@@ -257,7 +249,6 @@ feat_volatilidade_evento AS (
   GROUP BY cmr.id_interacao, cmr.telefone
 ),
 
--- ---- 4) grau de compartilhamento familiar (CadÚnico), por evento -------
 parentesco AS (
   SELECT cpf, id_familia, menor_idade
   FROM `rj-crm-registry.intermediario_rmi_parentesco_cadunico.dim_parentesco`
@@ -277,7 +268,6 @@ feat_familia_evento AS (
   GROUP BY id_interacao, telefone
 ),
 
--- ---- 5) DDD e metadados de telefone (fixos, iguais aos de 01) ---------
 ddd_telefone AS (
   SELECT
     telefone,
@@ -293,7 +283,6 @@ telefone_meta AS (
   GROUP BY telefone
 )
 
--- ---- 6) monta a saída: 1 linha por (id_interacao, telefone candidato) --
 SELECT
   ev.id_interacao,
   ev.telefone,

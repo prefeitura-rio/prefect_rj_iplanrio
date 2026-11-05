@@ -1,0 +1,16 @@
+id: no-section-comments
+valid:
+  - |
+    # The API returns the rows newest first.
+    rows = read()
+  - "#!/usr/bin/env python"
+invalid:
+  - |
+    # --- Messaging ---
+    rows = read()
+  - |
+    # ==========
+    rows = read()
+  - |
+    ####
+    rows = read()
