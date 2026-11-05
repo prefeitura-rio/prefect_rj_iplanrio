@@ -2,7 +2,7 @@
 WITH
   cadastro_inscritos AS (
     SELECT
-      *
+      * 
     FROM rj-smtr-sandbox.projeto_disparo_enem_2026.cadastro_incritos
   ),
   rmi AS (
