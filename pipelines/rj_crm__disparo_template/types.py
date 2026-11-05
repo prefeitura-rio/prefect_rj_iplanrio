@@ -105,3 +105,18 @@ class Delivered:
     rows: list[dict[str, JsonValue]]
     last_date: str
     batches: int
+
+
+@dataclass(frozen=True)
+class SftpTarget:
+    """The SFTP server, its login, its pinned host key and the folder of the files.
+
+    The host key is a line of `known_hosts`.
+    """
+
+    host: str
+    user: str
+    password: str
+    host_key: str
+    port: int = 22
+    remote_path: str = "/"

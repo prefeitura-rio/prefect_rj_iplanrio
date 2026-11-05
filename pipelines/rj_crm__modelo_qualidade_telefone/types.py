@@ -151,3 +151,6 @@ class Release(NamedTuple):
 
     version: str
     date: str
+
+
+type Row = dict[str, str | float | None]

@@ -3,6 +3,8 @@
 from typing import Final
 from zoneinfo import ZoneInfo
 
+from google.cloud import bigquery
+
 from pipelines.rj_crm__salesforce_datacloud.types import Feed
 
 DEFAULT_PROJECT_ID: Final = "rj-crm-registry"
@@ -102,3 +104,130 @@ FEEDS: Final = (
 
 The Agentforce ones go session, interaction, step, message.
 """
+
+
+TIMESTAMP = bigquery.enums.SqlTypeNames.TIMESTAMP
+
+
+STRING = bigquery.enums.SqlTypeNames.STRING
+
+
+FLOAT64 = bigquery.enums.SqlTypeNames.FLOAT64
+
+
+BOOL = bigquery.enums.SqlTypeNames.BOOLEAN
+
+
+# --- Eventos WhatsApp (DLL MessagingEventsWhatsAppV2_00Das_4CAB1BC2__dll) ---
+# Nomes = saída de _clean_dc_field_name (transform.py) sobre as colunas de
+# sql/messaging_events_whatsapp.sql. Chave do MERGE: event_id (EventId__c —
+# conferido único e nunca vazio no histórico todo em 2026-09-29).
+MESSAGING_EVENTS_WHATSAPP_FIELDS = [
+    bigquery.SchemaField("event_id", STRING),
+    bigquery.SchemaField("event_date_time", TIMESTAMP),
+    bigquery.SchemaField("event_type", STRING),
+    bigquery.SchemaField("send_status", STRING),
+    bigquery.SchemaField("not_sent_reason", STRING),
+    bigquery.SchemaField("error_code", STRING),
+    bigquery.SchemaField("contact_point_phone_number", STRING),
+    bigquery.SchemaField("individual_id", STRING),
+    bigquery.SchemaField("kq_individual_id", STRING),
+    bigquery.SchemaField("whats_app_wam_id", STRING),
+    bigquery.SchemaField("message_id", STRING),
+    bigquery.SchemaField("bulk_message_id", STRING),
+    bigquery.SchemaField("content_id", STRING),
+    bigquery.SchemaField("message", STRING),
+    bigquery.SchemaField("message_purpose", STRING),
+    bigquery.SchemaField("pricing_category", STRING),
+    bigquery.SchemaField("journey_id", STRING),
+    bigquery.SchemaField("flow_element_run_id", STRING),
+    bigquery.SchemaField("kq_flow_element_run_id", STRING),
+    bigquery.SchemaField("kq_event_id", STRING),
+    bigquery.SchemaField("engagement_channel", STRING),
+    bigquery.SchemaField("kq_engagement_channel", STRING),
+    bigquery.SchemaField("application", STRING),
+    bigquery.SchemaField("source", STRING),
+    bigquery.SchemaField("sender_id", STRING),
+    bigquery.SchemaField("sender_display_name", STRING),
+    bigquery.SchemaField("username", STRING),
+    bigquery.SchemaField("business_unit_id", STRING),
+    bigquery.SchemaField("external_account_id", STRING),
+    bigquery.SchemaField("tenant", STRING),
+    bigquery.SchemaField("bsuid", STRING),
+    bigquery.SchemaField("parent_bsuid", STRING),
+    bigquery.SchemaField("ctwa_campaign_source_type", STRING),
+    bigquery.SchemaField("ctwa_campaign_source_id", STRING),
+    bigquery.SchemaField("ctwa_click_id", STRING),
+    bigquery.SchemaField("link_url", STRING),
+    bigquery.SchemaField("resolved_url", STRING),
+    bigquery.SchemaField("user_agent", STRING),
+    bigquery.SchemaField("global_event", BOOL),
+    bigquery.SchemaField("data_source", STRING),
+    bigquery.SchemaField("data_source_object", STRING),
+    bigquery.SchemaField("cdp_sys_source_version", STRING),
+    bigquery.SchemaField("cdp_sys_partition_date", TIMESTAMP),
+]
+
+
+# --- Send events WhatsApp do SFMC (DLL sfmc_whatsapp_send_event_534019838__dll) ---
+# Nomes = saída de _clean_dc_field_name sobre as colunas de
+# sql/sfmc_whatsapp_send_event.sql. Chave do MERGE: id (ID__c — conferido
+# único e nunca vazio no histórico todo em 2026-10-02).
+SFMC_WHATSAPP_SEND_EVENT_FIELDS = [
+    bigquery.SchemaField("id", STRING),
+    bigquery.SchemaField("engagement_date_time", TIMESTAMP),
+    bigquery.SchemaField("accepted_time_utc", TIMESTAMP),
+    bigquery.SchemaField("last_modified_date", TIMESTAMP),
+    bigquery.SchemaField("engagement_channel_action", STRING),
+    bigquery.SchemaField("message_recipient_send_status", STRING),
+    bigquery.SchemaField("event_direction", STRING),
+    bigquery.SchemaField("reason", STRING),
+    bigquery.SchemaField("engagement_action_reason", STRING),
+    bigquery.SchemaField("engagement_notes_txt", STRING),
+    bigquery.SchemaField("message_key", STRING),
+    bigquery.SchemaField("bulk_message_id", STRING),
+    bigquery.SchemaField("kq_bulk_message_id", STRING),
+    bigquery.SchemaField("journey_id", STRING),
+    bigquery.SchemaField("journey_activity_id", STRING),
+    bigquery.SchemaField("asset_id", STRING),
+    bigquery.SchemaField("message_text", STRING),
+    bigquery.SchemaField("mobile_number", STRING),
+    bigquery.SchemaField("country_code", STRING),
+    bigquery.SchemaField("channel_id", STRING),
+    bigquery.SchemaField("whats_app_id", STRING),
+    bigquery.SchemaField("bsuid", STRING),
+    bigquery.SchemaField("subscriber_key", STRING),
+    bigquery.SchemaField("kq_subscriber_key", STRING),
+    bigquery.SchemaField("subscriber_id", STRING),
+    bigquery.SchemaField("contact_point_id", STRING),
+    bigquery.SchemaField("kq_contact_point_id", STRING),
+    bigquery.SchemaField("engagement_channel_type", STRING),
+    bigquery.SchemaField("kq_engagement_channel_type", STRING),
+    bigquery.SchemaField("omni_post_model_type_id", FLOAT64),
+    bigquery.SchemaField("app_id", STRING),
+    bigquery.SchemaField("business_manager_id", STRING),
+    bigquery.SchemaField("internal_organization", STRING),
+    bigquery.SchemaField("sender_display_name", STRING),
+    bigquery.SchemaField("data_source", STRING),
+    bigquery.SchemaField("data_source_object", STRING),
+    bigquery.SchemaField("kq_id", STRING),
+    bigquery.SchemaField("cdp_sys_source_version", STRING),
+    bigquery.SchemaField("cdp_sys_partition_date", TIMESTAMP),
+]
+
+
+# Tabelas com particionamento + clustering
+PARTITIONED_TABLES: dict[str, list[str]] = {
+    "ai_agent_session": ["id"],
+    "ai_agent_interaction": ["id", "ai_agent_session_id"],
+    "ai_agent_interaction_step": ["id", "ai_agent_interaction_id"],
+    "ai_agent_interaction_message": ["id", "ai_agent_interaction_id"],
+    "messaging_end_user": ["id"],
+    "messaging_session": ["id"],
+    "conversation_entry": ["id"],
+    "telemetry_trace_span": ["id"],
+    "messaging_events_whatsapp": ["event_id"],
+    "sfmc_whatsapp_send_event": ["id", "message_key"],
+    # telemetry_trace_span_staging, messaging_end_user_staging,
+    # messaging_session_staging: sem particionamento (staging tables)
+}

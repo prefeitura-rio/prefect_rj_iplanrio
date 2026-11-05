@@ -8,6 +8,7 @@ from prefect import task
 from toolkit.telemetry import logger
 
 from pipelines.rj_crm__get_history_data.constants import (
+    COLUMNS,
     FINAL_TABLE_ID,
     HTTP_TIMEOUT,
     MERGE_KEYS,
@@ -115,8 +116,8 @@ async def load_task(rows: list[Row], window_days: int, project_id: str, dataset_
         target=target,
         source=tmp,
         keys=list(MERGE_KEYS),
-        columns=bq.COLUMNS,
-        update_columns=[column for column in bq.COLUMNS if column not in MERGE_KEYS],
+        columns=COLUMNS,
+        update_columns=[column for column in COLUMNS if column not in MERGE_KEYS],
     )
     touched = await to_thread(bq.run_merge, project_id, sql)
     logger.info("MERGE done: target=%s rows=%d", target, touched)

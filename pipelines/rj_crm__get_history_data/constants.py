@@ -1,6 +1,8 @@
 """Constants of rj_crm__get_history_data."""
 
-from typing import Final
+from typing import Final, cast
+
+from google.cloud import bigquery
 
 DE_SUFFIX: Final = "historico"
 """The suffix of the name of a Data Extension that holds history."""
@@ -25,3 +27,16 @@ DATE_FORMATS: Final = (
 )
 """The SFMC date formats after the ISO format: month first, then day first."""
 HTTP_TIMEOUT: Final = 60
+
+
+SCHEMA: Final = [
+    bigquery.SchemaField("de_nome", "STRING"),
+    bigquery.SchemaField("telefone", "STRING"),
+    bigquery.SchemaField("id_de", "STRING"),
+    bigquery.SchemaField("entrada_data", "STRING"),
+    bigquery.SchemaField("dados_json", "STRING"),
+    bigquery.SchemaField("data_particao", "DATE"),
+]
+
+
+COLUMNS: Final = [cast("str", field.name) for field in SCHEMA]

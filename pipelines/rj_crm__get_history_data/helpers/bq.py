@@ -6,23 +6,13 @@ and clustered by `de_nome`.
 """
 
 from collections.abc import Sequence
-from typing import Final, cast
 
 from google.cloud import bigquery
 from toolkit.telemetry import logger
 
+from pipelines.rj_crm__get_history_data.constants import SCHEMA
 from pipelines.rj_crm__get_history_data.types import Row
 from utils.utils import load_credentials
-
-SCHEMA: Final = [
-    bigquery.SchemaField("de_nome", "STRING"),
-    bigquery.SchemaField("telefone", "STRING"),
-    bigquery.SchemaField("id_de", "STRING"),
-    bigquery.SchemaField("entrada_data", "STRING"),
-    bigquery.SchemaField("dados_json", "STRING"),
-    bigquery.SchemaField("data_particao", "DATE"),
-]
-COLUMNS: Final = [cast("str", field.name) for field in SCHEMA]
 
 
 def connect(project: str) -> bigquery.Client:

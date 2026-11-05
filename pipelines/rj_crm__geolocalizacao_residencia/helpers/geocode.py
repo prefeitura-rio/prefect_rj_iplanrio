@@ -21,15 +21,14 @@ from pipelines.rj_crm__geolocalizacao_residencia.constants import (
     JITTER_RANGE,
     MAX_BACKOFF_SECONDS,
     MIN_SLEEP_SECONDS,
+    OK,
+    PAYMENT_REQUIRED,
+    TOO_MANY_REQUESTS,
     XYZ_ATTEMPTS,
     XYZ_THROTTLE_BASE,
 )
 from pipelines.rj_crm__geolocalizacao_residencia.helpers.providers import (
-    OK,
-    PAYMENT_REQUIRED,
-    TOO_MANY_REQUESTS,
     WAZE,
-    Provider,
     empty_geocode,
     finish_geoapify,
     is_valid_xyz,
@@ -40,7 +39,7 @@ from pipelines.rj_crm__geolocalizacao_residencia.helpers.providers import (
     xyz_url,
 )
 from pipelines.rj_crm__geolocalizacao_residencia.helpers.rows import has_point, split_found, texts
-from pipelines.rj_crm__geolocalizacao_residencia.types import Address, Geocode, Pause, Run, Step
+from pipelines.rj_crm__geolocalizacao_residencia.types import Address, Geocode, Pause, Provider, Run, Step
 from utils.records import dig, read_json
 
 ERRORS = (HTTPError, ValidationError, ValueError, KeyError, IndexError, TypeError)

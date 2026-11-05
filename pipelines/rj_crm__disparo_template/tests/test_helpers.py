@@ -23,9 +23,9 @@ from pipelines.rj_crm__disparo_template.helpers.notices import (
     success_notice,
 )
 from pipelines.rj_crm__disparo_template.helpers.queries import build_query
-from pipelines.rj_crm__disparo_template.helpers.sftp import SftpTarget, remote_file, upload
+from pipelines.rj_crm__disparo_template.helpers.sftp import remote_file, upload
 from pipelines.rj_crm__disparo_template.tests.conftest import FakeSftp, make_client
-from pipelines.rj_crm__disparo_template.types import Audience, Csv, Report
+from pipelines.rj_crm__disparo_template.types import Audience, Csv, Report, SftpTarget
 
 MONDAY = date(2026, 7, 13)
 SATURDAY = date(2026, 7, 18)
