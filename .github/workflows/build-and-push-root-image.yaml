@@ -11,6 +11,7 @@ on:
 jobs:
   build-and-push-root-image:
     name: Build and push root image
+    if: vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
