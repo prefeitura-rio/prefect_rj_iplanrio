@@ -4,7 +4,13 @@ from typing import cast, final
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.constants import STALE_BATCHES_LIMIT
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.catalog import Catalog
-from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.llm import classify_batches, discover_catalog, judge_batches
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.llm import (
+    classify_batches,
+    classify_each,
+    discover_catalog,
+    judge_batches,
+    suggest_categories,
+)
 from pipelines.rj_crm__relatorio_engajamento_hsm.tests.conftest import ClassificationFactory, ConversationFactory
 from utils.bifrost import Bifrost, BifrostError
 
@@ -87,3 +93,51 @@ async def test_the_judge_returns_the_verdicts_and_counts_the_failures(
     assert sorted(judged) == ["0", "1"]
     assert {item.verdict for item in judged.values()} == {"CORRETO"}
     assert failed == 1
+
+
+async def test_the_discovery_returns_the_example_sessions_of_each_new_category(
+    make_conversation: ConversationFactory,
+) -> None:
+    """Map the example numbers of a batch to session ids."""
+    sample = [make_conversation(f"s{number}") for number in range(1, 5)]
+    answer = '[{"categoria_nova": "NOVA", "categoria_nova_descricao": "d", "exemplos": [2, 4]}]'
+    catalog = Catalog()
+
+    examples = await discover_catalog(gateway(FakeBifrost([answer, "[]", "[]", "[]", "[]", "[]"])), sample, catalog, 4)
+
+    assert examples == {"NOVA": ["s2", "s4"]}
+
+
+async def test_the_suggestions_leave_out_every_category_that_the_catalog_has(
+    make_conversation: ConversationFactory,
+) -> None:
+    """Never suggest an excluded category, and never change the catalog of the run."""
+    sample = [make_conversation("s1")]
+    known = Catalog()
+    known.register("EXCLUDED", "was removed")
+    answer = (
+        '[{"categoria_nova": "excluded", "categoria_nova_descricao": "again"},'
+        ' {"categoria_nova": "FRESH", "categoria_nova_descricao": "new topic"}]'
+    )
+
+    suggestions = await suggest_categories(gateway(FakeBifrost([answer] + ["[]"] * 5)), sample, known, 1)
+
+    assert suggestions == {"FRESH": "new topic"}
+    assert known.as_dict() == {"EXCLUDED": "was removed"}
+
+
+async def test_each_conversation_is_classified_with_its_own_examples(make_conversation: ConversationFactory) -> None:
+    """Send one call for each conversation and keep going after a failure."""
+    conversations = [make_conversation("s1", "CIDADÃO: um"), make_conversation("s2", "CIDADÃO: dois")]
+    catalog = Catalog()
+    catalog.register("A", "d")
+    fake = FakeBifrost(['[{"id": 1, "categoria": "A", "resumo": "r"}]', BifrostError("down")])
+
+    results, failures = await classify_each(gateway(fake), conversations, catalog, ["EX-ONE", "EX-TWO"], 1)
+
+    assert [item.conversation.session_id for item in results] == ["s1"]
+    assert failures == Counter({"lote_inteiro_falhou": 1})
+    assert "EX-ONE" in fake.asked[0][0]
+    assert "CIDADÃO: um" in fake.asked[0][0]
+    assert "EX-TWO" in fake.asked[1][0]
+    assert "CIDADÃO: dois" in fake.asked[1][0]

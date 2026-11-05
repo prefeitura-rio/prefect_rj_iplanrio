@@ -1,10 +1,11 @@
--- Mensagens das sessões que receberam o HSM, a partir da data de início.
+-- Mensagens das sessões que receberam o HSM (ou a campanha), entre a data de início e a
+-- data de fim dos disparos. `filter_field` é nome_hsm ou nome_campanha.
 -- Fontes: HSM, AI_AGENT_CIDADAO e AI_AGENT_AGENTE (CUSTOMER fica de fora de propósito).
 with seleciona_ids_por_eixo as (
     select distinct id_sessao_48h
     from `{{ project }}.{{ dataset }}.{{ table }}` c
-    where c.hsm.nome_hsm = {{ hsm_name }}
-      and c.data_particao >= {{ start_date }}
+    where c.hsm.{{ filter_field }} = {{ value }}
+      and c.data_particao between {{ start_date }} and {{ end_date }}
 )
 select distinct
     contato.cpf as cpf,

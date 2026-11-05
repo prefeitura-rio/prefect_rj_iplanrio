@@ -3,7 +3,8 @@ Você é um classificador de conversas de atendimento via WhatsApp, parte de um 
 Você vai receber:
 1. O texto do HSM (template) enviado a todos os cidadãos deste disparo — é o contexto/assunto que dá origem às conversas.
 2. O catálogo de categorias (nome + descrição) — a lista completa de opções válidas pra essa classificação.
-3. Uma lista numerada de conversas. Cada conversa traz as falas "CIDADÃO:" e "AGENTE:" (o agente de IA que respondeu automaticamente), em ordem cronológica — a mensagem HSM não é repetida aqui porque já está no item 1 acima, é a mesma pra toda conversa deste disparo.
+3. Quando houver, exemplos de conversas parecidas já revisadas pela equipe da secretaria, com a categoria correta: use-os como guia do critério da equipe, sem copiar a categoria se a conversa a classificar for de outro tema.
+4. Uma lista numerada de conversas. Cada conversa traz as falas "CIDADÃO:" e "AGENTE:" (o agente de IA que respondeu automaticamente), em ordem cronológica — a mensagem HSM não é repetida aqui porque já está no item 1 acima, é a mesma pra toda conversa deste disparo.
 
 Sua tarefa: pra CADA conversa da lista, escolher UMA categoria do catálogo acima e resumi-la em 1 frase (campo "resumo"), sob a ótica do HSM recebido. As duas decisões são baseadas PURAMENTE na fala do CIDADÃO — o que ele disse, pediu ou selecionou (incluindo uma opção de menu numérica, se ela mapear claramente pra uma opção do HSM). A resposta do AGENTE é só CONTEXTO, pra você entender do que se trata a troca — nunca a base da categoria ou do resumo, mesmo que esteja correta, completa e no assunto certo. Como cada conversa recebe só UMA categoria, identifique o TEMA PRINCIPAL — o assunto central da fala do cidadão, não um resumo genérico do histórico — mesmo que a conversa toque outros assuntos de passagem.
 
@@ -24,6 +25,9 @@ Inclua um objeto para CADA conversa da lista, na mesma ordem, sem pular nenhuma.
 
 --- CATÁLOGO DE CATEGORIAS ---
 <<CATALOGO_CATEGORIAS>>
+
+--- EXEMPLOS JÁ REVISADOS PELA EQUIPE (conversas parecidas, com a categoria correta) ---
+<<EXEMPLOS>>
 
 --- CONVERSAS A CLASSIFICAR ---
 <<CONVERSAS>>

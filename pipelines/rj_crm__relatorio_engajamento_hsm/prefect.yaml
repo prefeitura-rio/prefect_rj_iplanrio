@@ -105,12 +105,19 @@ deployments:
           INFISICAL_ENVIRONMENT: prod
           INFISICAL_PATHS: /shared
           GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
+    concurrency_limit:
+      limit: 1
+      collision_strategy: ENQUEUE
     schedules:
       - cron: "0 8 * * *"
         active: false
         timezone: America/Sao_Paulo
-        slug: relatorio-engajamento-hsm-diario-8h
+        slug: relatorio-engajamento-hsm-8h
+      - cron: "0 13 * * *"
+        active: false
+        timezone: America/Sao_Paulo
+        slug: relatorio-engajamento-hsm-13h
       - cron: "0 18 * * *"
         active: false
         timezone: America/Sao_Paulo
-        slug: relatorio-engajamento-hsm-diario-18h
+        slug: relatorio-engajamento-hsm-18h

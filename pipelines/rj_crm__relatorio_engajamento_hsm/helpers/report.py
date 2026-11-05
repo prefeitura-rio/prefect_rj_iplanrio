@@ -1,35 +1,69 @@
-"""The report: categories, margin of error, Word document and CSV files."""
+"""The report: categories, margin of error, Word document and Drive output."""
 
 from collections.abc import Sequence
-from csv import writer
 from datetime import date, datetime
-from io import BytesIO, StringIO
+from io import BytesIO
 from math import nan, sqrt
 
+import polars as pl
 from docx import Document
 from docx.document import Document as WordDocument
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
 from docx.text.paragraph import Paragraph
+from googleapiclient.discovery import Resource
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.constants import (
-    CATEGORY_COLUMNS,
+    AUTO_CATALOG_COUNT,
+    AUTO_CATALOG_FILE,
+    AUTO_CATALOG_TAB,
+    BOT_OPTIONS,
+    BOT_RATING,
+    CATALOG_CATEGORY,
+    CATALOG_DESCRIPTION,
+    CATALOG_EXAMPLES,
     CHATBOT_DATASET,
     CHATBOT_TABLE,
+    CONVERSATION_COLUMNS,
+    CONVERSATIONS_FILE,
+    CONVERSATIONS_LEGEND,
+    CONVERSATIONS_TAB,
     CORRECT,
-    CSV_SEP,
-    DETAIL_COLUMNS,
+    EXAMPLES_SEPARATOR,
+    EXCLUDE_COLOR,
+    FLOW_COLOR,
+    KEEP_COLOR,
+    LEGEND_TAB,
     MAX_EXAMPLE_CHARS,
+    NO_CATEGORY,
     NOTE_FILES,
     NOTE_LLM,
     NOTE_PONTUAL,
     PROJECT_ID,
     QUERY_NOTE,
+    QUICK_FOLDER_SUFFIX,
+    REPORT_FILE,
+    REVIEW,
+    REVIEW_COLUMNS,
+    REVIEW_OPTIONS,
+    REVIEW_RIGHT,
+    REVIEW_WRONG,
+    SECRETARIAT_COLOR,
+    SUGGESTIONS_NOTE,
     Z_95,
 )
-from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.text import slugify_hsm
-from pipelines.rj_crm__relatorio_engajamento_hsm.types import Category, Classification, Example, Report
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.drive import folder_link, upload_doc
+from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.sheets import add_tab, create_sheet, format_sheet
+from pipelines.rj_crm__relatorio_engajamento_hsm.types import (
+    Category,
+    Classification,
+    Color,
+    Example,
+    Report,
+    RoundFiles,
+)
+from utils.drive import ensure_folder
 
 ACCENT = RGBColor(0xB5, 0x50, 0x2E)
 CODE_FILL = "FBE9E2"
@@ -194,13 +228,35 @@ def add_summary(document: WordDocument, report: Report, categories: Sequence[Cat
         document.add_paragraph(style="Intense Quote").add_run(cut_text(hsm_text))
 
 
-def add_notes(document: WordDocument, csv_names: Sequence[str]) -> None:
-    """Add the notes on how to read the report."""
-    names = " e ".join(f"'{name}'" for name in csv_names)
+def add_notes(document: WordDocument, notes: Sequence[str]) -> None:
+    """Add the notes on how to read the report, then the notes of this run."""
     document.add_heading("Observações importantes", level=1)
     document.add_paragraph(NOTE_PONTUAL)
     document.add_paragraph(NOTE_LLM)
-    document.add_paragraph(NOTE_FILES.format(names=names, separator=CSV_SEP))
+    document.add_paragraph(NOTE_FILES.format(name=CONVERSATIONS_FILE))
+
+    for number, note in enumerate(notes, start=4):
+        document.add_paragraph(f"{number}) {note}")
+
+
+def add_suggestions(document: WordDocument, suggestions: dict[str, str]) -> None:
+    """Add the new categories that the discovery suggests.
+
+    They stay out of the classification. To use one, the secretariat adds it to the
+    `Catalog` with the decision New.
+    """
+    document.add_heading("Sugestões de categorias novas", level=1)
+
+    if not suggestions:
+        document.add_paragraph().add_run("Nenhuma sugestão: o catálogo cobre os temas da amostra.").italic = True
+        return
+
+    document.add_paragraph(SUGGESTIONS_NOTE.format(none=NO_CATEGORY))
+
+    for name, description in suggestions.items():
+        heading = document.add_heading(name, level=2)
+        heading.runs[0].font.color.rgb = ACCENT
+        document.add_paragraph(description or "(sem descrição)")
 
 
 def add_categories(document: WordDocument, categories: Sequence[Category]) -> None:
@@ -260,9 +316,7 @@ def add_examples(document: WordDocument, category: Category) -> None:
     document.add_paragraph()
 
 
-def build_docx(
-    report: Report, categories: Sequence[Category], sql: str, csv_names: Sequence[str], now: datetime
-) -> bytes:
+def build_docx(report: Report, categories: Sequence[Category], sql: str, now: datetime) -> bytes:
     """Return the Word document of a report.
 
     It has the summary, notes, the query, the categories and examples.
@@ -279,72 +333,101 @@ def build_docx(
     meta.add_run(f"Campanha: {campaign or '—'}    ·    Eixo: {axis or '—'}").italic = True
     document.add_paragraph(f"Gerado em {now:%d/%m/%Y %H:%M}")
     add_summary(document, report, categories, first.hsm_text if first else "")
-    add_notes(document, csv_names)
+    add_notes(document, report.notes)
     document.add_heading("Query utilizada na análise", level=1)
     document.add_paragraph(QUERY_NOTE.format(table=f"{PROJECT_ID}.{CHATBOT_DATASET}.{CHATBOT_TABLE}"))
     add_code_block(document, sql)
     add_categories(document, categories)
+
+    if report.suggestions is not None:
+        add_suggestions(document, report.suggestions)
+
     buffer = BytesIO()
     document.save(buffer)
 
     return buffer.getvalue()
 
 
-def to_csv(columns: Sequence[str], rows: Sequence[Sequence[str | int | float | None]]) -> bytes:
-    """Return rows as CSV with `;` as the separator, and nothing as an empty cell."""
-    buffer = StringIO()
-    out = writer(buffer, delimiter=CSV_SEP, lineterminator="\n")
-    out.writerow(columns)
-    out.writerows(["" if cell is None else cell for cell in row] for row in rows)
+def round_name(generated_at: datetime, start: date, end: date, *, quick: bool) -> str:
+    """Return the name of the folder of one generation.
 
-    return buffer.getvalue().encode("utf-8")
+    It has the day and the hour, and the period of the dispatches. A quick report adds a
+    suffix, so its files never feed the example store. A later generation has another
+    name, so it never replaces an earlier sheet that someone may have reviewed.
+    """
+    name = f"{generated_at:%Y-%m-%d_%H}h__disparos_{start.isoformat()}_a_{end.isoformat()}"
+
+    return name + (QUICK_FOLDER_SUFFIX if quick else "")
 
 
-def categories_csv(categories: Sequence[Category]) -> bytes:
-    """Return the CSV of the categories, one line each.
+def conversations_frame(items: Sequence[Classification], *, with_review: bool) -> pl.DataFrame:
+    """Return the sheet of the classified conversations, one row each.
 
-    It has the share, judged count, precision and margin.
+    It has no CPF and no phone. The engagement report adds the empty columns that the
+    secretariat fills to review, which the example store reads on the next run.
     """
     rows = [
         (
-            category.name,
-            category.description,
-            category.count,
-            round(category.pct, 1),
-            category.judged,
-            None if (precision := precision_of(category)) is None else round(precision, 4),
-            None if (margin := margin_of(category)) is None else round(margin, 4),
-        )
-        for category in categories
-    ]
-
-    return to_csv(CATEGORY_COLUMNS, rows)
-
-
-def detail_csv(items: Sequence[Classification]) -> bytes:
-    """Return the CSV of the conversations: one line with its category and verdict."""
-    rows = [
-        (
             item.conversation.session_id,
-            item.conversation.cpf,
-            item.conversation.phone,
             item.category,
             item.justification,
             item.summary,
+            item.conversation.text,
             item.verdict,
             item.expected_category,
             item.judge_note,
         )
         for item in items
     ]
+    columns = [*CONVERSATION_COLUMNS]
 
-    return to_csv(DETAIL_COLUMNS, rows)
+    if with_review:
+        rows = [(*row, *[""] * len(REVIEW_COLUMNS)) for row in rows]
+        columns = [*columns, *REVIEW_COLUMNS]
+
+    return pl.DataFrame(rows, schema=columns, orient="row")
 
 
-def report_slug(hsm_name: str, reference: date) -> str:
-    """Return the prefix of the report files of an HSM for a day, which has no time.
+def auto_catalog_frame(
+    catalog: dict[str, str], examples: dict[str, list[str]], categories: Sequence[Category]
+) -> pl.DataFrame:
+    """Return the automatic catalog of a quick report, with examples and counts."""
+    counts = {category.name: category.count for category in categories}
+    rows = [
+        (name, description, EXAMPLES_SEPARATOR.join(examples.get(name, [])), counts.get(name, 0))
+        for name, description in catalog.items()
+    ]
 
-    It names the files, and it tells whether the report exists, so a run repeats with no
-    duplicate.
+    return pl.DataFrame(
+        rows, schema=[CATALOG_CATEGORY, CATALOG_DESCRIPTION, CATALOG_EXAMPLES, AUTO_CATALOG_COUNT], orient="row"
+    )
+
+
+def publish_round(drive: Resource, sheets: Resource, campaign_folder_id: str, files: RoundFiles) -> str:
+    """Publish one generation in a new folder and return the link of the folder.
+
+    The folder holds the Google Doc `relatorio_engajamento` and the sheet
+    `conversas_classificadas`. A quick report adds the sheet `catalogo_automatico`.
     """
-    return f"relatorio_engajamento_{slugify_hsm(hsm_name)}__geracao_{reference.isoformat()}"
+    folder_id = ensure_folder(drive, campaign_folder_id, files.folder_name)
+    upload_doc(drive, folder_id, REPORT_FILE, files.document)
+    sheet = create_sheet(drive, sheets, folder_id, (CONVERSATIONS_FILE, CONVERSATIONS_TAB), files.conversations)
+    reviewed = REVIEW in files.conversations.columns
+    flow_columns: dict[str, Color] = dict.fromkeys(CONVERSATION_COLUMNS, FLOW_COLOR)
+    secretariat_columns: dict[str, Color] = dict.fromkeys(REVIEW_COLUMNS, SECRETARIAT_COLOR)
+    format_sheet(
+        sheets,
+        sheet["id"],
+        header_colors=flow_columns | (secretariat_columns if reviewed else {}),
+        dropdowns={REVIEW: REVIEW_OPTIONS, BOT_RATING: BOT_OPTIONS} if reviewed else None,
+        highlights={REVIEW: ((REVIEW_RIGHT, KEEP_COLOR), (REVIEW_WRONG, EXCLUDE_COLOR))} if reviewed else None,
+    )
+
+    if reviewed:
+        add_tab(sheets, sheet["id"], LEGEND_TAB, [list(row) for row in CONVERSATIONS_LEGEND])
+
+    if files.auto_catalog is not None:
+        catalog = create_sheet(drive, sheets, folder_id, (AUTO_CATALOG_FILE, AUTO_CATALOG_TAB), files.auto_catalog)
+        format_sheet(sheets, catalog["id"], header_colors=dict.fromkeys(files.auto_catalog.columns, FLOW_COLOR))
+
+    return folder_link(folder_id)

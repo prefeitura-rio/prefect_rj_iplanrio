@@ -4,6 +4,15 @@ from collections.abc import Sequence
 from functools import cache
 from pathlib import Path
 
+import polars as pl
+
+from pipelines.rj_crm__relatorio_engajamento_hsm.constants import (
+    CATEGORY_SEPARATOR,
+    EXAMPLE_CATEGORIES,
+    EXAMPLE_REVIEW_NOTE,
+    MAX_RAG_CHARS,
+    NO_EXAMPLES,
+)
 from pipelines.rj_crm__relatorio_engajamento_hsm.types import Classification, Conversation
 
 PROMPTS = Path(__file__).parent.parent / "prompts"
@@ -20,13 +29,46 @@ def first_hsm_text(conversations: Sequence[Conversation]) -> str:
     return next((conversation.hsm_text for conversation in conversations if conversation.hsm_text), "")
 
 
-def fill_prompt(template: str, hsm_text: str, catalog_text: str, conversations_text: str) -> str:
-    """Return the template with the HSM text, catalog and conversations in place."""
+def fill_prompt(
+    template: str, hsm_text: str, catalog_text: str, conversations_text: str, examples_text: str = NO_EXAMPLES
+) -> str:
+    """Return the template with the HSM text, catalog, conversations and examples.
+
+    A template with no `<<EXEMPLOS>>` mark ignores the examples.
+    """
     return (
         template.replace("<<HSM_TEXTO>>", hsm_text)
         .replace("<<CATALOGO_CATEGORIAS>>", catalog_text)
+        .replace("<<EXEMPLOS>>", examples_text)
         .replace("<<CONVERSAS>>", conversations_text)
     )
+
+
+def format_examples(examples: pl.DataFrame) -> str:
+    """Return the reviewed examples as prompt blocks, or the note that there are none.
+
+    Each block has the conversation, cut at a limit, and its correct categories.
+    """
+    if examples.is_empty():
+        return NO_EXAMPLES
+
+    blocks: list[str] = []
+
+    for number, row in enumerate(examples.iter_rows(named=True), start=1):
+        conversation = str(row["conversation"])
+
+        if len(conversation) > MAX_RAG_CHARS:
+            conversation = conversation[:MAX_RAG_CHARS].rstrip() + " […]"
+
+        lines = [f"### EXEMPLO {number}", conversation]
+        lines.append(EXAMPLE_CATEGORIES.format(names=CATEGORY_SEPARATOR.join(row["categories"])))
+
+        if str(row["review_note"] or "").strip():
+            lines.append(EXAMPLE_REVIEW_NOTE.format(note=row["review_note"]))
+
+        blocks.append("\n".join(lines))
+
+    return "\n\n".join(blocks)
 
 
 def format_conversations(batch: Sequence[Conversation]) -> str:
