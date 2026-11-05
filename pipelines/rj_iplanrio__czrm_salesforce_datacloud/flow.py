@@ -16,12 +16,15 @@ guard-rail impede que origem não-prod grave na zona de pouso de produção.
 """
 
 from __future__ import annotations
-
+import Path
 import time
 from dataclasses import dataclass
 from datetime import date
 from typing import Literal
-
+import polars as pl
+from iplanrio.pipelines_utils.bd import (
+    create_table_and_upload_to_gcs_task,
+)
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
@@ -96,24 +99,18 @@ def processar_tabela(  # noqa: PLR0913 - parametros sao o contexto do run
 
     extraidas = len(df)
     df = transformar(df, tabela=tabela, schema=schema)
+    pl.write_parquet(df, f"/tmp/{tabela.nome}.parquet", compression="snappy")
     if destino.dry_run:
         return {"extraidas": extraidas, "inseridas": 0, "atualizadas": 0}
 
-    carregar_staging(
-        df=df,
-        project_id=destino.project_id,
+    create_table_and_upload_to_gcs_task(
+        data_path=Path(f"/tmp/{tabela.nome}.parquet"),
         dataset_id=destino.dataset_id,
-        staging_id=tabela.staging,
-        campos=list(schema.campos),
+        table_id=tabela.nome,
+        dump_mode="append"
     )
-    resultado = merge_staging(
-        project_id=destino.project_id,
-        dataset_id=destino.dataset_id,
-        staging_id=tabela.staging,
-        target_id=tabela.nome,
-        primary_key=tabela.primary_key,
-    )
-    return {"extraidas": extraidas, **resultado}
+    
+    return {"extraidas": extraidas}
 
 
 def _validar_destino(origem: str, dataset_id: str, dry_run: bool) -> None:
@@ -322,3 +319,5 @@ def rj_iplanrio__czrm_salesforce_datacloud(  # noqa: PLR0913 - assinatura do flo
         f"; falharam: {', '.join(falhas)}" if falhas else "",
     )
     return resultados
+
+
