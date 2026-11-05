@@ -100,3 +100,7 @@ INFISICAL_SECRETS_PATH: Final = "/api/v3/secrets/raw"
 
 SERVICE_ACCOUNT_TOKEN: Final = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 """The file where Kubernetes mounts the token of the service account of a pod."""
+EMBEDDING_MODEL: Final = "gemini-embedding-001"
+"""The embedding model that the Bifrost gateway serves."""
+EMBEDDING_BATCH: Final = 100
+"""The texts of one embedding request."""

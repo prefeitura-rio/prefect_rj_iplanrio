@@ -168,6 +168,53 @@ def test_the_answer_carries_the_tokens_of_the_gateway() -> None:
     )
 
 
+async def test_embeddings_are_batched_and_normalized() -> None:
+    """Send embedding batches and return one unit vector for each text."""
+    bifrost, seen = gateway(
+        Response(200, json={"embeddings": [{"values": [3.0, 4.0]}, {"values": [0.0, 2.0]}]}),
+        Response(200, json={"embeddings": [{"values": [1.0, 0.0]}]}),
+    )
+
+    vectors = await bifrost.embed(["a", "b", "c"], model="embed", batch_size=2)
+
+    assert vectors == [[0.6, 0.8], [0.0, 1.0], [1.0, 0.0]]
+    assert [request.url.path for request in seen] == [
+        "/genai/v1beta/models/embed:batchEmbedContents",
+        "/genai/v1beta/models/embed:batchEmbedContents",
+    ]
+    assert [len(loads(request.content)["requests"]) for request in seen] == [2, 1]
+
+
+async def test_a_failed_embedding_request_is_asked_again() -> None:
+    """Retry a network error and an error status like a question."""
+    bifrost, seen = gateway(
+        ConnectError("down"),
+        Response(503, json={"unrelated": 1}),
+        Response(200, json={"embeddings": [{"values": [0.0, 3.0]}]}),
+    )
+
+    assert await bifrost.embed(["a"], model="embed") == [[0.0, 1.0]]
+    assert len(seen) == 3
+
+
+async def test_an_embedding_request_that_keeps_failing_raises() -> None:
+    """Stop after the attempts and raise the gateway error."""
+    bifrost, seen = gateway(Response(500, content=b"oops"), Response(500, content=b"oops"), attempts=2)
+
+    with pytest.raises(BifrostError, match="500"):
+        await bifrost.embed(["a"], model="embed")
+
+    assert len(seen) == 2
+
+
+async def test_an_embedding_answer_with_the_wrong_size_is_refused() -> None:
+    """Raise when the gateway omits an embedding."""
+    bifrost, _ = gateway(Response(200, json={"embeddings": []}), attempts=1)
+
+    with pytest.raises(BifrostError, match="1 embeddings"):
+        await bifrost.embed(["a"], model="embed")
+
+
 def test_a_json_object_answer_is_parsed_and_a_list_is_refused() -> None:
     """Strip the fence, and raise for what is not an object."""
     assert parse_json_object('```json\n{"a": "x\ny"}\n```') == {"a": "x\ny"}
