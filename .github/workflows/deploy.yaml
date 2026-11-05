@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - master
+      - staging/*
+      - '!staging/main'
     paths:
       - pipelines/**
       - src/**
@@ -84,6 +86,7 @@ jobs:
           args=(--environment "$ENVIRONMENT" --before "$BEFORE" --after "$AFTER")
           [ -n "$PIPELINE" ] && args+=(--pipeline "$PIPELINE")
           [ "$ALL" = true ] && args+=(--all)
+          [ "$EVENT" = push ] && [[ "$BRANCH" == staging/* ]] && args+=(--open-pr-from "$BRANCH")
           [ "$EVENT" = push ] && [ "$BRANCH" = master ] && args+=(--defer-to-image-build)
           nu scripts/deploy.nu plan "${args[@]}"
   deploy:
