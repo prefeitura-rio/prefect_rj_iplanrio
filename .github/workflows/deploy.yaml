@@ -52,7 +52,7 @@ env:
 jobs:
   plan:
     name: Choose the pipelines
-    if: vars.DEPLOY_ENABLED == 'true'
+    if: vars.DEPLOY_ENABLED == 'true' && (inputs.environment != 'prod' || github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
