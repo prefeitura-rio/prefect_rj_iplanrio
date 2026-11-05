@@ -24,133 +24,105 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-iplanrio--run-dbt--staging
-    tags:
-      - environment:staging
-      - severity:medium
-      - code_owner:unassigned
-    version: '{{ build-image.tag }}'
+  - name: rj-iplanrio--run_dbt--staging
+    version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_iplanrio__run_dbt/flow.py:rj_iplanrio__run_dbt
     work_pool:
       name: default-pool
       work_queue_name: default
       job_variables:
-        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: uv run --no-sync --package rj_iplanrio__run_dbt -- python -m utils.secrets -- prefect flow-run execute
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__run_dbt -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
         image_pull_policy: Always
-        service_account_name: pipelines
-        finished_job_ttl: 600
-        pod_annotations:
-          gke-gcsfuse/volumes: 'true'
-        resources:
-          requests:
-            ephemeral-storage: 1Gi
-          limits:
-            ephemeral-storage: 4Gi
-        volume_mounts:
-          - name: tmp
-            mountPath: /tmp
-        volumes:
-          - name: tmp
-            csi:
-              driver: gcsfuse.csi.storage.gke.io
-              volumeAttributes:
-                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
-                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
-        env:
-          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
-          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
-          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
-          INFISICAL_ENVIRONMENT: staging
-          INFISICAL_PATHS: /rj_iplanrio__run_dbt,/shared
-          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
-  - name: rj-iplanrio--run-dbt--prod
-    tags:
-      - environment:prod
-      - severity:medium
-      - code_owner:unassigned
-    version: '{{ get-commit-hash.stdout }}'
+  - name: rj-iplanrio--run_dbt--prod
+    version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__run_dbt/flow.py:rj_iplanrio__run_dbt
     work_pool:
       name: default-pool
       work_queue_name: default
       job_variables:
-        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: uv run --no-sync --package rj_iplanrio__run_dbt -- python -m utils.secrets -- prefect flow-run execute
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__run_dbt -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
         image_pull_policy: Always
-        service_account_name: pipelines
-        finished_job_ttl: 600
-        pod_annotations:
-          gke-gcsfuse/volumes: 'true'
-        resources:
-          requests:
-            ephemeral-storage: 1Gi
-          limits:
-            ephemeral-storage: 4Gi
-        volume_mounts:
-          - name: tmp
-            mountPath: /tmp
-        volumes:
-          - name: tmp
-            csi:
-              driver: gcsfuse.csi.storage.gke.io
-              volumeAttributes:
-                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
-                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
-        env:
-          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
-          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
-          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
-          INFISICAL_ENVIRONMENT: prod
-          INFISICAL_PATHS: /rj_iplanrio__run_dbt,/shared
-          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     schedules:
+      # Daily schedules (86400 seconds = 24 hours)
+      # Schedule 1: Daily source freshness check
       - interval: 86400
-        anchor_date: '2023-01-01T09:00:00'
+        anchor_date: "2023-01-01T09:00:00"
         timezone: America/Sao_Paulo
         slug: dbt_daily_freshness
         parameters:
-          request:
-            repository: https://github.com/prefeitura-rio/queries-rj-iplanrio.git
-            command: source freshness
-            target: prod
+          command: "source freshness"
+          send_discord_report: false
+          github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
+          bigquery_project: "rj-iplanrio"
+          target: "prod"
+          gcs_buckets:
+            prod: "rj-iplanrio_dbt"
+            dev: "rj-iplanrio-dev_dbt"
+      # Schedule 2: Daily build with daily and freshness tags
       - interval: 86400
-        anchor_date: '2023-01-01T09:15:00'
+        anchor_date: "2023-01-01T09:15:00"
         timezone: America/Sao_Paulo
         slug: dbt_daily_build
         parameters:
-          request:
-            repository: https://github.com/prefeitura-rio/queries-rj-iplanrio.git
-            command: build
-            target: prod
-            select: tag:daily
+          command: "build"
+          select: "tag:daily"
+          send_discord_report: false
+          github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
+          bigquery_project: "rj-iplanrio"
+          target: "prod"
+          gcs_buckets:
+            prod: "rj-iplanrio_dbt"
+            dev: "rj-iplanrio-dev_dbt"
+      # Weekly schedules (604800 seconds = 7 days)
+      # Schedule 3: Weekly build with weekly tags
       - interval: 604800
-        anchor_date: '2024-03-17T09:15:00'
+        anchor_date: "2024-03-17T09:15:00"
         timezone: America/Sao_Paulo
         slug: dbt_weekly_build
         parameters:
-          request:
-            repository: https://github.com/prefeitura-rio/queries-rj-iplanrio.git
-            command: build
-            target: prod
-            select: tag:weekly
+          command: "build"
+          select: "tag:weekly"
+          send_discord_report: false
+          github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
+          bigquery_project: "rj-iplanrio"
+          target: "prod"
+          gcs_buckets:
+            prod: "rj-iplanrio_dbt"
+            dev: "rj-iplanrio-dev_dbt"
+
+      # Hourly (3600 seconds = 1 hour)
+      # Schedule 4: run each 60 minutes
       - interval: 3600
-        anchor_date: '2024-03-17T09:15:00'
+        anchor_date: "2024-03-17T09:15:00"
         timezone: America/Sao_Paulo
         slug: dbt_hourly_build
         parameters:
-          request:
-            repository: https://github.com/prefeitura-rio/queries-rj-iplanrio.git
-            command: build
-            target: prod
-            select: +tag:hourly
+          command: "build"
+          select: "+tag:hourly"
+          send_discord_report: false
+          github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
+          bigquery_project: "rj-iplanrio"
+          target: "prod"
+          gcs_buckets:
+            prod: "rj-iplanrio_dbt"
+            dev: "rj-iplanrio-dev_dbt"
+      # Hourly (3600 seconds = 1 hour)
+      # Schedule 5: freshness each 60 minutes
       - interval: 3600
-        anchor_date: '2023-01-01T09:30:00'
+        anchor_date: "2023-01-01T09:30:00"
         timezone: America/Sao_Paulo
         slug: dbt_hourly_freshness
         parameters:
-          request:
-            repository: https://github.com/prefeitura-rio/queries-rj-iplanrio.git
-            command: source freshness
-            target: prod
-            select: +tag:hourly
+          command: "source freshness"
+          select: "+tag:hourly"
+          send_discord_report: false
+          github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
+          bigquery_project: "rj-iplanrio"
+          target: "prod"
+          gcs_buckets:
+            prod: "rj-iplanrio_dbt"
+            dev: "rj-iplanrio-dev_dbt"

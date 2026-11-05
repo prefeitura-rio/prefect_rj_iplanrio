@@ -1,0 +1,28 @@
+name: Build and push root image
+description: Build and push Docker root image to GitHub Container Registry
+
+inputs:
+  repository:
+    description: GitHub repository name
+    required: true
+  github_token:
+    description: GitHub token for authentication
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Log in to GitHub container registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.github_token }}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: ghcr.io/${{ inputs.repository }}:latest

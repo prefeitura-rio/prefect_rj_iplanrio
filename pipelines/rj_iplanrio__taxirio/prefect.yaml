@@ -25,228 +25,114 @@ pull:
 
 deployments:
   - name: rj-iplanrio--taxirio--staging
-    tags:
-      - environment:staging
-      - severity:medium
-      - code_owner:unassigned
-    version: '{{ build-image.tag }}'
+    version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_iplanrio__taxirio/flow.py:rj_iplanrio__taxirio
     work_pool:
       name: taxirio-pool
       work_queue_name: default
       job_variables:
-        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: uv run --no-sync --package rj_iplanrio__taxirio -- prefect flow-run execute
-        secretName: pipelines-rj-iplanrio--taxirio-staging
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__taxirio -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
         image_pull_policy: Always
+
   - name: rj-iplanrio--taxirio--prod
-    tags:
-      - environment:prod
-      - severity:medium
-      - code_owner:unassigned
-    version: '{{ get-commit-hash.stdout }}'
+    version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__taxirio/flow.py:rj_iplanrio__taxirio
     work_pool:
       name: taxirio-pool
       work_queue_name: default
       job_variables:
-        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: uv run --no-sync --package rj_iplanrio__taxirio -- prefect flow-run execute
-        secretName: pipelines-rj-iplanrio--taxirio-prod
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__taxirio -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
         image_pull_policy: Always
+
     schedules:
-      - interval: 604800
-        anchor_date: '2024-09-01T07:00:00'
-        timezone: America/Sao_Paulo
-        slug: cities-weekly
-        parameters:
-          database:
-            type: mongodb
-            host: ${TAXIRIO_MONGODB_HOST}
-            port: 27017
-            database: taxirio
-            options:
-              shape: pipelines.rj_iplanrio__taxirio.constants:CITIES
-          table:
-            dataset_id: brutos_taxirio
-            table_id: cities
-          read:
-            table: cities
-            pipeline: cities
-          dump_mode: overwrite
-      - interval: 604800
-        anchor_date: '2024-09-01T07:05:00'
-        timezone: America/Sao_Paulo
-        slug: drivers-weekly
-        parameters:
-          database:
-            type: mongodb
-            host: ${TAXIRIO_MONGODB_HOST}
-            port: 27017
-            database: taxirio
-            options:
-              shape: pipelines.rj_iplanrio__taxirio.constants:DRIVERS
-          table:
-            dataset_id: brutos_taxirio
-            table_id: drivers
-          read:
-            table: drivers
-            pipeline: drivers
-          dump_mode: overwrite
-      - interval: 604800
-        anchor_date: '2024-09-01T07:10:00'
-        timezone: America/Sao_Paulo
-        slug: discounts-weekly
-        parameters:
-          database:
-            type: mongodb
-            host: ${TAXIRIO_MONGODB_HOST}
-            port: 27017
-            database: taxirio
-            options:
-              shape: pipelines.rj_iplanrio__taxirio.constants:DISCOUNTS
-          table:
-            dataset_id: brutos_taxirio
-            table_id: discounts
-          read:
-            table: discounts
-            pipeline: discounts
-          dump_mode: overwrite
-      - interval: 604800
-        anchor_date: '2024-09-01T07:15:00'
-        timezone: America/Sao_Paulo
-        slug: paymentmethods-weekly
-        parameters:
-          database:
-            type: mongodb
-            host: ${TAXIRIO_MONGODB_HOST}
-            port: 27017
-            database: taxirio
-            options:
-              shape: pipelines.rj_iplanrio__taxirio.constants:PAYMENTMETHODS
-          table:
-            dataset_id: brutos_taxirio
-            table_id: paymentmethods
-          read:
-            table: paymentmethods
-            pipeline: payment-methods
-          dump_mode: overwrite
-      - interval: 604800
-        anchor_date: '2024-09-02T07:20:00'
-        timezone: America/Sao_Paulo
-        slug: users-weekly
-        parameters:
-          database:
-            type: mongodb
-            host: ${TAXIRIO_MONGODB_HOST}
-            port: 27017
-            database: taxirio
-            options:
-              shape: pipelines.rj_iplanrio__taxirio.constants:USERS
-          table:
-            dataset_id: brutos_taxirio
-            table_id: users
-          read:
-            table: users
-            pipeline: users
-          dump_mode: overwrite
-      - interval: 86400
-        anchor_date: '2025-04-28T07:25:00'
-        timezone: America/Sao_Paulo
-        slug: races-daily
-        parameters:
-          database:
-            type: mongodb
-            host: ${TAXIRIO_MONGODB_HOST}
-            port: 27017
-            database: taxirio
-            options:
-              shape: pipelines.rj_iplanrio__taxirio.constants:RACES
-          table:
-            dataset_id: brutos_taxirio
-            table_id: races
-          read:
-            table: races
-            pipeline: races
-          dump_mode: append
-          options:
-            chunks:
-              column: createdAt
-              width: month
-              begin: '2023-01-01'
-              lookback: 2
-      - interval: 86400
-        anchor_date: '2025-04-28T07:30:00'
-        timezone: America/Sao_Paulo
-        slug: passengers-daily
-        parameters:
-          database:
-            type: mongodb
-            host: ${TAXIRIO_MONGODB_HOST}
-            port: 27017
-            database: taxirio
-            options:
-              shape: pipelines.rj_iplanrio__taxirio.constants:PASSENGERS
-          table:
-            dataset_id: brutos_taxirio
-            table_id: passengers
-          read:
-            table: passengers
-            pipeline: passengers
-          dump_mode: append
-          options:
-            chunks:
-              column: createdAt
-              width: month
-              begin: '2023-01-01'
-              lookback: 2
-      - interval: 86400
-        anchor_date: '2024-09-01T07:40:00'
-        timezone: America/Sao_Paulo
-        slug: rankingraces-daily
-        parameters:
-          database:
-            type: mongodb
-            host: ${TAXIRIO_MONGODB_HOST}
-            port: 27017
-            database: taxirio
-            options:
-              shape: pipelines.rj_iplanrio__taxirio.constants:RANKINGRACES
-          table:
-            dataset_id: brutos_taxirio
-            table_id: rankingraces
-          read:
-            table: rankingraces
-            pipeline: ranking-races
-          dump_mode: append
-          options:
-            chunks:
-              column: createdAt
-              width: month
-              begin: '2023-01-01'
-              lookback: 2
-      - interval: 86400
-        anchor_date: '2024-09-01T07:45:00'
-        timezone: America/Sao_Paulo
-        slug: metricsdriverunoccupieds-daily
-        parameters:
-          database:
-            type: mongodb
-            host: ${TAXIRIO_MONGODB_HOST}
-            port: 27017
-            database: taxirio
-            options:
-              shape: pipelines.rj_iplanrio__taxirio.constants:METRICSDRIVERUNOCCUPIEDS
-          table:
-            dataset_id: brutos_taxirio
-            table_id: metricsdriverunoccupieds
-          read:
-            table: metricsdriverunoccupieds
-            pipeline: metrics-driver-unoccupieds
-          dump_mode: append
-          options:
-            chunks:
-              column: dateTime
-              width: month
-              begin: '2023-01-01'
-              lookback: 2
+    # ========================================
+    # Tabelas com schedule SEMANAL (every_week)
+    # ========================================
+
+    # Cities - Dump mensal da collection cities
+    - interval: 604800  # 7 dias em segundos
+      anchor_date: "2024-09-01T07:00:00"
+      timezone: America/Sao_Paulo
+      slug: cities-weekly
+      parameters:
+        table_id: cities
+
+    # Drivers - Dump mensal da collection drivers
+    - interval: 604800  # 7 dias em segundos
+      anchor_date: "2024-09-01T07:05:00"
+      timezone: America/Sao_Paulo
+      slug: drivers-weekly
+      parameters:
+        table_id: drivers
+
+    # Discounts - Dump mensal da collection discounts
+    - interval: 604800  # 7 dias em segundos
+      anchor_date: "2024-09-01T07:10:00"
+      timezone: America/Sao_Paulo
+      slug: discounts-weekly
+      parameters:
+        table_id: discounts
+
+    # Payment Methods - Dump mensal da collection paymentmethods
+    - interval: 604800  # 7 dias em segundos
+      anchor_date: "2024-09-01T07:15:00"
+      timezone: America/Sao_Paulo
+      slug: paymentmethods-weekly
+      parameters:
+        table_id: paymentmethods
+
+    # Users - Dump semanal da collection users
+    - interval: 604800  # 7 dias em segundos
+      anchor_date: "2024-09-02T07:20:00"
+      timezone: America/Sao_Paulo
+      slug: users-weekly
+      parameters:
+        table_id: users
+
+    # ========================================
+    # Tabelas com schedule DIÁRIO (every_day)
+    # ========================================
+
+    # Races - Dump incremental diário da collection races
+    - interval: 86400  # 1 dia em segundos
+      anchor_date: "2025-04-28T07:25:00"
+      timezone: America/Sao_Paulo
+      slug: races-daily
+      parameters:
+        table_id: races
+        dump_mode: append
+        frequency: D
+
+    # Passengers - Dump incremental diário da collection passengers
+    - interval: 86400  # 1 dia em segundos
+      anchor_date: "2025-04-28T07:30:00"
+      timezone: America/Sao_Paulo
+      slug: passengers-daily
+      parameters:
+        table_id: passengers
+        dump_mode: append
+        frequency: D
+
+    # Ranking Races - Dump mensal da collection rankingraces
+    - interval: 86400  # Executa a cada 24 horas (1 dia)
+      anchor_date: "2024-09-01T07:40:00"
+      timezone: America/Sao_Paulo
+      slug: rankingraces-daily
+      parameters:
+        table_id: rankingraces
+        dump_mode: append
+        frequency: D
+
+    # Metrics Driver Unoccupieds - Dump mensal da collection metricsdriverunoccupieds
+    - interval: 86400  # Executa a cada 24 horas (1 dia)
+      anchor_date: "2024-09-01T07:45:00"
+      timezone: America/Sao_Paulo
+      slug: metricsdriverunoccupieds-daily
+      parameters:
+        table_id: metricsdriverunoccupieds
+        dump_mode: append
+        frequency: D

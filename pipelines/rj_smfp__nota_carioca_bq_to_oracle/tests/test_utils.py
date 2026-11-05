@@ -1,37 +1,33 @@
-from asyncio import run
-from collections.abc import Callable, Sequence
-from dataclasses import replace
-from datetime import UTC, datetime, timedelta
-from io import BytesIO
-from typing import final
-
 import pytest
-from obstore import put_async
-from obstore.store import MemoryStore
-from toolkit.gcs import list_sizes
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import bigquery, oracle, oracle_ddl, slots_oracle
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.bigquery import changed_tables, quiet_wait_seconds
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.columns import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import (
     LoaderField,
     OracleColumn,
     build_load_plan,
     loader_spec,
     oracle_column,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.inmemory import InMemoryStatus
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
     CROSS_SCHEMA_PRIVILEGES,
     MANAGED_TABLE_MARKER,
-    OracleConfig,
+    QUERIES_ANCHOR,
     assert_managed_table,
+    column_definitions,
+    definition_differences,
+    foreign_indexes,
     missing_privileges,
     oracle_table_name,
+    secret_env_key,
     validate_identifier,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_ddl import definition_differences, foreign_indexes
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_query import QUERIES_ANCHOR, column_definitions
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import (
+import io
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery, slots
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.bigquery import changed_tables, quiet_wait_seconds
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.inmemory import InMemoryStatus
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.slots import (
     CONSUMER_GRANTS,
     SlotPlan,
     SynonymTarget,
@@ -41,53 +37,44 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.slots import (
     synonym_owners,
     synonyms_to_realign,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr import build_control_file, split_round_robin
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.sqlldr_progress import (
-    CountingReader,
-    ProgressSnapshot,
-    SessionProgress,
-    format_count,
-    format_duration,
-    format_progress,
-    format_size,
-    progress_percent,
-)
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
+    IndexDefinition,
+    IndexExpression,
+    PartitionStorage,
+    Partitioning,
+    TableLayout,
+    TablePartition,
     index_from_dictionary,
     index_key,
+    index_statement_parts,
     inmemory_from_dictionary,
     layout_differences,
     partitioning_from_dictionary,
     plan_structure,
     slot_indexes,
+    storage_clause,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_ddl import index_statement_parts, storage_clause
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.structure_models import (
-    IndexDefinition,
-    IndexExpression,
-    Partitioning,
-    PartitionStorage,
-    TableLayout,
-    TablePartition,
+from prefect_rj_iplanrio.sql import load_query
+
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.sqlldr import (
+    CountingReader,
+    ProgressSnapshot,
+    SessionProgress,
+    build_control_file,
+    format_count,
+    format_duration,
+    format_progress,
+    format_size,
+    progress_percent,
+    split_round_robin,
 )
-from utils.utils import render_query
 
 
 def field(name: str, type_: str, mode: str = "NULLABLE") -> dict[str, str]:
-    """Return the field."""
     return {"name": name, "type": type_, "mode": mode}
 
 
-def ora(
-    name: str,
-    data_type: str,
-    length: int | None = None,
-    char_used: str | None = None,
-    precision: int | None = None,
-    scale: int | None = None,
-    nullable: bool = False,
-) -> OracleColumn:
-    """Return the ora."""
+def ora(name: str, data_type: str, length=None, char_used=None, precision=None, scale=None, nullable=False):
     return OracleColumn(name, data_type, length, char_used, precision, scale, nullable)
 
 
@@ -100,8 +87,7 @@ TEMPLATE = [
 ]
 
 
-def test_ddl_matches_original_column_definitions() -> None:
-    """Check that ddl matches original column definitions."""
+def test_ddl_matches_original_column_definitions():
     assert [column.definition for column in TEMPLATE] == [
         '"CPF_CNPJ_RESPONSAVEL" VARCHAR2(14 BYTE) NOT NULL',
         '"DATA_COMPETENCIA_MUNICIPIO" DATE NOT NULL',
@@ -113,9 +99,8 @@ def test_ddl_matches_original_column_definitions() -> None:
     assert ora("TS", "TIMESTAMP(6) WITH TIME ZONE", 13).ddl_type == "TIMESTAMP(6) WITH TIME ZONE"
 
 
-def test_oracle_column_parses_dictionary_row() -> None:
-    """Check that oracle column parses dictionary row."""
-    row: dict[str, object] = {
+def test_oracle_column_parses_dictionary_row():
+    row = {
         "column_name": "NOTA_FISCAL",
         "data_type": "NUMBER",
         "data_length": 22,
@@ -127,8 +112,7 @@ def test_oracle_column_parses_dictionary_row() -> None:
     assert oracle_column(row) == ora("NOTA_FISCAL", "NUMBER", 22, precision=15, scale=0)
 
 
-def test_build_load_plan_follows_original_and_ignores_extra_bigquery_columns() -> None:
-    """Follow the original table, and ignore extra BigQuery columns."""
+def test_build_load_plan_follows_original_and_ignores_extra_bigquery_columns():
     bq = [
         field("_bigquery_uid", "STRING"),
         field("cpf_cnpj_responsavel", "STRING"),
@@ -152,14 +136,12 @@ def test_build_load_plan_follows_original_and_ignores_extra_bigquery_columns() -
     ]
 
 
-def test_build_load_plan_requires_every_original_column() -> None:
-    """Check that build load plan requires every original column."""
+def test_build_load_plan_requires_every_original_column():
     with pytest.raises(ValueError, match="ausentes no BigQuery"):
         build_load_plan([field("cpf_cnpj_responsavel", "STRING")], TEMPLATE)
 
 
-def test_build_load_plan_excludes_rowid_columns_missing_in_bigquery() -> None:
-    """Check that build load plan excludes rowid columns missing in bigquery."""
+def test_build_load_plan_excludes_rowid_columns_missing_in_bigquery():
     template = [*TEMPLATE[:2], ora("NN_ROWID", "ROWID", 10), ora("PC_ROWID", "UROWID", 4000)]
     bq = [field("cpf_cnpj_responsavel", "STRING"), field("data_competencia_municipio", "STRING")]
     plan = build_load_plan(bq, template)
@@ -167,8 +149,7 @@ def test_build_load_plan_excludes_rowid_columns_missing_in_bigquery() -> None:
     assert [column.name for column in plan.columns] == ["CPF_CNPJ_RESPONSAVEL", "DATA_COMPETENCIA_MUNICIPIO"]
 
 
-def test_build_load_plan_excludes_requested_columns_and_ignores_them_if_in_bigquery() -> None:
-    """Exclude the requested columns, and ignore them if BigQuery has them."""
+def test_build_load_plan_excludes_requested_columns_and_ignores_them_if_in_bigquery():
     template = [*TEMPLATE[:2], ora("DPS_ROWID", "VARCHAR2", 18, "B")]
     bq = [field("cpf_cnpj_responsavel", "STRING"), field("data_competencia_municipio", "STRING")]
     with pytest.raises(ValueError, match="excluded_template_columns"):
@@ -188,34 +169,29 @@ def test_build_load_plan_excludes_requested_columns_and_ignores_them_if_in_bigqu
         (ora("TEXTO", "CLOB", 4000), "STRING"),
     ],
 )
-def test_loader_spec_rejects_unsupported_combinations(column: OracleColumn, bq_type: str) -> None:
-    """Check that loader spec rejects unsupported combinations."""
+def test_loader_spec_rejects_unsupported_combinations(column, bq_type):
     with pytest.raises(NotImplementedError):
         loader_spec(column, bq_type)
 
 
-def test_build_load_plan_rejects_nested_and_invalid_names() -> None:
-    """Check that build load plan rejects nested and invalid names."""
+def test_build_load_plan_rejects_nested_and_invalid_names():
     with pytest.raises(NotImplementedError):
         build_load_plan([field("itens", "STRING", "REPEATED")], [])
     with pytest.raises(ValueError, match="Nome de coluna"):
         build_load_plan([field("coluna com espaço", "STRING")], [])
 
 
-def test_oracle_table_name_always_has_prefix() -> None:
-    """Check that oracle table name always has prefix."""
+def test_oracle_table_name_always_has_prefix():
     assert oracle_table_name("MVT_NOTAS_NACIONAIS_EXIGIVEIS") == "BQLOAD_MVT_NOTAS_NACIONAIS_EXIGIVEIS"
     assert oracle_table_name("tabela") == "BQLOAD_TABELA"
 
 
-def test_validate_identifier_rejects_injection() -> None:
-    """Check that validate identifier rejects injection."""
+def test_validate_identifier_rejects_injection():
     with pytest.raises(ValueError, match="Identificador"):
         validate_identifier('X"; DROP TABLE Y; --')
 
 
-def test_assert_managed_table_accepts_only_marked_prefixed_tables() -> None:
-    """Check that assert managed table accepts only marked prefixed tables."""
+def test_assert_managed_table_accepts_only_marked_prefixed_tables():
     assert_managed_table("BQLOAD_X", f"{MANAGED_TABLE_MARKER}: carga a partir de a.b.c")
     with pytest.raises(PermissionError, match="não foi criada"):
         assert_managed_table("BQLOAD_X", None)
@@ -225,14 +201,12 @@ def test_assert_managed_table_accepts_only_marked_prefixed_tables() -> None:
         assert_managed_table("NOTAS", f"{MANAGED_TABLE_MARKER}: carga")
 
 
-def test_missing_privileges_owner_needs_only_synonyms_in_other_schemas() -> None:
-    """Check that missing privileges owner needs only synonyms in other schemas."""
+def test_missing_privileges_owner_needs_only_synonyms_in_other_schemas():
     assert missing_privileges("DFEN", "DFEN", set()) == ["CREATE ANY SYNONYM"]
     assert missing_privileges("DFEN", "DFEN", {"CREATE ANY SYNONYM"}) == []
 
 
-def test_missing_privileges_lists_what_other_users_lack() -> None:
-    """Check that missing privileges lists what other users lack."""
+def test_missing_privileges_lists_what_other_users_lack():
     current = {"CREATE ANY TABLE", "DROP ANY TABLE", "INSERT ANY TABLE", "SELECT ANY TABLE", "UNLIMITED TABLESPACE"}
     assert missing_privileges("26234793", "DFEN", current) == [
         "ALTER ANY INDEX",
@@ -247,25 +221,14 @@ def test_missing_privileges_lists_what_other_users_lack() -> None:
     assert missing_privileges("26234793", "DFEN", set(CROSS_SCHEMA_PRIVILEGES)) == []
 
 
-def test_grant_and_synonym_statements_for_the_physical_table() -> None:
-    """Check that grant and synonym statements for the physical table."""
-    assert (
-        render_query(
-            QUERIES_ANCHOR,
-            "grant_on_table",
-            privileges="SELECT, ALTER, DELETE",
-            schema="DFEN",
-            table="BQLOAD_X_A",
-            grantee="NFSE_OWNER",
-        )
-        == 'GRANT SELECT, ALTER, DELETE ON "DFEN"."BQLOAD_X_A" TO "NFSE_OWNER"\n'
-    )
-    assert (
-        render_query(
-            QUERIES_ANCHOR, "create_synonym", owner="NFSE_SIGA", synonym="BQLOAD_X", schema="DFEN", table="BQLOAD_X_B"
-        )
-        == 'CREATE OR REPLACE SYNONYM "NFSE_SIGA"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_B"\n'
-    )
+def test_grant_and_synonym_statements_for_the_physical_table():
+    assert load_query(
+        QUERIES_ANCHOR, "grant_on_table", privileges="SELECT, ALTER, DELETE", schema="DFEN", table="BQLOAD_X_A",
+        grantee="NFSE_OWNER",
+    ) == 'GRANT SELECT, ALTER, DELETE ON "DFEN"."BQLOAD_X_A" TO "NFSE_OWNER"\n'
+    assert load_query(
+        QUERIES_ANCHOR, "create_synonym", owner="NFSE_SIGA", synonym="BQLOAD_X", schema="DFEN", table="BQLOAD_X_B"
+    ) == 'CREATE OR REPLACE SYNONYM "NFSE_SIGA"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_B"\n'
     assert CONSUMER_GRANTS == (
         ("RL_NFSE", "SELECT"),
         ("RL_NFSE_SIGA", "SELECT"),
@@ -275,35 +238,30 @@ def test_grant_and_synonym_statements_for_the_physical_table() -> None:
     assert synonym_owners("DFEN") == ("DFEN", "NFSE_SIGA", "NFSE_USER", "NFSE_OWNER")
 
 
-def test_inmemory_queries_keep_the_dollar_of_the_views() -> None:
-    """Check that inmemory queries keep the dollar of the views."""
-    assert "gv$inmemory_area" in render_query(QUERIES_ANCHOR, "get_inmemory_area")
-    assert "gv$im_segments" in render_query(QUERIES_ANCHOR, "get_inmemory_segments")
+def test_inmemory_queries_keep_the_dollar_of_the_views():
+    assert "gv$inmemory_area" in load_query(QUERIES_ANCHOR, "get_inmemory_area")
+    assert "gv$im_segments" in load_query(QUERIES_ANCHOR, "get_inmemory_segments")
 
 
-def syn(owner: str, table_name: str, table_owner: str = "DFEN") -> SynonymTarget:
-    """Return the syn."""
+def syn(owner, table_name, table_owner="DFEN"):
     return SynonymTarget(owner, table_owner, table_name)
 
 
-def test_choose_slots_first_load_goes_to_a_even_with_legacy_synonyms() -> None:
-    """Check that choose slots first load goes to a even with legacy synonyms."""
+def test_choose_slots_first_load_goes_to_a_even_with_legacy_synonyms():
     plan = choose_slots("BQLOAD_X", "DFEN", [])
     assert (plan.active, plan.inactive, plan.slot) == (None, "BQLOAD_X_A", "A")
     legacy = choose_slots("BQLOAD_X", "DFEN", [syn("NFSE_SIGA", "BQLOAD_X"), syn("NFSE_USER", "BQLOAD_X")])
     assert (legacy.active, legacy.inactive) == (None, "BQLOAD_X_A")
 
 
-def test_choose_slots_alternates_between_a_and_b() -> None:
-    """Check that choose slots alternates between a and b."""
+def test_choose_slots_alternates_between_a_and_b():
     on_a = [syn("DFEN", "BQLOAD_X_A"), syn("NFSE_SIGA", "BQLOAD_X_A"), syn("NFSE_USER", "BQLOAD_X_A")]
     assert choose_slots("BQLOAD_X", "DFEN", on_a) == SlotPlan("BQLOAD_X", "BQLOAD_X_A", "BQLOAD_X_B")
     on_b = [syn("DFEN", "BQLOAD_X_B")]
     assert choose_slots("BQLOAD_X", "DFEN", on_b) == SlotPlan("BQLOAD_X", "BQLOAD_X_B", "BQLOAD_X_A")
 
 
-def test_choose_slots_after_interrupted_swap_trusts_schema_then_consumers() -> None:
-    """Check that choose slots after interrupted swap trusts schema then consumers."""
+def test_choose_slots_after_interrupted_swap_trusts_schema_then_consumers():
     partial = [syn("DFEN", "BQLOAD_X_A"), syn("NFSE_SIGA", "BQLOAD_X_B"), syn("NFSE_USER", "BQLOAD_X_B")]
     plan = choose_slots("BQLOAD_X", "DFEN", partial)
     assert (plan.active, plan.inactive) == ("BQLOAD_X_A", "BQLOAD_X_B")
@@ -314,8 +272,7 @@ def test_choose_slots_after_interrupted_swap_trusts_schema_then_consumers() -> N
     assert synonyms_to_realign(plan, first_swap_interrupted) == []
 
 
-def test_choose_slots_refuses_synonyms_pointing_to_unmanaged_objects() -> None:
-    """Check that choose slots refuses synonyms pointing to unmanaged objects."""
+def test_choose_slots_refuses_synonyms_pointing_to_unmanaged_objects():
     with pytest.raises(PermissionError, match="não gerencia"):
         choose_slots("BQLOAD_X", "DFEN", [syn("NFSE_SIGA", "MVT_X")])
     with pytest.raises(PermissionError, match="não gerencia"):
@@ -324,14 +281,13 @@ def test_choose_slots_refuses_synonyms_pointing_to_unmanaged_objects() -> None:
     assert other_owner.active is None
 
 
-def test_load_comment_round_trip_keeps_pipeline_marker() -> None:
-    """Check that load comment round trip keeps pipeline marker."""
+def test_load_comment_round_trip_keeps_pipeline_marker():
     snapshot = datetime(2026, 10, 1, 1, 50, 47, 630000, tzinfo=UTC)
     loaded_at = datetime(2026, 10, 1, 3, 4, 5, tzinfo=UTC)
     comment = load_comment("rj-iplanrio-dia.nota_carioca.T", snapshot, loaded_at)
     assert comment == (
         f"{MANAGED_TABLE_MARKER}: carga a partir de rj-iplanrio-dia.nota_carioca.T; "
-        + "snapshot do BigQuery de 2026-10-01 01:50:47 UTC; carregada em 2026-10-01 03:04:05 UTC"
+        "snapshot do BigQuery de 2026-10-01 01:50:47 UTC; carregada em 2026-10-01 03:04:05 UTC"
     )
     assert parse_load_comment(comment) == ("2026-10-01 01:50:47", "2026-10-01 03:04:05")
     assert parse_load_comment(f"{MANAGED_TABLE_MARKER}: carga a partir de x") is None
@@ -339,8 +295,7 @@ def test_load_comment_round_trip_keeps_pipeline_marker() -> None:
     assert_managed_table("BQLOAD_X_A", comment)
 
 
-def test_slot_indexes_suffix_each_physical_table() -> None:
-    """Check that slot indexes suffix each physical table."""
+def test_slot_indexes_suffix_each_physical_table():
     renamed = slot_indexes((index("BQLOAD_IX_A", ["A"]), index("BQLOAD_IX_B", ["B"])), "B")
     assert [item.name for item in renamed] == ["BQLOAD_IX_A_B", "BQLOAD_IX_B_B"]
     with pytest.raises(ValueError, match="inválido"):
@@ -350,139 +305,71 @@ def test_slot_indexes_suffix_each_physical_table() -> None:
 T0 = datetime(2026, 10, 1, 12, 0, 0, tzinfo=UTC)
 
 
-def test_quiet_wait_and_changed_tables() -> None:
-    """Check that quiet wait and changed tables."""
+def test_quiet_wait_and_changed_tables():
     assert quiet_wait_seconds([T0 - timedelta(minutes=2), T0 - timedelta(hours=1)], T0, 300) == 180
     assert quiet_wait_seconds([T0 - timedelta(minutes=10)], T0, 300) == 0
     assert quiet_wait_seconds([], T0, 300) == 0
     assert changed_tables({"A": T0, "B": T0}, {"A": T0, "B": T0 + timedelta(seconds=1)}) == ["B"]
 
 
-def snapshot_request(max_wait_seconds: float = 3600, max_attempts: int = 3) -> bigquery.SnapshotRequest:
-    """Return the snapshot request."""
+def snapshot_request(**extra):
     return bigquery.SnapshotRequest(
-        project="p",
-        dataset_id="d",
-        table_ids=["DET", "EXI"],
-        bucket="b",
-        prefix="d/run",
-        quiet_seconds=300,
-        max_wait_seconds=max_wait_seconds,
-        max_attempts=max_attempts,
+        project="p", dataset_id="d", table_ids=["DET", "EXI"], bucket="b", prefix="d/run", quiet_seconds=300, **extra
     )
 
 
-@final
-class FrozenDatetime:
-    """Replaces `datetime` in the BigQuery helper, so that `now` is always `T0`."""
-
-    @staticmethod
-    def now(tz: object) -> datetime:
-        """Return the now."""
-        del tz
-
-        return T0
-
-
-def ignore_message(message: str) -> None:
-    """Ignore message."""
-    del message
-
-
-def ignore_seconds(seconds: float) -> None:
-    """Ignore seconds."""
-    del seconds
-
-
-def fake_bigquery(
-    monkeypatch: pytest.MonkeyPatch, modified_reads: list[dict[str, datetime]]
-) -> tuple[list[str], list[str]]:
-    """Fake bigquery."""
+def fake_bigquery(monkeypatch, modified_reads):
     reads = iter(modified_reads)
-    extracted: list[str] = []
-    deleted: list[str] = []
+    extracted, deleted = [], []
+    monkeypatch.setattr(bigquery, "get_last_modified", lambda project, dataset_id, table_id: next(reads)[table_id])
+    monkeypatch.setattr(
+        bigquery, "get_table_schema", lambda project, dataset_id, table_id: {"fields": [], "num_rows": 1}
+    )
 
-    def last_modified(project: str, dataset_id: str, table_id: str) -> datetime:
-        del project, dataset_id
-
-        return next(reads)[table_id]
-
-    def schema(project: str, dataset_id: str, table_id: str) -> bigquery.TableSchema:
-        del project, dataset_id, table_id
-
-        return bigquery.TableSchema(fields=[], num_rows=1)
-
-    def extract(project: str, dataset_id: str, table_id: str, bucket: str, prefix: str) -> list[bigquery.ExportedFile]:
-        del project, dataset_id, table_id, bucket
+    def extract(project, dataset_id, table_id, bucket, prefix):
         extracted.append(prefix)
-
         return [bigquery.ExportedFile(name=f"{prefix}/part-0.csv.gz", size=1)]
 
-    def delete(bucket: str, blob_names: list[str]) -> None:
-        del bucket
-        deleted.extend(blob_names)
-
-    monkeypatch.setattr(bigquery, "get_last_modified", last_modified)
-    monkeypatch.setattr(bigquery, "get_table_schema", schema)
     monkeypatch.setattr(bigquery, "extract_table_to_gcs", extract)
-    monkeypatch.setattr(bigquery, "delete_blobs", delete)
-    monkeypatch.setattr(bigquery, "datetime", FrozenDatetime)
-
+    monkeypatch.setattr(bigquery, "delete_blobs", lambda project, bucket, blob_names: deleted.extend(blob_names))
+    monkeypatch.setattr(bigquery, "datetime", type("FrozenDatetime", (), {"now": staticmethod(lambda tz: T0)}))
     return extracted, deleted
 
 
-def test_export_consistent_snapshot_waits_for_quiet_period_and_retries_on_change(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Wait for a quiet period, and retry when a table changes."""
+def test_export_consistent_snapshot_waits_for_quiet_period_and_retries_on_change(monkeypatch):
     old, recent, newer = T0 - timedelta(hours=1), T0 - timedelta(minutes=1), T0 - timedelta(seconds=30)
     reads = [
-        {"DET": recent},
-        {"EXI": old},
-        {"DET": old},
-        {"EXI": old},
-        {"DET": old},
-        {"EXI": newer},
-        {"DET": old},
-        {"EXI": old},
-        {"DET": old},
-        {"EXI": old},
+        {"DET": recent}, {"EXI": old},
+        {"DET": old}, {"EXI": old}, {"DET": old}, {"EXI": newer},
+        {"DET": old}, {"EXI": old}, {"DET": old}, {"EXI": old},
     ]
-    waits: list[float] = []
-    messages: list[str] = []
+    waits, messages = [], []
     extracted, deleted = fake_bigquery(monkeypatch, reads)
     snapshot = bigquery.export_consistent_snapshot(snapshot_request(), report=messages.append, sleep=waits.append)
     assert waits == [240]
-    assert extracted == [
-        "d/run/tentativa-1/DET",
-        "d/run/tentativa-1/EXI",
-        "d/run/tentativa-2/DET",
-        "d/run/tentativa-2/EXI",
-    ]
+    assert extracted == ["d/run/tentativa-1/DET", "d/run/tentativa-1/EXI", "d/run/tentativa-2/DET", "d/run/tentativa-2/EXI"]
     assert deleted == ["d/run/tentativa-1/DET/part-0.csv.gz", "d/run/tentativa-1/EXI/part-0.csv.gz"]
     assert "mudou durante o extract em ['EXI']" in messages[1]
     assert snapshot["DET"].last_modified == old
     assert snapshot["EXI"].files == [bigquery.ExportedFile("d/run/tentativa-2/EXI/part-0.csv.gz", 1)]
 
 
-def test_export_consistent_snapshot_gives_up(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Check that export consistent snapshot gives up."""
+def test_export_consistent_snapshot_gives_up(monkeypatch):
     recent = T0 - timedelta(seconds=10)
     fake_bigquery(monkeypatch, [{"DET": recent}, {"EXI": recent}])
     with pytest.raises(RuntimeError, match="sem alterações"):
         bigquery.export_consistent_snapshot(
-            snapshot_request(max_wait_seconds=60), report=ignore_message, sleep=ignore_seconds
+            snapshot_request(max_wait_seconds=60), report=lambda message: None, sleep=lambda seconds: None
         )
     old = T0 - timedelta(hours=1)
     fake_bigquery(monkeypatch, [{"DET": old}, {"EXI": old}, {"DET": T0}, {"EXI": old}])
     with pytest.raises(RuntimeError, match="1 extracts seguidos"):
         bigquery.export_consistent_snapshot(
-            snapshot_request(max_attempts=1), report=ignore_message, sleep=ignore_seconds
+            snapshot_request(max_attempts=1), report=lambda message: None, sleep=lambda seconds: None
         )
 
 
-def test_inmemory_status_complete_and_description() -> None:
-    """Check that inmemory status complete and description."""
+def test_inmemory_status_complete_and_description():
     done = InMemoryStatus("BQLOAD_X_A", 6, 6, 0, 0)
     assert done.complete
     assert done.description == "BQLOAD_X_A: 6/6 segmento(s) no In-Memory, 0,00 GB por popular"
@@ -491,8 +378,11 @@ def test_inmemory_status_complete_and_description() -> None:
     assert InMemoryStatus("T", 0, 0, 0, 0).complete
 
 
-def test_definition_differences_lists_changed_missing_and_extra_columns() -> None:
-    """Check that definition differences lists changed missing and extra columns."""
+def test_secret_env_key_follows_iplanrio_convention():
+    assert secret_env_key("/db-oracle-nota-fiscal", "DB_HOST") == "DB_ORACLE_NOTA_FISCAL__DB_HOST"
+
+
+def test_definition_differences_lists_changed_missing_and_extra_columns():
     expected = ['"A" DATE NOT NULL', '"B" VARCHAR2(14 BYTE) NOT NULL']
     assert definition_differences(expected, expected) == []
     assert definition_differences(['"A" VARCHAR2(4000 BYTE)'], expected) == [
@@ -502,33 +392,24 @@ def test_definition_differences_lists_changed_missing_and_extra_columns() -> Non
     assert definition_differences([*expected, '"C" NUMBER'], expected) == ['"C" NUMBER → (ausente)']
 
 
-def test_column_definitions_keep_types_and_not_null() -> None:
-    """Check that column definitions keep types and not null."""
+def test_column_definitions_keep_types_and_not_null():
     assert column_definitions(TEMPLATE[:2]) == (
         '  "CPF_CNPJ_RESPONSAVEL" VARCHAR2(14 BYTE) NOT NULL,\n  "DATA_COMPETENCIA_MUNICIPIO" DATE NOT NULL'
     )
 
 
-def test_build_control_file_handles_embedded_newlines_and_blanks() -> None:
-    """Check that build control file handles embedded newlines and blanks."""
+def test_build_control_file_handles_embedded_newlines_and_blanks():
     control = build_control_file(
         "DESTINO", "BQLOAD_X", [LoaderField("ID", "CHAR(32)"), LoaderField("_EXTRA", "FILLER CHAR(4000)")]
     )
     lines = control.splitlines()
-    assert lines[:5] == [
-        "LOAD DATA",
-        "CHARACTERSET AL32UTF8",
-        "APPEND",
-        "PRESERVE BLANKS",
-        'INTO TABLE "DESTINO"."BQLOAD_X"',
-    ]
+    assert lines[:5] == ["LOAD DATA", "CHARACTERSET AL32UTF8", "APPEND", "PRESERVE BLANKS", 'INTO TABLE "DESTINO"."BQLOAD_X"']
     assert "FIELDS CSV WITH EMBEDDED TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"'" in lines
     assert '  "ID" CHAR(32),' in lines
     assert '  "_EXTRA" FILLER CHAR(4000)' in lines
 
 
-def test_split_round_robin_skips_empty_groups() -> None:
-    """Check that split round robin skips empty groups."""
+def test_split_round_robin_skips_empty_groups():
     assert split_round_robin(["a", "b", "c"], 2) == [["a", "c"], ["b"]]
     assert split_round_robin(["a"], 4) == [["a"]]
     assert split_round_robin([], 2) == []
@@ -537,16 +418,14 @@ def test_split_round_robin_skips_empty_groups() -> None:
 GB = 1024**3
 
 
-def test_format_helpers() -> None:
-    """Check that format helpers."""
+def test_format_helpers():
     assert format_count(67987860) == "67.987.860"
     assert format_size(int(1.5 * GB)) == "1,50 GB"
     assert format_duration(250) == "4m10s"
     assert format_duration(3725) == "1h02m05s"
 
 
-def test_progress_percent_and_message_with_estimate() -> None:
-    """Check that progress percent and message with estimate."""
+def test_progress_percent_and_message_with_estimate():
     snapshot = ProgressSnapshot(files_done=30, files_total=120, bytes_done=GB, bytes_total=4 * GB, elapsed_seconds=300)
     assert progress_percent(snapshot) == 25.0
     assert format_progress("BQLOAD_X", snapshot) == (
@@ -554,8 +433,7 @@ def test_progress_percent_and_message_with_estimate() -> None:
     )
 
 
-def test_progress_message_before_start_and_after_all_files_sent() -> None:
-    """Check that progress message before start and after all files sent."""
+def test_progress_message_before_start_and_after_all_files_sent():
     start = ProgressSnapshot(files_done=0, files_total=10, bytes_done=0, bytes_total=GB, elapsed_seconds=1)
     assert format_progress("T", start).endswith("(0,0%), 0m01s decorridos, calculando estimativa")
     done = ProgressSnapshot(files_done=10, files_total=10, bytes_done=GB, bytes_total=GB, elapsed_seconds=60)
@@ -565,10 +443,9 @@ def test_progress_message_before_start_and_after_all_files_sent() -> None:
     assert progress_percent(empty) == 100.0
 
 
-def test_counting_reader_tracks_bytes_read() -> None:
-    """Check that counting reader tracks bytes read."""
+def test_counting_reader_tracks_bytes_read():
     progress = SessionProgress()
-    reader = CountingReader(BytesIO(b"x" * 10), progress)
+    reader = CountingReader(io.BytesIO(b"x" * 10), progress)
     assert reader.read(4) == b"xxxx"
     assert reader.read() == b"xxxxxx"
     assert reader.read() == b""
@@ -586,31 +463,16 @@ RANGE_BY_MONTH = Partitioning(
 )
 
 
-def index(
-    name: str,
-    columns: Sequence[str],
-    locality: str | None = "LOCAL",
-    index_type: str = "NORMAL",
-    unique: bool = False,
-    tablespace: str | None = "DFEN_BIG_IDX",
-    owner: str = "",
-) -> IndexDefinition:
-    """Return the index."""
-    return IndexDefinition(name, index_type, unique, tuple(columns), locality, tablespace, owner=owner)
+def index(name, columns, locality="LOCAL", index_type="NORMAL", unique=False, tablespace="DFEN_BIG_IDX", **extra):
+    return IndexDefinition(name, index_type, unique, tuple(columns), locality, tablespace, **extra)
 
 
-def test_partitioning_from_dictionary_keeps_only_declared_partitions() -> None:
-    """Check that partitioning from dictionary keeps only declared partitions."""
+def test_partitioning_from_dictionary_keeps_only_declared_partitions():
     partitioning = partitioning_from_dictionary(
         {"partitioning_type": "RANGE", "subpartitioning_type": "NONE", "interval": "NUMTOYMINTERVAL(1, 'MONTH') "},
         ["DATA_COMPETENCIA_MUNICIPIO"],
         [
-            {
-                "partition_name": "P_INITIAL",
-                "high_value": f" {JAN} ",
-                "tablespace_name": "DFEN_BIG_DATA",
-                "interval": "NO",
-            },
+            {"partition_name": "P_INITIAL", "high_value": f" {JAN} ", "tablespace_name": "DFEN_BIG_DATA", "interval": "NO"},
             {"partition_name": "SYS_P101", "high_value": FEB, "tablespace_name": "DFEN_BIG_DATA", "interval": "YES"},
         ],
     )
@@ -630,10 +492,7 @@ IMMEDIATE_8M = PartitionStorage(True, 8388608, 1048576, 1, 2147483645)
 DEFERRED_EMPTY = PartitionStorage(False)
 
 
-def storage_row(
-    name: str, high_value: str, segment_created: str, extents: tuple[int | None, ...] = (None, None, None, None)
-) -> dict[str, object]:
-    """Return a row of `all_tab_partitions` with the segment and the extents."""
+def storage_row(name, high_value, segment_created, extents=(None, None, None, None)):
     initial, next_extent, min_extent, max_extent = extents
     return {
         "partition_name": name,
@@ -649,19 +508,7 @@ def storage_row(
     }
 
 
-def with_storage(*storages: PartitionStorage) -> TableLayout:
-    """Return the layout by month with the storage of each partition."""
-    assert RANGE_BY_MONTH.partitions
-    partitions = tuple(
-        replace(partition, storage=storage)
-        for partition, storage in zip(RANGE_BY_MONTH.partitions, storages, strict=True)
-    )
-
-    return TableLayout("DFEN_BIG_DATA", replace(RANGE_BY_MONTH, partitions=partitions))
-
-
-def test_partitioning_from_dictionary_reads_segment_creation_and_storage() -> None:
-    """Read `segment_created` and the extents of each partition."""
+def test_partitioning_from_dictionary_reads_segment_creation_and_storage():
     partitioning = partitioning_from_dictionary(
         {"partitioning_type": "RANGE", "subpartitioning_type": "NONE", "interval": None},
         ["DATA_COMPETENCIA_MUNICIPIO"],
@@ -670,12 +517,10 @@ def test_partitioning_from_dictionary_reads_segment_creation_and_storage() -> No
             storage_row("P_202601", FEB, "NO"),
         ],
     )
-
     assert [partition.storage for partition in partitioning.partitions] == [IMMEDIATE_8M, DEFERRED_EMPTY]
 
 
-def test_partition_storage_clause_replicates_the_original_ddl() -> None:
-    """Write the segment creation and the parameters that the partition declares."""
+def test_partition_storage_clause_replicates_the_original_ddl():
     assert IMMEDIATE_8M.clause == (
         "SEGMENT CREATION IMMEDIATE STORAGE (INITIAL 8388608 NEXT 1048576 MINEXTENTS 1 MAXEXTENTS UNLIMITED)"
     )
@@ -685,8 +530,7 @@ def test_partition_storage_clause_replicates_the_original_ddl() -> None:
     )
 
 
-def test_storage_clause_puts_partition_storage_before_tablespace() -> None:
-    """Put the storage of a partition between its bound and its tablespace."""
+def test_storage_clause_puts_partition_storage_before_tablespace():
     partitioning = Partitioning(
         "RANGE",
         ("D",),
@@ -696,18 +540,22 @@ def test_storage_clause_puts_partition_storage_before_tablespace() -> None:
             TablePartition("P_202601", FEB, "DFEN_BIG_DATA", DEFERRED_EMPTY),
         ),
     )
-
     assert storage_clause(TableLayout("DFEN_BIG_DATA", partitioning)).splitlines()[3:5] == [
         f'  PARTITION "P_INITIAL" VALUES LESS THAN ({JAN}) {IMMEDIATE_8M.clause} TABLESPACE "DFEN_BIG_DATA",',
         f'  PARTITION "P_202601" VALUES LESS THAN ({FEB}) SEGMENT CREATION DEFERRED TABLESPACE "DFEN_BIG_DATA"',
     ]
 
 
-def test_layout_differences_detect_partition_without_the_declared_storage() -> None:
-    """Tell a partition that lacks the storage that the original declares."""
-    expected = with_storage(IMMEDIATE_8M, IMMEDIATE_8M)
-    assert expected.partitioning is not None
+def with_storage(*storages):
+    partitions = tuple(
+        replace(partition, storage=storage)
+        for partition, storage in zip(RANGE_BY_MONTH.partitions, storages, strict=True)
+    )
+    return TableLayout("DFEN_BIG_DATA", replace(RANGE_BY_MONTH, partitions=partitions))
 
+
+def test_layout_differences_detect_partition_without_the_declared_storage():
+    expected = with_storage(IMMEDIATE_8M, IMMEDIATE_8M)
     assert layout_differences(with_storage(IMMEDIATE_8M, IMMEDIATE_8M), expected) == []
     assert layout_differences(with_storage(IMMEDIATE_8M, DEFERRED_EMPTY), expected) == [
         f"storage da partição P_202601: SEGMENT CREATION DEFERRED → {IMMEDIATE_8M.clause}"
@@ -718,20 +566,17 @@ def test_layout_differences_detect_partition_without_the_declared_storage() -> N
     assert len(unread) == len(expected.partitioning.partitions)
 
 
-def test_layout_differences_ignore_segments_that_depend_only_on_data() -> None:
-    """Do not count the segment of a partition whose original declares nothing."""
+def test_layout_differences_ignore_segments_that_depend_only_on_data():
     expected = with_storage(DEFERRED_EMPTY, PartitionStorage(False, 8388608, 1048576, 1, 2147483645))
     loaded = with_storage(IMMEDIATE_8M, IMMEDIATE_8M)
-    deferred = with_storage(DEFERRED_EMPTY, DEFERRED_EMPTY)
-
     assert layout_differences(loaded, expected) == []
+    deferred = with_storage(DEFERRED_EMPTY, DEFERRED_EMPTY)
     assert layout_differences(deferred, deferred) == []
     assert layout_differences(loaded, TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH)) == []
 
 
-def test_index_from_dictionary_ignores_degree_and_status_in_comparison() -> None:
-    """Check that index from dictionary ignores degree and status in comparison."""
-    row: dict[str, object] = {
+def test_index_from_dictionary_ignores_degree_and_status_in_comparison():
+    row = {
         "owner": "DFEN",
         "index_name": "IX",
         "index_type": "NORMAL",
@@ -746,8 +591,7 @@ def test_index_from_dictionary_ignores_degree_and_status_in_comparison() -> None
     assert parsed == index("IX", ["A", "B"])
 
 
-def test_plan_structure_renames_indexes_and_skips_materialized_view_snapshot_index() -> None:
-    """Rename the indexes, and skip the materialized view snapshot index."""
+def test_plan_structure_renames_indexes_and_skips_materialized_view_snapshot_index():
     template = TableLayout(
         "DFEN_BIG_DATA",
         RANGE_BY_MONTH,
@@ -770,36 +614,31 @@ def test_plan_structure_renames_indexes_and_skips_materialized_view_snapshot_ind
     ("template", "error"),
     [
         (TableLayout(None, None, (index("IX", ["A"], locality="GLOBAL"),)), NotImplementedError),
-        (
-            TableLayout(None, None, (index("IX", ["SYS_NC1$"], index_type="FUNCTION-BASED NORMAL"),)),
-            NotImplementedError,
-        ),
+        (TableLayout(None, None, (index("IX", ["SYS_NC1$"], index_type="FUNCTION-BASED NORMAL"),)), NotImplementedError),
         (TableLayout(None, Partitioning("HASH", ("A",), None, ()), ()), NotImplementedError),
         (TableLayout(None, None, (index("IX", ["NN_ROWID"]),)), ValueError),
         (TableLayout(None, Partitioning("RANGE", ("NN_ROWID",), None, ()), ()), ValueError),
         (TableLayout(None, None, (index("I" * 124, ["A"]),)), ValueError),
     ],
 )
-def test_plan_structure_rejects_what_the_load_cannot_replicate(template: TableLayout, error: type[Exception]) -> None:
-    """Check that plan structure rejects what the load cannot replicate."""
+def test_plan_structure_rejects_what_the_load_cannot_replicate(template, error):
     with pytest.raises(error):
         plan_structure(template, ["A"], "BQLOAD_")
 
 
-def test_storage_clause_copies_tablespace_and_partitions_without_inmemory() -> None:
-    """Check that storage clause copies tablespace and partitions without inmemory."""
+def test_storage_clause_copies_tablespace_and_partitions_without_inmemory():
     assert storage_clause(TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH)) == (
         'TABLESPACE "DFEN_BIG_DATA"\n'
-        + "NO INMEMORY\n"
-        + 'PARTITION BY RANGE ("DATA_COMPETENCIA_MUNICIPIO") (\n'
-        + f'  PARTITION "P_INITIAL" VALUES LESS THAN ({JAN}) TABLESPACE "DFEN_BIG_DATA",\n'
-        + f'  PARTITION "P_202601" VALUES LESS THAN ({FEB}) TABLESPACE "DFEN_BIG_DATA"\n'
-        + ")"
+        "NO INMEMORY\n"
+        'PARTITION BY RANGE ("DATA_COMPETENCIA_MUNICIPIO") (\n'
+        f'  PARTITION "P_INITIAL" VALUES LESS THAN ({JAN}) TABLESPACE "DFEN_BIG_DATA",\n'
+        f'  PARTITION "P_202601" VALUES LESS THAN ({FEB}) TABLESPACE "DFEN_BIG_DATA"\n'
+        ")"
     )
     interval = Partitioning("RANGE", ("D",), "NUMTOYMINTERVAL(1, 'MONTH')", (TablePartition("P", JAN, None),))
     assert storage_clause(TableLayout(None, interval)) == (
-        "NO INMEMORY\nPARTITION BY RANGE (\"D\") INTERVAL (NUMTOYMINTERVAL(1, 'MONTH')) (\n"
-        + f'  PARTITION "P" VALUES LESS THAN ({JAN})\n)'
+        f"NO INMEMORY\nPARTITION BY RANGE (\"D\") INTERVAL (NUMTOYMINTERVAL(1, 'MONTH')) (\n"
+        f'  PARTITION "P" VALUES LESS THAN ({JAN})\n)'
     )
     listed = Partitioning("LIST", ("UF",), None, (TablePartition("P_RJ", "'RJ'", None),))
     assert "PARTITION \"P_RJ\" VALUES ('RJ')" in storage_clause(TableLayout(None, listed))
@@ -809,14 +648,7 @@ def test_storage_clause_copies_tablespace_and_partitions_without_inmemory() -> N
 INMEMORY_HIGH = "INMEMORY PRIORITY HIGH MEMCOMPRESS FOR QUERY HIGH DISTRIBUTE AUTO NO DUPLICATE"
 
 
-def inmemory_row(
-    inmemory: str | None = "ENABLED",
-    priority: str | None = "HIGH",
-    compression: str | None = "FOR QUERY HIGH",
-    distribute: str | None = "AUTO",
-    duplicate: str | None = "NO DUPLICATE",
-) -> dict[str, object]:
-    """Return the inmemory row."""
+def inmemory_row(inmemory="ENABLED", priority="HIGH", compression="FOR QUERY HIGH", distribute="AUTO", duplicate="NO DUPLICATE"):
     return {
         "inmemory": inmemory,
         "inmemory_priority": priority,
@@ -845,8 +677,7 @@ def inmemory_row(
         pytest.param(inmemory_row(inmemory=None), None, id="no_value"),
     ],
 )
-def test_inmemory_from_dictionary_builds_the_create_table_clause(row: dict[str, object], expected: str | None) -> None:
-    """Check that inmemory from dictionary builds the create table clause."""
+def test_inmemory_from_dictionary_builds_the_create_table_clause(row, expected):
     assert inmemory_from_dictionary(row) == expected
 
 
@@ -859,8 +690,7 @@ def test_inmemory_from_dictionary_builds_the_create_table_clause(row: dict[str, 
         pytest.param(inmemory_row(duplicate="TRIPLICATE"), id="duplicate"),
     ],
 )
-def test_inmemory_from_dictionary_rejects_unknown_values(row: dict[str, object]) -> None:
-    """Check that inmemory from dictionary rejects unknown values."""
+def test_inmemory_from_dictionary_rejects_unknown_values(row):
     with pytest.raises(NotImplementedError, match="INMEMORY"):
         inmemory_from_dictionary(row)
 
@@ -873,21 +703,18 @@ def test_inmemory_from_dictionary_rejects_unknown_values(row: dict[str, object])
         pytest.param("INMEMORY PRIORITY LOW MEMCOMPRESS FOR DML", id="original_with_other_options"),
     ],
 )
-def test_plan_structure_creates_every_loaded_table_out_of_memory(original_inmemory: str | None) -> None:
-    """Create the loaded table with no In-Memory, whatever the original has."""
+def test_plan_structure_creates_every_loaded_table_out_of_memory(original_inmemory):
     template = TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH, inmemory=original_inmemory)
     assert plan_structure(template, ["DATA_COMPETENCIA_MUNICIPIO"], "BQLOAD_").layout.inmemory is None
 
 
-def test_storage_clause_uses_inmemory_of_original() -> None:
-    """Check that storage clause uses inmemory of original."""
+def test_storage_clause_uses_inmemory_of_original():
     assert storage_clause(TableLayout("DFEN_BIG_DATA", None, inmemory=INMEMORY_HIGH)) == (
         f'TABLESPACE "DFEN_BIG_DATA"\n{INMEMORY_HIGH}'
     )
 
 
-def test_layout_differences_detect_changed_inmemory() -> None:
-    """Check that layout differences detect changed inmemory."""
+def test_layout_differences_detect_changed_inmemory():
     expected = TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH, inmemory=INMEMORY_HIGH)
     assert layout_differences(expected, expected) == []
     assert layout_differences(TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH), expected) == [
@@ -895,8 +722,7 @@ def test_layout_differences_detect_changed_inmemory() -> None:
     ]
 
 
-def test_index_statement_parts() -> None:
-    """Check that index statement parts."""
+def test_index_statement_parts():
     assert index_statement_parts(index("BQLOAD_IX", ["A", "B"]), 4) == {
         "kind": "",
         "columns": '"A", "B"',
@@ -907,8 +733,7 @@ def test_index_statement_parts() -> None:
     assert index_statement_parts(index("BQLOAD_BM", ["A"], index_type="BITMAP"), 1)["kind"] == "BITMAP"
 
 
-def test_layout_differences_detect_missing_partitioning_and_changed_partitions() -> None:
-    """Detect a missing partitioning and changed partitions."""
+def test_layout_differences_detect_missing_partitioning_and_changed_partitions():
     expected = TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH)
     assert layout_differences(expected, expected) == []
     assert layout_differences(TableLayout("USERS", None), expected) == [
@@ -919,22 +744,17 @@ def test_layout_differences_detect_missing_partitioning_and_changed_partitions()
     assert layout_differences(TableLayout("DFEN_BIG_DATA", fewer), expected) == [
         f"partição ausente: P_202601 ({FEB}) em DFEN_BIG_DATA"
     ]
-    with_interval = Partitioning(
-        "RANGE", ("DATA_COMPETENCIA_MUNICIPIO",), "NUMTOYMINTERVAL(1, 'MONTH')", RANGE_BY_MONTH.partitions
-    )
+    with_interval = Partitioning("RANGE", ("DATA_COMPETENCIA_MUNICIPIO",), "NUMTOYMINTERVAL(1, 'MONTH')", RANGE_BY_MONTH.partitions)
     assert layout_differences(TableLayout("DFEN_BIG_DATA", with_interval), expected) == [
         "particionamento: RANGE (DATA_COMPETENCIA_MUNICIPIO) INTERVAL NUMTOYMINTERVAL(1, 'MONTH') → "
-        + "RANGE (DATA_COMPETENCIA_MUNICIPIO)"
+        "RANGE (DATA_COMPETENCIA_MUNICIPIO)"
     ]
 
 
-def test_foreign_indexes_protects_indexes_the_pipeline_did_not_create() -> None:
-    """Check that foreign indexes protects indexes the pipeline did not create."""
+def test_foreign_indexes_protects_indexes_the_pipeline_did_not_create():
     ours = index("BQLOAD_IX", ["A"], owner="DFEN")
     assert foreign_indexes([ours], "DFEN") == []
-    assert foreign_indexes(
-        [ours, index("IX_MANUAL", ["A"], owner="DFEN"), index("BQLOAD_X", ["A"], owner="OUTRO")], "DFEN"
-    ) == [
+    assert foreign_indexes([ours, index("IX_MANUAL", ["A"], owner="DFEN"), index("BQLOAD_X", ["A"], owner="OUTRO")], "DFEN") == [
         "DFEN.IX_MANUAL",
         "OUTRO.BQLOAD_X",
     ]
@@ -943,43 +763,26 @@ def test_foreign_indexes_protects_indexes_the_pipeline_did_not_create() -> None:
 MARKED = f"{MANAGED_TABLE_MARKER}: carga a partir de x"
 
 
-type DbRow = tuple[object, ...]
-
-
-@final
 class FakeCursor:
-    """Answer the dictionary queries of the swap, and record the DDL commands."""
+    """Responde às consultas de dicionário usadas na troca e registra os comandos DDL."""
 
-    def __init__(
-        self,
-        objects: dict[str, list[str]],
-        comments: dict[str, str | None],
-        synonyms: Sequence[tuple[str, str, str]] = (),
-    ) -> None:
-        """Store the arguments."""
-        self.objects = objects
-        self.comments = comments
-        self.synonyms = synonyms
-        self.ddl: list[str] = []
-        self.rows: list[DbRow] = []
-        self.description: list[tuple[str]] = []
+    def __init__(self, objects, comments, synonyms=()):
+        self.objects, self.comments, self.synonyms = objects, comments, synonyms
+        self.ddl, self.rows, self.description = [], [], []
 
-    def __enter__(self) -> "FakeCursor":
-        """Return the fake."""
+    def __enter__(self):
         return self
 
-    def __exit__(self, *args: object) -> bool:
-        """Close the fake."""
+    def __exit__(self, *args):
         return False
 
-    def execute(self, sql: str, binds: dict[str, str] | None = None) -> None:
-        """Execute."""
+    def execute(self, sql, binds=None):
         binds = binds or {}
         if "FROM all_objects" in sql:
             self.answer(["object_type"], [(kind,) for kind in self.objects.get(binds["object_name"], [])])
         elif "FROM all_tables t" in sql and "all_tab_comments" in sql:
             name = binds["table_name"]
-            found: list[DbRow] = [(name, self.comments[name])] if name in self.comments else []
+            found = [(name, self.comments[name])] if name in self.comments else []
             self.answer(["table_name", "comments"], found)
         elif "session_privs" in sql:
             self.answer(["session_user", "privilege"], [("DFEN", "CREATE ANY SYNONYM")])
@@ -988,74 +791,54 @@ class FakeCursor:
         else:
             self.ddl.append(" ".join(sql.split()))
 
-    def answer(self, names: list[str], rows: Sequence[DbRow]) -> None:
-        """Answer."""
+    def answer(self, names, rows):
         self.description = [(name,) for name in names]
-        self.rows = list(rows)
+        self.rows = rows
 
-    def fetchone(self) -> DbRow | None:
-        """Return the fetchone."""
+    def fetchone(self):
         return self.rows[0] if self.rows else None
 
-    def fetchall(self) -> list[DbRow]:
-        """Return the fetchall."""
+    def fetchall(self):
         return self.rows
 
 
-@final
 class FakeConnection:
-    def __init__(self, cursor: FakeCursor) -> None:
-        """Store the arguments."""
+    def __init__(self, cursor):
         self.fake_cursor = cursor
 
-    def __enter__(self) -> "FakeConnection":
-        """Return the fake."""
+    def __enter__(self):
         return self
 
-    def __exit__(self, *args: object) -> bool:
-        """Close the fake."""
+    def __exit__(self, *args):
         return False
 
-    def cursor(self) -> FakeCursor:
-        """Return the cursor."""
+    def cursor(self):
         return self.fake_cursor
 
 
-def fake_database(
-    monkeypatch: pytest.MonkeyPatch,
-    objects: dict[str, list[str]],
-    comments: dict[str, str | None],
-    synonyms: Sequence[tuple[str, str, str]] = (),
-) -> FakeCursor:
-    """Fake database."""
+
+def fake_database(monkeypatch, objects, comments, synonyms=()):
     cursor = FakeCursor(objects, comments, synonyms)
-
-    def connect(config: object) -> FakeConnection:
-        del config
-
-        return FakeConnection(cursor)
-
-    monkeypatch.setattr(slots_oracle, "connect", connect)
-
+    monkeypatch.setattr(slots, "connect", lambda config: FakeConnection(cursor))
     return cursor
 
 
-def slots_config() -> OracleConfig:
-    """Return the slots config."""
+def slots_config():
+    from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import OracleConfig
+
     return OracleConfig("DFEN", "x", "h", "1521", "S", "DFEN")
 
 
 PLAN_A = SlotPlan("BQLOAD_X", None, "BQLOAD_X_A")
 
 
-def test_swap_migrates_partitioned_legacy_table_after_repointing_consumers(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Check that swap migrates partitioned legacy table after repointing consumers."""
+def test_swap_migrates_partitioned_legacy_table_after_repointing_consumers(monkeypatch):
     cursor = fake_database(
         monkeypatch,
         objects={"BQLOAD_X": ["TABLE", "TABLE PARTITION"]},
         comments={"BQLOAD_X": MARKED, "BQLOAD_X_A": MARKED},
     )
-    slots_oracle.swap_synonyms(slots_config(), PLAN_A)
+    slots.swap_synonyms(slots_config(), PLAN_A)
     assert cursor.ddl == [
         'CREATE OR REPLACE SYNONYM "NFSE_SIGA"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_A"',
         'CREATE OR REPLACE SYNONYM "NFSE_USER"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_A"',
@@ -1065,10 +848,9 @@ def test_swap_migrates_partitioned_legacy_table_after_repointing_consumers(monke
     ]
 
 
-def test_swap_after_migration_only_repoints_synonyms(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Check that swap after migration only repoints synonyms."""
+def test_swap_after_migration_only_repoints_synonyms(monkeypatch):
     cursor = fake_database(monkeypatch, objects={"BQLOAD_X": ["SYNONYM"]}, comments={"BQLOAD_X_B": MARKED})
-    slots_oracle.swap_synonyms(slots_config(), SlotPlan("BQLOAD_X", "BQLOAD_X_A", "BQLOAD_X_B"))
+    slots.swap_synonyms(slots_config(), SlotPlan("BQLOAD_X", "BQLOAD_X_A", "BQLOAD_X_B"))
     assert [statement.split()[4] for statement in cursor.ddl] == [
         '"NFSE_SIGA"."BQLOAD_X"',
         '"NFSE_USER"."BQLOAD_X"',
@@ -1084,18 +866,14 @@ def test_swap_after_migration_only_repoints_synonyms(monkeypatch: pytest.MonkeyP
         ({"BQLOAD_X": ["VIEW"]}, {"BQLOAD_X_A": MARKED}, "impede criar o sinônimo"),
     ],
 )
-def test_swap_changes_nothing_when_the_name_cannot_become_a_synonym(
-    monkeypatch: pytest.MonkeyPatch, objects: dict[str, list[str]], comments: dict[str, str | None], message: str
-) -> None:
-    """Check that swap changes nothing when the name cannot become a synonym."""
+def test_swap_changes_nothing_when_the_name_cannot_become_a_synonym(monkeypatch, objects, comments, message):
     cursor = fake_database(monkeypatch, objects=objects, comments=comments)
     with pytest.raises(PermissionError, match=message):
-        slots_oracle.swap_synonyms(slots_config(), PLAN_A)
+        slots.swap_synonyms(slots_config(), PLAN_A)
     assert cursor.ddl == []
 
 
-def test_resolve_slots_stops_before_loading_when_legacy_table_is_not_managed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Stop before the load when the legacy table is not managed."""
+def test_resolve_slots_stops_before_loading_when_legacy_table_is_not_managed(monkeypatch):
     cursor = fake_database(
         monkeypatch,
         objects={"BQLOAD_X": ["TABLE"]},
@@ -1103,19 +881,18 @@ def test_resolve_slots_stops_before_loading_when_legacy_table_is_not_managed(mon
         synonyms=[("NFSE_SIGA", "DFEN", "BQLOAD_X_B"), ("DFEN", "DFEN", "BQLOAD_X_A")],
     )
     with pytest.raises(PermissionError, match="não foi criada"):
-        slots_oracle.resolve_slots(slots_config(), "BQLOAD_X")
+        slots.resolve_slots(slots_config(), "BQLOAD_X")
     assert cursor.ddl == []
 
 
-def test_refresh_synonyms_points_every_owner_to_the_active_table(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Check that refresh synonyms points every owner to the active table."""
+def test_refresh_synonyms_points_every_owner_to_the_active_table(monkeypatch):
     cursor = fake_database(
         monkeypatch,
         objects={"BQLOAD_X": ["SYNONYM"]},
         comments={"BQLOAD_X_A": MARKED, "BQLOAD_X_B": MARKED},
         synonyms=[("DFEN", "DFEN", "BQLOAD_X_B"), ("NFSE_SIGA", "DFEN", "BQLOAD_X_B")],
     )
-    actions = slots_oracle.refresh_synonyms(slots_config(), "BQLOAD_X")
+    actions = slots.refresh_synonyms(slots_config(), "BQLOAD_X")
     assert [statement for statement in cursor.ddl if statement.startswith("GRANT")] == [
         f'GRANT {privileges} ON "DFEN"."BQLOAD_X_B" TO "{grantee}"' for grantee, privileges in CONSUMER_GRANTS
     ]
@@ -1133,17 +910,10 @@ def test_refresh_synonyms_points_every_owner_to_the_active_table(monkeypatch: py
         ({"BQLOAD_X": ["TABLE"]}, {"BQLOAD_X": MARKED}, [("NFSE_SIGA", "DFEN", "BQLOAD_X")], PermissionError),
     ],
 )
-def test_refresh_synonyms_changes_nothing_without_an_active_a_b_table(
-    monkeypatch: pytest.MonkeyPatch,
-    objects: dict[str, list[str]],
-    comments: dict[str, str | None],
-    synonyms: list[tuple[str, str, str]],
-    error: type[Exception],
-) -> None:
-    """Check that refresh synonyms changes nothing without an active a b table."""
+def test_refresh_synonyms_changes_nothing_without_an_active_a_b_table(monkeypatch, objects, comments, synonyms, error):
     cursor = fake_database(monkeypatch, objects=objects, comments=comments, synonyms=synonyms)
     with pytest.raises(error):
-        slots_oracle.refresh_synonyms(slots_config(), "BQLOAD_X")
+        slots.refresh_synonyms(slots_config(), "BQLOAD_X")
     assert cursor.ddl == []
 
 
@@ -1183,27 +953,20 @@ STATUS_EXPRESSIONS = (
 )
 
 
-def function_based_index(
-    columns: Sequence[str] = STATUS_EXPRESSIONS, locality: str | None = "LOCAL"
-) -> IndexDefinition:
-    """Return the function based index."""
-    return index(
-        "IX_MVT_NN_CANC_COMP_NN", columns, locality=locality, index_type="FUNCTION-BASED NORMAL", tablespace=None
-    )
+def function_based_index(columns=STATUS_EXPRESSIONS, **extra):
+    return index("IX_MVT_NN_CANC_COMP_NN", columns, index_type="FUNCTION-BASED NORMAL", tablespace=None, **extra)
 
 
-def test_raw_ddl_type_and_definition() -> None:
-    """Check that raw ddl type and definition."""
+def test_raw_ddl_type_and_definition():
     assert ora("PESSOA_EMITENTE", "RAW", 16).ddl_type == "RAW(16)"
     assert ora("PESSOA_EMITENTE", "RAW", 16).definition == '"PESSOA_EMITENTE" RAW(16) NOT NULL'
     assert ora("PESSOA_OPCIONAL", "RAW", 8, nullable=True).definition == '"PESSOA_OPCIONAL" RAW(8)'
 
 
-def test_raw_loader_spec_decodes_base64_text() -> None:
-    """Check that raw loader spec decodes base64 text."""
+def test_raw_loader_spec_decodes_base64_text():
     assert loader_spec(ora("PESSOA_EMITENTE", "RAW", 16), "STRING") == (
         'CHAR(64) "CASE WHEN :PESSOA_EMITENTE IS NOT NULL THEN '
-        + 'UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(:PESSOA_EMITENTE)) END"'
+        'UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(:PESSOA_EMITENTE)) END"'
     )
     assert loader_spec(ora("BLOB_GRANDE", "RAW", 2000), "STRING").startswith("CHAR(2668) ")
 
@@ -1212,21 +975,19 @@ def test_raw_loader_spec_decodes_base64_text() -> None:
     ("column", "bq_type"),
     [(ora("PESSOA", "RAW", 16), "BYTES"), (ora("PESSOA", "RAW", 16), "INTEGER"), (ora("_PESSOA", "RAW", 16), "STRING")],
 )
-def test_raw_loader_spec_rejects_other_sources_and_quoted_names(column: OracleColumn, bq_type: str) -> None:
-    """Check that raw loader spec rejects other sources and quoted names."""
+def test_raw_loader_spec_rejects_other_sources_and_quoted_names(column, bq_type):
     with pytest.raises(NotImplementedError):
         loader_spec(column, bq_type)
 
 
-def test_build_load_plan_for_notas_nacionais_detalhes_excludes_rowids_and_decodes_raw() -> None:
-    """Exclude the ROWIDs and decode the RAW columns of the national notes details."""
+def test_build_load_plan_for_notas_nacionais_detalhes_excludes_rowids_and_decodes_raw():
     plan = build_load_plan(NN_DETALHES_BQ, NN_DETALHES_TEMPLATE)
     assert plan.excluded == ["NN_ROWID", "DPS_ROWID", "PE_ROWID"]
     assert plan.ignored == ["_BIGQUERY_UID", "_BIGQUERY_PARTICAO_DATA", "_BIGQUERY_UPDATED_AT"]
     specs = {loader.name: loader.spec for loader in plan.fields}
     assert specs["PESSOA_INTERMEDIARIO"] == (
         'CHAR(64) "CASE WHEN :PESSOA_INTERMEDIARIO IS NOT NULL THEN '
-        + 'UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(:PESSOA_INTERMEDIARIO)) END"'
+        'UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(:PESSOA_INTERMEDIARIO)) END"'
     )
     assert specs["DATA_VALIDACAO"] == 'DATE "YYYY-MM-DD\\"T\\"HH24:MI:SS"'
     assert specs["STATUS_NOTA"] == "CHAR(64)"
@@ -1237,14 +998,9 @@ def test_build_load_plan_for_notas_nacionais_detalhes_excludes_rowids_and_decode
     assert '  "_BIGQUERY_PARTICAO_DATA" FILLER CHAR(4000),' in control
 
 
-def test_index_key_reads_column_expression_and_descending_columns() -> None:
-    """Check that index key reads column expression and descending columns."""
+def test_index_key_reads_column_expression_and_descending_columns():
     assert index_key({"column_name": "A", "descend": "ASC", "column_expression": None}) == "A"
-    row: dict[str, object] = {
-        "column_name": "SYS_NC1$",
-        "descend": "ASC",
-        "column_expression": ' CASE WHEN "A"=1 THEN 1 END',
-    }
+    row = {"column_name": "SYS_NC1$", "descend": "ASC", "column_expression": ' CASE WHEN "A"=1 THEN 1 END'}
     expression = index_key(row)
     assert isinstance(expression, IndexExpression)
     assert expression == 'CASE WHEN "A"=1 THEN 1 END'
@@ -1253,9 +1009,8 @@ def test_index_key_reads_column_expression_and_descending_columns() -> None:
     assert descending == '"B" DESC'
 
 
-def test_index_from_dictionary_keeps_expressions_of_function_based_index() -> None:
-    """Check that index from dictionary keeps expressions of function based index."""
-    row: dict[str, object] = {
+def test_index_from_dictionary_keeps_expressions_of_function_based_index():
+    row = {
         "owner": "DFEN",
         "index_name": "IX_MVT_NN_CANC_COMP_NN",
         "index_type": "FUNCTION-BASED NORMAL",
@@ -1273,8 +1028,7 @@ def test_index_from_dictionary_keeps_expressions_of_function_based_index() -> No
 LOADED = ["STATUS_NOTA", "DATA_COMPETENCIA_MUNICIPIO", "NOTA_NACIONAL", "CHAVE_ACESSO"]
 
 
-def test_plan_structure_accepts_local_function_based_index_and_renames_it() -> None:
-    """Check that plan structure accepts local function based index and renames it."""
+def test_plan_structure_accepts_local_function_based_index_and_renames_it():
     template = TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH, (function_based_index(),))
     plan = plan_structure(template, LOADED, "BQLOAD_")
     assert plan.layout.indexes == (replace(function_based_index(), name="BQLOAD_IX_MVT_NN_CANC_COMP_NN"),)
@@ -1287,8 +1041,7 @@ def test_plan_structure_accepts_local_function_based_index_and_renames_it() -> N
     assert long_index.name == "BQLOAD_IX_MVTNND_RESPONSAVEL_DV_CA_B"
 
 
-def test_plan_structure_rejects_function_based_index_on_column_that_is_not_loaded() -> None:
-    """Reject a function-based index on a column that is not loaded."""
+def test_plan_structure_rejects_function_based_index_on_column_that_is_not_loaded():
     template = TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH, (function_based_index(),))
     with pytest.raises(ValueError, match="STATUS_NOTA"):
         plan_structure(template, ["DATA_COMPETENCIA_MUNICIPIO", "NOTA_NACIONAL"], "BQLOAD_")
@@ -1303,22 +1056,20 @@ def test_plan_structure_rejects_function_based_index_on_column_that_is_not_loade
         function_based_index(columns=("SYS_NC00001$",)),
     ],
 )
-def test_plan_structure_still_rejects_other_function_based_and_unknown_indexes(unsupported: IndexDefinition) -> None:
-    """Reject other function-based indexes and unknown ones."""
+def test_plan_structure_still_rejects_other_function_based_and_unknown_indexes(unsupported):
     with pytest.raises(NotImplementedError):
         plan_structure(TableLayout(None, None, (unsupported,)), LOADED, "BQLOAD_")
 
 
-def test_index_statement_emits_expressions_verbatim_with_local_and_parallel() -> None:
-    """Check that index statement emits expressions verbatim with local and parallel."""
+def test_index_statement_emits_expressions_verbatim_with_local_and_parallel():
     parts = index_statement_parts(function_based_index(), 4)
     assert parts == {
         "kind": "",
         "columns": 'CASE  WHEN "STATUS_NOTA"<>0 THEN "DATA_COMPETENCIA_MUNICIPIO" END , '
-        + 'CASE  WHEN "STATUS_NOTA"<>0 THEN "NOTA_NACIONAL" END ',
+        'CASE  WHEN "STATUS_NOTA"<>0 THEN "NOTA_NACIONAL" END ',
         "options": "LOCAL PARALLEL 4",
     }
-    statement = render_query(
+    statement = load_query(
         QUERIES_ANCHOR,
         "create_index",
         schema="DFEN",
@@ -1328,14 +1079,13 @@ def test_index_statement_emits_expressions_verbatim_with_local_and_parallel() ->
     )
     assert statement.startswith(
         'CREATE  INDEX "DFEN"."BQLOAD_IX_MVT_NN_CANC_COMP_NN_A" ON "DFEN"."BQLOAD_MVT_NOTAS_NACIONAIS_DETALHES_A" '
-        + '(CASE  WHEN "STATUS_NOTA"<>0 THEN "DATA_COMPETENCIA_MUNICIPIO" END , '
-        + 'CASE  WHEN "STATUS_NOTA"<>0 THEN "NOTA_NACIONAL" END )'
+        '(CASE  WHEN "STATUS_NOTA"<>0 THEN "DATA_COMPETENCIA_MUNICIPIO" END , '
+        'CASE  WHEN "STATUS_NOTA"<>0 THEN "NOTA_NACIONAL" END )'
     )
     assert statement.rstrip().endswith("LOCAL PARALLEL 4")
 
 
-def test_function_based_index_description_shows_expressions() -> None:
-    """Check that function based index description shows expressions."""
+def test_function_based_index_description_shows_expressions():
     assert function_based_index().description.startswith('LOCAL FUNCTION-BASED NORMAL (CASE  WHEN "STATUS_NOTA"<>0')
 
 
@@ -1350,40 +1100,34 @@ def test_function_based_index_description_shows_expressions() -> None:
         (ora("NACIONAL", "NVARCHAR2", 20, "C"), "CHAR(80)"),
     ],
 )
-def test_text_loader_spec_is_sized_from_the_column_with_utf8_headroom(column: OracleColumn, expected: str) -> None:
-    """Check that text loader spec is sized from the column with utf8 headroom."""
+def test_text_loader_spec_is_sized_from_the_column_with_utf8_headroom(column, expected):
     assert loader_spec(column, "STRING") == expected
     assert loader_spec(column, "JSON") == expected
 
 
-def test_text_loader_spec_holds_a_max_length_multibyte_value_in_a_char_semantics_column() -> None:
-    """Hold a multibyte value of maximum length in a column with character semantics."""
+def test_text_loader_spec_holds_a_max_length_multibyte_value_in_a_char_semantics_column():
     column = ora("NOME", "VARCHAR2", 1200, "C")  # VARCHAR2(300 CHAR) num banco AL32UTF8: 1200 bytes
     declared = int(loader_spec(column, "STRING").removeprefix("CHAR(").removesuffix(")"))
     assert declared >= len(("😀" * 300).encode()) == 1200
 
 
-def test_date_loader_spec_is_native_without_sql_expression() -> None:
-    """Check that date loader spec is native without sql expression."""
+def test_date_loader_spec_is_native_without_sql_expression():
     assert loader_spec(ora("DATA", "DATE", 7), "STRING") == 'DATE "YYYY-MM-DD\\"T\\"HH24:MI:SS"'
     assert loader_spec(ora("_DATA", "DATE", 7), "STRING") == 'DATE "YYYY-MM-DD\\"T\\"HH24:MI:SS"'
 
 
 @pytest.mark.parametrize(("length", "chars"), [(16, 32), (8, 16), (2000, 4000)])
-def test_raw_hex_loader_spec_is_a_plain_char_field_sized_by_two_chars_per_byte(length: int, chars: int) -> None:
-    """Make the RAW hex spec a plain CHAR field of two chars for each byte."""
+def test_raw_hex_loader_spec_is_a_plain_char_field_sized_by_two_chars_per_byte(length, chars):
     spec = loader_spec(ora("PESSOA", "RAW", length), "STRING", "hex")
     assert spec == f"CHAR({chars})"
 
 
-def test_raw_hex_loader_spec_does_not_need_an_unquoted_name_and_base64_stays_the_default() -> None:
-    """Need no unquoted name for RAW hex, and keep base64 as the default."""
+def test_raw_hex_loader_spec_does_not_need_an_unquoted_name_and_base64_stays_the_default():
     assert loader_spec(ora("_PESSOA", "RAW", 16), "STRING", "hex") == "CHAR(32)"
     assert loader_spec(ora("PESSOA", "RAW", 16), "STRING", "base64") == loader_spec(ora("PESSOA", "RAW", 16), "STRING")
 
 
-def test_build_load_plan_propagates_raw_text_encoding_to_pessoa_columns_only() -> None:
-    """Pass the RAW text encoding to the `pessoa` columns only."""
+def test_build_load_plan_propagates_raw_text_encoding_to_pessoa_columns_only():
     hex_plan = build_load_plan(NN_DETALHES_BQ, NN_DETALHES_TEMPLATE, raw_text_encoding="hex")
     specs = {loader.name: loader.spec for loader in hex_plan.fields}
     assert [specs[name] for name in ("PESSOA_EMITENTE", "PESSOA_PRESTADOR", "PESSOA_TOMADOR")] == ["CHAR(32)"] * 3
@@ -1394,114 +1138,90 @@ def test_build_load_plan_propagates_raw_text_encoding_to_pessoa_columns_only() -
     assert '  "PESSOA_TOMADOR" CHAR(32),' in control
 
 
-def test_count_rows_query_runs_parallel_with_the_requested_degree() -> None:
-    """Check that count rows query runs parallel with the requested degree."""
-    sql = render_query(QUERIES_ANCHOR, "count_rows", schema="DFEN", table="BQLOAD_X_A", degree=4)
+def test_count_rows_query_runs_parallel_with_the_requested_degree():
+    sql = load_query(QUERIES_ANCHOR, "count_rows", schema="DFEN", table="BQLOAD_X_A", degree=4)
     assert sql == 'SELECT /*+ PARALLEL(4) */ COUNT(*)\nFROM "DFEN"."BQLOAD_X_A"\n'
 
 
-@final
-class CountCursor:
-    """A cursor that records the SQL and answers a count of 7."""
-
-    def __init__(self, executed: list[str]) -> None:
-        """Store the arguments."""
-        self.executed = executed
-
-    def __enter__(self) -> "CountCursor":
-        """Return the fake."""
-        return self
-
-    def __exit__(self, *args: object) -> bool:
-        """Close the fake."""
-        return False
-
-    def execute(self, sql: str) -> None:
-        """Execute."""
-        self.executed.append(sql)
-
-    def fetchone(self) -> tuple[int]:
-        """Return the fetchone."""
-        return (7,)
-
-
-@final
-class CountConnection:
-    """A connection with the cursor of `CountCursor`."""
-
-    def __init__(self, executed: list[str]) -> None:
-        """Store the arguments."""
-        self.executed = executed
-
-    def __enter__(self) -> "CountConnection":
-        """Return the fake."""
-        return self
-
-    def __exit__(self, *args: object) -> bool:
-        """Close the fake."""
-        return False
-
-    def cursor(self) -> CountCursor:
-        """Return the cursor."""
-        return CountCursor(self.executed)
-
-
 @pytest.mark.parametrize(("requested", "hinted"), [(4, 4), (1, 1), (0, 1), (-3, 1)])
-def test_count_rows_sends_the_parallel_hint_to_oracle(
-    monkeypatch: pytest.MonkeyPatch, requested: int, hinted: int
-) -> None:
-    """Check that count rows sends the parallel hint to oracle."""
-    executed: list[str] = []
+def test_count_rows_sends_the_parallel_hint_to_oracle(monkeypatch, requested, hinted):
+    from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import oracle
 
-    def connect(config: object) -> CountConnection:
-        del config
+    executed = []
 
-        return CountConnection(executed)
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, sql):
+            executed.append(sql)
+
+        def fetchone(self):
+            return (7,)
+
+    class Connection(Cursor):
+        def cursor(self):
+            return Cursor()
 
     config = oracle.OracleConfig("DFEN", "p", "h", "1", "s", "DFEN")
-    monkeypatch.setattr(oracle_ddl, "connect", connect)
-    assert oracle_ddl.count_rows(config, "BQLOAD_X_A", parallel_degree=requested) == 7
+    monkeypatch.setattr(oracle, "connect", lambda _config: Connection())
+    assert oracle.count_rows(config, "BQLOAD_X_A", parallel_degree=requested) == 7
     assert executed == [f'SELECT /*+ PARALLEL({hinted}) */ COUNT(*)\nFROM "DFEN"."BQLOAD_X_A"\n']
 
 
-async def store_with(names: list[str]) -> MemoryStore:
-    """Return an in-memory bucket that holds one object for each name."""
-    store = MemoryStore()
+class FakeBatch:
+    def __init__(self, log):
+        self.log = log
 
-    for name in names:
-        await put_async(store, name, b"x")
+    def __enter__(self):
+        self.log.append("batch-open")
+        return self
 
-    return store
-
-
-def serve(store: MemoryStore) -> Callable[[str], MemoryStore]:
-    """Return a stand-in for `create_store` that gives the same in-memory bucket."""
-
-    def create_store(bucket: str) -> MemoryStore:
-        """Return the bucket."""
-        del bucket
-
-        return store
-
-    return create_store
+    def __exit__(self, *exc):
+        self.log.append("batch-close")
+        return False
 
 
-def test_delete_blobs_removes_every_listed_object_and_keeps_the_others(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Check that delete blobs removes every listed object and keeps the others."""
+class FakeStorageClient:
+    def __init__(self, log):
+        self.log = log
+
+    def batch(self, raise_exception=True):
+        assert raise_exception is True
+        return FakeBatch(self.log)
+
+    def bucket(self, name):
+        log = self.log
+
+        class Bucket:
+            def blob(self, blob_name):
+                return type("Blob", (), {"delete": staticmethod(lambda: log.append(blob_name))})()
+
+        return Bucket()
+
+
+def test_delete_blobs_removes_every_object_in_batches_of_at_most_100(monkeypatch):
+    log = []
+    monkeypatch.setattr(bigquery.storage, "Client", lambda project: FakeStorageClient(log))
     names = [f"p/part-{n}.csv.gz" for n in range(250)]
-    store = run(store_with([*names, "other/keep.csv.gz"]))
-    monkeypatch.setattr(bigquery, "create_store", serve(store))
+    bigquery.delete_blobs("proj", "bucket", names)
+    batches, current = [], None
+    for item in log:
+        if item == "batch-open":
+            current = []
+        elif item == "batch-close":
+            batches.append(current)
+        else:
+            current.append(item)
+    assert [len(batch) for batch in batches] == [100, 100, 50]
+    assert [name for batch in batches for name in batch] == names
 
-    bigquery.delete_blobs("bucket", names)
 
-    assert list_sizes(store, "") == {"other/keep.csv.gz": 1}
-
-
-def test_delete_blobs_with_no_objects_keeps_the_bucket(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Check that delete blobs with no objects keeps the bucket."""
-    store = run(store_with(["p/a.csv.gz"]))
-    monkeypatch.setattr(bigquery, "create_store", serve(store))
-
-    bigquery.delete_blobs("bucket", [])
-
-    assert list_sizes(store, "") == {"p/a.csv.gz": 1}
+def test_delete_blobs_with_no_objects_makes_no_request(monkeypatch):
+    log = []
+    monkeypatch.setattr(bigquery.storage, "Client", lambda project: FakeStorageClient(log))
+    bigquery.delete_blobs("proj", "bucket", [])
+    assert log == []

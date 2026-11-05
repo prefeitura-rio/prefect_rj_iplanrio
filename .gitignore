@@ -1,10 +1,4 @@
 **/**/test*
-!packages/toolkit/tests/
-!packages/toolkit/tests/**
-!pipelines/*/tests/
-!pipelines/*/tests/**
-!tests/
-!tests/**
 **/**/api.pdf
 /data/
 test.py
@@ -16,6 +10,9 @@ prefect_rj_iplanrio.egg-info/
 __pycache__/
 *.py[cod]
 *$py.class
+
+# direnv
+.direnv/
 
 # Sphinx documentation
 docs/_build/
@@ -48,8 +45,3 @@ pipelines/**/.python-version
 
 # Egg-info dirs generated inside pipeline packages
 pipelines/**/*.egg-info/
-packages/toolkit/.coverage
-
-# devenv
-.devenv/
-devenv.local.nix
