@@ -1,160 +1,590 @@
-from datetime import UTC, datetime, timedelta
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 
 import pytest
 
-from pipelines.rj_smfp__nota_carioca_carga_completa.helpers.chain import (
+from pipelines.rj_smfp__nota_carioca_carga_completa.constants import (
+    BQ_TO_ORACLE_DEPLOYMENT,
+    BQ_TO_ORACLE_LABEL,
+    EXTRACTION_DEPLOYMENT,
+    EXTRACTION_LABEL,
+    ORACLE_TO_BQ_DEPLOYMENT,
+    ORACLE_TO_BQ_LABEL,
+)
+from pipelines.rj_smfp__nota_carioca_carga_completa.utils.chain import (
+    ChainActions,
+    ChainPlan,
+    ChainStoppedError,
+    ChildRun,
+    Step,
     build_run_tags,
-    format_duration,
-    is_done,
-    item_tag,
-    missing_positions,
-    not_triggered,
-    position_of,
-    unfinished,
+    run_chain,
 )
-from pipelines.rj_smfp__nota_carioca_carga_completa.helpers.guard import blocking_runs, describe_blocking
-from pipelines.rj_smfp__nota_carioca_carga_completa.types import ActiveRun, ChildRun
+from pipelines.rj_smfp__nota_carioca_carga_completa.utils.guard import ActiveRun, ActiveRunsError
 
-NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
-
-
-def active(state_type: str, name: str = "r", state_name: str | None = None, start: datetime | None = None) -> ActiveRun:
-    """Return an active run in a state."""
-    return ActiveRun(f"id-{name}", name, state_type, state_name or state_type.title(), start)
-
-
-@pytest.mark.parametrize(
-    ("run", "blocks"),
-    [
-        pytest.param(active("RUNNING"), True, id="running"),
-        pytest.param(active("PENDING"), True, id="pending"),
-        pytest.param(active("CANCELLING"), True, id="cancelling"),
-        pytest.param(active("SCHEDULED", start=NOW + timedelta(minutes=5)), True, id="scheduled_soon"),
-        pytest.param(active("SCHEDULED", start=NOW + timedelta(minutes=10)), True, id="scheduled_at_the_limit"),
-        pytest.param(active("SCHEDULED", start=NOW + timedelta(minutes=11)), False, id="scheduled_later"),
-        pytest.param(active("SCHEDULED", start=NOW - timedelta(minutes=3)), True, id="late"),
-        pytest.param(active("SCHEDULED"), True, id="scheduled_with_no_time"),
-        pytest.param(active("COMPLETED"), False, id="completed"),
-    ],
-)
-def test_a_run_blocks_the_chain_when_it_is_active_or_about_to_start(run: ActiveRun, blocks: bool) -> None:
-    """Block for a run that is active, or scheduled within 10 minutes, or late."""
-    assert bool(blocking_runs([run], NOW)) is blocks
+ORACLE_STEP = Step(ORACLE_TO_BQ_LABEL, ORACLE_TO_BQ_DEPLOYMENT, 4 * 3600)
+BQ_STEP = Step(BQ_TO_ORACLE_LABEL, BQ_TO_ORACLE_DEPLOYMENT, 8 * 3600)
+TAGS = ("disparo:carga-completa", "disparo:discord", "discord-user:42")
+PLAN = ChainPlan(first=ORACLE_STEP, second=BQ_STEP, pause_seconds=30, tags=TAGS)
+EXTRACTION_STEP = Step(EXTRACTION_LABEL, EXTRACTION_DEPLOYMENT, 9 * 3600, done="concluída")
+FULL_PLAN = ChainPlan(first=ORACLE_STEP, second=BQ_STEP, pause_seconds=30, tags=TAGS, extraction=EXTRACTION_STEP)
+ORACLE_DONE_SECONDS = 40 * 60
+BQ_DONE_SECONDS = 3 * 3600
 
 
-def test_the_blocking_runs_are_described_with_their_links() -> None:
-    """List three runs with their link, and count the rest."""
-    runs = [active("RUNNING", name) for name in "abcde"]
-
-    text = describe_blocking(runs, lambda run_id: f"<{run_id}>")
-
-    assert text.startswith("5 execuções ativas ou agendadas: a (Running) <id-a>; b")
-    assert text.endswith("; e mais 2")
-    assert describe_blocking(runs[:1], lambda _: None) == "1 execução ativa ou agendada: a (Running)"
+def child(name: str, state_type: str, state_name: str) -> ChildRun:
+    return ChildRun(run_id=f"id-{name}", name=name, state_type=state_type, state_name=state_name)
 
 
-@pytest.mark.parametrize(
-    ("current", "expected"),
-    [
-        pytest.param([], ["disparo:carga-completa"], id="no_tags"),
-        pytest.param(
-            ["disparo:discord", "discord-user:9", "other", "disparo:carga-completa"],
-            ["disparo:carga-completa", "disparo:discord", "discord-user:9"],
-            id="audit_tags_without_repeats",
-        ),
-    ],
-)
-def test_the_child_runs_carry_the_audit_tags_of_the_chain(current: list[str], expected: list[str]) -> None:
-    """Keep the tags of the chain and the audit ones, and drop the others."""
-    assert build_run_tags(current) == expected
+COMPLETED = ("COMPLETED", "Completed")
 
 
-@pytest.mark.parametrize(
-    ("seconds", "expected"),
-    [
-        pytest.param(7, "7s", id="seconds"),
-        pytest.param(303, "5min 03s", id="minutes"),
-        pytest.param(7500, "2h05min", id="hours"),
-    ],
-)
-def test_a_duration_is_written_in_its_largest_units(seconds: int, expected: str) -> None:
-    """Write hours, minutes or seconds."""
-    assert format_duration(seconds) == expected
+@dataclass
+class World:
+    """Mundo falso: devolve o resultado combinado de cada deployment e registra o que a cadeia fez, em ordem."""
+
+    results: dict[str, ChildRun | Exception]
+    busy: dict[str, list[ActiveRun]] = field(default_factory=dict)
+    busy_after_pause: dict[str, list[ActiveRun]] = field(default_factory=dict)
+    ui_url: str | None = "https://prefect.test"
+    events: list[tuple[str, ...]] = field(default_factory=list)
+    run_tags: list[Sequence[str]] = field(default_factory=list)
+    now: float = 0.0
+    paused: bool = False
+    own: dict[str, ChildRun] = field(default_factory=dict)
+    waited: dict[str, ChildRun] = field(default_factory=dict)
+
+    def run(self, step: Step, tags: Sequence[str]) -> ChildRun:
+        self.events.append(("run", step.deployment, str(step.timeout_seconds)))
+        self.run_tags.append(tags)
+        self.now += ORACLE_DONE_SECONDS if step is ORACLE_STEP else BQ_DONE_SECONDS
+        outcome = self.results[step.deployment]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    def find_own(self, step: Step) -> ChildRun | None:
+        self.events.append(("own", step.deployment))
+        return self.own.get(step.deployment)
+
+    def wait(self, step: Step, child_run: ChildRun) -> ChildRun:
+        self.events.append(("wait", step.deployment, child_run.run_id))
+        self.now += BQ_DONE_SECONDS
+        return self.waited.get(step.deployment, child(child_run.name, *COMPLETED))
+
+    def ensure_idle(self, deployment: str) -> None:
+        self.events.append(("guard", deployment))
+        blocking = (self.busy_after_pause if self.paused else self.busy).get(deployment)
+        if blocking:
+            raise ActiveRunsError("ocupado", blocking)
+
+    def pause(self, seconds: int) -> None:
+        self.events.append(("pause", str(seconds)))
+        self.paused = True
+        self.now += seconds
+
+    def notify(self, text: str) -> None:
+        self.events.append(("notify", text))
+
+    def alert(self, text: str) -> None:
+        self.events.append(("alert", text))
+
+    def log(self, text: str) -> None:
+        self.events.append(("log", text))
+
+    def link(self, run_id: str) -> str | None:
+        return f"{self.ui_url}/runs/flow-run/{run_id}" if self.ui_url else None
+
+    def actions(self) -> ChainActions:
+        return ChainActions(
+            run=self.run,
+            ensure_idle=self.ensure_idle,
+            pause=self.pause,
+            notify=self.notify,
+            alert=self.alert,
+            find_own=self.find_own,
+            wait=self.wait,
+            log=self.log,
+            link=self.link,
+            clock=lambda: self.now,
+        )
+
+    def of_kind(self, kind: str) -> list[tuple[str, ...]]:
+        return [event for event in self.events if event[0] == kind]
+
+    def notifications(self) -> list[str]:
+        """Avisos e alertas, na ordem em que foram postados."""
+        return [event[1] for event in self.events if event[0] in {"notify", "alert"}]
+
+    def alerts(self) -> list[str]:
+        return [event[1] for event in self.of_kind("alert")]
+
+    def runs(self) -> list[str]:
+        return [event[1] for event in self.of_kind("run")]
 
 
-def child(state_type: str, name: str = "t", state_name: str | None = None) -> ChildRun:
-    """Return a child run in a state."""
-    return ChildRun(f"id-{name}", name, state_type, state_name or state_type.title())
+def both(oracle: ChildRun | Exception, bq: ChildRun | Exception | None = None) -> dict[str, ChildRun | Exception]:
+    return {
+        ORACLE_TO_BQ_DEPLOYMENT: oracle,
+        BQ_TO_ORACLE_DEPLOYMENT: bq if bq is not None else child("bq-run", *COMPLETED),
+    }
 
 
-def test_a_step_is_unfinished_only_if_a_child_run_did_not_complete() -> None:
-    """Give nothing when every child run completed."""
+def idle_world() -> World:
+    return World(both(child("oracle-run", *COMPLETED)))
+
+
+def busy_run(name: str = "manual-run") -> ActiveRun:
+    return ActiveRun(
+        run_id=f"id-{name}", name=name, state_type="RUNNING", state_name="Running", expected_start_time=None
+    )
+
+
+def test_run_chain_runs_second_after_pause_when_first_completes() -> None:
+    # Given: os dois deployments livres e o primeiro conclui
+    world = idle_world()
+
+    # When: roda a cadeia
+    run_chain(PLAN, world.actions())
+
+    # Then: confere os dois, dispara o primeiro, pausa 30 s, reconfere só o segundo e dispara o segundo
+    assert [event for event in world.events if event[0] not in {"log", "notify", "alert", "own"}] == [
+        ("guard", ORACLE_TO_BQ_DEPLOYMENT),
+        ("guard", BQ_TO_ORACLE_DEPLOYMENT),
+        ("run", ORACLE_TO_BQ_DEPLOYMENT, str(4 * 3600)),
+        ("pause", "30"),
+        ("guard", BQ_TO_ORACLE_DEPLOYMENT),
+        ("run", BQ_TO_ORACLE_DEPLOYMENT, str(8 * 3600)),
+    ]
+
+
+def test_run_chain_announces_start_transition_and_total_duration() -> None:
+    world = idle_world()
+
+    run_chain(PLAN, world.actions())
+
+    assert world.notifications() == [
+        "🔗 Carga completa iniciada: Oracle → BigQuery, depois BigQuery → Oracle",
+        "⏭️ Oracle → BigQuery concluído; BigQuery → Oracle começa em 30 s",
+        "✅ Carga completa concluída em 3h 40min",
+    ]
+
+
+def test_run_chain_passes_the_same_tags_to_both_children() -> None:
+    world = idle_world()
+
+    run_chain(PLAN, world.actions())
+
+    assert world.run_tags == [TAGS, TAGS]
+
+
+def test_run_chain_logs_child_runs_with_ui_links() -> None:
+    world = idle_world()
+
+    run_chain(PLAN, world.actions())
+
+    logs = [event[1] for event in world.of_kind("log")]
     assert (
-        unfinished("Oracle → BigQuery", [child("COMPLETED"), child("COMPLETED", "u")], 3600, ["BigQuery → Oracle"])
-        is None
+        "Oracle → BigQuery: flow run oracle-run em Completed https://prefect.test/runs/flow-run/id-oracle-run" in logs
     )
-
-
-def test_a_child_run_that_failed_or_is_still_going_stops_the_step() -> None:
-    """Say how each bad child run ended, and that the next step did not start."""
-    reason = unfinished(
-        "Oracle → BigQuery",
-        [child("COMPLETED", "ok"), child("FAILED", "bad"), child("RUNNING", "slow")],
-        3600,
-        ["BigQuery → Oracle"],
-    )
-
-    assert reason == (
-        "Oracle → BigQuery: bad terminou em Failed; slow ainda estava em Running após o limite de 1h00min; "
-        "BigQuery → Oracle não foi disparado"
-    )
-    assert "não foi disparado" not in str(unfinished("BigQuery → Oracle", [child("CRASHED")], 60, []))
+    assert "BigQuery → Oracle: flow run bq-run em Completed https://prefect.test/runs/flow-run/id-bq-run" in logs
 
 
 @pytest.mark.parametrize(
-    ("tags", "expected"),
-    [
-        pytest.param([item_tag(3), "disparo:discord"], 3, id="the_tag_of_the_position"),
-        pytest.param(["disparo:discord"], 0, id="no_position_tag"),
-        pytest.param(["carga-completa-item:x"], 0, id="a_position_that_is_not_a_number"),
-    ],
+    ("state_type", "state_name"),
+    [("FAILED", "Failed"), ("CRASHED", "Crashed"), ("CANCELLED", "Cancelled")],
 )
-def test_the_position_of_a_child_run_is_read_from_its_tags(tags: list[str], expected: int) -> None:
-    """Read the number after the tag prefix, and give 0 when there is none."""
-    assert position_of(tags) == expected
+def test_run_chain_stops_without_second_when_first_does_not_complete(state_type: str, state_name: str) -> None:
+    # Given: o primeiro termina mal
+    world = World(both(child("oracle-run", state_type, state_name)))
+
+    # When: roda a cadeia
+    with pytest.raises(ChainStoppedError) as stopped:
+        run_chain(PLAN, world.actions())
+
+    # Then: o segundo não é disparado nem há pausa, e o erro traz nome, estado e link do filho
+    assert world.runs() == [ORACLE_TO_BQ_DEPLOYMENT]
+    assert world.of_kind("pause") == []
+    message = str(stopped.value)
+    assert f"terminou em {state_name}" in message
+    assert "oracle-run" in message
+    assert "https://prefect.test/runs/flow-run/id-oracle-run" in message
+    assert "BigQuery → Oracle não foi disparado" in message
 
 
-def positioned(position: int, state_type: str = "COMPLETED") -> ChildRun:
-    """Return a child run with a position, in a state."""
-    return ChildRun(f"id{position}", f"t{position}", state_type, state_type.title(), position)
+def test_run_chain_announces_stop_with_state_and_link_when_first_fails() -> None:
+    world = World(both(child("oracle-run", "FAILED", "Failed")))
+
+    with pytest.raises(ChainStoppedError):
+        run_chain(PLAN, world.actions())
+
+    assert world.notifications()[-1] == (
+        "⛔ Carga completa interrompida: Oracle → BigQuery terminou em Failed; "
+        "BigQuery → Oracle não foi disparado · <https://prefect.test/runs/flow-run/id-oracle-run>"
+    )
+    assert not any("começa em" in text or "concluída" in text for text in world.notifications())
+
+
+def test_run_chain_stops_without_cancelling_when_first_is_still_running_after_timeout() -> None:
+    # Given: o tempo limite acabou e o primeiro ainda corre
+    world = World(both(child("oracle-run", "RUNNING", "Running")))
+
+    # When: roda a cadeia
+    with pytest.raises(ChainStoppedError) as stopped:
+        run_chain(PLAN, world.actions())
+
+    # Then: para sem disparar o segundo e diz que o filho segue ativo, sem ser cancelado
+    assert world.runs() == [ORACLE_TO_BQ_DEPLOYMENT]
+    assert "ainda estava em Running após o limite de 4h 00min" in str(stopped.value)
+    assert "não foi cancelado" in str(stopped.value)
+    assert "ainda estava em Running" in world.notifications()[-1]
+    assert "BigQuery → Oracle não foi disparado" in world.notifications()[-1]
+
+
+def test_run_chain_fails_when_second_does_not_complete() -> None:
+    # Given: o primeiro conclui e o segundo falha
+    world = World(both(child("oracle-run", *COMPLETED), child("bq-run", "FAILED", "Failed")))
+
+    # When: roda a cadeia
+    with pytest.raises(ChainStoppedError) as stopped:
+        run_chain(PLAN, world.actions())
+
+    # Then: o segundo foi disparado depois da pausa e o orquestrador falha com o estado dele
+    assert world.runs() == [ORACLE_TO_BQ_DEPLOYMENT, BQ_TO_ORACLE_DEPLOYMENT]
+    assert "BigQuery → Oracle terminou em Failed" in str(stopped.value)
+    assert "bq-run" in str(stopped.value)
+    assert world.notifications()[-1] == (
+        "⛔ Carga completa interrompida: BigQuery → Oracle terminou em Failed"
+        " · <https://prefect.test/runs/flow-run/id-bq-run>"
+    )
+
+
+def test_run_chain_fails_when_second_is_still_running_after_timeout() -> None:
+    world = World(both(child("oracle-run", *COMPLETED), child("bq-run", "RUNNING", "Running")))
+
+    with pytest.raises(ChainStoppedError) as stopped:
+        run_chain(PLAN, world.actions())
+
+    assert "BigQuery → Oracle ainda estava em Running após o limite de 8h 00min" in str(stopped.value)
+    assert not any("concluída" in text for text in world.notifications())
+
+
+@pytest.mark.parametrize("busy_deployment", [ORACLE_TO_BQ_DEPLOYMENT, BQ_TO_ORACLE_DEPLOYMENT])
+def test_run_chain_triggers_nothing_when_either_deployment_is_busy_at_start(busy_deployment: str) -> None:
+    # Given: alguém disparou um dos dois deployments à mão
+    world = idle_world()
+    world.busy[busy_deployment] = [busy_run()]
+
+    # When: tenta iniciar a cadeia
+    with pytest.raises(ChainStoppedError) as stopped:
+        run_chain(PLAN, world.actions())
+
+    # Then: nada é disparado, não há aviso de início e o erro nomeia a execução em andamento
+    assert world.of_kind("run") == []
+    assert world.of_kind("pause") == []
+    assert world.notifications() == [
+        "⛔ Carga completa não iniciada: " + _label(busy_deployment) + " já tem execução ativa (manual-run (Running))"
+    ]
+    assert "Carga completa não iniciada" in str(stopped.value)
+    assert busy_deployment in str(stopped.value)
+
+
+def _label(deployment: str) -> str:
+    return ORACLE_TO_BQ_LABEL if deployment == ORACLE_TO_BQ_DEPLOYMENT else BQ_TO_ORACLE_LABEL
+
+
+def test_run_chain_does_not_run_second_when_it_became_busy_during_the_pause() -> None:
+    # Given: o segundo estava livre no início, mas alguém o disparou durante a pausa
+    world = idle_world()
+    world.busy_after_pause[BQ_TO_ORACLE_DEPLOYMENT] = [busy_run()]
+
+    # When: roda a cadeia
+    with pytest.raises(ChainStoppedError) as stopped:
+        run_chain(PLAN, world.actions())
+
+    # Then: o primeiro rodou, o segundo não, e a parada avisa o Discord
+    assert world.runs() == [ORACLE_TO_BQ_DEPLOYMENT]
+    assert "BigQuery → Oracle" in str(stopped.value)
+    assert world.notifications()[-1] == (
+        "⛔ Carga completa interrompida (Oracle → BigQuery concluído): "
+        "BigQuery → Oracle já tem execução ativa (manual-run (Running))"
+    )
+
+
+def test_run_chain_rechecks_only_the_second_deployment_after_the_pause() -> None:
+    world = idle_world()
+
+    run_chain(PLAN, world.actions())
+
+    guards = [event[1] for event in world.of_kind("guard")]
+    assert guards == [ORACLE_TO_BQ_DEPLOYMENT, BQ_TO_ORACLE_DEPLOYMENT, BQ_TO_ORACLE_DEPLOYMENT]
+
+
+def test_run_chain_announces_and_reraises_unexpected_errors() -> None:
+    # Given: o disparo do primeiro estoura por um erro de infraestrutura
+    world = World(both(RuntimeError("API fora do ar")))
+
+    # When: roda a cadeia
+    with pytest.raises(RuntimeError, match="API fora do ar"):
+        run_chain(PLAN, world.actions())
+
+    # Then: o Discord é avisado e o segundo não é disparado
+    assert world.notifications()[-1] == "⛔ Carga completa interrompida por erro: RuntimeError: API fora do ar"
+    assert world.runs() == [ORACLE_TO_BQ_DEPLOYMENT]
+
+
+def test_run_chain_omits_links_when_ui_url_is_unknown() -> None:
+    world = World(both(child("oracle-run", "FAILED", "Failed")), ui_url=None)
+
+    with pytest.raises(ChainStoppedError) as stopped:
+        run_chain(PLAN, world.actions())
+
+    assert world.notifications()[-1] == (
+        "⛔ Carga completa interrompida: Oracle → BigQuery terminou em Failed; BigQuery → Oracle não foi disparado"
+    )
+    assert "https://" not in str(stopped.value)
+
+
+def test_build_run_tags_always_tags_the_chain() -> None:
+    assert build_run_tags([]) == ["disparo:carga-completa"]
+
+
+def test_build_run_tags_propagates_audit_tags_of_the_orchestrator_run() -> None:
+    # Given: o bot tagueou o run do orquestrador, e o deployment traz tags próprias
+    current = [
+        "environment:prod",
+        "disparo:discord",
+        "severity:medium",
+        "discord-user:123456789",
+        "code_owner:fredzolio",
+    ]
+
+    # When: monta as tags dos filhos
+    tags = build_run_tags(current)
+
+    # Then: herda só as de auditoria, depois da tag da carga completa
+    assert tags == ["disparo:carga-completa", "disparo:discord", "discord-user:123456789"]
+
+
+def test_build_run_tags_does_not_repeat_the_chain_tag() -> None:
+    assert build_run_tags(["disparo:carga-completa", "disparo:discord"]) == [
+        "disparo:carga-completa",
+        "disparo:discord",
+    ]
+
+
+def test_step_rejects_non_positive_timeout() -> None:
+    with pytest.raises(ValueError, match="tempo limite"):
+        Step(ORACLE_TO_BQ_LABEL, ORACLE_TO_BQ_DEPLOYMENT, 0)
+
+
+def test_chain_plan_rejects_negative_pause() -> None:
+    with pytest.raises(ValueError, match="pausa"):
+        ChainPlan(first=ORACLE_STEP, second=BQ_STEP, pause_seconds=-1, tags=())
+
+
+def all_three(extraction: ChildRun | Exception) -> dict[str, ChildRun | Exception]:
+    return {EXTRACTION_DEPLOYMENT: extraction, **both(child("oracle-run", *COMPLETED))}
+
+
+def test_run_chain_with_extraction_runs_it_first_and_each_next_step_after_a_pause() -> None:
+    # Given: os três deployments livres e todos concluem
+    world = World(all_three(child("xml-run", *COMPLETED)))
+
+    # When: roda a cadeia com a extração XML
+    run_chain(FULL_PLAN, world.actions())
+
+    # Then: confere os três, roda a extração, pausa, reconfere e roda cada próximo passo
+    assert [event for event in world.events if event[0] not in {"log", "notify", "alert", "own"}] == [
+        ("guard", EXTRACTION_DEPLOYMENT),
+        ("guard", ORACLE_TO_BQ_DEPLOYMENT),
+        ("guard", BQ_TO_ORACLE_DEPLOYMENT),
+        ("run", EXTRACTION_DEPLOYMENT, str(9 * 3600)),
+        ("pause", "30"),
+        ("guard", ORACLE_TO_BQ_DEPLOYMENT),
+        ("run", ORACLE_TO_BQ_DEPLOYMENT, str(4 * 3600)),
+        ("pause", "30"),
+        ("guard", BQ_TO_ORACLE_DEPLOYMENT),
+        ("run", BQ_TO_ORACLE_DEPLOYMENT, str(8 * 3600)),
+    ]
+    assert world.run_tags == [TAGS, TAGS, TAGS]
+
+
+def test_run_chain_with_extraction_announces_the_three_steps() -> None:
+    world = World(all_three(child("xml-run", *COMPLETED)))
+
+    run_chain(FULL_PLAN, world.actions())
+
+    notes = world.notifications()
+    assert notes[0] == "🔗 Carga completa iniciada: Extração XML, depois Oracle → BigQuery, depois BigQuery → Oracle"
+    assert notes[1] == "⏭️ Extração XML concluída; Oracle → BigQuery começa em 30 s"
+    assert notes[2] == "⏭️ Oracle → BigQuery concluído; BigQuery → Oracle começa em 30 s"
+    assert notes[-1].startswith("✅ Carga completa concluída em ")
+    assert world.alerts() == []
 
 
 @pytest.mark.parametrize(
-    ("existing", "total", "missing", "done"),
-    [
-        pytest.param([], 2, [1, 2], False, id="nothing_started"),
-        pytest.param([positioned(1)], 3, [2, 3], False, id="started_half_way"),
-        pytest.param([positioned(1), positioned(2, "RUNNING")], 2, [], False, id="one_still_runs"),
-        pytest.param([positioned(1), positioned(2)], 2, [], True, id="all_completed"),
-        pytest.param([positioned(1, "FAILED")], 1, [], False, id="one_failed"),
-    ],
+    ("state_type", "state_name"),
+    [("FAILED", "Failed"), ("CRASHED", "Crashed"), ("CANCELLED", "Cancelled"), ("RUNNING", "Running")],
 )
-def test_a_restart_starts_only_the_runs_that_are_missing(
-    existing: list[ChildRun], total: int, missing: list[int], done: bool
-) -> None:
-    """Find the positions with no child run, and tell whether the step is done."""
-    assert missing_positions(existing, total) == missing
-    assert is_done(existing, total) is done
+def test_run_chain_runs_no_load_when_extraction_does_not_complete(state_type: str, state_name: str) -> None:
+    # Given: a extração não conclui (falha, cai, é cancelada ou passa do limite)
+    world = World(all_three(child("xml-run", state_type, state_name)))
+
+    # When: roda a cadeia
+    with pytest.raises(ChainStoppedError) as stopped:
+        run_chain(FULL_PLAN, world.actions())
+
+    # Then: nenhuma carga roda e o alerta diz que as duas não foram disparadas
+    assert world.runs() == [EXTRACTION_DEPLOYMENT]
+    assert world.of_kind("pause") == []
+    assert "Oracle → BigQuery e BigQuery → Oracle não foram disparados" in str(stopped.value)
+    assert world.alerts() == [world.notifications()[-1]]
+    assert world.alerts()[0].startswith("⛔ Carga completa interrompida: Extração XML ")
+    assert "Oracle → BigQuery e BigQuery → Oracle não foram disparados" in world.alerts()[0]
 
 
-@pytest.mark.parametrize(
-    ("labels", "expected"),
-    [
-        pytest.param([], "", id="nothing_skipped"),
-        pytest.param(["A"], "; A não foi disparado", id="one_step"),
-        pytest.param(["A", "B", "C"], "; A, B e C não foram disparados", id="three_steps"),
-    ],
-)
-def test_the_steps_that_do_not_start_are_listed(labels: list[str], expected: str) -> None:
-    """Write the skipped steps in the singular or the plural."""
-    assert not_triggered(labels) == expected
+def test_run_chain_triggers_nothing_when_the_extraction_is_busy_at_start() -> None:
+    world = World(all_three(child("xml-run", *COMPLETED)))
+    world.busy[EXTRACTION_DEPLOYMENT] = [busy_run()]
+
+    with pytest.raises(ChainStoppedError, match="Carga completa não iniciada"):
+        run_chain(FULL_PLAN, world.actions())
+
+    assert world.of_kind("run") == []
+    assert world.alerts() == [
+        "⛔ Carga completa não iniciada: Extração XML já tem execução ativa (manual-run (Running))"
+    ]
+
+
+def test_run_chain_does_not_run_oracle_to_bq_when_it_became_busy_after_the_extraction() -> None:
+    world = World(all_three(child("xml-run", *COMPLETED)))
+    world.busy_after_pause[ORACLE_TO_BQ_DEPLOYMENT] = [busy_run()]
+
+    with pytest.raises(ChainStoppedError):
+        run_chain(FULL_PLAN, world.actions())
+
+    assert world.runs() == [EXTRACTION_DEPLOYMENT]
+    assert world.alerts() == [
+        "⛔ Carga completa interrompida (Extração XML concluída): "
+        "Oracle → BigQuery já tem execução ativa (manual-run (Running))"
+    ]
+
+
+def test_run_chain_posts_every_stop_as_an_alert_and_progress_as_plain_notes() -> None:
+    world = World(both(child("oracle-run", "FAILED", "Failed")))
+
+    with pytest.raises(ChainStoppedError):
+        run_chain(PLAN, world.actions())
+
+    assert [text for text in world.alerts() if text.startswith("⛔")] == world.alerts()
+    assert not any(text.startswith("⛔") for text in (event[1] for event in world.of_kind("notify")))
+
+
+def test_run_chain_alerts_unexpected_errors() -> None:
+    world = World(all_three(RuntimeError("API fora do ar")))
+
+    with pytest.raises(RuntimeError):
+        run_chain(FULL_PLAN, world.actions())
+
+    assert world.alerts() == ["⛔ Carga completa interrompida por erro: RuntimeError: API fora do ar"]
+
+
+RUNNING = ("RUNNING", "Running")
+
+
+def test_run_chain_asks_for_its_own_children_of_every_step_before_anything() -> None:
+    world = World(all_three(child("xml-run", *COMPLETED)))
+
+    run_chain(FULL_PLAN, world.actions())
+
+    assert world.events[:3] == [
+        ("own", EXTRACTION_DEPLOYMENT),
+        ("own", ORACLE_TO_BQ_DEPLOYMENT),
+        ("own", BQ_TO_ORACLE_DEPLOYMENT),
+    ]
+    assert world.of_kind("wait") == []
+
+
+def test_restarted_chain_waits_for_its_running_step_without_alert_or_new_trigger() -> None:
+    # Given: o orquestrador reiniciou (SIGTERM) com a extração e o Oracle → BigQuery já concluídos e o BigQuery → Oracle
+    # dele ainda rodando
+    world = World(all_three(child("xml-run", *COMPLETED)))
+    world.own = {
+        EXTRACTION_DEPLOYMENT: child("xml-run", *COMPLETED),
+        ORACLE_TO_BQ_DEPLOYMENT: child("oracle-run", *COMPLETED),
+        BQ_TO_ORACLE_DEPLOYMENT: child("bq-run", *RUNNING),
+    }
+
+    # When: roda a cadeia de novo
+    run_chain(FULL_PLAN, world.actions())
+
+    # Then: não dispara nada, não confere a trava contra os próprios filhos, só espera o BigQuery → Oracle e conclui
+    assert world.of_kind("run") == []
+    assert world.of_kind("guard") == []
+    assert world.of_kind("pause") == []
+    assert world.of_kind("wait") == [("wait", BQ_TO_ORACLE_DEPLOYMENT, "id-bq-run")]
+    assert world.alerts() == []
+    notes = world.notifications()
+    assert notes[0].startswith("🔁 Carga completa retomada depois de um reinício do orquestrador")
+    assert any(note.startswith("⏳ Retomando a espera de BigQuery → Oracle") and "bq-run" in note for note in notes)
+    assert notes[-1].startswith("✅ Carga completa concluída em ")
+
+
+def test_restarted_chain_starts_the_next_step_when_the_restart_happened_between_steps() -> None:
+    # Given: só a extração deste run existe (o reinício veio durante a pausa)
+    world = World(all_three(child("xml-run", *COMPLETED)))
+    world.own = {EXTRACTION_DEPLOYMENT: child("xml-run", *COMPLETED)}
+
+    run_chain(FULL_PLAN, world.actions())
+
+    assert world.runs() == [ORACLE_TO_BQ_DEPLOYMENT, BQ_TO_ORACLE_DEPLOYMENT]
+    assert [event[1] for event in world.of_kind("guard")] == [
+        ORACLE_TO_BQ_DEPLOYMENT,
+        BQ_TO_ORACLE_DEPLOYMENT,
+        ORACLE_TO_BQ_DEPLOYMENT,
+        BQ_TO_ORACLE_DEPLOYMENT,
+    ]
+    assert "⏭️ Extração XML concluída; Oracle → BigQuery começa em 30 s" in world.notifications()
+    assert world.alerts() == []
+
+
+@pytest.mark.parametrize(("state_type", "state_name"), [("FAILED", "Failed"), ("CRASHED", "Crashed")])
+def test_restarted_chain_stops_when_its_own_step_had_not_completed(state_type: str, state_name: str) -> None:
+    world = World(all_three(child("xml-run", *COMPLETED)))
+    world.own = {
+        EXTRACTION_DEPLOYMENT: child("xml-run", *COMPLETED),
+        ORACLE_TO_BQ_DEPLOYMENT: child("oracle-run", state_type, state_name),
+    }
+
+    with pytest.raises(ChainStoppedError, match=f"Oracle → BigQuery terminou em {state_name}"):
+        run_chain(FULL_PLAN, world.actions())
+
+    assert world.of_kind("run") == []
+    assert "BigQuery → Oracle não foi disparado" in world.alerts()[0]
+
+
+def test_restarted_chain_stops_when_the_resumed_wait_ends_without_completion() -> None:
+    world = World(all_three(child("xml-run", *COMPLETED)))
+    world.own = {
+        EXTRACTION_DEPLOYMENT: child("xml-run", *COMPLETED),
+        ORACLE_TO_BQ_DEPLOYMENT: child("oracle-run", *COMPLETED),
+        BQ_TO_ORACLE_DEPLOYMENT: child("bq-run", *RUNNING),
+    }
+    world.waited = {BQ_TO_ORACLE_DEPLOYMENT: child("bq-run", "FAILED", "Failed")}
+
+    with pytest.raises(ChainStoppedError, match="BigQuery → Oracle terminou em Failed"):
+        run_chain(FULL_PLAN, world.actions())
+
+    assert world.alerts()[0].startswith("⛔ Carga completa interrompida: BigQuery → Oracle terminou em Failed")
+
+
+def test_restarted_chain_still_refuses_a_step_busy_with_a_run_that_is_not_its_own() -> None:
+    world = World(all_three(child("xml-run", *COMPLETED)))
+    world.own = {EXTRACTION_DEPLOYMENT: child("xml-run", *COMPLETED)}
+    world.busy[BQ_TO_ORACLE_DEPLOYMENT] = [busy_run()]
+
+    with pytest.raises(ChainStoppedError, match="Carga completa não iniciada"):
+        run_chain(FULL_PLAN, world.actions())
+
+    assert world.of_kind("run") == []

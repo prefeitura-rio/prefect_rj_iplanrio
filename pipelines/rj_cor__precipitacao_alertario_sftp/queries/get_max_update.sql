@@ -6,4 +6,4 @@
 SELECT
     MAX(data_medicao) as max_data_medicao
 FROM
-    `{{ table }}`
+    `${project_id}.${dataset_id}.${table_id}`

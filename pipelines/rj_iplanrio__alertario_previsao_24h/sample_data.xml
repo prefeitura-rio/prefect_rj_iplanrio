@@ -1,0 +1,20 @@
+<previsoes Createdate="2025-11-27T05:04:04.854987">
+<previsao ceu="Parcialmente Nublado" condicaoIcon="parcnub.gif" datePeriodo="2025-11-28" dirVento="E/SE" periodo="Madrugada" precipitacao="Sem chuva" temperatura="Declínio" velVento="Fraco a Moderado"/>
+<previsao ceu="Parcialmente Nublado a Nublado" condicaoIcon="parcnub.gif" datePeriodo="2025-11-27" dirVento="E/SE" periodo="Noite" precipitacao="Sem chuva" temperatura="Estável" velVento="Fraco a Moderado"/>
+<previsao ceu="Parcialmente Nublado a Nublado" condicaoIcon="parcnub.gif" datePeriodo="2025-11-27" dirVento="SE/S" periodo="Tarde" precipitacao="Sem chuva" temperatura="Estável" velVento="Fraco a Moderado"/>
+<previsao ceu="Nublado a Parcialmente Nublado" condicaoIcon="nublado.gif" datePeriodo="2025-11-27" dirVento="SE/S" periodo="Manhã" precipitacao="Sem chuva" temperatura="Estável" velVento="Fraco a Moderado"/>
+<quadroSinotico Createdate="2025-11-27T05:04:04.793121" sinotico="As condições atmosféricas, nesta quinta-feira na cidade do Rio, serão influenciadas por ventos úmidos do oceano. Assim, o céu estará com nebulosidade variada e não há previsão de chuva. Os ventos estarão fracos a moderados e as temperaturas não apresentarão mudanças em relação ao dia anterior, com máxima prevista de 29°C."/>
+<Temperatura data="2025-11-26">
+<Zona maxima="29.0" minima="18.0" zona="Barra/Jacarepaguá"/>
+<Zona maxima="27.0" minima="15.0" zona="Centro/Grande Tijuca"/>
+<Zona maxima="29.0" minima="19.0" zona="Zona Norte"/>
+<Zona maxima="29.0" minima="18.0" zona="Zona Oeste"/>
+<Zona maxima="26.0" minima="18.0" zona="Zona Sul"/>
+</Temperatura>
+<TabuasMares>
+<tabua altura="0.92" date="2025-11-27T07:21:00" elevacao="Alta"/>
+<tabua altura="0.6" date="2025-11-27T15:04:00" elevacao="Baixa"/>
+<tabua altura="0.85" date="2025-11-27T19:02:00" elevacao="Alta"/>
+<tabua altura="0.3" date="2025-11-28T03:04:00" elevacao="Baixa"/>
+</TabuasMares>
+</previsoes>

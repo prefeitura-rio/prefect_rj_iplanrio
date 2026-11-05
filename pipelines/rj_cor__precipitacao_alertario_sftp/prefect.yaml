@@ -2,119 +2,67 @@ name: rj_cor__precipitacao_alertario_sftp
 prefect-version: 3.4.3
 
 build:
-  - prefect.deployments.steps.run_shell_script:
-      id: get-commit-hash
-      script: git rev-parse --short HEAD
-      stream_output: false
-  - prefect_docker.deployments.steps.build_docker_image:
-      id: build-image
-      requires: prefect-docker>=0.6.5
-      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
-      tag: "rj_cor__precipitacao_alertario_sftp-{{ get-commit-hash.stdout }}"
-      dockerfile: pipelines/rj_cor__precipitacao_alertario_sftp/Dockerfile
+- prefect.deployments.steps.run_shell_script:
+    id: get-commit-hash
+    script: git rev-parse --short HEAD
+    stream_output: false
+- prefect_docker.deployments.steps.build_docker_image:
+    id: build-image
+    requires: prefect-docker>=0.6.5
+    image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+    tag: "rj_cor__precipitacao_alertario_sftp-{{ get-commit-hash.stdout }}"
+    dockerfile: pipelines/rj_cor__precipitacao_alertario_sftp/Dockerfile
 
 push:
-  - prefect_docker.deployments.steps.push_docker_image:
-      requires: prefect-docker>=0.6.5
-      image_name: "{{ build-image.image_name }}"
-      tag: "{{ build-image.tag }}"
+- prefect_docker.deployments.steps.push_docker_image:
+    requires: prefect-docker>=0.6.5
+    image_name: "{{ build-image.image_name }}"
+    tag: "{{ build-image.tag }}"
 
 pull:
-  - prefect.deployments.steps.set_working_directory:
-      directory: /opt/prefect/prefect_rj_iplanrio
+- prefect.deployments.steps.set_working_directory:
+    directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-cor--precipitacao-alertario-sftp--staging
-    tags:
-      - environment:staging
-      - severity:high
-      - code_owner:tricktx
-    version: "{{ build-image.tag }}"
-    entrypoint: pipelines/rj_cor__precipitacao_alertario_sftp/flow.py:rj_cor__precipitacao_alertario_sftp
-    work_pool:
-      name: default-pool
-      work_queue_name: default
-      job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --no-sync --package rj_cor__precipitacao_alertario_sftp -- python -m utils.secrets -- prefect flow-run execute
-        image_pull_policy: Always
-        service_account_name: pipelines
-        finished_job_ttl: 600
-        pod_annotations:
-          gke-gcsfuse/volumes: 'true'
-        resources:
-          requests:
-            ephemeral-storage: 1Gi
-          limits:
-            ephemeral-storage: 4Gi
-        volume_mounts:
-          - name: tmp
-            mountPath: /tmp
-        volumes:
-          - name: tmp
-            csi:
-              driver: gcsfuse.csi.storage.gke.io
-              volumeAttributes:
-                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
-                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
-        env:
-          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
-          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
-          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
-          INFISICAL_ENVIRONMENT: staging
-          INFISICAL_PATHS: /rj_cor__precipitacao_alertario_sftp,/shared
-          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
+- name: rj-cor--precipitacao-alertario-sftp--staging
+  tags:
+    - environment:staging
+    - severity:high
+    - code_owner:tricktx
+  version: "{{ build-image.tag }}"
+  entrypoint: pipelines/rj_cor__precipitacao_alertario_sftp/flow.py:rj_cor__precipitacao_alertario_sftp
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_cor__precipitacao_alertario_sftp -- prefect flow-run execute
+      secretName: prefect-jobs-secrets-staging
+      image_pull_policy: Always
 
-  - name: rj-cor--precipitacao-alertario-sftp--prod
-    tags:
-      - environment:prod
-      - severity:high
-      - code_owner:tricktx
-    version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_cor__precipitacao_alertario_sftp/flow.py:rj_cor__precipitacao_alertario_sftp
-    work_pool:
-      name: default-pool
-      work_queue_name: default
-      job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --no-sync --package rj_cor__precipitacao_alertario_sftp -- python -m utils.secrets -- prefect flow-run execute
-        image_pull_policy: Always
-        service_account_name: pipelines
-        finished_job_ttl: 600
-        pod_annotations:
-          gke-gcsfuse/volumes: 'true'
-        resources:
-          requests:
-            ephemeral-storage: 1Gi
-          limits:
-            ephemeral-storage: 4Gi
-        volume_mounts:
-          - name: tmp
-            mountPath: /tmp
-        volumes:
-          - name: tmp
-            csi:
-              driver: gcsfuse.csi.storage.gke.io
-              volumeAttributes:
-                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
-                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
-        env:
-          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
-          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
-          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
-          INFISICAL_ENVIRONMENT: prod
-          INFISICAL_PATHS: /rj_cor__precipitacao_alertario_sftp,/shared
-          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
-    schedules:
-      - interval: 300
-        anchor_date: "2021-01-01T00:00:00"
-        timezone: America/Sao_Paulo
-        slug: precipitacao-alertario-5min-xml
-        parameters:
-          pluviometric:
-            dataset_id: clima_pluviometro
-            table_id: taxa_precipitacao_alertario_5min
-          meteorological:
-            dataset_id: clima_estacao_meteorologica
-            table_id: meteorologia_alertario
-          dump_mode: append
+- name: rj-cor--precipitacao-alertario-sftp--prod
+  tags:
+    - environment:prod
+    - severity:high
+    - code_owner:tricktx
+  version: "{{ get-commit-hash.stdout }}"
+  entrypoint: pipelines/rj_cor__precipitacao_alertario_sftp/flow.py:rj_cor__precipitacao_alertario_sftp
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_cor__precipitacao_alertario_sftp -- prefect flow-run execute
+      secretName: prefect-jobs-secrets
+      image_pull_policy: Always
+  schedules:
+  - interval: 300
+    anchor_date: "2021-01-01T00:00:00"
+    timezone: America/Sao_Paulo
+    slug: precipitacao-alertario-5min-xml
+    parameters:
+      dataset_id_pluviometric: "clima_pluviometro"
+      dataset_id_meteorological: "clima_estacao_meteorologica"
+      table_id_pluviometric: "taxa_precipitacao_alertario_5min"
+      table_id_meteorological: "meteorologia_alertario"
+      dump_mode: "append"
