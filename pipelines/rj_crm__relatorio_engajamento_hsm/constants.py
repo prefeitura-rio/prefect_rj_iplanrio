@@ -31,6 +31,8 @@ DISCOVERY_SEED: Final = 42
 JUDGE_SEED: Final = 42
 STALE_BATCHES_LIMIT: Final = 5
 """The batches in a row with no new category that end the discovery."""
+ANSWER_ATTEMPTS: Final = 3
+"""The times that a batch is asked when the answer is not a whole JSON list."""
 DEFAULT_CLASSIFICATION_BATCH: Final = 50
 DEFAULT_DISCOVERY_BATCH: Final = 150
 DEFAULT_DISCOVERY_CAP: Final = 2000

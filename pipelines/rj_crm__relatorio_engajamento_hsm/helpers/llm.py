@@ -7,7 +7,11 @@ from collections.abc import Sequence
 from pydantic import JsonValue
 from toolkit.telemetry import logger
 
-from pipelines.rj_crm__relatorio_engajamento_hsm.constants import CLASSIFICATION_TOKENS, STALE_BATCHES_LIMIT
+from pipelines.rj_crm__relatorio_engajamento_hsm.constants import (
+    ANSWER_ATTEMPTS,
+    CLASSIFICATION_TOKENS,
+    STALE_BATCHES_LIMIT,
+)
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.catalog import Catalog, catalog_of
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.prompts import (
     fill_prompt,
@@ -30,13 +34,27 @@ async def ask_list(
 ) -> list[dict[str, JsonValue]] | None:
     """Ask the model and return the objects of its answer, or log and return nothing.
 
-    It does so when the batch fails.
+    An answer that is not a whole JSON list, such as one that the gateway cut off, is
+    asked again up to `ANSWER_ATTEMPTS` times. A gateway error is not, because
+    `Bifrost.answer` already tried. Nothing comes back after the last try.
     """
-    try:
-        return parse_json_list(await bifrost.ask(prompt, max_output_tokens=max_tokens))
-    except (BifrostError, ValueError) as error:
-        logger.warning("A batch of the %s failed: conversations=%d error=%s", step, batch, error)
-        return None
+    for attempt in range(1, ANSWER_ATTEMPTS + 1):
+        try:
+            return parse_json_list(await bifrost.ask(prompt, max_output_tokens=max_tokens))
+        except BifrostError as error:
+            logger.warning("A batch of the %s failed: conversations=%d error=%s", step, batch, error)
+            return None
+        except ValueError as error:
+            logger.warning(
+                "A batch of the %s has no valid answer: conversations=%d attempt=%d of %d error=%s",
+                step,
+                batch,
+                attempt,
+                ANSWER_ATTEMPTS,
+                error,
+            )
+
+    return None
 
 
 async def discover_catalog(

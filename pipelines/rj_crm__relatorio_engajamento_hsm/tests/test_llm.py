@@ -2,7 +2,7 @@ from collections import Counter
 from collections.abc import Sequence
 from typing import cast, final
 
-from pipelines.rj_crm__relatorio_engajamento_hsm.constants import STALE_BATCHES_LIMIT
+from pipelines.rj_crm__relatorio_engajamento_hsm.constants import ANSWER_ATTEMPTS, STALE_BATCHES_LIMIT
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.catalog import Catalog
 from pipelines.rj_crm__relatorio_engajamento_hsm.helpers.llm import (
     classify_batches,
@@ -79,6 +79,50 @@ async def test_the_classification_counts_a_batch_that_fails(make_conversation: C
 
     assert [item.conversation.session_id for item in results] == ["0", "1"]
     assert failures == Counter({"lote_inteiro_falhou": 1})
+
+
+async def test_an_answer_that_is_cut_off_is_asked_again(make_conversation: ConversationFactory) -> None:
+    """Ask the same batch again when the first answer is not a whole JSON list."""
+    conversations = [make_conversation(str(number)) for number in range(2)]
+    catalog = Catalog()
+    catalog.register("A", "d")
+    cut = '[{"id": 1, "categoria": "A", "justificativa": "j",'
+    answer = '[{"id": 1, "categoria": "A"}, {"id": 2, "categoria": "A"}]'
+    fake = FakeBifrost([cut, answer])
+
+    results, failures = await classify_batches(gateway(fake), conversations, catalog, 2)
+
+    assert [item.conversation.session_id for item in results] == ["0", "1"]
+    assert not failures
+    assert fake.calls == 2
+
+
+async def test_a_batch_that_never_parses_fails_after_the_last_try(make_conversation: ConversationFactory) -> None:
+    """Count the batch as failed after `ANSWER_ATTEMPTS` tries, and not before."""
+    conversations = [make_conversation(str(number)) for number in range(2)]
+    catalog = Catalog()
+    catalog.register("A", "d")
+    fake = FakeBifrost(["[{"] * (ANSWER_ATTEMPTS + 1))
+
+    results, failures = await classify_batches(gateway(fake), conversations, catalog, 2)
+
+    assert not results
+    assert failures == Counter({"lote_inteiro_falhou": 2})
+    assert fake.calls == ANSWER_ATTEMPTS
+
+
+async def test_a_gateway_error_is_not_asked_again_here(make_conversation: ConversationFactory) -> None:
+    """The gateway client already tried, so the helper asks once."""
+    conversations = [make_conversation("0")]
+    catalog = Catalog()
+    catalog.register("A", "d")
+    fake = FakeBifrost([BifrostError("down"), '[{"id": 1, "categoria": "A"}]'])
+
+    results, failures = await classify_batches(gateway(fake), conversations, catalog, 1)
+
+    assert not results
+    assert failures == Counter({"lote_inteiro_falhou": 1})
+    assert fake.calls == 1
 
 
 async def test_the_judge_returns_the_verdicts_and_counts_the_failures(
