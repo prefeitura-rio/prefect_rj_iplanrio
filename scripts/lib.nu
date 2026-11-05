@@ -28,6 +28,15 @@ export def find-deployments [pipeline: string, environment: string]: nothing -> 
     | where ($it | str ends-with $'--($environment)')
 }
 
+# Reject a production deployment from a GitHub ref other than master.
+export def require-master-for-prod [environment: string]: nothing -> nothing {
+    let ref = $env.GITHUB_REF?
+
+    if $environment == 'prod' and $ref != null and $ref != 'refs/heads/master' {
+        fail $'Only master deploys to prod, not ($ref)' {command: require-master-for-prod, span: (metadata $environment).span}
+    }
+}
+
 # Return the pipelines that may deploy to one environment, from `.allow.json` in the root of the repository.
 # Return nothing if the file does not exist: then every pipeline may deploy.
 export def read-allowed [environment: string]: nothing -> oneof<list<string>, nothing> {

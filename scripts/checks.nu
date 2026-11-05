@@ -197,7 +197,7 @@ def allow-problems []: nothing -> list<string> {
 
     let allowed = try { open .allow.json } catch { return ['.allow.json: cannot be read'] }
 
-    ['staging' 'prod'] | each {|environment|
+    ['staging'] | each {|environment|
         let names = try { $allowed | get $environment } catch { null }
 
         if not (($names | describe) starts-with 'list') {

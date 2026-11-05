@@ -1,9 +1,9 @@
-use lib.nu [fail find-deployments read-allowed]
+use lib.nu [fail find-deployments read-allowed require-master-for-prod]
 use std/log
 
 const RETRYABLE_ERRORS = [timeout connection network 'read timed out']
 const ZERO_SHA = '0000000000000000000000000000000000000000'
-const SHARED_PATHS = [src packages pyproject.toml uv.lock .allow.json]
+const SHARED_PATHS = [src packages pyproject.toml uv.lock]
 const ROOT_IMAGE_FILES = [Dockerfile openssl.cnf]
 
 # Write one output for the next job of the workflow, or print it when run by hand.
@@ -73,6 +73,8 @@ def 'main plan' [
     --open-pr-from: string # deploy only if this branch has an open pull request into master
     --defer-to-image-build # deploy nothing if the push also changes the root image, because its build deploys every pipeline
 ]: nothing -> nothing {
+    require-master-for-prod $environment
+
     if ($open_pr_from != null) and not (has-open-pr $open_pr_from) {
         skip-deploy $'no open pull request from ($open_pr_from) into master'
         return
@@ -86,7 +88,8 @@ def 'main plan' [
     }
 
     let every_pipeline = glob pipelines/*/prefect.yaml | each { path dirname | path basename }
-    let shared_changed = $changed | any {|file| $SHARED_PATHS | any {|path| ($file == $path) or ($file | str starts-with $'($path)/') } }
+    let shared_paths = if $environment == 'staging' { $SHARED_PATHS | append .allow.json } else { $SHARED_PATHS }
+    let shared_changed = $changed | any {|file| $shared_paths | any {|path| ($file == $path) or ($file | str starts-with $'($path)/') } }
 
     let candidates = if $pipeline != null {
         [$pipeline]
@@ -96,13 +99,19 @@ def 'main plan' [
         $changed | list-pipelines
     }
 
-    let allowed = read-allowed $environment
+    let eligible = if $environment == 'staging' {
+        let allowed = read-allowed 'staging'
 
-    if ($pipeline != null) and ($allowed != null) and ($pipeline not-in $allowed) {
-        fail $'The pipeline ($pipeline) is not in .allow.json for ($environment)' {command: plan, span: (metadata $pipeline).span}
+        if ($pipeline != null) and ($allowed != null) and ($pipeline not-in $allowed) {
+            fail $'The pipeline ($pipeline) is not in .allow.json for staging' {command: plan, span: (metadata $pipeline).span}
+        }
+
+        $candidates | where {|name| ($allowed == null) or ($name in $allowed) }
+    } else {
+        $candidates
     }
 
-    let chosen = $candidates | where {|name| ($allowed == null) or ($name in $allowed) } | where (find-deployments $it $environment | is-not-empty) | sort
+    let chosen = $eligible | where (find-deployments $it $environment | is-not-empty) | sort
 
     if ($pipeline != null) and ($chosen | is-empty) {
         fail $'The pipeline ($pipeline) has no ($environment) deployment' {command: plan, span: (metadata $pipeline).span}
@@ -121,6 +130,8 @@ def 'main run' [
     --delay: duration = 30sec # the wait before the first new try, doubled each time
     --dry-run # print the command and stop
 ]: nothing -> nothing {
+    require-master-for-prod $environment
+
     let deployments = find-deployments $pipeline $environment
     if ($deployments | is-empty) {
         fail $'The pipeline ($pipeline) has no ($environment) deployment' {command: run, span: (metadata $pipeline).span}
