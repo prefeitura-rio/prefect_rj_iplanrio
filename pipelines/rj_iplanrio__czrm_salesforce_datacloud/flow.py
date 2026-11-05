@@ -1,190 +1,324 @@
-"""Flow rj_iplanrio__czrm_salesforce_datacloud.
+"""Flow CZRM (Salesforce) Data Cloud -> BigQuery.
 
-Synchronises Salesforce Data Cloud (CZRM) tables to BigQuery via GCS Delta Lake.
+Dois deployments, mesmo código:
 
-Two deployments, same code:
+- ``--staging``: sem schedule e com ``dry_run=True`` por padrão. Serve para
+  validar extração/transformação contra a org escolhida sem escrever nada.
+- ``--prod``: schedules de 15min (janela de 1h), diário (dia anterior) e
+  semanal (7 dias). Escreve em ``brutos_czrm_salesforce_staging``.
 
-- `--staging`: no schedule, `dry_run=True` by default.  Validates extraction
-  and transformation against the chosen org without writing anything.
-- `--prod`: 15-min, daily and weekly schedules.  Writes to
-  `brutos_czrm_salesforce_staging`.
+A primeira carga é manual (``modo=carga_inicial``): lê a tabela inteira sem
+filtro de data. Não é schedule de propósito — é um botão que se aperta uma vez.
 
-The first load is manual (`modo=carga_inicial`): reads the full table without
-a date filter.  Not scheduled on purpose — press the button once.
-
-`origem` selects the credential set (`SF_DC_<ORIGEM>_*`) and the DLO for each
-table (`tabelas.yaml`).  A guard prevents non-prod origins from writing to the
-production landing zone.
-
-`dry_run=True` still authenticates against the Salesforce org of `origem` to
-validate extraction — it skips only the GCS write and BQ publish.
-
-Write path per table (skipped on `dry_run`):
-  with TemporaryDirectory():
-      write_parquet_records → upload_files_to_gcs  (Parquet → GCS Delta)
-  publish_table_in_bq                              (GCS Delta → BigQuery external table)
-
-`publish_table_in_bq` creates the BigQuery table automatically on first use —
-no schema creation step is required before writing...
+O ``origem`` escolhe o jogo de credenciais (``SF_DC_<ORIGEM>_*``) **e** a DLO
+de cada tabela (``tabelas.yaml``). O destino é sempre o mesmo dataset; um
+guard-rail impede que origem não-prod grave na zona de pouso de produção.
 """
 
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from datetime import date
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Literal
 
+from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
-from prefect.logging import get_logger
 
-from pipelines.rj_iplanrio__czrm_salesforce_datacloud.constants import DATASET_ID, DIAS_RECONCILIACAO
-from pipelines.rj_iplanrio__czrm_salesforce_datacloud.helpers.janela import build_run_windows
-from pipelines.rj_iplanrio__czrm_salesforce_datacloud.helpers.notify import notify_flow_failure
-from pipelines.rj_iplanrio__czrm_salesforce_datacloud.helpers.tabelas import NomeTabela, Origem
-from pipelines.rj_iplanrio__czrm_salesforce_datacloud.tasks import (
-    authenticate_task,
-    build_run_label,
-    discover_schemas_task,
-    notify_run_summary_task,
-    process_all_windows_task,
-    select_tables,
-    utils_table,
-    validate_destination,
+from pipelines.rj_iplanrio__czrm_salesforce_datacloud.constants import DATASET_ID, PROJECT_ID
+from pipelines.rj_iplanrio__czrm_salesforce_datacloud.tasks.auth import get_session
+from pipelines.rj_iplanrio__czrm_salesforce_datacloud.tasks.bigquery import (
+    carregar_staging,
+    garantir_tabelas,
+    merge_staging,
 )
-from utils.constants import DEFAULT_CLOUD
-from utils.tasks import publish_table_in_bq, upload_files_to_gcs, write_parquet_records
-from utils.types import Cloud, DumpMode
-from utils.utils import capture_options
+from pipelines.rj_iplanrio__czrm_salesforce_datacloud.tasks.extract import (
+    descobrir_colunas,
+    extrair,
+)
+from pipelines.rj_iplanrio__czrm_salesforce_datacloud.tasks.notify import (
+    notify_falha_flow,
+    notify_falha_tabela,
+    notify_resumo,
+)
+from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.janela import (
+    filtro_sql,
+    fmt_janela,
+    janelas_do_run,
+)
+from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.log import logger_da_pipeline
+from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.schema import SchemaTabela, montar
+from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.tabelas import (
+    TABELAS,
+    NomeTabela,
+    Origem,
+    Tabela,
+)
+from pipelines.rj_iplanrio__czrm_salesforce_datacloud.utils.transform import transformar
 
-logger = get_logger("toolkit")
+logger = logger_da_pipeline(__name__)
 
 Modo = Literal["hora", "dia", "reconciliacao", "carga_inicial"]
 
 
-@flow(
-    name="rj_iplanrio__czrm_salesforce_datacloud",
-    log_prints=True,
-    flow_run_name="{origem}-{modo}",
-    on_failure=[notify_flow_failure],
-)
-async def rj_iplanrio__czrm_salesforce_datacloud(
+@dataclass(frozen=True)
+class Destino:
+    """Para onde e como o run escreve (agrupado para não inflar assinaturas)."""
+
+    project_id: str
+    dataset_id: str
+    dry_run: bool
+
+
+def processar_tabela(  # noqa: PLR0913 - parametros sao o contexto do run
+    tabela: Tabela,
+    schema: SchemaTabela,
+    session: dict,
+    origem: str,
+    destino: Destino,
+    filtro: str,
+) -> dict[str, int]:
+    """Extrai, transforma e grava UMA tabela em UMA janela.
+
+    :param tabela: configuração da tabela.
+    :param schema: schema descoberto da DLO.
+    :param session: sessão autenticada no Salesforce.
+    :param origem: org de origem (só para log).
+    :param destino: projeto, dataset e se é dry-run.
+    :param filtro: cláusula WHERE da janela (vazia na carga inicial).
+    :returns: ``{"extraidas", "inseridas", "atualizadas"}``.
+    """
+    dlo = tabela.dlo_de(origem)
+    df = extrair(session=session, dlo=dlo, filtro=filtro, order_by=tabela.order_by, tabela=tabela.nome)
+    if df.empty:
+        return {"extraidas": 0, "inseridas": 0, "atualizadas": 0}
+
+    extraidas = len(df)
+    df = transformar(df, tabela=tabela, schema=schema)
+    if destino.dry_run:
+        return {"extraidas": extraidas, "inseridas": 0, "atualizadas": 0}
+
+    carregar_staging(
+        df=df,
+        project_id=destino.project_id,
+        dataset_id=destino.dataset_id,
+        staging_id=tabela.staging,
+        campos=list(schema.campos),
+    )
+    resultado = merge_staging(
+        project_id=destino.project_id,
+        dataset_id=destino.dataset_id,
+        staging_id=tabela.staging,
+        target_id=tabela.nome,
+        primary_key=tabela.primary_key,
+    )
+    return {"extraidas": extraidas, **resultado}
+
+
+def _validar_destino(origem: str, dataset_id: str, dry_run: bool) -> None:
+    """Impede que origem não-prod grave na zona de pouso de produção.
+
+    :param origem: org de origem.
+    :param dataset_id: dataset de destino do run.
+    :param dry_run: se o run não escreve.
+    :raises ValueError: Se a combinação for insegura.
+    """
+    if origem != "prod" and dataset_id == DATASET_ID and not dry_run:
+        raise ValueError(
+            f"origem '{origem}' não pode gravar em '{DATASET_ID}' (zona de pouso de produção). "
+            "Use dry_run=True ou um dataset_id explícito de validação."
+        )
+
+
+def _selecionar(tabelas: list[str] | None) -> list[Tabela]:
+    """Valida a seleção e devolve as tabelas na ordem do YAML.
+
+    :param tabelas: nomes escolhidos no run. Vazio/None = todas.
+    :returns: tabelas a processar.
+    :raises ValueError: Se algum nome não existir em ``tabelas.yaml``.
+    """
+    desconhecidas = set(tabelas or []) - {t.nome for t in TABELAS}
+    if desconhecidas:
+        raise ValueError(f"Tabelas desconhecidas: {sorted(desconhecidas)}. Ver tabelas.yaml.")
+    return [t for t in TABELAS if not tabelas or t.nome in tabelas]
+
+
+def _janelas(
+    modo: str,
+    dia: date | None,
+    reprocessar: bool,
+    reprocessar_de: date | None,
+    reprocessar_ate: date | None,
+) -> list[tuple[str | None, str | None]]:
+    """Janelas do run. ``carga_inicial`` é uma janela aberta (sem filtro)."""
+    if modo == "carga_inicial":
+        return [(None, None)]
+    return list(janelas_do_run(modo, dia, reprocessar, reprocessar_de, reprocessar_ate))
+
+
+def _rotulo(
+    modo: str,
+    reprocessar: bool,
+    reprocessar_de: date | None,
+    reprocessar_ate: date | None,
+) -> str:
+    """Rótulo do run para log e notificação."""
+    if reprocessar:
+        return f"reprocesso {reprocessar_de} a {reprocessar_ate or reprocessar_de}"
+    if modo == "carga_inicial":
+        return "carga inicial"
+    return f"modo={modo}"
+
+
+def _descobrir_schemas(session: dict, selecionadas: list[Tabela], origem: str) -> dict[str, SchemaTabela]:
+    """Descobre o schema de cada tabela selecionada a partir da DLO."""
+    schemas: dict[str, SchemaTabela] = {}
+    for tabela in selecionadas:
+        colunas = descobrir_colunas(session=session, dlo=tabela.dlo_de(origem), tabela=tabela.nome)
+        schemas[tabela.nome] = montar(colunas, tabela.renomear, tabela.booleanas)
+    return schemas
+
+
+def _processar_janelas(  # noqa: PLR0913 - parametros sao o contexto do run
+    janelas: list[tuple[str | None, str | None]],
+    selecionadas: list[Tabela],
+    schemas: dict[str, SchemaTabela],
+    session: dict,
+    origem: str,
+    destino: Destino,
+) -> tuple[dict[str, dict[str, int]], list[str]]:
+    """Roda todas as janelas x tabelas, isolando falha por tabela."""
+    resultados: dict[str, dict[str, int]] = {}
+    falhas: list[str] = []
+
+    for data_inicio, data_fim in janelas:
+        if data_inicio and data_fim:
+            logger.info("[FLOW] janela %s", fmt_janela(data_inicio, data_fim))
+
+        for tabela in selecionadas:
+            filtro = filtro_sql(tabela.coluna_modificacao, data_inicio or "", data_fim or "")
+            try:
+                resultado = processar_tabela(
+                    tabela=tabela,
+                    schema=schemas[tabela.nome],
+                    session=session,
+                    origem=origem,
+                    destino=destino,
+                    filtro=filtro,
+                )
+                logger.info(
+                    "[FLOW] %s: %d extraídas, %d inseridas, %d atualizadas",
+                    tabela.nome,
+                    resultado["extraidas"],
+                    resultado["inseridas"],
+                    resultado["atualizadas"],
+                )
+                linhas = (
+                    resultado["inseridas"] + resultado["atualizadas"] if not destino.dry_run else resultado["extraidas"]
+                )
+            except Exception as exc:
+                logger.warning("[FLOW] '%s' falhou: %s", tabela.nome, exc)
+                notify_falha_tabela(
+                    tabela=tabela.nome,
+                    grupo=tabela.grupo,
+                    janela=fmt_janela(data_inicio, data_fim) if data_inicio and data_fim else "carga inicial",
+                    erro=str(exc),
+                )
+                if tabela.nome not in falhas:
+                    falhas.append(tabela.nome)
+                linhas = 0
+
+            grupo = resultados.setdefault(tabela.grupo, {})
+            grupo[tabela.nome] = grupo.get(tabela.nome, 0) + linhas
+
+    return resultados, falhas
+
+
+@flow(name="czrm-salesforce-datacloud", log_prints=True, on_failure=[notify_falha_flow])
+def rj_iplanrio__czrm_salesforce_datacloud(  # noqa: PLR0913 - assinatura do flow é a interface do deployment
     origem: Origem = "prod",
-    cloud: Cloud = DEFAULT_CLOUD,
-    dataset_id: str = DATASET_ID,
+    project_id: str = PROJECT_ID,
+    dataset_id: str | None = None,
     tabelas: list[NomeTabela] | None = None,
     modo: Modo = "hora",
     dia: date | None = None,
     reprocessar: bool = False,
     reprocessar_de: date | None = None,
     reprocessar_ate: date | None = None,
-    dump_mode: DumpMode = "append",
     dry_run: bool = False,
-    dias_reconciliacao: int = DIAS_RECONCILIACAO,
-) -> None:
-    """Sync tables from `tabelas.yaml` out of Salesforce Data Cloud into GCS + BigQuery.
+) -> dict[str, dict[str, int]]:
+    """Sincroniza as tabelas de ``tabelas.yaml`` do Data Cloud para o BigQuery.
 
-    - `origem`: Salesforce org to read from (`qa`, `staging` or `prod`).
-    - `cloud`: GCS bucket and BigQuery project.  Default: `DEFAULT_CLOUD`.
-    - `dataset_id`: destination BigQuery dataset.  Default: `brutos_czrm_salesforce_staging`.
-    - `tabelas`: subset of tables to process.  Empty/None = all.
-    - `modo`: `hora` (1-h window), `dia` (full day), `reconciliacao` (last N
-      days) or `carga_inicial` (full table, no date filter).
-    - `dia`: day to process in `dia` mode.  Default: yesterday.
-    - `reprocessar`: reprocess day by day from `reprocessar_de` to `reprocessar_ate`.
-    - `reprocessar_de`: first day of the reprocess range (inclusive).
-    - `reprocessar_ate`: last day (inclusive).  Default: same as `reprocessar_de`.
-    - `dump_mode`: GCS dump mode (`append` or `overwrite`).  Default: `append`.
-    - `dry_run`: extract and transform without writing to GCS or BigQuery.
-    - `dias_reconciliacao`: lookback window for `reconciliacao` mode.  Default: 7.
-
-    Raise `ValueError` if the origin tries to write to the production landing
-    zone or if the table selection is invalid.
-    Raise `RuntimeError` if all selected tables fail in every window.
+    :param origem: org do Salesforce de onde ler (``qa``, ``staging`` ou ``prod``).
+    :param project_id: projeto GCP de destino.
+    :param dataset_id: dataset de destino. Padrão: ``brutos_czrm_salesforce_staging``.
+    :param tabelas: subconjunto de tabelas a processar. Vazio/None = todas.
+    :param modo: ``hora`` (janela de 1h), ``dia`` (dia inteiro),
+        ``reconciliacao`` (últimos 7 dias) ou ``carga_inicial`` (tabela inteira).
+    :param dia: dia a processar no modo ``dia``. Padrão: ontem.
+    :param reprocessar: reprocessa dia a dia de ``reprocessar_de`` a ``reprocessar_ate``.
+    :param reprocessar_de: primeiro dia do reprocessamento (inclusivo).
+    :param reprocessar_ate: último dia (inclusivo). Padrão: igual a ``de``.
+    :param dry_run: extrai e transforma sem escrever no BigQuery.
+    :returns: dict por grupo com ``{tabela: linhas inseridas + atualizadas}``.
+    :raises ValueError: Se a origem tentar gravar na zona de pouso de produção
+        ou se a seleção de tabelas for inválida.
+    :raises RuntimeError: Se todas as tabelas falharem.
     """
-    validate_destination(origem, dataset_id, dry_run)
-    start_time = time.monotonic()
+    dataset_id = dataset_id or DATASET_ID
+    _validar_destino(origem, dataset_id, dry_run)
+    inicio_run = time.time()
 
-    selected = select_tables(list(tabelas) if tabelas else None)
-    windows = build_run_windows(
-        modo=modo,
-        dia=dia,
-        reprocessar=reprocessar,
-        reprocessar_de=reprocessar_de,
-        reprocessar_ate=reprocessar_ate,
-        dias_reconciliacao=dias_reconciliacao,
-    )
-    label = build_run_label(modo, reprocessar, reprocessar_de, reprocessar_ate)
+    selecionadas = _selecionar(tabelas)
+    janelas = _janelas(modo, dia, reprocessar, reprocessar_de, reprocessar_ate)
+    rotulo = _rotulo(modo, reprocessar, reprocessar_de, reprocessar_ate)
 
-    if reprocessar and modo == "reconciliacao":
-        logger.warning("Run mode overridden: reprocessar=True replaces modo=reconciliacao with day-by-day.")
+    rename_current_flow_run_task(new_name=f"czrm-salesforce-{origem}-{modo}" + ("-dry-run" if dry_run else ""))
+    if not dry_run:
+        inject_bd_credentials_task(environment="prod")
 
-    session = await authenticate_task(origem)
+    session = get_session(origem)
 
     logger.info(
-        "Run started: label=%s origin=%s bucket=%s dataset=%s.%s tables=%s windows=%d",
-        label,
+        "[FLOW] %s | origem=%s | dataset=%s.%s | tabelas=%s%s",
+        rotulo,
         origem,
-        cloud["bucket"],
-        cloud["project"],
+        project_id,
         dataset_id,
-        [t.nome for t in selected],
-        len(windows),
-    )
-    if dry_run:
-        logger.info("Run mode: dry_run — GCS upload and BigQuery publish skipped.")
-
-    schemas = await discover_schemas_task(session=session, selected=selected, origin=origem)
-
-    frames, failures = await process_all_windows_task(
-        windows=windows,
-        selected=selected,
-        schemas=schemas,
-        session=session,
-        origin=origem,
-        dry_run=dry_run,
+        [t.nome for t in selecionadas],
+        " | DRY-RUN" if dry_run else "",
     )
 
-    successes = set(frames)
-    if not successes:
-        raise RuntimeError(f"All tables failed: {', '.join(sorted(t.nome for t in selected))}")
+    schemas = _descobrir_schemas(session, selecionadas, origem)
 
     if not dry_run:
-        for table in selected:
-            rows = frames.get(table.nome)
-            if rows is None or rows.is_empty():
-                continue
+        garantir_tabelas(
+            project_id=project_id,
+            dataset_id=dataset_id,
+            schemas=schemas,
+            clusters={t.nome: t.cluster for t in selecionadas},
+        )
 
-            with TemporaryDirectory() as directory:
-                folder = await write_parquet_records(rows.to_dicts(), Path(directory))
-                await upload_files_to_gcs(
-                    folder,
-                    utils_table(table, dataset_id),
-                    bucket=cloud["bucket"],
-                    dump_mode=dump_mode,
-                    source_format="parquet",
-                    options=capture_options(dump_mode),
-                )
+    destino = Destino(project_id=project_id, dataset_id=dataset_id, dry_run=dry_run)
+    resultados, falhas = _processar_janelas(janelas, selecionadas, schemas, session, origem, destino)
 
-            await publish_table_in_bq(utils_table(table, dataset_id), cloud)
+    if falhas and len(falhas) == len(selecionadas):
+        raise RuntimeError(f"todas as tabelas falharam: {', '.join(falhas)}")
 
-    elapsed_minutes = (time.monotonic() - start_time) / 60
-    total_rows = sum(len(df) for df in frames.values())
+    if not dry_run and (reprocessar or modo in ("dia", "reconciliacao", "carga_inicial")):
+        notify_resumo(
+            rotulo=rotulo,
+            resultados=resultados,
+            falhas=falhas,
+            minutos=(time.time() - inicio_run) / 60,
+        )
 
+    total = sum(quantidade for grupo in resultados.values() for quantidade in grupo.values())
     logger.info(
-        "Run complete: rows=%d tables=%d elapsed=%.1fmin",
-        total_rows,
-        len(successes),
-        elapsed_minutes,
+        "[FLOW] concluído — %d linha(s) em %d tabela(s)%s",
+        total,
+        len(selecionadas),
+        f"; falharam: {', '.join(falhas)}" if falhas else "",
     )
-    if failures:
-        logger.warning("Run finished with failures: tables=%s", failures)
-
-    # if not dry_run and (reprocessar or modo in ("dia", "reconciliacao", "carga_inicial")):
-    #     await notify_run_summary_task(
-    #         label=label,
-    #         results={t.nome: len(frames[t.nome]) for t in selected if t.nome in frames},
-    #         failures=failures,
-    #         minutes=elapsed_minutes,
-    #     )
+    return resultados
