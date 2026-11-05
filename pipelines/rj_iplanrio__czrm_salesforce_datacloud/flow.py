@@ -25,7 +25,7 @@ Write path per table (skipped on `dry_run`):
   publish_table_in_bq                              (GCS Delta → BigQuery external table)
 
 `publish_table_in_bq` creates the BigQuery table automatically on first use —
-no schema creation step is required before writing..
+no schema creation step is required before writing...
 """
 
 from __future__ import annotations
