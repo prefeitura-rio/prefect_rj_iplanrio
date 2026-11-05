@@ -207,8 +207,10 @@ def 'main lint deps' []: nothing -> nothing {
     }
 }
 
-# List the problems of `.allow.json`: a missing list, an unsorted or repeated name, or a pipeline without a deployment.
+# List the problems of `.allow.json`: a missing list, an unsorted or repeated name, or a pipeline without a deployment. Without the file there is nothing to check.
 def allow-problems []: nothing -> list<string> {
+    if not ('.allow.json' | path exists) { return [] }
+
     let allowed = try { open .allow.json } catch { return ['.allow.json: cannot be read'] }
 
     ['staging' 'prod'] | each {|environment|
