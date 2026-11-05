@@ -66,15 +66,11 @@ def pid-of [dir: string]: nothing -> any {
     if ($file | path exists) { open $file | str trim | into int } else { null }
 }
 
-# ---------------------------------------------------------------- probe
-
 def "main probe" []: nothing -> table {
     [podman nix openssl python3 sh] | each {|tool|
         {tool: $tool, found: (which $tool | is-not-empty)}
     }
 }
-
-# ---------------------------------------------------------------- up
 
 def "main up" [...names: string]: nothing -> nothing {
     let wanted = if ($names | is-empty) { $ALL } else { $names }
@@ -214,8 +210,6 @@ def up-oracle []: nothing -> nothing {
         table: "LAB.ORDERS",
     }
 }
-
-# ---------------------------------------------------------------- status, down, clean
 
 def "main status" []: nothing -> table {
     let known = (load-env)

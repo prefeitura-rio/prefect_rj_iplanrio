@@ -1,4 +1,3 @@
--- =====================================================================
 -- Features de telefone (1 linha por telefone, calculadas só com dado ANTERIOR
 -- ao `data_corte` — leakage-safe). Única fonte das features: o treino e o
 -- scoring diário renderizam ESTE arquivo, só muda o que entra nos 3
@@ -12,7 +11,6 @@
 -- de lá tem o histórico de cada decisão de feature (constantes fixas, features
 -- removidas/adicionadas, auditoria de leakage). Mudança de feature: mexer SÓ aqui
 -- e em constants.py.
--- =====================================================================
 
 WITH disparos_base AS (
   SELECT
@@ -65,7 +63,6 @@ disparo_amostra AS (
 ),
 
 {{ rotulo_ctes }}
--- ---- 2) features do passado: disparos -----------------------------------
 passado AS (
   SELECT
     telefone, cpf, data_corte, envio_datahora,
@@ -86,7 +83,6 @@ feat_disparo AS (
   GROUP BY telefone
 ),
 
--- ---- 2b) dias_desde_ultima_resposta: por TELEFONE, não por disparo/sessão --
 -- (ver comentário de cabeçalho — WeTalkie x Salesforce estruturam sessão
 -- diferente; "há quanto tempo esse telefone respondeu alguma coisa" é
 -- mais simples e mais robusto que tentar reamarrar a um disparo específico)
@@ -112,7 +108,6 @@ feat_resposta AS (
   GROUP BY telefone
 ),
 
--- ---- 3) features do passado: sistema e atualidade (leakage-safe) -------
 aparicoes_amostra AS (
   SELECT ap.*, am.data_corte
   FROM aparicoes ap
@@ -173,7 +168,6 @@ feat_maturidade AS (
   GROUP BY telefone
 ),
 
--- ---- 4) qtd_cpfs_associados (cadastro + disparo, ambos < data_corte) ---
 cpf_pares AS (
   SELECT telefone, LPAD(proprietario_id, 11, '0') AS cpf
   FROM aparicoes_conhecidas
@@ -191,7 +185,6 @@ feat_cpf AS (
   GROUP BY telefone
 ),
 
--- ---- 4b) volatilidade: quantos telefones o CPF mais recente já usou ---
 -- "esse CPF troca de número com frequência?" — pega, pra este telefone, o
 -- CPF associado mais recentemente (antes do data_corte, "o dono atual" na
 -- falta de termo melhor) e conta quantos telefones DISTINTOS esse CPF já
@@ -229,7 +222,6 @@ feat_volatilidade AS (
   GROUP BY cmr.telefone
 ),
 
--- ---- 5) grau de compartilhamento familiar (CadÚnico) --------------------
 parentesco AS (
   SELECT cpf, id_familia, menor_idade
   FROM `rj-crm-registry.intermediario_rmi_parentesco_cadunico.dim_parentesco`
@@ -249,7 +241,6 @@ feat_familia AS (
   GROUP BY telefone
 ),
 
--- ---- 6) DDD e metadados de telefone (fixos, não dependem de data_corte) --
 ddd_telefone AS (
   SELECT
     telefone,
@@ -265,7 +256,6 @@ telefone_meta AS (
   GROUP BY telefone
 ),
 
--- ---- 7) monta as features (1 linha por telefone) ------------------------
 features AS (
 SELECT
   am.telefone,

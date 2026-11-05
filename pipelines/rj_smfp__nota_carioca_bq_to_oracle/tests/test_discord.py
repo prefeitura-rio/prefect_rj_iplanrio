@@ -473,9 +473,6 @@ def test_never_raises_swallows_and_warns(warnings: list[str]) -> None:
     assert "broken" in warnings[0]
 
 
-# --- validation comparison
-
-
 def equal_line() -> ValidationLine:
     """Return the equal line."""
     sides = (

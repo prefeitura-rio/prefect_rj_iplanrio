@@ -119,9 +119,6 @@ def state(**overrides: object) -> RunState:
     return replace(base, **overrides)
 
 
-# --- weights
-
-
 def test_table_fraction_follows_stage_weights_and_load_bytes() -> None:
     # Given a table loading half of its bytes, and tables at later stages
     """Check that table fraction follows stage weights and load bytes."""
@@ -147,9 +144,6 @@ def test_overall_fraction_normalizes_active_steps_and_weights_tables_by_volume()
     assert overall_fraction(with_dbt) == pytest.approx((20 + 5 + 70 * 0.75) / 100)
     assert overall_fraction(state(status=RunStatus.SUCCESS)) == 1.0
     assert overall_fraction(state(mode="synonyms_only", step=Step.SWAP)) == 0.0
-
-
-# --- notifier
 
 
 def test_full_run_walks_the_steps_and_ends_green_with_per_table_summary() -> None:
@@ -315,9 +309,6 @@ def test_a_bug_in_the_notifier_never_reaches_the_flow(monkeypatch: pytest.Monkey
     assert notifier.state.status is RunStatus.SUCCESS
 
 
-# --- validation comparison
-
-
 def fields_by_name(embed: dict[str, object]) -> dict[str, str]:
     """Return the fields by name."""
     fields = embed["fields"]
@@ -405,9 +396,6 @@ def test_running_and_synonyms_only_views_have_no_validation_section() -> None:
     # Then neither shows the comparison
     assert build_view(running.state).validation == ()
     assert build_view(synonyms.state).validation == ()
-
-
-# --- reachability from tasks
 
 
 def fake_artifact(**kwargs: object) -> str:

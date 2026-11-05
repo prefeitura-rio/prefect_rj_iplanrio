@@ -1,4 +1,3 @@
--- ---- 1) rótulo: HighDelivery na janela futura --------------------------
 futuro AS (
   SELECT telefone, status_disparo IN ('delivered', 'read') AS entregue
   FROM disparo_amostra

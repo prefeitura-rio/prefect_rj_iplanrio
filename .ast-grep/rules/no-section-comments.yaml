@@ -1,0 +1,12 @@
+id: no-section-comments
+language: Python
+severity: error
+message: Do not write a divider or banner comment. Name a function or a module instead.
+files:
+  - pipelines/**/*.py
+  - src/**/*.py
+  - tests/**/*.py
+  - packages/toolkit/**/*.py
+rule:
+  kind: comment
+  regex: ^#\s*[-=#*~_]{3,}

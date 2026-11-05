@@ -25,7 +25,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.helpers.report_comp
 )
 from utils.utils import render_query
 
-# load_query resolve queries/ no diretório pai do caminho recebido; a pasta utils/
+# load_query resolve queries/ no diretório pai do caminho recebido; a pasta helpers/
 # aponta para a raiz da pipeline.
 QUERIES_ANCHOR = str(Path(__file__).parent)
 

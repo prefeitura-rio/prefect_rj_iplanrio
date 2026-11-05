@@ -1,5 +1,3 @@
--- ===================== 1) MATERIALIZA =====================
--- ===================== 1.1) CELULARES VÁLIDOS (PF) E *MÓVEIS* =====================
 CREATE TEMP TABLE tmp_grupos AS
 
 WITH celulares_validos AS (
@@ -93,7 +91,6 @@ LEFT JOIN UNNEST(
 WHERE cdas_associadas.situacao_cda.descricao_situacao_cda IN ('Inscrita','Cobrança')
 ),
 
--- ===================== 1.2) BASE COM PAGAMENTOS =====================
 -- soma por cpf e cda primeiro, já que temos mais de uma linha por cda
 base_ AS (
 SELECT
@@ -111,7 +108,6 @@ GROUP BY
     valor_saldo_devido
 ),
 
--- ===================== 1.3) UMA LINHA POR CPF =====================
 per_cpf AS (
 SELECT
     b.cpf,
@@ -138,7 +134,6 @@ WHERE soma_divida_total <= 30000
     AND dt_ultima_cda >= '2021-01-01'
 ),
 
--- ===================== 1.4) RANDOMIZAÇÃO DETERMINÍSTICA =====================
 randomizados AS (
 SELECT *,
     ROW_NUMBER() OVER (
@@ -147,7 +142,6 @@ SELECT *,
 FROM elegiveis_divida_ativa
 ),
 
--- ===================== 1.5) ATRIBUIÇÃO A GRUPOS ESCALONADOS =====================
 grupos_escalonados AS (
 SELECT
     *,
@@ -166,7 +160,6 @@ FROM randomizados
 
 SELECT * FROM grupos_escalonados;
 
--- ===================== 2) INSERT: Insere dados da tabela de teste ab =====================
 INSERT INTO `rj-crm-registry.ab_test.divida_ativa`
 SELECT
 cpf,
@@ -183,7 +176,6 @@ CURRENT_TIMESTAMP(),
 cast(cpf as int) as cpf_particao
 FROM tmp_grupos;
 
--- ===================== 3) Estrutura dados para o disparo =====================
 -- Tabela simples (sem TO_JSON_STRING). 'externalId' é controle interno (dedup por
 -- CPF) e é descartado do CSV pelo de_columns antes do envio à Data Extension.
 -- O limite cresce 100 por dia útil.
