@@ -5,8 +5,11 @@ from re import search
 from subprocess import run
 from types import SimpleNamespace
 
+import polars as pl
 import pytest
 from deltalake import DeltaTable, write_deltalake
+from duckdb import BinderException
+from google.api_core.exceptions import NotFound
 from httpx2 import HTTPStatusError
 from pyarrow import table as arrow_table
 from toolkit.dbt import DbtRun
@@ -18,6 +21,7 @@ from utils.tasks import (
     dump_arcgis_to_gcs,
     maintain_delta_table,
     notify_discord,
+    read_bq_if_exists,
     request_json,
     run_bq_sql,
     run_dbt,
@@ -251,3 +255,49 @@ def test_regression_the_image_keeps_the_dbt_macros_and_drops_package_tests(tmp_p
     run(["sh", "-c", command], cwd=tmp_path, check=True)
 
     assert (tmp_path / ".venv" / "lib" / folder).exists() is kept
+
+
+def read_bq_that(outcome: object) -> object:
+    """Return a `read_bq` that raises the outcome if it is an error, or returns it."""
+
+    async def read_bq(_query: str, *, project: str) -> object:
+        assert project == "p"
+
+        if isinstance(outcome, Exception):
+            raise outcome
+
+        return outcome
+
+    return read_bq
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(NotFound("table"), id="a_missing_table_in_the_client"),
+        pytest.param(
+            BinderException("Binder Error: Not found: Dataset p:x was not found"), id="a_missing_dataset_in_duckdb"
+        ),
+    ],
+)
+async def test_a_missing_table_reads_as_nothing(monkeypatch: pytest.MonkeyPatch, error: Exception) -> None:
+    """Give nothing, so a caller can start from the beginning."""
+    monkeypatch.setattr(tasks, "read_bq", read_bq_that(error))
+
+    assert await read_bq_if_exists("select 1", project="p") is None
+
+
+async def test_another_binder_error_is_not_hidden(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Raise a failure that is not a missing table."""
+    monkeypatch.setattr(tasks, "read_bq", read_bq_that(BinderException("Binder Error: bad column")))
+
+    with pytest.raises(BinderException, match="bad column"):
+        await read_bq_if_exists("select 1", project="p")
+
+
+async def test_an_existing_table_gives_its_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Return the frame of the query."""
+    frame = pl.DataFrame({"n": [1]})
+    monkeypatch.setattr(tasks, "read_bq", read_bq_that(frame))
+
+    assert await read_bq_if_exists("select 1", project="p") is frame

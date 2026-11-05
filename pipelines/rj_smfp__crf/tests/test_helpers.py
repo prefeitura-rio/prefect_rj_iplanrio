@@ -1,12 +1,9 @@
-from collections.abc import Awaitable, Callable
 from datetime import date
 from pathlib import Path
 from zipfile import ZipFile
 
 import polars as pl
 import pytest
-from duckdb import BinderException
-from google.api_core.exceptions import NotFound
 
 from pipelines.rj_smfp__crf import helpers, tasks
 from pipelines.rj_smfp__crf.constants import EXTRA_COLUMNS, LAYOUTS, PERIODS_LAYOUT
@@ -184,35 +181,15 @@ def test_a_zip_becomes_a_parquet_file_of_text_columns(tmp_path: Path, monkeypatc
     assert frame.columns == [*PERIODS_LAYOUT.names, *EXTRA_COLUMNS]
 
 
-def raising(error: Exception) -> Callable[..., Awaitable[pl.DataFrame]]:
-    """Return a `read_bq` that raises `error`."""
-
-    async def read_bq(*_args: object, **_kwargs: object) -> pl.DataFrame:
-        raise error
-
-    return read_bq
-
-
-@pytest.mark.parametrize(
-    "error",
-    [
-        pytest.param(NotFound("table"), id="a_missing_table_in_the_client"),
-        pytest.param(BinderException("Binder Error: Not found: Table x was not found"), id="a_missing_table_in_duckdb"),
-    ],
-)
-async def test_a_missing_table_has_no_watermark(monkeypatch: pytest.MonkeyPatch, error: Exception) -> None:
+async def test_a_missing_table_has_no_watermark(monkeypatch: pytest.MonkeyPatch) -> None:
     """Load every ZIP file when the table does not exist yet."""
-    monkeypatch.setattr(tasks, "read_bq", raising(error))
+
+    async def read_nothing(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(tasks, "read_bq_if_exists", read_nothing)
 
     assert await tasks.read_watermark_task.fn("p.d.t", "p") is None
-
-
-async def test_another_binder_error_is_not_hidden(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Raise a failure that is not a missing table."""
-    monkeypatch.setattr(tasks, "read_bq", raising(BinderException("Binder Error: bad column")))
-
-    with pytest.raises(BinderException):
-        await tasks.read_watermark_task.fn("p.d.t", "p")
 
 
 async def test_the_watermark_is_the_latest_partition(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -221,6 +198,6 @@ async def test_the_watermark_is_the_latest_partition(monkeypatch: pytest.MonkeyP
     async def read_bq(*_args: object, **_kwargs: object) -> pl.DataFrame:
         return pl.DataFrame({"max_data_particao": [date(2021, 1, 3)]})
 
-    monkeypatch.setattr(tasks, "read_bq", read_bq)
+    monkeypatch.setattr(tasks, "read_bq_if_exists", read_bq)
 
     assert await tasks.read_watermark_task.fn("p.d.t", "p") == date(2021, 1, 3)
