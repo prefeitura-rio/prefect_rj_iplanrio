@@ -82,3 +82,4 @@ deployments:
     schedules:
       - cron: "*/2 * * * *"
         timezone: America/Sao_Paulo
+        slug: every-two-minutes
