@@ -1,60 +1,79 @@
-"""Tasks of rj_smfp__crf."""
+"""Tasks for GCS ZIP file handling and extraction."""
 
-from asyncio import to_thread
 from datetime import date
-from pathlib import Path
 
-import polars as pl
-from duckdb import BinderException
-from google.api_core.exceptions import NotFound
+from iplanrio.pipelines_utils.env import getenv_or_action
 from prefect import task
-from toolkit.telemetry import logger
 
-from pipelines.rj_smfp__crf.helpers import list_names, parse_date, process_zip, select_zip_names
-from utils.tasks import read_bq
-from utils.utils import render_query
+from pipelines.rj_smfp__crf.utils import (
+    get_max_date_from_bigquery,
+    process_crf_zip_files,
+)
 
 
 @task(retries=3, retry_delay_seconds=10)
-async def read_watermark_task(table: str, project: str) -> date | None:
-    """Return the latest `data_particao` of the table, or nothing if it is empty.
+def get_max_date_from_bigquery_task(
+    project_id: str,
+    dataset_id: str,
+    table_id: str,
+) -> date | None:
+    """Obtém a maior data de partição da tabela CRF no BigQuery.
 
-    Nothing also means that the table does not exist yet. The ZIP files after that day
-    are the ones to load.
+    Executa a query SQL para obter o valor máximo de ``data_particao``
+    da tabela especificada, servindo como marca d'água para filtrar
+    arquivos ZIP novos no bucket GCS.
+
+    :param project_id: ID do projeto GCP.
+    :param dataset_id: ID do dataset BigQuery.
+    :param table_id: ID da tabela BigQuery.
+    :returns: Data máxima como ``datetime.date`` ou ``None`` se a tabela estiver vazia.
+    :raises Exception: Se houver erro ao executar a query.
     """
-    try:
-        frame = await read_bq(render_query(__file__, "get_max_partition", table=table), project=project)
-    except (NotFound, BinderException) as error:
-        if isinstance(error, BinderException) and "Not found" not in str(error):
-            raise
-        logger.info("The table does not exist yet: table=%s", table)
-        return None
-
-    latest = frame["max_data_particao"].cast(pl.String).to_list()[0] if frame.height else None
-    logger.info("Watermark read: table=%s latest=%s", table, latest)
-
-    return parse_date(latest, "max_data_particao")
+    return get_max_date_from_bigquery(
+        project_id=project_id,
+        dataset_id=dataset_id,
+        table_id=table_id,
+    )
 
 
 @task
-async def process_zip_files_task(
-    bucket: str, prefix: str, table_id: str, folder: Path, window: tuple[date | None, date | None]
-) -> int:
-    """Read the ZIP files of the window into Parquet files of the folder.
+def process_all_crf_zip_files_task(
+    project_id: str,
+    table_id: str,
+    data_inicio: date | str | None = None,
+    data_fim: date | str | None = None,
+) -> str | None:
+    """Processa sequencialmente todos os arquivos ZIP CRF do GCS.
 
-    The window is `(start, end]`: a file on `start` or before it was loaded already.
-    Return how many ZIP files were read, which is `0` if none is in the window.
+    Delega o ciclo completo (listar, baixar, extrair, ler FWF, salvar parquet,
+    limpar) para :func:`~pipelines.rj_smfp__crf.utils.process_crf_zip_files`.
+
+    O bucket e o prefixo da pasta vêm das variáveis de ambiente
+    ``CRF__BUCKET_NAME`` e ``CRF__FOLDER_PREFIX_PERIODOS_EVENTOS``,
+    lidas em runtime (injetadas pelo Infisical/container).
+
+    :param project_id: Google Cloud project ID.
+    :param table_id: Identificador da tabela CRF a processar.
+    :param data_inicio: Data de início do intervalo (``YYYY-MM-DD`` ou ``date``).
+        Arquivos com data igual ou anterior são ignorados. Se ``None``, sem limite inferior.
+    :param data_fim: Data de fim do intervalo (``YYYY-MM-DD`` ou ``date``).
+        Arquivos com data posterior são ignorados. Se ``None``, sem limite superior.
+        Requer que ``data_inicio`` também seja fornecido.
+    :returns: Caminho local (``data_path``) onde os arquivos parquet foram salvos,
+        ou ``None`` se nenhum arquivo ZIP foi encontrado para processar.
+    :raises ValueError: Se ``data_fim`` for fornecido sem ``data_inicio`` ou se
+        alguma variável de ambiente obrigatória não estiver definida.
     """
-    names = await to_thread(list_names, bucket, prefix)
-    chosen = select_zip_names(names, *window)
-    logger.info("ZIP files: found=%d chosen=%d window=%s", len(names), len(chosen), window)
-    total = 0
+    if data_fim is not None and data_inicio is None:
+        raise ValueError(
+            "data_fim não pode ser fornecido sem data_inicio. Forneça data_inicio para definir o início do intervalo."
+        )
 
-    for name in chosen:
-        rows = await to_thread(process_zip, bucket, name, table_id, folder)
-        total += rows
-        logger.info("ZIP file read: name=%s rows=%d", name, rows)
-
-    logger.info("ZIP files read: table=%s files=%d rows=%d", table_id, len(chosen), total)
-
-    return len(chosen)
+    return process_crf_zip_files(
+        project_id=project_id,
+        bucket_name=getenv_or_action("CRF__BUCKET_NAME"),
+        folder_prefix=getenv_or_action("CRF__FOLDER_PREFIX_PERIODOS_EVENTOS"),
+        table_id=table_id,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )

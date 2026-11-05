@@ -25,10 +25,6 @@ pull:
 
 deployments:
   - name: rj-smas--api-datametrica-agendamentos--staging
-    tags:
-      - environment:staging
-      - severity:medium
-      - code_owner:unassigned
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_smas__api_datametrica_agendamentos/flow.py:rj_smas__api_datametrica_agendamentos
     work_pool:
@@ -36,50 +32,17 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --no-sync --package rj_smas__api_datametrica_agendamentos -- python -m utils.secrets -- prefect flow-run execute
+        command: uv run --package rj_smas__api_datametrica_agendamentos -- prefect flow-run execute
+        secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
-        service_account_name: pipelines
-        finished_job_ttl: 600
-        pod_annotations:
-          gke-gcsfuse/volumes: 'true'
-        resources:
-          requests:
-            ephemeral-storage: 1Gi
-          limits:
-            ephemeral-storage: 4Gi
-        volume_mounts:
-          - name: tmp
-            mountPath: /tmp
-        volumes:
-          - name: tmp
-            csi:
-              driver: gcsfuse.csi.storage.gke.io
-              volumeAttributes:
-                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
-                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
-        env:
-          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
-          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
-          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
-          INFISICAL_ENVIRONMENT: staging
-          INFISICAL_PATHS: /rj_smas__api_datametrica_agendamentos,/shared
-          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     parameters:
-      table:
-        dataset_id: brutos_data_metrica
-        table_id: cadunico_agendamentos
+      dataset_id: brutos_data_metrica
+      table_id: cadunico_agendamentos
       dump_mode: append
-      dbt:
-        repository: https://github.com/prefeitura-rio/queries-rj-iplanrio
-        command: run
-        target: prod
-        select: raw_cadunico_agendamentos
-      date:
+      materialize_after_dump: true
+      date: null
+      infisical_secret_path: /api-datametrica
   - name: rj-smas--api-datametrica-agendamentos--prod
-    tags:
-      - environment:prod
-      - severity:medium
-      - code_owner:unassigned
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smas__api_datametrica_agendamentos/flow.py:rj_smas__api_datametrica_agendamentos
     work_pool:
@@ -87,47 +50,19 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --no-sync --package rj_smas__api_datametrica_agendamentos -- python -m utils.secrets -- prefect flow-run execute
+        command: uv run --package rj_smas__api_datametrica_agendamentos -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
         image_pull_policy: Always
-        service_account_name: pipelines
-        finished_job_ttl: 600
-        pod_annotations:
-          gke-gcsfuse/volumes: 'true'
-        resources:
-          requests:
-            ephemeral-storage: 1Gi
-          limits:
-            ephemeral-storage: 4Gi
-        volume_mounts:
-          - name: tmp
-            mountPath: /tmp
-        volumes:
-          - name: tmp
-            csi:
-              driver: gcsfuse.csi.storage.gke.io
-              volumeAttributes:
-                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
-                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
-        env:
-          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
-          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
-          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
-          INFISICAL_ENVIRONMENT: prod
-          INFISICAL_PATHS: /rj_smas__api_datametrica_agendamentos,/shared
-          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     parameters:
-      table:
-        dataset_id: brutos_data_metrica
-        table_id: cadunico_agendamentos
+      dataset_id: brutos_data_metrica
+      table_id: cadunico_agendamentos
       dump_mode: append
-      dbt:
-        repository: https://github.com/prefeitura-rio/queries-rj-iplanrio
-        command: run
-        target: prod
-        select: raw_cadunico_agendamentos
-      date:
+      materialize_after_dump: true
+      date: null  # null usa regra de negócio: 2 dias à frente (4 dias em quinta/sexta)
+      infisical_secret_path: /api-datametrica
     schedules:
-      - cron: "0 9 * * 1-5"
-        timezone: America/Sao_Paulo
+      - cron: "0 12 * * 1-5"
+        timezone: UTC
         active: true
         slug: daily-atualizacao-api-datametrica-agend-cadunico
+        flow_run_name: atualizacao-api-datametrica-agend-cadunico

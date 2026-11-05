@@ -2,145 +2,104 @@ name: rj_smfp__nota_carioca_oracle_to_bq
 prefect-version: 3.4.3
 
 build:
-  - prefect.deployments.steps.run_shell_script:
-      id: get-commit-hash
-      script: git rev-parse --short HEAD
-      stream_output: false
-  - prefect_docker.deployments.steps.build_docker_image:
-      id: build-image
-      requires: prefect-docker>=0.6.5
-      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
-      tag: "rj_smfp__nota_carioca_oracle_to_bq-{{ get-commit-hash.stdout }}"
-      dockerfile: pipelines/rj_smfp__nota_carioca_oracle_to_bq/Dockerfile
+- prefect.deployments.steps.run_shell_script:
+    id: get-commit-hash
+    script: git rev-parse --short HEAD
+    stream_output: false
+- prefect_docker.deployments.steps.build_docker_image:
+    id: build-image
+    requires: prefect-docker>=0.6.5
+    image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+    tag: "rj_smfp__nota_carioca_oracle_to_bq-{{ get-commit-hash.stdout }}"
+    dockerfile: pipelines/rj_smfp__nota_carioca_oracle_to_bq/Dockerfile
 
 push:
-  - prefect_docker.deployments.steps.push_docker_image:
-      requires: prefect-docker>=0.6.5
-      image_name: "{{ build-image.image_name }}"
-      tag: "{{ build-image.tag }}"
+- prefect_docker.deployments.steps.push_docker_image:
+    requires: prefect-docker>=0.6.5
+    image_name: "{{ build-image.image_name }}"
+    tag: "{{ build-image.tag }}"
 
 pull:
-  - prefect.deployments.steps.set_working_directory:
-      directory: /opt/prefect/prefect_rj_iplanrio
+- prefect.deployments.steps.set_working_directory:
+    directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-smfp--nota-carioca-oracle-to-bq--staging
-    tags:
-      - environment:staging
-      - severity:low
-      - code_owner:fredzolio
-    version: '{{ build-image.tag }}'
-    entrypoint: pipelines/rj_smfp__nota_carioca_oracle_to_bq/flow.py:rj_smfp__nota_carioca_oracle_to_bq
-    concurrency_limit:
-      limit: 4
-      collision_strategy: ENQUEUE
-    work_pool:
-      name: onprem-pool
-      work_queue_name: default
-      job_variables:
-        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: uv run --no-sync --package rj_smfp__nota_carioca_oracle_to_bq -- python -m utils.secrets -- prefect flow-run execute
-        namespace: pipelines-staging
-        secretName: pipelines-infisical
-        image_pull_policy: Always
-        env:
-          INFISICAL_URL: https://infisical.iplan.dados.rio
-          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
-          INFISICAL_ENVIRONMENT: staging
-          INFISICAL_PATHS: /rj_smfp__nota_carioca_oracle_to_bq,/shared
-          GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
-    parameters:
-      database:
-        type: oracle
-        host: ${ORACLE_NOTA_FISCAL_HOST}
-        port: 1521
-        database: ${ORACLE_NOTA_FISCAL_SERVICE}
-      cloud:
-        bucket: rj-iplanrio-dia-bq-to-oracle
-        project: rj-iplanrio-dia
-        connection: rj-iplanrio-dia.us.biglake
-  - name: rj-smfp--nota-carioca-oracle-to-bq--prod
-    tags:
-      - environment:prod
-      - severity:medium
-      - code_owner:fredzolio
-    version: '{{ get-commit-hash.stdout }}'
-    entrypoint: pipelines/rj_smfp__nota_carioca_oracle_to_bq/flow.py:rj_smfp__nota_carioca_oracle_to_bq
-    concurrency_limit:
-      limit: 4
-      collision_strategy: ENQUEUE
-    work_pool:
-      name: onprem-pool
-      work_queue_name: default
-      job_variables:
-        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: uv run --no-sync --package rj_smfp__nota_carioca_oracle_to_bq -- python -m utils.secrets -- prefect flow-run execute
-        namespace: pipelines-prod
-        secretName: pipelines-infisical
-        image_pull_policy: Always
-        env:
-          INFISICAL_URL: https://infisical.iplan.dados.rio
-          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
-          INFISICAL_ENVIRONMENT: prod
-          INFISICAL_PATHS: /rj_smfp__nota_carioca_oracle_to_bq,/shared
-          GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
-        cpu_request: '3'
-        cpu_limit: '6'
-        memory_request: 5Gi
-        memory_limit: 6Gi
-    parameters:
-      database:
-        type: oracle
-        host: ${ORACLE_NOTA_FISCAL_HOST}
-        port: 1521
-        database: ${ORACLE_NOTA_FISCAL_SERVICE}
-      cloud:
-        bucket: rj-iplanrio-dia-bq-to-oracle
-        project: rj-iplanrio-dia
-        connection: rj-iplanrio-dia.us.biglake
-    schedules:
-      - interval: 86400
-        anchor_date: '2026-01-01T01:00:00'
-        timezone: America/Sao_Paulo
-        slug: dps
-        active: false
-        parameters:
-          table:
-            dataset_id: brutos_nota_fiscal
-            table_id: DPS
-          read:
-            table: DFEN.DPS
-          dump_mode: overwrite
-          options:
-            columns:
-              add_timestamp: true
-      - interval: 86400
-        anchor_date: '2026-01-01T02:00:00'
-        timezone: America/Sao_Paulo
-        slug: notas_nacionais
-        active: false
-        parameters:
-          table:
-            dataset_id: brutos_nota_fiscal
-            table_id: NOTAS_NACIONAIS
-          read:
-            table: DFEN.NOTAS_NACIONAIS
-          dump_mode: overwrite
-          options:
-            columns:
-              add_timestamp: true
-      - interval: 86400
-        anchor_date: '2026-01-01T03:00:00'
-        timezone: America/Sao_Paulo
-        slug: pessoas_nacionais
-        active: false
-        parameters:
-          table:
-            dataset_id: brutos_nota_fiscal
-            table_id: PESSOAS_NACIONAIS
-          read:
-            table: DFEN.PESSOAS_NACIONAIS
-          dump_mode: overwrite
-          options:
-            columns:
-              add_timestamp: true
+- name: rj-smfp--nota-carioca-oracle-to-bq--staging
+  tags:
+  - environment:staging
+  - severity:low
+  - code_owner:fredzolio
+  version: "{{ build-image.tag }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_oracle_to_bq/flow.py:rj_smfp__nota_carioca_oracle_to_bq
+  # 1 pai + 3 filhos (um pod por tabela). A exclusão entre cargas é feita no código: o pai recusa a execução se
+  # houver outro pai (ou filho) ativo, sem limite global de concorrência, que prenderia o slot se um pod morresse.
+  concurrency_limit:
+    limit: 4
+    collision_strategy: ENQUEUE
+  # Staging se comporta como prod: mesmos parâmetros e recursos do deployment de prod, só muda o dataset de destino
+  # (brutos_nota_fiscal_staging) e o Oracle, que vem do secret de staging (homologação, bem menor que o de prod: estes
+  # recursos são folgados ali, mas mantê-los iguais exercita o mesmo caminho de código e de memória).
+  parameters:
+    dataset_id: brutos_nota_fiscal_staging
+    workers: 6
+    pod_memory_mb: 5888
+    upload_concurrency: 6
+    max_pending_files: 6
+    worker_max_tasks: 25
+    memory_pause_ratio: 0.85
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_oracle_to_bq -- prefect flow-run execute
+      secretName: prefect-jobs-secrets-staging
+      image_pull_policy: Always
+      cpu_request: "3"
+      cpu_limit: "6"
+      memory_request: 6Gi
+      memory_limit: 8Gi
+- name: rj-smfp--nota-carioca-oracle-to-bq--prod
+  tags:
+  - environment:prod
+  - severity:medium
+  - code_owner:fredzolio
+  version: "{{ get-commit-hash.stdout }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_oracle_to_bq/flow.py:rj_smfp__nota_carioca_oracle_to_bq
+  # 1 pai + 3 filhos (um pod por tabela). A exclusão entre cargas é feita no código: o pai recusa a execução se
+  # houver outro pai (ou filho) ativo, sem limite global de concorrência, que prenderia o slot se um pod morresse.
+  concurrency_limit:
+    limit: 4
+    collision_strategy: ENQUEUE
+  parameters:
+    dataset_id: brutos_nota_fiscal
+    # 6 processos de leitura por pod (era 2) e 6 envios simultâneos ao GCS: mais envios contornam as conexões que a
+    # saída de rede prende em ~3 MB/s. Memória: 512 MiB do processo principal + 6 x 640 MiB = ~4,4 GiB, dentro do
+    # pod_memory_mb, que precisa ficar abaixo do memory_request dos job_variables menos folga (6 GiB - 256 MiB = 5888).
+    # No Oracle de prod são 3 x 6 sessões de leitura + 3 de contagem; para aliviar o banco, Custom run com workers=4.
+    workers: 6
+    pod_memory_mb: 5888
+    upload_concurrency: 6
+    max_pending_files: 6
+    # OOM de 14/10 (NOTAS_NACIONAIS, 66% em ~14 min, pod de 6 GiB): a estimativa era de ~4,4 GiB e as mesmas
+    # configurações tinham passado em 09/10 e 13/10, então o RSS dos workers cresce com o tempo. O worker é trocado a
+    # cada 25 faixas (volta a ~250 MB, conexão nova no mesmo SCN) e, com o pod em 85% do limite de memória, nenhuma
+    # faixa nova começa até o uso cair a 80%.
+    worker_max_tasks: 25
+    memory_pause_ratio: 0.85
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_oracle_to_bq -- prefect flow-run execute
+      secretName: prefect-jobs-secrets
+      image_pull_policy: Always
+      # Cada pod (pai e filhos) reserva o que os 6 workers usam: os nós não têm reserva de sistema e um pod acima do
+      # request já derrubou um nó. Os nós são de 8 vCPU / 15,5 GiB; a conversão para Parquet é limitada por CPU.
+      cpu_request: "3"
+      cpu_limit: "6"
+      # O limite passa do request em 2 GiB: é a margem contra o crescimento de memória que matou o pod em 14/10, e o
+      # memory_pause_ratio é medido sobre ele (pausa a 6,8 GiB).
+      memory_request: 6Gi
+      memory_limit: 8Gi

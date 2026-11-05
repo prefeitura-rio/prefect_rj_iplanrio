@@ -1,3 +1,35 @@
+# Relatório de Engajamento por campanha de WhatsApp -> Google Drive
+#
+# Entrypoint: flow.py:rj_crm__relatorio_engajamento_hsm (docstring = documentação completa)
+#
+# Roda 3x/dia, às 8h, 13h e 18h (America/Sao_Paulo): processa as solicitações do Google
+# Form "Solicitação de Relatório de Engajamento" (Sheet de respostas em
+# config.SOLICITACOES_SHEET_ID) com Data de geração até hoje — material de validação do
+# catálogo, relatório de engajamento ou relatório rápido — e grava o status de cada uma
+# no próprio Sheet.
+#
+# Liberar uma campanha acima do teto de conversas: Custom run deste deployment com
+#   campanhas_liberadas: ["<campanha>"]
+#
+# Relatório de 1 HSM, fora do Form (disparos e conversas direto dos eventos de WhatsApp):
+# Custom run com fonte_disparos: hsm, hsm: "<nome_do_template>", data_inicio/data_fim
+# (AAAA-MM-DD) e tipo_solicitacao (padrão: relatório rápido).
+#
+# Credenciais no secret do work pool (mesmo secretName de rj_crm__agentforce_classificacao_llm):
+#   BF_KEY                        : API key do gateway Bifrost
+#   BASEDOSDADOS_CREDENTIALS_PROD : a service account dele precisa de
+#       - Editor na pasta "Relatórios de Engajamento" do Drive (config.DRIVE_PASTA_RAIZ_ID)
+#       - Editor no Sheet de solicitações (config.SOLICITACOES_SHEET_ID)
+#       - leitura em rj-crm-registry.rmi_conversas.chatbot
+#       - leitura em rj-crm-registry.brutos_salesforce_staging.messaging_events_whatsapp e
+#         .sfmc_whatsapp_send_event (só fonte_disparos="hsm", ver flow.py)
+#       - criar tabela / insert / delete em rj-crm-registry.brutos_salesforce
+#         (banco de exemplos do RAG: config.RAG_TABLE, criada pelo flow se não existir)
+#
+# A imagem leva torch (só-CPU) + o modelo de embedding (~430MB, ver Dockerfile): se o pod
+# morrer por falta de memória ao carregar o modelo, configurar memória no job_variables
+# conforme o padrão do work pool.
+
 name: rj_crm__relatorio_engajamento_hsm
 prefect-version: 3.4.3
 
@@ -24,6 +56,10 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
+  # -----------------------------------------------------------------------
+  # Deployment de staging (QA) — sem schedule ativo, roda sob demanda até validar
+  # (mesmo padrão de rj_crm__agentforce_classificacao_llm).
+  # -----------------------------------------------------------------------
   - name: rj-crm--relatorio-engajamento-hsm--staging
     tags:
       - environment:staging
@@ -36,35 +72,13 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --no-sync --package rj_crm__relatorio_engajamento_hsm -- python -m utils.secrets -- prefect flow-run execute
+        command: "uv run --package rj_crm__relatorio_engajamento_hsm -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
-        service_account_name: pipelines
-        finished_job_ttl: 600
-        pod_annotations:
-          gke-gcsfuse/volumes: 'true'
-        resources:
-          requests:
-            ephemeral-storage: 1Gi
-          limits:
-            ephemeral-storage: 4Gi
-        volume_mounts:
-          - name: tmp
-            mountPath: /tmp
-        volumes:
-          - name: tmp
-            csi:
-              driver: gcsfuse.csi.storage.gke.io
-              volumeAttributes:
-                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
-                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
-        env:
-          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
-          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
-          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
-          INFISICAL_ENVIRONMENT: staging
-          INFISICAL_PATHS: /shared
-          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
 
+  # -----------------------------------------------------------------------
+  # Deployment de produção — cron 3x/dia, 8h, 13h e 18h (America/Sao_Paulo)
+  # -----------------------------------------------------------------------
   - name: rj-crm--relatorio-engajamento-hsm--prod
     tags:
       - environment:prod
@@ -77,40 +91,19 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --no-sync --package rj_crm__relatorio_engajamento_hsm -- python -m utils.secrets -- prefect flow-run execute
+        command: "uv run --package rj_crm__relatorio_engajamento_hsm -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
-        service_account_name: pipelines
-        finished_job_ttl: 600
-        pod_annotations:
-          gke-gcsfuse/volumes: 'true'
-        resources:
-          requests:
-            ephemeral-storage: 1Gi
-          limits:
-            ephemeral-storage: 4Gi
-        volume_mounts:
-          - name: tmp
-            mountPath: /tmp
-        volumes:
-          - name: tmp
-            csi:
-              driver: gcsfuse.csi.storage.gke.io
-              volumeAttributes:
-                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
-                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
-        env:
-          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
-          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
-          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
-          INFISICAL_ENVIRONMENT: prod
-          INFISICAL_PATHS: /shared
-          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     schedules:
       - cron: "0 8 * * *"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: relatorio-engajamento-hsm-diario-8h
+      - cron: "0 13 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: relatorio-engajamento-hsm-diario-13h
       - cron: "0 18 * * *"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: relatorio-engajamento-hsm-diario-18h

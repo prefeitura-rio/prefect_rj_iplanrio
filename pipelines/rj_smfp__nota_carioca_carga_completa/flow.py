@@ -1,75 +1,92 @@
-"""Flow for rj_smfp__nota_carioca_carga_completa."""
+"""Flow for rj_smfp__nota_carioca_carga_completa.
 
-from typing import cast
+Encadeia os deployments da Nota Carioca: a extração XML (documentos fiscais nacionais → DFEN, antes acionada à mão),
+Oracle → BigQuery e BigQuery → Oracle. Cada passo só roda se o anterior terminar em ``Completed``, depois de
+``pause_seconds``. ``incluir_extracao_xml=false`` pula a extração (por exemplo, se ela já foi rodada à mão). Os padrões
+dos parâmetros são os deployments de prod; o deployment de staging passa os de staging. Cada filho usa os parâmetros
+padrão do próprio deployment (o mesmo que um disparo rápido) e é ligado a este run como subflow. O pod só espera: o
+trabalho roda nos pods dos filhos. O deployment de prod roda todo dia às 17h (America/Sao_Paulo) e também pelo bot.
+Se o pod deste orquestrador for encerrado (SIGTERM), o Prefect reenvia o mesmo flow run: ele recomeça, acha os filhos
+que já disparou, não repete os passos concluídos e volta a esperar o que ficou rodando.
+O ambiente (prod ou staging) vem do nome deste deployment e só escolhe o webhook e o marcador das mensagens do Discord.
+Se qualquer parte não concluir, o orquestrador falha, os passos seguintes não são disparados e o alerta no Discord
+menciona os cargos de ``discord_alert_role_ids``; um filho que ainda corria quando o tempo limite acabou NÃO é
+cancelado.
+"""
+
+import time
 
 from prefect import flow
 from prefect.runtime import flow_run
 
+from iplanrio.pipelines_utils.logging import log
+from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from pipelines.rj_smfp__nota_carioca_carga_completa.constants import (
+    BQ_TO_ORACLE_DEPLOYMENT,
     BQ_TO_ORACLE_LABEL,
+    EXTRACTION_DEPLOYMENT,
     EXTRACTION_LABEL,
+    ORACLE_TO_BQ_DEPLOYMENT,
     ORACLE_TO_BQ_LABEL,
     SECONDS_PER_HOUR,
 )
-from pipelines.rj_smfp__nota_carioca_carga_completa.helpers.chain import build_run_tags
-from pipelines.rj_smfp__nota_carioca_carga_completa.helpers.steps import run_chain
-from pipelines.rj_smfp__nota_carioca_carga_completa.types import Chain, Plan, Step
-
-DEFAULT_CHAIN = Chain()
-
-
-def build_plan(chain: Chain, tags: tuple[str, ...], parent_run_id: str | None) -> Plan:
-    """Return the steps in order: the extraction, if it is on, and the two loads."""
-    extraction = (
-        Step(
-            EXTRACTION_LABEL,
-            chain.extraction_deployment,
-            chain.extraction_timeout_hours * SECONDS_PER_HOUR,
-            done="concluída",
-        ),
-    )
-    loads = (
-        Step(
-            ORACLE_TO_BQ_LABEL,
-            chain.oracle_to_bq_deployment,
-            chain.oracle_to_bq_timeout_hours * SECONDS_PER_HOUR,
-            per_schedule=True,
-        ),
-        Step(BQ_TO_ORACLE_LABEL, chain.bq_to_oracle_deployment, chain.bq_to_oracle_timeout_hours * SECONDS_PER_HOUR),
-    )
-
-    return Plan(
-        (*(extraction if chain.include_extraction else ()), *loads),
-        tags,
-        chain.pause_seconds,
-        parent_run_id,
-        chain.alert_role_ids,
-    )
+from pipelines.rj_smfp__nota_carioca_carga_completa.tasks import (
+    ensure_idle_task,
+    find_own_child_task,
+    pause_task,
+    run_deployment_task,
+    wait_for_child_task,
+)
+from pipelines.rj_smfp__nota_carioca_carga_completa.utils.chain import (
+    ChainActions,
+    ChainPlan,
+    Step,
+    build_run_tags,
+    run_chain,
+)
+from pipelines.rj_smfp__nota_carioca_carga_completa.utils.discord import current_environment
+from pipelines.rj_smfp__nota_carioca_carga_completa.utils.notify import make_notifier
+from pipelines.rj_smfp__nota_carioca_carga_completa.utils.runs import run_link
 
 
-@flow(log_prints=True, flow_run_name="carga-completa")
-async def rj_smfp__nota_carioca_carga_completa(
-    *, chain: Chain = DEFAULT_CHAIN, discord_notifications: bool = True
+@flow(log_prints=True)
+def rj_smfp__nota_carioca_carga_completa(  # noqa: PLR0913, PLR0917
+    oracle_to_bq_deployment: str = ORACLE_TO_BQ_DEPLOYMENT,
+    bq_to_oracle_deployment: str = BQ_TO_ORACLE_DEPLOYMENT,
+    pause_seconds: int = 30,
+    oracle_to_bq_timeout_hours: int = 4,
+    bq_to_oracle_timeout_hours: int = 8,
+    discord_notifications: bool = True,
+    extracao_xml_deployment: str = EXTRACTION_DEPLOYMENT,
+    incluir_extracao_xml: bool = True,
+    extracao_xml_timeout_hours: int = 9,
+    discord_alert_role_ids: list[str] | None = None,
 ) -> None:
-    """Run the XML extraction, Oracle to BigQuery and BigQuery to Oracle, in this order.
-
-    Each step is a set of child runs of its deployment, linked to this run as subflows:
-    one for each schedule of the Oracle to BigQuery deployment (one table each, with its
-    parameters), and one for each of the others, with their own defaults. The pod only
-    waits, and the work runs in the pods of the children. Each step starts only if the
-    last one completed. Before the steps a guard refuses to start if a deployment has a
-    run that is active or about to start. If a child run does not complete, this run
-    fails and the next steps are not started. A child run that is still going at the
-    timeout is not cancelled.
-
-    If the pod stops, Prefect sends this flow run again. It finds the child runs that it
-    started, does not repeat the steps that completed, and waits for those that still
-    run. Discord gets one line for the start, each move to the next step, the end, or
-    the stop. A stop mentions the roles of `chain.alert_role_ids`, and
-    `chain.include_extraction` off skips the extraction, for example if it ran by hand.
-    """
-    tags = tuple(build_run_tags(cast("list[str]", flow_run.tags)))
-    run_id = cast("str | None", flow_run.id)
-    parent = run_id or None
-
-    await run_chain(build_plan(chain, tags, parent), enabled=discord_notifications)
+    rename_current_flow_run_task(new_name="carga-completa")
+    extraction = (
+        Step(EXTRACTION_LABEL, extracao_xml_deployment, extracao_xml_timeout_hours * SECONDS_PER_HOUR, "concluída")
+        if incluir_extracao_xml
+        else None
+    )
+    plan = ChainPlan(
+        first=Step(ORACLE_TO_BQ_LABEL, oracle_to_bq_deployment, oracle_to_bq_timeout_hours * SECONDS_PER_HOUR),
+        second=Step(BQ_TO_ORACLE_LABEL, bq_to_oracle_deployment, bq_to_oracle_timeout_hours * SECONDS_PER_HOUR),
+        pause_seconds=pause_seconds,
+        tags=tuple(build_run_tags(flow_run.tags)),
+        extraction=extraction,
+    )
+    environment = current_environment()
+    current_run_id = str(flow_run.id) if flow_run.id else None
+    actions = ChainActions(
+        run=run_deployment_task,
+        ensure_idle=ensure_idle_task,
+        pause=pause_task,
+        notify=make_notifier(discord_notifications, environment),
+        alert=make_notifier(discord_notifications, environment, mention_role_ids=tuple(discord_alert_role_ids or ())),
+        find_own=lambda step: find_own_child_task(step, current_run_id),
+        wait=wait_for_child_task,
+        log=log,
+        link=run_link,
+        clock=time.monotonic,
+    )
+    run_chain(plan, actions)
