@@ -5,6 +5,7 @@ description = "Classificação inicial por LLM (Bifrost/Gemini) das sessões do 
 dependencies = [
     "prefect_rj_iplanrio",
     "google-cloud-bigquery",
+    "google-genai",
 ]
 
 [tool.uv.sources]

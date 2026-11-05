@@ -4036,12 +4036,14 @@ version = "1.0.0"
 source = { virtual = "pipelines/rj_crm__agentforce_classificacao_llm" }
 dependencies = [
     { name = "google-cloud-bigquery" },
+    { name = "google-genai" },
     { name = "prefect-rj-iplanrio" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "google-cloud-bigquery" },
+    { name = "google-genai" },
     { name = "prefect-rj-iplanrio", editable = "." },
 ]
 
@@ -4147,6 +4149,7 @@ source = { virtual = "pipelines/rj_crm__relatorio_engajamento_hsm" }
 dependencies = [
     { name = "google-api-python-client" },
     { name = "google-cloud-bigquery" },
+    { name = "google-genai" },
     { name = "numpy" },
     { name = "polars" },
     { name = "prefect-rj-iplanrio" },
@@ -4157,6 +4160,7 @@ dependencies = [
 requires-dist = [
     { name = "google-api-python-client" },
     { name = "google-cloud-bigquery" },
+    { name = "google-genai" },
     { name = "numpy" },
     { name = "polars" },
     { name = "prefect-rj-iplanrio", editable = "." },
