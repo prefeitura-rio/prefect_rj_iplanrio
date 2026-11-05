@@ -1,0 +1,10 @@
+id: no-wildcard-import
+language: Python
+severity: error
+message: Import each name explicitly.
+files:
+  - pipelines/**/*.py
+  - src/**/*.py
+  - packages/toolkit/**/*.py
+rule:
+  pattern: from $M import *

@@ -1,0 +1,17 @@
+id: no-private-functions
+language: Python
+severity: error
+message: Do not prefix a function with an underscore. Use the module boundary.
+files:
+  - pipelines/**/*.py
+  - src/**/*.py
+  - packages/toolkit/toolkit/**/*.py
+ignores:
+  - pipelines/**/tests/**
+  - tests/**
+  - packages/toolkit/tests/**
+rule:
+  kind: function_definition
+  has:
+    field: name
+    regex: ^_[a-z]

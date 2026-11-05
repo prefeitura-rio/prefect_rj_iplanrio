@@ -1,0 +1,5 @@
+id: no-obstore-outside-gcs
+valid:
+  - pass
+invalid:
+  - from obstore.store import ObjectStore

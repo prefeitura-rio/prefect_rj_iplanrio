@@ -1,0 +1,6 @@
+id: no-stdlib-logger
+valid:
+  - logger.info("done")
+invalid:
+  - from logging import getLogger
+  - logging.getLogger(__name__)

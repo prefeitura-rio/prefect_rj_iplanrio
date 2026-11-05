@@ -1,0 +1,14 @@
+id: no-assert-in-production
+language: Python
+severity: error
+message: Validate production data with an exception, not assert.
+files:
+  - pipelines/**/*.py
+  - src/**/*.py
+  - packages/toolkit/toolkit/**/*.py
+ignores:
+  - pipelines/**/tests/**
+  - tests/**
+  - packages/toolkit/tests/**
+rule:
+  kind: assert_statement

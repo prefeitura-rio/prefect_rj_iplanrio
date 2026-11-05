@@ -1,0 +1,21 @@
+id: no-io-in-flow
+language: Python
+severity: error
+message: flow.py orchestrates tasks and does not import an I/O client.
+files:
+  - pipelines/**/flow.py
+rule:
+  any:
+    - pattern: import httpx2
+    - pattern: from httpx2 import $$$A
+    - pattern: import polars as pl
+    - pattern: from polars import $$$A
+    - pattern: import pandas as $P
+    - pattern: from pandas import $$$A
+    - pattern: import oracledb
+    - pattern: from oracledb import $$$A
+    - pattern: import pymongo
+    - pattern: from pymongo import $$$A
+    - pattern: from google.cloud import bigquery
+    - pattern: import duckdb
+    - pattern: from duckdb import $$$A

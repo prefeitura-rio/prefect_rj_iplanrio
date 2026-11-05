@@ -1,0 +1,15 @@
+id: no-pydantic-v1-validator
+language: Python
+severity: error
+message: Use Pydantic v2 field_validator, not validator.
+files:
+  - pipelines/**/*.py
+  - src/**/*.py
+  - packages/toolkit/toolkit/**/*.py
+rule:
+  any:
+    - pattern: from pydantic import validator
+    - pattern: |
+        @validator($$$A)
+        def $F($$$B):
+          $$$C

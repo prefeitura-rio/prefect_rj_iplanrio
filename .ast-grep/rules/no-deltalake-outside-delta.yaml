@@ -1,0 +1,17 @@
+id: no-deltalake-outside-delta
+language: Python
+severity: error
+message: Import deltalake only in toolkit/delta.py.
+files:
+  - pipelines/**/*.py
+  - src/**/*.py
+  - packages/toolkit/toolkit/**/*.py
+ignores:
+  - packages/toolkit/toolkit/delta.py
+  - '**/tests/**'
+rule:
+  any:
+    - pattern: import deltalake
+    - pattern: import deltalake.$$$A
+    - pattern: from deltalake import $$$A
+    - pattern: from deltalake.$M import $$$A

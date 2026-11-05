@@ -1,0 +1,11 @@
+id: no-flow-in-tasks
+valid:
+  - |
+      @task
+      def work():
+        return 1
+invalid:
+  - |
+      @flow(log_prints=True)
+      def pipeline():
+        work()

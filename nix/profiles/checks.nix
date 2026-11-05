@@ -5,6 +5,7 @@
     module = {
       packages = with pkgs; [
         actionlint
+        ast-grep
       ];
 
       tasks = {
@@ -33,6 +34,16 @@
           exec = "nu scripts/checks.nu lint layout";
           execIfModified = [
             "pipelines/**"
+          ];
+        };
+        "lint:structure" = {
+          exec = "nu scripts/checks.nu lint structure";
+          execIfModified = [
+            ".ast-grep/**"
+            "pipelines/**/*.py"
+            "src/**/*.py"
+            "packages/toolkit/**/*.py"
+            "sgconfig.yaml"
           ];
         };
         "lint:sql" = {
@@ -106,6 +117,7 @@
         "lint:all".after = [
           "lint:python"
           "lint:layout"
+          "lint:structure"
           "lint:sql"
           "lint:deps"
           "lint:prefect"

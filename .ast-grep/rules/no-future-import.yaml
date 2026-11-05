@@ -1,0 +1,10 @@
+id: no-future-import
+language: Python
+severity: error
+message: Do not use __future__ imports. The repository targets Python 3.14.
+files:
+  - pipelines/**/*.py
+  - src/**/*.py
+  - packages/toolkit/**/*.py
+rule:
+  pattern: from __future__ import $$$A

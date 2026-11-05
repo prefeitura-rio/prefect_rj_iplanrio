@@ -1,0 +1,6 @@
+id: no-io-in-flow
+valid:
+  - from pipelines.x.tasks import read_task
+invalid:
+  - import polars as pl
+  - from httpx2 import Client

@@ -1,0 +1,7 @@
+id: no-if-main-in-flow
+valid:
+  - pass
+invalid:
+  - |
+      if __name__ == "__main__":
+        run()

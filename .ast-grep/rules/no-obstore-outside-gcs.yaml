@@ -1,0 +1,17 @@
+id: no-obstore-outside-gcs
+language: Python
+severity: error
+message: Import obstore only in toolkit/gcs.py.
+files:
+  - pipelines/**/*.py
+  - src/**/*.py
+  - packages/toolkit/toolkit/**/*.py
+ignores:
+  - packages/toolkit/toolkit/gcs.py
+  - '**/tests/**'
+rule:
+  any:
+    - pattern: import obstore
+    - pattern: import obstore.$$$A
+    - pattern: from obstore import $$$A
+    - pattern: from obstore.$M import $$$A

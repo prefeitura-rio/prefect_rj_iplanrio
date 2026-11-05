@@ -1,0 +1,15 @@
+id: no-task-in-flow
+valid:
+  - |
+      @flow(log_prints=True)
+      def pipeline():
+        run_task()
+invalid:
+  - |
+      @task
+      def work():
+        return 1
+  - |
+      @task(retries=2)
+      async def work():
+        return 1

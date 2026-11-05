@@ -1,134 +1,475 @@
----
-lang: pt-br
----
+# Toolkit style guide
 
-# Guia de Estilo do toolkit
+The root [`STYLEGUIDE.md`](../../STYLEGUIDE.md) applies here. This guide contains only rules specific to `packages/toolkit`.
 
-Regras só do pacote `toolkit`. Ele segue o [guia do repositório](../../STYLEGUIDE.md) (Python, dados, testes, repositório) e parte do `data-proxy`: siga um padrão existente antes de criar outro. O comportamento de cada função está na `docstring` dela, não neste guia.
+The toolkit provides generic primitives. It has no pipeline name, dataset, table id, business rule, Prefect flow, or Prefect task.
 
-## 1. Escopo
-
-O `toolkit` tem primitivos reutilizáveis e nenhuma lógica de domínio. Regras de negócio, consultas, constantes de `dataset` ou `table_id`, `@flow` e `@task` ficam em cada pipeline ou em `src/utils/`.
-
-Promova uma função para cá só no segundo uso confirmado, e só se ela for genérica, estável e sem lógica de pipeline. Promoção especulativa é proibida.
-
-## 2. Layout e código
-
-| Módulo                               | Responsabilidade                                                                                                                                                                |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `toolkit.executor`                   | `Executor`, `Engine`, fontes e modelos SQL.                                                                                                                                     |
-| `toolkit.settings`                   | `ToolkitSettings` (a base) e um grupo por parte, como `GcsSettings`.                                                                                                            |
-| `toolkit.functions`                  | As funções do `DuckDB`: `native.py` (uma vez por linha), `arrow.py` e `documents.py` (uma vez por lote) e `registry.py`, com o registro automático.                             |
-| `toolkit.utils`                      | As colunas e os filtros de um `dump`: `normalize_column`, `build_column_aliases`, `select_columns`, `filter_conditions` e `filter_selectors`.                                   |
-| `toolkit.telemetry`                  | O `logger` do pacote e o `OpenTelemetry`.                                                                                                                                       |
-| `toolkit.constants`, `toolkit.types` | Constantes e apelidos de tipo compartilhados.                                                                                                                                   |
-| `toolkit.chunks`                     | Os chunks de um `dump` e o `hash` da `config`. Funções puras.                                                                                                                   |
-| `toolkit.delta`                      | A tabela `Delta` de um `dump`: o `ledger`, a troca de um chunk, a soma de linhas, a compactação, a manutenção e a leitura do estado (`inspect_table` e `find_layout_problems`). |
-| `toolkit.gcs`                        | `GCS` com `obstore`. Único lugar que importa `obstore`.                                                                                                                         |
-| `toolkit.bigquery`                   | Cliente do BigQuery: instruções e tabelas externas.                                                                                                                             |
-| `toolkit.oracle`                     | `Oracle`, o cliente `SQL` do `oracledb`: `connect`, `execute` e `query`.                                                                                                        |
-| `toolkit.dbt`                        | O comando `dbt` de uma pipeline (`DbtRun`) e o clone do repositório. O `dbt` roda em `src/utils/tasks.py`.                                                                      |
-
-- `__init__.py` fica vazio. O pacote é plano, e um módulo leva o nome do domínio, nunca o de uma biblioteca (`logging.py`, `polars.py`).
-- Sem prefixo `_` em nomes. Uma função não recebe um parâmetro que não usa.
-- Use `dataclass` para dados e `Pydantic` só em fronteiras. Alternativas fechadas são uniões etiquetadas tratadas com `match`. Um fluxo de vários passos é uma `dataclass` de contexto com um método por passo.
-- Incorpore uma função auxiliar de uma linha que tem um só chamador. Ponha a função no módulo do domínio, e use `utils.py` só quando nenhum serve.
-- Parâmetros explícitos e funções com nome. Evite `**kwargs`, lambdas opacas, `Any` e `object`. Código bloqueante roda por `asyncio.to_thread`.
-- Cada parte tem a sua classe de configuração, que estende `ToolkitSettings`. A parte cria o grupo quando precisa dele, como `GcsSettings()`, nunca no `import`. A base só tem o que todas as partes usam: `LOG_LEVEL` e `OTEL_*`. Uma variável nova vai no grupo da parte que a usa.
-- Constantes ficam em `constants.py` e apelidos de tipo em `types.py`, um de cada por pacote. Um módulo importa do próprio pacote e dos acima, nunca dos abaixo. `toolkit/types.py` não importa nada do toolkit. Classes ficam com o comportamento delas.
-- Cada caminho de importação é um contrato, sem versionamento. Renomear, mover ou mudar o retorno de um símbolo público quebra os consumidores: atualize todos no mesmo PR, sem reexportação. Adicionar função, ou parâmetro com default, é seguro.
-
-### 2.1 Documentação e comentários
-
-- Escreva em inglês técnico simples (frases curtas, voz ativa) e em Markdown: código com uma crase, sem `reST` (`:param`, `:func:`, `::`).
-- Todo módulo de produção tem `docstring` de módulo. Um teste e um `__init__.py` não têm. Toda função tem `docstring` (aninhada, mágica, de teste ou de dublê). Toda classe de produção também.
-- A `docstring` é uma frase curta no imperativo, em uma linha, com ponto. Escreva mais frases só se o contrato não aparecer no nome e nos tipos, após uma linha em branco e em linhas de até 88 colunas. O erro que a função levanta entra na `docstring`. Uma classe leva um sintagma nominal, como "Um chunk de dados", e uma função com `@overload` não leva `docstring`.
-- Uma função difícil de entender leva um exemplo em bloco `python` cercado, com o resultado num comentário `#` conferido ao rodar. Sem o rótulo `Example:`. Uma função do `DuckDB` leva o exemplo em bloco `sql`. Um auxiliar de teste difícil de ler também leva exemplo.
-- Sem comentário no corpo de função e sem comentário de seção. Dê um nome à ideia.
-- O `README.md` é o dono do uso e da configuração, e este guia é o dono das regras. Aponte com um link, não copie. Uma configuração nova entra na tabela do `README.md` na mesma alteração.
-
-## 3. SQL e `DuckDB`
-
-- Todo SQL é um modelo `Jinja` (`StrictUndefined`) e roda pelo `Executor`: `toolkit/executor/templates/<pasta>/<nome>.sql` no toolkit, `queries/*.sql` em cada pipeline. Não há SQL em Python, e ninguém abre conexão `DuckDB` fora do `Executor`.
-- Valores entram como `Identifier()` e `Literal()`, e valores de execução como parâmetros (`?`). Nunca ponha um valor de fora, nem uma senha, no texto do SQL. Em SQL, carregue e apague em conjuntos.
-- Uma conexão `DuckDB` atende uma consulta por vez: abra uma por tarefa concorrente.
-- `Executor.query` e `Executor.read` conferem cada lote contra `expect`: uma classe anotada, um `polars.Schema`, um mapa de tipos ou `None`. O contrato (nulos, geometria, texto lido como número) está na `docstring` de `Executor.query` e no [README](README.md). Faça o `CAST` de texto para número no modelo, nunca na leitura.
-- O `DuckDB` cuida de SQL, de leitura e escrita de Parquet e CSV, de `COPY` para o `GCS` e de geometria. O `Polars` cuida só do que o `DuckDB` não faz. Uma função pública recebe e devolve `Path`, `pl.DataFrame` ou `pl.LazyFrame`, nunca conexão, relação ou cursor.
-
-- A cópia de uma fonte para o `bucket` extrai um chunk por vez com `COPY` por `Executor.execute` (`duckdb/extract_chunk`) para um `Parquet` local, e o `deltalake` grava a tabela `Delta`. Tudo que vira uma tabela `BigLake` é `Delta`. Do BigQuery para o `bucket` são lotes simples do `query` da fonte (`duckdb/select_source`). CSV só entra quando não há alternativa.
-
-### 3.1 Modelos
-
-- Todo modelo começa com um cabeçalho JSON em `{# ... #}` (`kind`, `description`, `inputs`). Toda macro tem `kind: "macro"`, `name`, `description`, `inputs` e `returns`, com uma linha em branco antes do cabeçalho, nenhuma entre ele e a macro, e uma depois.
-- Um nome por papel (`secret`, `alias`, `path`, `columns`), sem `name` solto nem abreviação (`cols`). O mapeamento do Python e o modelo usam os mesmos nomes. O Python decide identificador, literal e parâmetro, e o `Jinja` só faz laços e condicionais.
-- Cada valor de `.sqlfluff` é um exemplo válido de um modelo que existe.
-- Uma operação que se repete vira função do `DuckDB` ou modelo em `duckdb/`, e não código em cada pipeline.
-- Toda função do `DuckDB` fica em `toolkit/functions/`, no módulo do tipo: `native.py` (o `DuckDB` a chama uma vez por linha, com `@native`), `arrow.py` ou `documents.py` (uma vez por lote, com `@arrow`). Escreva a função como uma expressão do `Polars`.
-- A função se registra onde é definida, com os decoradores de `decorators.py`. O `register_functions` a registra quando o `DuckDBEngine` é criado, então toda conexão a tem. A lista está no [README](README.md#módulos).
-- Os modelos prontos são `extract_chunk`, `select_source`, `fingerprint` e `select_columns`.
-- O nome de uma coluna usa `Executor.normalize_columns(table, columns, separator, lowercase)`, porque o `DuckDB` não aceita o resultado de uma função como nome de coluna. Ela renomeia as colunas dadas (ou todas, se `columns` for `None`) de uma tabela da própria conexão, nunca de uma fonte anexada.
-- Na cópia de um banco, `select_columns` (em `toolkit/utils.py`) monta a lista de colunas da macro `select_columns`: `select`, nomes, `clean_text` e funções por coluna. Só entram funções `Arrow`, que leem texto, então `select_columns` converte datas e `timestamps` antes.
-
-## 4. `Engine` e fontes
-
-- Uma `Source` é só configuração: a conexão, as opções e a `origin` (o que ler). Um `Engine` nasce dela, com `Engine.from_source(source)`, abre a conexão no `async with` e faz tudo com o sistema. O `Executor` recebe o motor e orquestra: abre o motor, renderiza os modelos e os roda, e lê os chunks de um `dump` (`chunks`). Uma `Source` nunca abre uma conexão, e nunca monta nem roda uma consulta.
-- A pasta `templates` de cada pipeline é procurada antes da do toolkit, então ela não usa nomes de pasta do toolkit, como `duckdb/`.
-- O banco anexado se chama sempre `src` (`ALIAS`), e o modelo escreve `FROM src.esquema.tabela`. Um `DuckDBEngine` anexa uma fonte só. O SQL é sempre `DuckDB`. Uma consulta no dialeto de um banco vai como texto para a função da extensão dele (`postgres_query` ou `mssql_scan`), pela macro `native_query`. O Oracle é a exceção: o `OracleEngine` guarda um `Oracle` próprio, o `Executor` roda nele os modelos de `oracle/` (`prepare` ajusta o fuso e lê o `SCN`), e `materialize` grava cada chunk em `Parquet` local para um `DuckDBEngine` do próprio motor terminar. O MySQL também é uma exceção: o `MySQLEngine` guarda um `MySQL` (`mysql.py`, o `aiomysql`) e grava os chunks em `Parquet`, porque o `mysql_scanner` do `DuckDB` não lê o MySQL 5.0 e 5.1. O CouchDB e o MongoDB são as outras exceções: não têm SQL, então o `CouchDBEngine` guarda um `CouchDBClient` (`executor/couchdb.py`, o protocolo `HTTP`) e o `MongoDBEngine` um cliente do `PyMongo`, e cada um grava as páginas em `Parquet`. O motor faz tudo com o sistema (`execute`, `query`, `read`, `describe` e `materialize`, com `match` no tipo da origem), e `materialize` é o único ponto em que a leitura aplica os filtros e o chunk.
-- O `Engine` é uma classe abstrata em `engines/base.py`, e cada motor é uma `dataclass` cujo primeiro campo é a fonte. Ele define `source_type` (as fontes que serve) e, se lê chunks ao mesmo tempo, `concurrency`. O `from_source` acha o motor pelo `isinstance` da fonte, então um motor novo não muda nenhum outro arquivo. Um motor que corta os chunks à sua maneira sobrescreve `check_chunks`. Todo motor implementa o `Engine` direto, sem classe intermediária. Um sistema que o `DuckDB` não lê escreve o `extract` (as linhas do chunk em um `Parquet`), abre um `DuckDBEngine` próprio e termina com `describe_extracted` e `materialize_extracted` (`engines/duckdb.py`). `execute` e `query` recusam o SQL por padrão, e o motor que roda SQL os sobrescreve.
-- Uma fonte é uma classe por arquivo em `sources/backends/`, subclasse de `Registered` (ou de `DuckDBSource`, para o que o `DuckDB` lê no lugar), com o nome terminando em `Source`, um `name` e o decorador `@dataclass(frozen=True, slots=True, config=SOURCE_CONFIG)` do `Pydantic`. Os campos são as opções, e `extra="forbid"` recusa uma chave que ela não declara. Só uma classe que define `name` entra no registro, e a intermediária não define. Um sistema novo é um arquivo novo.
-- Uma fonte que o `DuckDB` lê no lugar define `extensions` e, se precisa, `setup(engine)`. Um motor só carrega as extensões e roda o `setup`.
-- Os modelos `Pydantic` das respostas que uma fonte lê de uma API HTTP ficam em `sources/models.py`: a fronteira valida o corpo, e o resto do código usa os campos tipados, sem `cast`.
-- A conexão (`DBConn`) é uma `dataclass` congelada, com a senha fora do `repr`. Nunca registre em log senha, token, URL de conexão, valores ou texto de consulta.
-- A construção de uma `Source` e a de um `Engine` não têm efeito colateral: a conexão abre no `async with`.
-
-## 5. Google Cloud
-
-- Autenticação por workload identity (ADC): `google.auth.default(scopes=...)`. Sem arquivo de service account, sem `GOOGLE_APPLICATION_CREDENTIALS` e sem credencial em imagem.
-- HTTP usa `httpx2`, e `requests` é proibido.
-- O `GCS` só passa por `toolkit.gcs` (`obstore`, chaves `HMAC` de `Settings`). Ele não apaga em lote: apague objeto por objeto, com concorrência limitada. O `DuckDB` não acessa o `GCS`: no `dump` de um banco ele grava `Parquet` local e o `deltalake` escreve a tabela `Delta` no `bucket`, pelo ADC.
-- O BigQuery só passa por `toolkit.bigquery`. A tabela final é uma tabela externa sobre o prefixo, criada depois que os dados existem. Uma tabela `Delta` é uma tabela `BigLake` e exige uma conexão.
-- O `dump` de um banco não repete dado: cada chunk tem uma impressão digital no `ledger` da tabela `Delta` (`toolkit.delta`), e só um chunk que mudou é trocado, em um `commit` atômico. O `md5` dá a impressão digital (`hash()` do `DuckDB` pode mudar entre versões). `deltalake` só em `toolkit/delta.py`.
-
-## 6. `Prefect`, logs e telemetria
-
-- O toolkit tem funções puras: sem `@flow`, `@task`, `if __name__ == "__main__":` nem `print()`. O `@task` é uma função fina, no `tasks.py` da pipeline ou em `src/utils/tasks.py`, que decide `retries` e cache.
-- Todo log passa por `toolkit.telemetry.logger` (`prefect.toolkit`), no formato `<Componente> <ação> <estado>: contexto`, com o nível do guia do repositório (Seção 5.5). O nível vem só de `Settings.LOG_LEVEL`. A saída de ferramentas externas fica como vem.
-- Uma operação (consulta, instrução, envio, exclusão) é um `span`, com o nome em `constants.py`. Não há histograma de duração, porque o `SigNoz` a deriva dos `spans`, e não se decora `flow` nem `task`.
-- Um instrumento de `telemetry.py` é só para totais que um `span` não dá (linhas, bytes), com unidade e atributos de cardinalidade baixa. Valor de dado, id de linha e mensagem de erro não são atributos.
-- O pacote usa só a API do `OpenTelemetry`. Os `flows` compartilhados de `utils.flows` chamam `configure_telemetry()` ao serem importados, depois de `import prefect`; um `flow` próprio faz o mesmo. Ela cria `ToolkitSettings` (`OTEL_*`) e não recebe as configurações como parâmetro.
-
-## 7. Testes
-
-Teste só o nosso comportamento, nunca o do `DuckDB`, `Polars`, `Prefect`, `OpenTelemetry`, `obstore`, `psycopg`, `Jinja` ou Google. As regras gerais estão na [Seção 14 do guia do repositório](../../STYLEGUIDE.md#14-testes).
-
-- `tests/` espelha o pacote, com funções `test_*` simples: sem `pytest-bdd` e sem pastas `unit/` e `integration/`. A marca `s3` ou `extensions` identifica o teste que precisa de serviço ou rede. O que os testes compartilham vai no `conftest.py` (na raiz do repositório, em `tests/fixtures.py`), como `fixture` ou como fábrica de funções. Um módulo de teste só tem testes e seus dados: constantes, classes de esquema e o auxiliar que um `parametrize` ou um teste `@given` usa na coleta, porque o `pytest` e o `hypothesis` não passam `fixture` a eles.
-- Um teste é pequeno, e o nome diz o comportamento. Prefira tabelas com `pytest.param(..., id="cenário")`, e `hypothesis` para invariantes, não para um exemplo só.
-- Confira valores exatos. Use `in` só em texto gerado que seria frágil de comparar inteiro (SQL renderizado, mensagem, XML) e na pertinência a uma coleção. Use `DuckDB` em memória e `tmp_path`, sem dublê de `DuckDB`. Faça dublê só do externo que não roda aqui (cliente do `Prefect`, chamada ao `dbt`, `oracledb` por SQLite, token do Google), com a forma mínima.
-- Todo bug ganha um teste de regressão, com o cenário no `id` e `Regression` na `docstring`. Estrague o código de propósito e veja o teste falhar.
-- Os testes de paridade (`tests/parity/` na raiz, marca `parity`, desligada por padrão) rodam os seis motores de verdade e conferem que todos dão as mesmas linhas e os mesmos tipos. Um motor novo entra neles, com o `engines.nu` que o sobe.
-- Não se testa: logs, `spans` e métricas (confira à mão em `/tmp`), o BigQuery, o armazenamento de campos, os padrões e o "não levantou", o conteúdo inteiro de uma lista que cresce (o registro de fontes), e o mesmo comportamento em dois níveis.
-
-## 8. Verificações
-
-Rode em `packages/toolkit/`:
+Run these checks before review:
 
 ```sh
-uv run ruff check . && uv run ruff format --check .
-uv run basedpyright
-uv run sqlfluff lint toolkit/executor/templates
-uv run vulture toolkit tests
-uv run pytest
+uv run --directory packages/toolkit ruff check .
+uv run --directory packages/toolkit ruff format --check .
+uv run --directory packages/toolkit basedpyright
+uv run --directory packages/toolkit sqlfluff lint toolkit/executor/templates
+uv run --directory packages/toolkit vulture toolkit tests
+uv run --directory packages/toolkit pytest -q
 ```
 
-| Regra                                                                                                                   | Ferramenta                             |
-| ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| Sem `pandas`, `geopandas`, `requests`, `basedosdados`, `google.cloud.storage`, `boto3`, `psycopg2`, `pymysql`, `pyodbc` | `ruff` (`TID251`)                      |
-| `obstore` só em `toolkit/gcs.py`                                                                                        | `ruff` (`TID251`, exceção por arquivo) |
-| Sem `print`                                                                                                             | `ruff` (`T20`)                         |
-| `docstring` em toda função, com resumo de uma linha no imperativo                                                       | `ruff` (`D`)                           |
-| Linha de `docstring` e de comentário com até 88 colunas                                                                 | `ruff` (`W505`)                        |
-| Tipos completos: modo `all` e nível `strict`                                                                            | `basedpyright`                         |
-| Estilo dos modelos SQL                                                                                                  | `sqlfluff`                             |
-| Código sem uso                                                                                                          | `vulture`                              |
+`devenv --profile checks tasks run lint:all test:all` runs the same checks in the complete repository.
 
-O verificador de tipos cobre `toolkit/` e `tests/` com zero erros e zero avisos. Não há comentário de ignore no código (`# pyright: ignore`, `# type: ignore`). Toda supressão vive no `pyproject.toml`, no escopo mais estreito (um arquivo ou uma pasta), com o motivo em um comentário, e só uma lacuna de tipos de terceiros a justifica. Ela é uma `executionEnvironments` com `root`.
+## 1. Scope and dependencies
+
+### generic-second-use
+
+- **Level:** MUST
+- **Check:** review
+- **Rule:** Add a primitive to the toolkit only after two real consumers need the same domain-free behavior.
+- **Why:** The toolkit is a stable shared contract, not a store for possible future code.
+
+```mermaid
+flowchart TD
+    A([New behavior]) --> B{Does it contain<br/>a pipeline or business rule?}
+    B -- Yes --> P[Keep it in the pipeline]
+    B -- No --> C{Do two real consumers<br/>need the same behavior?}
+    C -- No --> P
+    C -- Yes --> T[Move the tested code to the toolkit]
+```
+
+|   | Situation | Decision |
+|---|---|---|
+| ✅ | Two database pipelines need the same chunk fingerprint algorithm. | Move the tested algorithm to `toolkit/chunks.py`. |
+| ❌ | One CRM pipeline needs a Salesforce rule. | Keep it in the CRM pipeline, even if another pipeline might need it later. |
+
+### no-domain-values
+
+- **Level:** MUST NOT
+- **Check:** `.ast-grep/rules/no-pipeline-names-in-toolkit.yaml` and review
+- **Rule:** Do not put a pipeline name, dataset, table id, schedule, or business rule in the toolkit.
+- **Why:** A generic package cannot own deployment-specific facts.
+
+Compliant: `DEFAULT_BATCH_SIZE = 50_000`
+
+Non-compliant: `TAXIRIO_RACES_TABLE = "races"`
+
+### dependency-direction
+
+- **Level:** MUST
+- **Check:** basedpyright, Ruff, and review
+- **Rule:** A toolkit module imports only its own layer or a lower layer. `types.py` imports no toolkit module.
+- **Why:** One dependency direction prevents cycles.
+
+Compliant:
+
+```python
+# toolkit/executor/executor.py
+from toolkit.executor.engines.base import Engine
+```
+
+Non-compliant:
+
+```python
+# toolkit/types.py
+from toolkit.executor import Executor
+```
+
+## 2. Layout
+
+### module-owner
+
+- **Level:** MUST
+- **Check:** review
+- **Rule:** Put each symbol in the module that owns its domain.
+- **Why:** A reader should find a GCS operation in `gcs.py` and a Delta operation in `delta.py`.
+
+| Module         | Owns                                                    |
+| -------------- | ------------------------------------------------------- |
+| `executor/`    | Engines, sources, requests, datasets, and SQL execution |
+| `settings.py`  | Toolkit settings groups                                 |
+| `functions/`   | Functions registered in DuckDB                          |
+| `utils.py`     | Column and filter construction                          |
+| `telemetry.py` | Logger and OpenTelemetry setup                          |
+| `constants.py` | Constants used by two or more toolkit modules           |
+| `types.py`     | Shared type aliases                                     |
+| `chunks.py`    | Chunk boundaries, keys, and fingerprints                |
+| `delta.py`     | Delta ledger, chunk writes, compaction, and inspection  |
+| `gcs.py`       | GCS access through obstore                              |
+| `bigquery.py`  | BigQuery instructions and external tables               |
+| `oracle.py`    | The Oracle SQL client                                   |
+| `dbt.py`       | dbt request and repository operations                   |
+
+Compliant: `list_keys` in `toolkit/gcs.py`.
+
+Non-compliant: `list_gcs_keys` in `toolkit/utils.py`.
+
+### empty-init
+
+- **Level:** MUST
+- **Check:** review
+- **Rule:** Keep each toolkit `__init__.py` empty.
+- **Why:** Every import path is explicit and no symbol has a hidden second path.
+
+Compliant: `from toolkit.gcs import list_keys`
+
+Non-compliant: `from toolkit import list_keys`
+
+### shared-constant-and-type
+
+- **Level:** MUST
+- **Check:** `.ast-grep/rules/types-imports-no-toolkit.yaml` and review
+- **Rule:** Put cross-module constants in `constants.py` and cross-module type aliases in `types.py`.
+- **Why:** Each shared fact has one owner.
+
+Compliant:
+
+```python
+# constants.py
+BATCH_COLUMN = "batch"
+```
+
+Non-compliant: define `BATCH_COLUMN` in both `chunks.py` and `delta.py`.
+
+A class with behavior stays in its domain module. A data-only class shared by modules belongs in `types.py`.
+
+## 3. Public API
+
+### stable-import-path
+
+- **Level:** MUST
+- **Check:** tests and review
+- **Rule:** Treat each public import path as a contract. Update every consumer in the same change when a path or return value changes.
+- **Why:** The repository does not provide compatibility re-exports.
+
+Compliant: rename a symbol and update all imports in one pull request.
+
+Non-compliant: re-export the old symbol from `__init__.py`.
+
+### explicit-parameters
+
+- **Level:** SHOULD
+- **Check:** Ruff, basedpyright, and review
+- **Rule:** Use named functions and explicit parameters instead of opaque lambdas, `Any`, `object`, and `**kwargs`.
+- **Why:** The type checker can verify an explicit contract.
+
+Compliant:
+
+```python
+def read_chunk(source: Source, chunk: Chunk) -> Dataset[Row]: ...
+```
+
+Non-compliant:
+
+```python
+def read_chunk(**kwargs: Any) -> object: ...
+```
+
+### no-unused-parameter
+
+- **Level:** MUST
+- **Check:** Ruff `ARG`
+- **Rule:** Do not accept a parameter that the function does not use.
+- **Why:** An unused parameter gives a false contract.
+
+Compliant: remove the parameter.
+
+Non-compliant: rename it to `_unused`.
+
+## 4. SQL and DuckDB
+
+### sql-template-only
+
+- **Level:** MUST
+- **Check:** SQLFluff and review
+- **Rule:** Put every SQL operation in a Jinja template under `toolkit/executor/templates/`.
+- **Why:** Templates are lintable, typed at their inputs, and reusable by engines.
+
+Compliant:
+
+```sql
+{#
+{"kind":"template","description":"Read one chunk.","inputs":{"table":"Source table."}}
+#}
+SELECT * FROM {{ table }}
+```
+
+Non-compliant:
+
+```python
+connection.execute(f"SELECT * FROM {table}")
+```
+
+### sql-template-header
+
+- **Level:** MUST
+- **Check:** SQLFluff and tests
+- **Rule:** Start each template with a JSON header that defines `kind`, `description`, and `inputs`.
+- **Why:** The header documents the executable contract for tools and people.
+
+A macro also defines `name` and `returns`.
+
+Compliant:
+
+```sql
+{# {"kind":"macro","name":"clean","description":"Clean text.","inputs":{"value":"Text."},"returns":"Clean text."} #}
+```
+
+Non-compliant: a template with no header.
+
+### executor-owns-duckdb
+
+- **Level:** MUST
+- **Check:** Ruff `TID251` and review
+- **Rule:** Open DuckDB only through `DuckDBEngine` and run SQL through `Executor`.
+- **Why:** The engine installs extensions, functions, limits, and telemetry once.
+
+Compliant:
+
+```python
+async with DuckDBEngine() as engine:
+    executor = Executor(engine, templates)
+    await executor.query("items", {}, expect=Item)
+```
+
+Non-compliant:
+
+```python
+import duckdb
+
+connection = duckdb.connect()
+```
+
+### executor-result-contract
+
+- **Level:** MUST
+- **Check:** basedpyright and tests
+- **Rule:** Give `Executor.query` and `Executor.read` an `expect` schema or annotated row type.
+- **Why:** The boundary rejects wrong names, nulls, and types near the source.
+
+Compliant: `await executor.query("items", {}, expect=Item)`
+
+Non-compliant: read rows and cast each field later.
+
+## 5. Engines and sources
+
+### source-is-configuration
+
+- **Level:** MUST
+- **Check:** tests and review
+- **Rule:** A Source stores configuration only. It does not connect, query, or perform I/O.
+- **Why:** Source construction must have no side effect.
+
+Compliant:
+
+```python
+@dataclass(frozen=True, slots=True, config=SOURCE_CONFIG)
+class ExampleSource(Registered):
+    name = "example"
+    host: str
+```
+
+Non-compliant: call a network client in `__post_init__`.
+
+### engine-owns-system-io
+
+- **Level:** MUST
+- **Check:** tests and review
+- **Rule:** An Engine opens the system, reads it, and materializes chunks inside `async with`.
+- **Why:** One object owns connection lifetime and cleanup.
+
+Compliant: `MongoDBEngine.materialize()` writes the requested chunk to local Parquet.
+
+Non-compliant: `MongoDBSource` opens `MongoClient`.
+
+### one-engine-per-source-family
+
+- **Level:** MUST
+- **Check:** tests and review
+- **Rule:** Implement a new system as one Source in `sources/backends/` and one direct Engine subclass when DuckDB cannot read it.
+- **Why:** `Engine.from_source` discovers engines without a central factory branch.
+
+Compliant: `CouchDBSource` plus `CouchDBEngine`.
+
+Non-compliant: add an `if source.type == "couchdb"` branch to `Executor`.
+
+### local-parquet-boundary
+
+- **Level:** MUST
+- **Check:** tests and review
+- **Rule:** An engine that DuckDB cannot read writes each extracted chunk to local Parquet, then delegates the remaining work to `DuckDBEngine`.
+- **Why:** Every source then shares the same normalization and fingerprint behavior.
+
+Compliant: MySQL materializes to Parquet before Delta writing.
+
+Non-compliant: MySQL writes rows directly to Delta with a second schema implementation.
+
+### validate-response-at-source
+
+- **Level:** MUST
+- **Check:** tests and basedpyright
+- **Rule:** Validate HTTP response bodies with models in `executor/sources/models.py`.
+- **Why:** The rest of the engine uses typed fields without repeated casts.
+
+Compliant: parse an API page into `PageResponse` once.
+
+Non-compliant: use `dict[str, Any]` through the engine.
+
+## 6. Storage and cloud
+
+### obstore-only-in-gcs
+
+- **Level:** MUST
+- **Check:** Ruff `TID251` and `.ast-grep/rules/no-obstore-outside-gcs.yaml`
+- **Rule:** Import `obstore` only in `toolkit/gcs.py`.
+- **Why:** One module owns GCS credentials, retries, and object operations.
+
+Compliant:
+
+```python
+from toolkit.gcs import list_keys
+```
+
+Non-compliant:
+
+```python
+import obstore
+```
+
+### deltalake-only-in-delta
+
+- **Level:** MUST
+- **Check:** Ruff `TID251` and `.ast-grep/rules/no-deltalake-outside-delta.yaml`
+- **Rule:** Import `deltalake` only in `toolkit/delta.py`.
+- **Why:** One module owns Delta commits and ledger rules.
+
+Compliant: `from toolkit.delta import inspect_table`
+
+Non-compliant: `from deltalake import DeltaTable` outside `toolkit/delta.py`.
+
+### bigquery-only-in-bigquery
+
+- **Level:** MUST
+- **Check:** `.ast-grep/rules/no-bigquery-client-in-toolkit.yaml` and review
+- **Rule:** Put direct BigQuery client operations in `toolkit/bigquery.py`.
+- **Why:** One client owns ADC, instructions, table creation, and errors.
+
+Compliant: call a method of `toolkit.bigquery.BigQuery`.
+
+Non-compliant: create `google.cloud.bigquery.Client()` in `toolkit/delta.py`.
+
+### adc-only
+
+- **Level:** MUST
+- **Check:** `.ast-grep/rules/no-service-account-file.yaml` and review
+- **Rule:** Use Application Default Credentials and never load a service-account file in toolkit code.
+- **Why:** Workload identity rotates credentials and avoids committed keys.
+
+Compliant: `google.auth.default(scopes=SCOPES)`
+
+Non-compliant: `service_account.Credentials.from_service_account_file(path)`
+
+### delta-table-output
+
+- **Level:** MUST
+- **Check:** tests and review
+- **Rule:** Write every toolkit-managed table in GCS as Delta and publish it as a BigLake external table.
+- **Why:** Atomic commits and the ledger prevent partial and repeated data.
+
+Compliant: materialize Parquet locally, write a Delta chunk, then publish.
+
+Non-compliant: publish a folder of loose CSV files.
+
+## 7. Settings
+
+### settings-by-domain
+
+- **Level:** MUST
+- **Check:** basedpyright and review
+- **Rule:** Give each toolkit domain its own `ToolkitSettings` subclass and instantiate it only when needed.
+- **Why:** Importing a module must not read the environment.
+
+Compliant:
+
+```python
+def connect() -> Client:
+    settings = GcsSettings()
+    return Client(settings.GCS_ACCESS_KEY)
+```
+
+Non-compliant:
+
+```python
+SETTINGS = GcsSettings()
+```
+
+The base settings class contains only values every toolkit domain uses, such as `LOG_LEVEL` and `OTEL_*`.
+
+## 8. Telemetry
+
+### toolkit-logger
+
+- **Level:** MUST
+- **Check:** `.ast-grep/rules/no-stdlib-logger.yaml` and review
+- **Rule:** Log through `toolkit.telemetry.logger` with lifecycle messages and bounded context.
+- **Why:** One logger sends INFO messages and telemetry with the same labels.
+
+Compliant: `logger.info("Chunk written: rows=%d", rows)`
+
+Non-compliant: `logging.getLogger(__name__).info("done")`
+
+### spans-for-operations
+
+- **Level:** SHOULD
+- **Check:** review
+- **Rule:** Wrap a query, write, send, or delete operation in one named span.
+- **Why:** The span already provides duration and error state.
+
+Compliant: one `gcs.object.write` span around an object write.
+
+Non-compliant: a custom duration histogram for the same operation.
+
+Use metrics only for totals that a span cannot give, such as rows or bytes. Keep attributes low-cardinality.
+
+## 9. Tests
+
+### test-owned-behavior
+
+- **Level:** MUST
+- **Check:** pytest and review
+- **Rule:** Test toolkit behavior, not the implementation of DuckDB, Polars, Prefect, OpenTelemetry, or a cloud SDK.
+- **Why:** A test must fail only when our contract breaks.
+
+Compliant: verify that a changed chunk replaces only its prior batch.
+
+Non-compliant: verify that `pl.DataFrame` stores the value passed to it.
+
+### parity-for-engine
+
+- **Level:** MUST
+- **Check:** parity tests and review
+- **Rule:** Add each new engine to `tests/parity/` and compare its rows and types with the other engines.
+- **Why:** Every engine must expose the same dataset contract.
+
+Compliant: add the source service to `tests/parity/engines.nu` and the expected dataset case.
+
+Non-compliant: add an engine with only mocked unit tests.
+
+### deterministic-tests
+
+- **Level:** MUST
+- **Check:** pytest and review
+- **Rule:** Keep tests independent, deterministic, and offline unless they use an explicit service marker.
+- **Why:** CI must reproduce every failure.
+
+Compliant: use `tmp_path`, in-memory DuckDB, and a fake external client.
+
+Non-compliant: read a production bucket in a unit test.
+
+### regression-test
+
+- **Level:** MUST
+- **Check:** review
+- **Rule:** Add a focused test for every bug and confirm it fails before the fix.
+- **Why:** The test prevents the same bug from returning.
+
+Compliant: a test named for the scenario with `Regression` in its docstring.
+
+Non-compliant: weaken an existing assertion until the fix passes.

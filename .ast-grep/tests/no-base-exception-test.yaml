@@ -1,0 +1,5 @@
+id: no-base-exception
+valid:
+  - pass
+invalid:
+  - raise BaseException("x")

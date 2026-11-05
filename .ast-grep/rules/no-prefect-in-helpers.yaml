@@ -1,0 +1,13 @@
+id: no-prefect-in-helpers
+language: Python
+severity: error
+message: Helpers do not import Prefect. Move the orchestration boundary to flow.py or tasks.py.
+files:
+  - pipelines/**/helpers.py
+  - pipelines/**/helpers/**/*.py
+rule:
+  any:
+    - pattern: import prefect
+    - pattern: import prefect.$$$A
+    - pattern: from prefect import $$$A
+    - pattern: from prefect.$M import $$$A

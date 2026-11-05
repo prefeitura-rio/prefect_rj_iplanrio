@@ -17,12 +17,10 @@ import time
 from collections.abc import Callable, Mapping
 from enum import StrEnum
 from functools import wraps
-from logging import INFO, WARNING, getLogger
 from threading import Lock
-from typing import cast, final
+from typing import final
 
 import httpx2
-from prefect.runtime import deployment
 from toolkit.telemetry import logger
 
 from utils.records import dig, read_json
@@ -37,15 +35,11 @@ HTTP_NOT_FOUND = 404
 HTTP_RATE_LIMITED = 429
 HTTP_SUCCESS_MAX = 299
 DEFAULT_RETRY_AFTER_SECONDS = 5.0
-fallback_logger = getLogger(__name__)
 
 
 def log_safely(message: str, level: str) -> None:
-    """Write to the Prefect log, or to `logging` outside a run (tests, scripts)."""
-    try:
-        logger.info(message, level)
-    except Exception:
-        fallback_logger.log(WARNING if level == "warning" else INFO, message)
+    """Write through the toolkit logger at the given level."""
+    (logger.warning if level == "warning" else logger.info)(message)
 
 
 def warn(message: str) -> None:
@@ -112,19 +106,6 @@ def environment_from_deployment(name: str | None) -> Environment:
     deployment, is production.
     """
     return Environment.STAGING if name and name.endswith(STAGING_DEPLOYMENT_SUFFIX) else Environment.PROD
-
-
-def current_environment() -> Environment:
-    """Give the environment of the deployment of this flow run, and log it.
-
-    A local run, with no deployment, is production. The webhook of each environment is
-    in the secrets of that environment, so only the mark depends on this.
-    """
-    name = cast("str | None", deployment.name)
-    environment = environment_from_deployment(name)
-    info(f"Ambiente das notificações do Discord: {environment} (deployment {name or 'nenhum'}).")
-
-    return environment
 
 
 def webhook_from_env() -> str | None:
