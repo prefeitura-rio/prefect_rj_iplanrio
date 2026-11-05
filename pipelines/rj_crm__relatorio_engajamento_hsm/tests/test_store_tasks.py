@@ -1,5 +1,6 @@
 from datetime import UTC, date, datetime
 from types import TracebackType
+from typing import Literal
 
 import polars as pl
 import pytest
@@ -273,19 +274,33 @@ async def test_a_status_is_written_with_the_time_of_the_run(monkeypatch: pytest.
     ]
 
 
-def test_the_extraction_query_runs_with_parameters_and_the_report_shows_literals() -> None:
-    """Show the real values in the report and run the safe query with parameters."""
-    window = Window("O'Brien", "nome_campanha", date(2026, 11, 1), date(2026, 11, 4))
+@pytest.mark.parametrize("field", ["nome_campanha", "nome_hsm"])
+def test_the_extraction_query_runs_with_parameters_and_the_report_shows_literals(
+    field: Literal["nome_campanha", "nome_hsm"],
+) -> None:
+    """Show literals in the report and run with parameters, for both fields."""
+    window = Window("O'Brien", field, date(2026, 11, 1), date(2026, 11, 4))
 
     running = tasks.conversations_sql(window, literal=False)
     shown = tasks.conversations_sql(window, literal=True)
 
-    assert "c.hsm.nome_campanha = @value" in running
+    assert f"h.hsm.{field} = @value" in running
     assert "between @start and @end" in running
-    assert "unnest(@sources)" in running
-    assert "c.hsm.nome_campanha = 'O''Brien'" in shown
+    assert "date_add(@end, interval 1 day)" in running
+    assert "fonte in unnest(@sources)" in running
+    assert f"h.hsm.{field} = 'O''Brien'" in shown
     assert "between '2026-11-01' and '2026-11-04'" in shown
-    assert "('HSM', 'AI_AGENT_CIDADAO', 'AI_AGENT_AGENTE')" in shown
+    assert "fonte in ('HSM', 'AI_AGENT_CIDADAO', 'AI_AGENT_AGENTE')" in shown
+    assert "@" not in shown
+
+
+def test_the_extraction_query_reads_the_flat_table_of_the_chatbot() -> None:
+    """The table has a row for each message, and no nested `mensagens` column."""
+    sql = tasks.conversations_sql(Window("x", "nome_hsm", date(2026, 11, 1), date(2026, 11, 4)), literal=False)
+
+    assert "mensagens" not in sql
+    assert "id_sessao_ativo_origem" in sql
+    assert "mensagem_texto" in sql
 
 
 def test_limits_are_a_typed_dict() -> None:

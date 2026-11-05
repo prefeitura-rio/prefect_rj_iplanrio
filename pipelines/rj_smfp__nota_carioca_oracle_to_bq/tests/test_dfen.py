@@ -15,6 +15,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.helpers.dfen import (
     format_elapsed,
 )
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.types import Dfen, DfenExtractionError, RunningTask
+from utils.utils import render_query
 
 STARTED = datetime(2026, 10, 20, 12, 0, 0)
 HOUR = 3600
@@ -142,6 +143,7 @@ def failing(message: str) -> Callable[[], Awaitable[tuple[RunningTask, ...]]]:
     [
         pytest.param("ORA-00942: table or view does not exist", id="a_missing_table"),
         pytest.param("ORA-01031: insufficient privileges", id="a_missing_privilege"),
+        pytest.param('ORA-41900: missing READ privilege on "NFSE_OWNER"."TAREFAS"', id="a_missing_grant_on_23ai"),
     ],
 )
 async def test_a_table_that_the_login_cannot_read_lets_the_run_go_on(message: str) -> None:
@@ -153,6 +155,14 @@ async def test_any_other_oracle_error_is_raised() -> None:
     """Raise an error that is not about access."""
     with pytest.raises(oracledb.DatabaseError):
         await check_no_extraction(failing("ORA-03113: end-of-file on communication channel"), stale_hours=6)
+
+
+@pytest.mark.parametrize("column", ["tarefa", "tipo", "data_inicio", "segundos_em_execucao"])
+def test_the_query_names_its_columns_in_lower_case(column: str) -> None:
+    """Oracle upper-cases an alias with no quotes, and the task reads lower case."""
+    sql = render_query(tasks.__file__, "list_running_extractions")
+
+    assert f'AS "{column}"' in sql
 
 
 async def test_a_run_with_the_check_off_reads_nothing(monkeypatch: pytest.MonkeyPatch) -> None:

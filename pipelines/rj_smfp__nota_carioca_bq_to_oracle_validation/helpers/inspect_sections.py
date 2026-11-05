@@ -5,7 +5,7 @@ from pathlib import Path
 import oracledb
 from google.cloud import bigquery
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import CONSUMER_GRANTS, TABLE_PREFIX
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import CONSUMER_GRANTS, LOADED_TABLE_INMEMORY, TABLE_PREFIX
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.inmemory import oracle_message, read_status
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle import connect
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.oracle_query import fetch_all, fetch_one, fetch_scalar, to_int
@@ -138,6 +138,10 @@ def structure_sections(
     `slot` is the suffix of the physical table (`A` or `B`), which goes in the name of
     the indexes, and `None` for the old single table. Return the number of divergences
     and the text sections of the report.
+
+    The load puts a table with no partitions whole in the In-Memory, so that is what the
+    report expects of it. The table of a partitioned one has no In-Memory: only the
+    partitions of the window have.
     """
     try:
         expected = plan_structure(template, loaded_columns, TABLE_PREFIX)
@@ -148,7 +152,8 @@ def structure_sections(
     partition_rows = compare_partitions(expected.layout.partitioning, loaded.partitioning)
     partition_divergences = count_divergences(partition_rows)
     tablespace_ok = expected.layout.tablespace == loaded.tablespace
-    inmemory_ok = expected.layout.inmemory == loaded.inmemory
+    expected_inmemory = LOADED_TABLE_INMEMORY if expected.layout.partitioning is None else expected.layout.inmemory
+    inmemory_ok = expected_inmemory == loaded.inmemory
     index_rows = compare_indexes(list(expected_indexes), list(loaded.indexes))
     index_divergences = count_divergences(index_rows)
     sections = [
@@ -156,7 +161,7 @@ def structure_sections(
         + f"{loaded.tablespace or '(padrão)'} ({'OK' if tablespace_ok else 'DIVERGE'}); "
         + f"{partition_divergences} divergência(s). Partições criadas pelo INTERVAL não entram.\n"
         + format_text_table(["#", "Partição", "Original", "Carregada", "Status"], partition_rows),
-        f"In-Memory: esperado {expected.layout.inmemory or 'NO INMEMORY'}, carregada "
+        f"In-Memory: esperado {expected_inmemory or 'NO INMEMORY'}, carregada "
         + f"{loaded.inmemory or 'NO INMEMORY'} ({'OK' if inmemory_ok else 'DIVERGE'})",
         f"Índices: {len(expected_indexes)} esperado(s), {len(loaded.indexes)} na carregada, "
         + f"{index_divergences} divergente(s). Esperado: definição da original, utilizável e paralelismo 1.\n"

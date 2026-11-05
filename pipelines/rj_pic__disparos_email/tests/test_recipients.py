@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from pipelines.rj_pic__disparos_email.helpers.recipients import (
     render_body,
 )
 
+NOW = datetime(2026, 11, 5, 14, 3, 9)
 STUDENT = {"cpf": "1", "nome": "Beto", "status": "irregular", "protocolo": "P-1"}
 
 
@@ -83,13 +85,21 @@ def test_a_row_becomes_a_mail_for_its_address() -> None:
     """Build the mail with the address, the name, the subject and the rendered body."""
     row = {"recipiente_email": " ana@x.org ", "recipiente_nome": "Ana", "dados": '[{"nome": "Beto"}]'}
 
-    mail = build_mail(row, "Assunto", TEMPLATE_DIR)
+    mail = build_mail(row, "Assunto", TEMPLATE_DIR, NOW)
 
     assert mail is not None
     assert (mail.to, mail.name, mail.subject) == ("ana@x.org", "Ana", "Assunto")
     assert "Beto" in mail.body
 
 
+def test_the_footer_has_the_date_and_the_hour_of_the_run() -> None:
+    """Fill `data` and `hora` of the template, which the footer prints."""
+    mail = build_mail({"recipiente_email": "ana@x.org"}, "Assunto", TEMPLATE_DIR, NOW)
+
+    assert mail is not None
+    assert "E-mail enviado em 05/11/2026 às 14:03:09" in mail.body
+
+
 def test_a_row_with_no_address_gives_no_mail(tmp_path: Path) -> None:
     """Skip the row, and do not read the template."""
-    assert build_mail({"recipiente_email": "  "}, "Assunto", tmp_path) is None
+    assert build_mail({"recipiente_email": "  "}, "Assunto", tmp_path, NOW) is None
