@@ -37,6 +37,7 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     get_already_dispatched_data,
     get_failed_cpfs,
     get_failed_phones,
+    get_pares_cpf_telefone_processados,
     get_retry_destinations,
     monitor_dispatch_status,
     remove_contacts_from_whitelist,
@@ -346,9 +347,48 @@ def rj_crm__disparo_template_sf(
                 print(f"✅ No others available for retry attempt {i}. Ending retry loop.")
                 break
 
-            print(f"⚠️  Sleep 3 minutes before retry dispatch.")
-            time.sleep(3 * 60)
+            print(f"⚠️  Sleep 30 minutes before retry dispatch.")
+            time.sleep(30 * 60)
             print(f"\n⚠️  Starting retry attempt {i} for campaign_name={campaign_name}...")
+
+            # Materializa int_crm_status_disparo para garantir que os webhooks de falha
+            # do Salesforce já estejam disponíveis na tabela antes de consultar get_failed_cpfs.
+            # Isso é necessário mesmo quando monitor_after_sftp=False e materialize_after_sftp=False,
+            # pois sem materialização a coluna indicador_quarentena não reflete os webhooks recentes.
+            print(f"⏳ Materializando int_crm_status_disparo antes de verificar falhas (retry {i})...")
+            github_token = getenv_or_action("GITHUB_TOKEN")
+            git_repository_path = f"https://{github_token}@github.com/prefeitura-rio/queries-rj-crm-registry.git"
+            execute_dbt_task(
+                select="+int_crm_status_disparo",
+                target="prod",
+                git_repository_path=git_repository_path,
+            )
+
+            # Verifica se o Salesforce já processou o attempt anterior checando se algum par
+            # (cpf, others[i-1]) do base_df apareceu na status_disparo com esse nome de campanha.
+            # Isso garante que não consultamos falhas antes do SF ter devolvido qualquer webhook,
+            # e funciona corretamente para qualquer attempt (i=1,2,...): sempre olha o telefone
+            # específico disparado no attempt anterior, não os anteriores.
+            pares_attempt_anterior = set(
+                base_df[["cpf", "others"]].apply(
+                    lambda row: (
+                        str(row["cpf"]),
+                        str(row["others"][i - 1])
+                        if hasattr(row["others"], "__len__") and len(row["others"]) >= i
+                        else None,
+                    ),
+                    axis=1,
+                ).dropna()
+            )
+            pares_processados = get_pares_cpf_telefone_processados(
+                billing_project_id=billing_project_id,
+                campaign_name=campaign_name,
+            )
+            pares_encontrados = pares_attempt_anterior.intersection(pares_processados)
+            print(f"🔍 Pares (cpf, telefone) do attempt {i-1} encontrados na status_disparo: {len(pares_encontrados)}/{len(pares_attempt_anterior)}")
+            if not pares_encontrados:
+                print(f"✅ Nenhum par (cpf, telefone) do attempt {i-1} apareceu na status_disparo ainda. Encerrando retentativas.")
+                break
 
             failed_cpfs = get_failed_cpfs(billing_project_id=billing_project_id, campaign_name=campaign_name)
 
