@@ -137,8 +137,11 @@ deployments:
             dev: "rj-crm-registry-dev_dbt"
       # Quarterly hour (900 seconds = 15 minutes) As execuções a cada 15 min passam a reescrever apenas os dois últimos dias e sem rodar os testes (passe quente)
       # Schedule 5: run each 15 minutes updating only last 2 days
-      - interval: 900
-        anchor_date: "2024-03-17T09:15:00"
+      # Roda 2 minutos depois da extração do Data Cloud (rj_crm__salesforce_datacloud,
+      # */15), que grava no BigQuery em cerca de 1,5 a 2 minutos. O dbt lê a raw cerca de
+      # 1:45 depois de começar: sem esses 2 minutos, ele lê quase junto com a carga
+      # (folga de 23 s medida em 06/11/2026) e, se ler antes, o dado perde um ciclo.
+      - cron: "2,17,32,47 * * * *"
         timezone: America/Sao_Paulo
         slug: dbt_quarter_hourly_build
         parameters:
