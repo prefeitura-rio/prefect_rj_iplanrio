@@ -62,6 +62,6 @@ def test_each_type_of_column_has_its_own_expression(make_record: Callable[..., R
 
     assert "SAFE.PARSE_DATE(\n        '%d%m%Y'," in sql
     assert "ELSE SAFE_CAST(TRIM(SUBSTRING(text,2,3)) AS INT64) / 100" in sql
-    assert "WHEN REGEXP_CONTAINS(SUBSTRING(text,3,3), r'^1$') THEN 'Masculino'" in sql
+    assert "WHEN REGEXP_CONTAINS(SUBSTRING(text,3,3), r'^0*1$') THEN 'Masculino'" in sql
     assert ") AS id_sexo," in sql
     assert ") AS sexo," in sql

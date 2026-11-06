@@ -3,10 +3,22 @@
 from pathlib import Path
 from zipfile import ZipFile
 
+from pyarrow import Array, ArrowInvalid, BinaryScalar, array, binary, csv, parquet, string
 from pyarrow import Table as ArrowTable
-from pyarrow import csv, parquet, string
+from toolkit.types import ArrowColumn
 
 from pipelines.rj_smas__cadunico.constants import BATCHES_PER_FILE, BLOCK_SIZE, DELIMITER
+
+
+def decode_lines(lines: Array[BinaryScalar]) -> ArrowColumn:
+    """Return the lines as text, with each byte that is not UTF-8 as `�`.
+
+    That is what BigQuery did when it read the text files as CSV.
+    """
+    try:
+        return lines.cast(string())
+    except ArrowInvalid:
+        return array([(line or b"").decode("utf-8", "replace") for line in lines.to_pylist()], string())
 
 
 def unzip_texts(archive: Path, folder: Path) -> list[Path]:
@@ -23,13 +35,13 @@ def write_text_parquet(source: Path, folder: Path, constants: dict[str, str], fi
     A file has the column `text`, which is one line, and the constant columns. The file
     is read in blocks, and `BATCHES_PER_FILE` blocks make one Parquet file, so a file of
     many gigabytes fits in memory and no output is too big. The names are `0000.parquet`
-    and so on.
+    and so on. A byte that is not UTF-8 becomes `�` (see `decode_lines`).
     """
     reader = csv.open_csv(
         source,
-        read_options=csv.ReadOptions(column_names=["text"], block_size=BLOCK_SIZE, encoding="utf8"),
+        read_options=csv.ReadOptions(column_names=["text"], block_size=BLOCK_SIZE),
         parse_options=csv.ParseOptions(delimiter=DELIMITER, quote_char=False),
-        convert_options=csv.ConvertOptions(column_types={"text": string()}, strings_can_be_null=False),
+        convert_options=csv.ConvertOptions(column_types={"text": binary()}, strings_can_be_null=False),
     )
     part = first_part
     writer: parquet.ParquetWriter | None = None
@@ -38,7 +50,7 @@ def write_text_parquet(source: Path, folder: Path, constants: dict[str, str], fi
     for batch in reader:
         data = ArrowTable.from_pydict(
             {
-                "text": batch.column("text"),
+                "text": decode_lines(batch.column("text")),
                 **{name: [value] * batch.num_rows for name, value in constants.items()},
             }
         )

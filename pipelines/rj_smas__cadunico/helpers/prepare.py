@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from polars import DataFrame, String, from_dicts
+from pyarrow.parquet import read_metadata
 from pydantic import TypeAdapter
 
 from pipelines.rj_smas__cadunico.helpers.files import unzip_texts, write_text_parquet
@@ -25,10 +26,12 @@ def prepare_partition(bucket: str, name: str, folder: Path) -> Partition:
 
     Every row has the columns of the partition: the layout version of the first line of
     the last text file, and the year, the month and the date of the name of the ZIP.
-    Raise `ValueError` if the ZIP has no text file.
+    The partition also counts the bytes of the ZIP, its text files, the rows and the
+    Parquet files. Raise `ValueError` if the ZIP has no text file.
     """
     date = parse_partition(name)
     archive = download_blob(bucket, name, folder)
+    archive_bytes = archive.stat().st_size
     texts = unzip_texts(archive, folder / "unzipped")
 
     if not texts:
@@ -50,7 +53,10 @@ def prepare_partition(bucket: str, name: str, folder: Path) -> Partition:
         part = write_text_parquet(text, output, constants, part)
         text.unlink()
 
-    return Partition(output, date, layout_version, extracted)
+    files = sorted(output.glob("*.parquet"))
+    rows = sum(read_metadata(path).num_rows for path in files)
+
+    return Partition(output, date, layout_version, extracted, archive_bytes, len(texts), rows, len(files))
 
 
 def read_layouts(bucket: str, files: Mapping[str, str], folder: Path) -> list[Record]:

@@ -50,3 +50,15 @@ def test_the_text_becomes_parquet_files_with_the_constant_columns(
     assert next_part == first_part + len(written)
     assert frame["text"].to_list() == lines
     assert frame["data_particao"].unique().to_list() == ["2024-01-31"]
+
+
+def test_a_byte_that_is_not_utf8_becomes_the_replacement_character(tmp_path: Path) -> None:
+    """Keep a line that is not UTF-8, with one `�` for each bad byte, and its length."""
+    source = tmp_path / "base.txt"
+    source.write_bytes("JOSÉ\nAÇÃO\nok\n".encode("latin-1"))
+    target = tmp_path / "out"
+    target.mkdir()
+
+    write_text_parquet(source, target, {"data_particao": "2024-01-31"})
+
+    assert read_parquet(target / "*.parquet")["text"].to_list() == ["JOS\ufffd", "A\ufffd\ufffdO", "ok"]
