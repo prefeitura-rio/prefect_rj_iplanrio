@@ -65,6 +65,10 @@ deployments:
           INFISICAL_PATHS: /rj_cor__meteorologia_inmet,/shared
           GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     parameters:
+      cloud:
+        bucket: rj-iplanrio-dia-staging
+        project: rj-iplanrio-dia
+        connection: rj-iplanrio-dia.us.biglake
       dump_mode: merge
 
   - name: rj-cor--meteorologia-inmet--prod

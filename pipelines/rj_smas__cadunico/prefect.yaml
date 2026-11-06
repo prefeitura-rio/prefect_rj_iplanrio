@@ -32,6 +32,10 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_smas__cadunico/flow.py:rj_smas__cadunico
     parameters:
+      cloud:
+        bucket: rj-iplanrio-dia-staging
+        project: rj-iplanrio-dia
+        connection: rj-iplanrio-dia.us.biglake
       dbt:
         repository: https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-iplanrio.git
         branch: cadunico

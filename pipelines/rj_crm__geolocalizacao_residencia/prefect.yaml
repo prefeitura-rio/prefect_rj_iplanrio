@@ -65,6 +65,10 @@ deployments:
           INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/shared
           GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     parameters:
+      cloud:
+        bucket: rj-iplanrio-dia-staging
+        project: rj-iplanrio-dia
+        connection: rj-iplanrio-dia.us.biglake
       strategy: nominatim
       table:
         dataset_id: brutos_dados_enriquecidos
@@ -177,6 +181,10 @@ deployments:
           INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/shared
           GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     parameters:
+      cloud:
+        bucket: rj-iplanrio-dia-staging
+        project: rj-iplanrio-dia
+        connection: rj-iplanrio-dia.us.biglake
       strategy: fallback
       table:
         dataset_id: brutos_dados_enriquecidos
@@ -275,6 +283,10 @@ deployments:
           INFISICAL_PATHS: /rj_crm__geolocalizacao_residencia,/shared
           GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     parameters:
+      cloud:
+        bucket: rj-iplanrio-dia-staging
+        project: rj-iplanrio-dia
+        connection: rj-iplanrio-dia.us.biglake
       strategy: geoapify_batch
       table:
         dataset_id: brutos_dados_enriquecidos

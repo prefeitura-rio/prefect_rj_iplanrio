@@ -58,6 +58,8 @@ O `cookiecutter` pergunta a `secretaria`, o nome da `pipeline`, o `tipo`, a `sev
 
 O modelo cria `flow.py` (duas linhas), `prefect.yaml` (`staging` e produção, com um `schedule` de exemplo), `pyproject.toml` e `Dockerfile`. Troque os valores de exemplo e pronto.
 
+O `deployment` de `staging` escreve no bucket `rj-iplanrio-dia-staging` (projeto `rj-iplanrio-dia`) com o grupo `cloud`. A produção usa `DEFAULT_CLOUD`. Assim uma execução de `staging` não troca a tabela externa da produção.
+
 Se nenhum `tipo` serve, escreva um `flow.py` que chama as [tasks prontas](#tasks-prontas).
 
 ## Flows prontos

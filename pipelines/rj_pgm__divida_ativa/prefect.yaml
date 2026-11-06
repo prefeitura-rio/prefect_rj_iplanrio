@@ -32,6 +32,10 @@ deployments:
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_pgm__divida_ativa/flow.py:rj_pgm__divida_ativa
     parameters:
+      cloud:
+        bucket: rj-iplanrio-dia-staging
+        project: rj-iplanrio-dia
+        connection: rj-iplanrio-dia.us.biglake
       database:
         type: mssql
         host: 10.2.221.127

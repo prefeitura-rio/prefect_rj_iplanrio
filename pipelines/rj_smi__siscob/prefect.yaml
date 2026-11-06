@@ -32,6 +32,10 @@ deployments:
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_smi__siscob/flow.py:rj_smi__siscob
     parameters:
+      cloud:
+        bucket: rj-iplanrio-dia-staging
+        project: rj-iplanrio-dia
+        connection: rj-iplanrio-dia.us.biglake
       database:
         type: mssql
         host: 10.70.1.34

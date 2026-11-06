@@ -32,6 +32,10 @@ deployments:
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_iplanrio__vigia_urbano/flow.py:rj_iplanrio__vigia_urbano
     parameters:
+      cloud:
+        bucket: rj-iplanrio-dia-staging
+        project: rj-iplanrio-dia
+        connection: rj-iplanrio-dia.us.biglake
       database:
         type: mysql
         host: srv000140.infra.rio.gov.br

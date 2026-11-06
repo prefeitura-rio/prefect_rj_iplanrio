@@ -32,6 +32,10 @@ deployments:
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_iplanrio__sicop/flow.py:rj_iplanrio__sicop
     parameters:
+      cloud:
+        bucket: rj-iplanrio-dia-staging
+        project: rj-iplanrio-dia
+        connection: rj-iplanrio-dia.us.biglake
       database:
         type: oracle
         host: srv000761.infra.rio.gov.br
