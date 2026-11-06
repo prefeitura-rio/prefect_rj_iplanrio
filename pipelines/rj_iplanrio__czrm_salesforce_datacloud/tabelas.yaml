@@ -1,0 +1,161 @@
+# Configuração das tabelas extraídas do Data Cloud.
+#
+# Uma entrada por tabela. Todas passam pelo mesmo caminho (flow.py):
+# descobrir colunas -> extrair -> transformar -> staging + MERGE.
+#
+# Campos:
+#   nome               : tabela destino no BQ (a staging é '<nome>_staging')
+#   grupo              : rótulo no resumo/logs
+#   dlo                : nome da DLO em cada org de origem (qa/staging/prod)
+#   primary_key        : chave do MERGE, em snake_case (padrão: id)
+#   order_by           : coluna usada na paginação por LIMIT/OFFSET (nome na DLO)
+#   coluna_modificacao : coluna de controle de alteração da DLO
+#   renomear           : mapa coluna_normalizada -> nome_final (exceções; o '_c'
+#                        residual de campo custom já é removido automaticamente)
+#   booleanas          : colunas que chegam como texto 'true'/'false' e viram BOOL
+#   cluster            : campos de clustering da tabela final
+#
+# Os nomes das DLOs na QA (`CZRM2236_*`) vêm do estudo do CZRM-2236; em
+# staging/prod o conector usa `<Objeto>_Home`. O contrato (nome da tabela,
+# colunas snake_case, tipos) é o mesmo nas três orgs.
+
+# --- Fato: os dois objetos do CZRM ---
+- nome: account
+  grupo: Cadastro
+  dlo:
+    qa: CZRM2236_Account__dll
+    staging: Account_Home__dll
+    prod: Account_Home__dll
+  order_by: Id__c
+  booleanas: [is_deleted]
+
+- nome: work_order
+  grupo: Ordens de serviço
+  dlo:
+    qa: CZRM2236_WorkOrder__dll
+    staging: WorkOrder_Home__dll
+    prod: WorkOrder_Home__dll
+  order_by: Id__c
+  booleanas: [is_deleted, is_closed, is_stopped]
+  cluster: [status]
+
+# --- Dimensões (para traduzir os IDs) ---
+- nome: user
+  grupo: Dimensões
+  dlo:
+    qa: CZRM2236_User__dll
+    staging: User_Home__dll
+    prod: User_Home__dll
+  order_by: Id__c
+  booleanas: [is_active]
+
+- nome: queue_group
+  grupo: Dimensões
+  dlo:
+    qa: CZRM2236_Group__dll
+    staging: Group_Home__dll
+    prod: Group_Home__dll
+  order_by: Id__c
+
+- nome: contact
+  grupo: Dimensões
+  dlo:
+    qa: Contact_Home__dll
+    staging: Contact_Home__dll
+    prod: Contact_Home__dll
+  order_by: Id__c
+  booleanas: [is_deleted]
+
+- nome: individual
+  grupo: Dimensões
+  dlo:
+    qa: Individual_Home__dll
+    staging: Individual_Home__dll
+    prod: Individual_Home__dll
+  order_by: Id__c
+
+- nome: service_case
+  grupo: Dimensões
+  dlo:
+    qa: Case_Home__dll
+    staging: Case_Home__dll
+    prod: Case_Home__dll
+  order_by: Id__c
+  booleanas: [is_deleted, is_closed, is_escalated]
+
+- nome: record_type
+  grupo: Dimensões
+  dlo:
+    qa: RecordType_Home__dll
+    staging: RecordType_Home__dll
+    prod: RecordType_Home__dll
+  order_by: Id__c
+  booleanas: [is_active]
+
+- nome: operating_hours
+  grupo: Dimensões
+  dlo:
+    qa: OperatingHours_Home__dll
+    staging: OperatingHours_Home__dll
+    prod: OperatingHours_Home__dll
+  order_by: Id__c
+
+- nome: neighborhood
+  grupo: Dimensões
+  dlo:
+    qa: CZRM2236_Neighborhood__dll
+    staging: Neighborhood_Home__dll
+    prod: Neighborhood_Home__dll
+  order_by: Id__c
+
+- nome: organizational_unity
+  grupo: Dimensões
+  dlo:
+    qa: CZRM2236_OrgUnit__dll
+    staging: Organizational_Unity_Home__dll
+    prod: Organizational_Unity_Home__dll
+  order_by: Id__c
+
+- nome: service_catalog
+  grupo: Dimensões
+  dlo:
+    qa: CZRM2236_ServiceCatalog__dll
+    staging: Service_Catalog_Home__dll
+    prod: Service_Catalog_Home__dll
+  order_by: Id__c
+
+# --- Formulário dinâmico (CZRM-2236) ---
+- nome: service_attribute_library
+  grupo: Formulário
+  dlo:
+    qa: CZRM2236_AttrLibrary__dll
+    staging: Service_Attribute_Library_Home__dll
+    prod: Service_Attribute_Library_Home__dll
+  order_by: Id__c
+
+- nome: work_order_attribute_answer
+  grupo: Formulário
+  dlo:
+    qa: CZRM2236_AttrAnswer__dll
+    staging: WorkOrder_Attribute_Answer_Home__dll
+    prod: WorkOrder_Attribute_Answer_Home__dll
+  order_by: Id__c
+
+# --- Andamentos da OS (V2 do formulário) ---
+- nome: work_order_update
+  grupo: Andamentos
+  dlo:
+    qa: WorkOrderUpdate_Home__dll
+    staging: WorkOrderUpdate_Home__dll
+    prod: WorkOrderUpdate_Home__dll
+  order_by: Id__c
+
+- nome: work_order_relationship
+  grupo: Ordens de serviço
+  dlo:
+    qa: WorkOrder_Relationship_Home__dll
+    staging: WorkOrder_Relationship_Home__dll
+    prod: WorkOrder_Relationship_Home__dll
+  order_by: Id__c
+  booleanas: [is_deleted]
+  renomear: {case: case_id}   # "case" é palavra reservada em SQL
