@@ -1020,7 +1020,39 @@ def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
         return set()
     
     return failed_cpfs
-    
+
+
+def get_pares_cpf_telefone_processados(billing_project_id: str, campaign_name: str) -> set:
+    """
+    Retorna um conjunto de tuplas (cpf, telefone) que já apareceram na tabela
+    brutos_salesforce.status_disparo para a campanha informada nas últimas 4 horas.
+
+    Usado para verificar se o Salesforce já processou o attempt anterior antes de
+    consultar falhas — comparando contra os pares (cpf, others[i-1]) do base_df.
+    """
+    campaign_filter = f"AND LOWER(nome_hsm) = LOWER('{campaign_name}')" if campaign_name else ""
+    query = f"""
+        SELECT DISTINCT
+            cpf,
+            contato_telefone AS telefone
+        FROM `rj-crm-registry.brutos_salesforce.status_disparo`
+        WHERE processado_datahora >= datetime_sub(current_datetime("America/Sao_Paulo"), INTERVAL 4 hour)
+          AND data_particao >= date_sub(current_date("America/Sao_Paulo"), INTERVAL 1 day)
+          {campaign_filter}
+    """
+    try:
+        df = download_data_from_bigquery(
+            query=query,
+            billing_project_id=billing_project_id,
+            bucket_name=billing_project_id,
+        )
+        if df.empty:
+            return set()
+        return set(zip(df["cpf"].astype(str), df["telefone"].astype(str)))
+    except Exception as e:
+        log(f"Erro ao buscar pares cpf/telefone processados: {e}", level="warning")
+        return set()
+
 
 def check_campaign_success(
     billing_project_id: str,
