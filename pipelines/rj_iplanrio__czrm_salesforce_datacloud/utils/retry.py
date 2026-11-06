@@ -1,36 +1,37 @@
-"""Condição de retry das tasks que chamam a API do Salesforce.
+"""Condição de retry para tasks que chamam a API do Salesforce.
 
-Só retenta o que pode passar sozinho: 5xx, 429, timeout e queda de conexão
-(``requests.Timeout``/``requests.ConnectionError``). Qualquer outra exceção —
-inclusive ``ValueError``/``KeyError``/``RuntimeError`` de configuração ou de
-SQL — falha na hora: tentar de novo não resolve e, com ``concurrency_limit=1``,
-3 tentativas com 30/60/120s seguram a fila por ~3,5 min.
+Retenta apenas erros transitórios: 5xx, 429, timeout e queda de conexão.
+Erros de configuração ou lógica (``ValueError``, ``RuntimeError``, etc.)
+falham imediatamente — tentar de novo não resolve.
 """
 
 from __future__ import annotations
 
 import requests
 
-_MIN_ERRO_SERVIDOR = 500
-_MUITAS_REQUISICOES = 429
-_TRANSITORIOS = (requests.Timeout, requests.ConnectionError)
+STATUS_ERRO_SERVIDOR = 500
+STATUS_MUITAS_REQUISICOES = 429
+ERROS_TRANSITORIOS = (requests.Timeout, requests.ConnectionError)
 
 
-def so_erro_temporario(_task, _task_run, state) -> bool:
-    """``retry_condition_fn`` do Prefect: ``True`` retenta, ``False`` falha já."""
+def condicao_retry(_task, _task_run, state) -> bool:
+    """Retorna ``True`` se o erro for transitório e justificar nova tentativa.
+
+    Usada como ``retry_condition_fn`` no decorator ``@task``.
+    """
     try:
         state.result()
     except Exception as exc:
-        erro: BaseException | None = exc
-        # as tasks embrulham o HTTPError num RuntimeError (raise ... from exc);
-        # desce a cadeia até achar um erro de rede/HTTP ou o fim dela
-        while erro is not None and not isinstance(erro, (*_TRANSITORIOS, requests.HTTPError)):
-            erro = erro.__cause__
+        causa: BaseException | None = exc
+        # Desce a cadeia de causas até encontrar um erro de rede/HTTP ou o fim.
+        while causa is not None and not isinstance(causa, (*ERROS_TRANSITORIOS, requests.HTTPError)):
+            causa = causa.__cause__
 
-        if isinstance(erro, requests.HTTPError):
-            if erro.response is None:
+        if isinstance(causa, requests.HTTPError):
+            if causa.response is None:
                 return True
-            status = erro.response.status_code
-            return status >= _MIN_ERRO_SERVIDOR or status == _MUITAS_REQUISICOES
-        return isinstance(erro, _TRANSITORIOS)
+            status = causa.response.status_code
+            return status >= STATUS_ERRO_SERVIDOR or status == STATUS_MUITAS_REQUISICOES
+
+        return isinstance(causa, ERROS_TRANSITORIOS)
     return False

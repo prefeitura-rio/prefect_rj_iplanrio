@@ -149,3 +149,13 @@
     staging: WorkOrderUpdate_Home__dll
     prod: WorkOrderUpdate_Home__dll
   order_by: Id__c
+
+- nome: work_order_relationship
+  grupo: Ordens de serviço
+  dlo:
+    qa: WorkOrder_Relationship_Home__dll
+    staging: WorkOrder_Relationship_Home__dll
+    prod: WorkOrder_Relationship_Home__dll
+  order_by: Id__c
+  booleanas: [is_deleted]
+  renomear: {case: case_id}   # "case" é palavra reservada em SQL
