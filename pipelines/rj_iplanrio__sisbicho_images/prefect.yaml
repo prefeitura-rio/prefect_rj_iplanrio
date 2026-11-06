@@ -65,6 +65,10 @@ deployments:
           INFISICAL_PATHS: /shared
           GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     parameters:
+      cloud:
+        bucket: rj-iplanrio-dia-staging
+        project: rj-iplanrio-dia
+        connection: rj-iplanrio-dia.us.biglake
       source:
         dataset_id: brutos_sisbicho
         table_id: animal

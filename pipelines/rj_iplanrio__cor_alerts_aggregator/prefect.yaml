@@ -32,6 +32,10 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_iplanrio__cor_alerts_aggregator/flow.py:rj_iplanrio__cor_alerts_aggregator
     parameters:
+      cloud:
+        bucket: rj-iplanrio-dia-staging
+        project: rj-iplanrio-dia
+        connection: rj-iplanrio-dia.us.biglake
       environment: staging
       destination: dry_run
       sheet:

@@ -56,7 +56,7 @@ deployments:
         port: 1521
         database: ${ORACLE_NOTA_FISCAL_SERVICE}
       cloud:
-        bucket: rj-iplanrio-dia-bq-to-oracle
+        bucket: rj-iplanrio-dia-staging
         project: rj-iplanrio-dia
         connection: rj-iplanrio-dia.us.biglake
   - name: rj-smfp--nota-carioca-oracle-to-bq--prod

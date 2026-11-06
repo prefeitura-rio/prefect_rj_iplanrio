@@ -28,6 +28,11 @@ deployments:
       - code_owner:unassigned
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_crm__salesforce_api/flow.py:rj_crm__salesforce_api
+    parameters:
+      cloud:
+        bucket: rj-iplanrio-dia-staging
+        project: rj-iplanrio-dia
+        connection: rj-iplanrio-dia.us.biglake
     work_pool:
       name: default-pool
       work_queue_name: default

@@ -32,6 +32,10 @@ deployments:
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_smfp__sigma/flow.py:rj_smfp__sigma
     parameters:
+      cloud:
+        bucket: rj-iplanrio-dia-staging
+        project: rj-iplanrio-dia
+        connection: rj-iplanrio-dia.us.biglake
       database:
         type: oracle
         host: 10.90.31.22

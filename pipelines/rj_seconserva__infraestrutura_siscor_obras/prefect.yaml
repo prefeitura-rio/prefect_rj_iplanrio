@@ -32,6 +32,10 @@ deployments:
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_seconserva__infraestrutura_siscor_obras/flow.py:rj_seconserva__infraestrutura_siscor_obras
     parameters:
+      cloud:
+        bucket: rj-iplanrio-dia-staging
+        project: rj-iplanrio-dia
+        connection: rj-iplanrio-dia.us.biglake
       database:
         type: mssql
         host: 10.70.11.61

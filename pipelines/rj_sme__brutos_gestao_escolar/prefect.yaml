@@ -32,6 +32,10 @@ deployments:
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_sme__brutos_gestao_escolar/flow.py:rj_sme__brutos_gestao_escolar
     parameters:
+      cloud:
+        bucket: rj-iplanrio-dia-staging
+        project: rj-iplanrio-dia
+        connection: rj-iplanrio-dia.us.biglake
       database:
         type: mssql
         host: clustersqlsme2.rio.rj.gov.br

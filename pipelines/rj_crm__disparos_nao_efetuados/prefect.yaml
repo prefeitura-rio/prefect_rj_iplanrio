@@ -29,6 +29,10 @@ deployments:
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_crm__disparos_nao_efetuados/flow.py:rj_crm__disparos_nao_efetuados
     parameters:
+      cloud:
+        bucket: rj-iplanrio-dia-staging
+        project: rj-iplanrio-dia
+        connection: rj-iplanrio-dia.us.biglake
       table:
         dataset_id: brutos_salesforce
         table_id: campanhas_sem_disparo
