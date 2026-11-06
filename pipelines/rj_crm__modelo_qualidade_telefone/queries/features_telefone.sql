@@ -48,7 +48,7 @@ aparicoes AS (
     ap.proprietario_id,
     ap.proprietario_tipo,
     ap.registro_data_atualizacao
-  FROM `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS t,
+  FROM `rj-rmi.intermediario_rmi_telefones.int_telefone` AS t,
     UNNEST(t.telefone_aparicoes) AS ap
   WHERE ap.sistema_nome != 'whatsapp'
 ),
@@ -239,7 +239,7 @@ feat_volatilidade AS (
 -- ---- 5) grau de compartilhamento familiar (CadÚnico) --------------------
 parentesco AS (
   SELECT cpf, id_familia, menor_idade
-  FROM `rj-crm-registry.intermediario_rmi_parentesco_cadunico.dim_parentesco`
+  FROM `rj-rmi.intermediario_rmi_parentesco_cadunico.dim_parentesco`
 ),
 cpf_pares_familia AS (
   SELECT cp.telefone, cp.cpf, p.id_familia, p.menor_idade

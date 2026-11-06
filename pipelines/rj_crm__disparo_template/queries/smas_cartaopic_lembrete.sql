@@ -37,7 +37,7 @@ ELSE
         SELECT
             cpf,
             telefone
-        FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+        FROM `rj-rmi.rmi_dados_mestres.pessoa_fisica` AS rmi
         WHERE menor_idade IS FALSE AND obito.indicador IS FALSE
     ),
 
@@ -116,7 +116,7 @@ ELSE
         -- remove telefones em quarentena ou com qualidade inválida
         SELECT DISTINCT f.*
         FROM filtra_disparados AS f
-        LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+        LEFT JOIN `rj-rmi.intermediario_rmi_telefones.int_telefone` AS tel
             ON f.celular_disparo = tel.telefone_numero_completo
         LEFT JOIN UNNEST(tel.consentimento) AS c
         WHERE
