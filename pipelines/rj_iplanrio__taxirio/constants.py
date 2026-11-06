@@ -1,191 +1,109 @@
-"""The PyMongoArrow schemas of the TaxiRio results, one for each collection."""
+# -*- coding: utf-8 -*-
+"""
+Constantes para a pipeline TaxiRio - Migrada para Prefect 3.0.
 
-from pyarrow import string
-from pymongoarrow.api import Schema
+Este módulo define todas as constantes necessárias para o processamento
+das collections do MongoDB do TaxiRio, incluindo configurações de cada tabela.
+"""
 
-CITIES = Schema(
-    {
-        "id": string(),
-        "name": string(),
-        "stateAbbreviation": string(),
-        "isCalulatedInApp": string(),
-        "isAbleToUsePaymentInApp": string(),
-        "loginLabel": string(),
-        "serviceStations": string(),
-    },
-)
+from enum import Enum
+from typing import Optional
 
-DISCOUNTS = Schema(
-    {
-        "id": string(),
-        "description": string(),
-        "value": string(),
-        "createdAt": string(),
-    },
-)
 
-DRIVERS = Schema(
-    {
-        "id": string(),
-        "ano_particao": string(),
-        "mes_particao": string(),
-        "dia_particao": string(),
-        "createdAt": string(),
-        "user": string(),
-        "taxiDriverId": string(),
-        "cars": string(),
-        "average": string(),
-        "associatedCar": string(),
-        "status": string(),
-        "associatedDiscount": string(),
-        "associatedPaymentsMethods": string(),
-        "login": string(),
-        "password": string(),
-        "salt": string(),
-        "isAbleToReceivePaymentInApp": string(),
-        "isAbleToReceivePaymentInCityHall": string(),
-        "ratingsReceived": string(),
-        "busy": string(),
-        "lastAverage": string(),
-        "expiredBlockByRankingDate": string(),
-        "blockedRace": string(),
-        "city": string(),
-        "serviceRecordRate": string(),
-        "nota": string(),
-        "averageTT": string(),
-        "infoPhone_updatedAt": string(),
-        "infoPhone_id": string(),
-        "infoPhone_appVersion": string(),
-        "infoPhone_phoneModel": string(),
-        "infoPhone_phoneManufacturer": string(),
-        "infoPhone_osVersion": string(),
-        "infoPhone_osName": string(),
-        "tokenInfo_httpSalt": string(),
-        "tokenInfo_wssSalt": string(),
-        "tokenInfo_pushToken": string(),
-        "associatedRace_originAtAccepted_position_lng": string(),
-        "associatedRace_originAtAccepted_position_lat": string(),
-        "associatedRace_race": string(),
-    },
-)
+class Constants(Enum):
+    """Constantes gerais do projeto TaxiRio."""
 
-METRICSDRIVERUNOCCUPIEDS = Schema(
-    {
-        "ano_particao": string(),
-        "mes_particao": string(),
-        "dia_particao": string(),
-        "id": string(),
-        "driver": string(),
-        "associatedDiscount": string(),
-        "dateTime": string(),
-    },
-)
+    DATASET_ID = "brutos_taxirio"
+    MONGODB_CONNECTION_STRING = "DB_CONNECTION_STRING"
+    MONGODB_DATABASE_NAME = "taxirio"
+    INFISICAL_SECRET_PATH = "/taxirio"
 
-PASSENGERS = Schema(
-    {
-        "id": string(),
-        "user": string(),
-        "createdAt": string(),
-        "ano_particao": string(),
-        "mes_particao": string(),
-        "dia_particao": string(),
-        "login": string(),
-        "password": string(),
-        "salt": string(),
-        "isAbleToUsePaymentInApp": string(),
-        "infoPhone_updatedAt": string(),
-        "infoPhone_id": string(),
-        "infoPhone_appVersion": string(),
-        "infoPhone_phoneModel": string(),
-        "infoPhone_phoneManufacturer": string(),
-        "infoPhone_osVersion": string(),
-        "infoPhone_osName": string(),
-        "tokenInfo_httpSalt": string(),
-        "tokenInfo_wssSalt": string(),
-        "tokenInfo_pushToken": string(),
-    },
-)
 
-PAYMENTMETHODS = Schema(
-    {
-        "id": string(),
-        "pindex": string(),
-        "name": string(),
-        "type": string(),
-    },
-)
+class TableConfig:
+    """
+    Configuração para processamento de uma tabela do TaxiRio.
 
-RACES = Schema(
-    {
-        "id": string(),
-        "createdAt": string(),
-        "ano_particao": string(),
-        "mes_particao": string(),
-        "dia_particao": string(),
-        "event": string(),
-        "passenger": string(),
-        "city": string(),
-        "broadcastQtd": string(),
-        "rating_score": string(),
-        "isSuspect": string(),
-        "isInvalid": string(),
-        "status": string(),
-        "car": string(),
-        "driver": string(),
-        "routeOriginDestination_distance_text": string(),
-        "routeOriginDestination_distance_value": string(),
-        "routeOriginDestination_duration_text": string(),
-        "routeOriginDestination_duration_value": string(),
-        "billing_estimatedPrice": string(),
-        "billing_associatedPaymentMethod": string(),
-        "billing_associatedTaximeter": string(),
-        "billing_associatedMinimumFare": string(),
-        "billing_associatedDiscount": string(),
-        "billing_associatedCorporative_externalPropertyPassenger": string(),
-        "billing_finalPrice_totalToPay": string(),
-        "billing_finalPrice_totalPriceToll": string(),
-        "billing_finalPrice_totalWithDiscount": string(),
-        "billing_finalPrice_totalDiscount": string(),
-        "billing_finalPrice_totalWithoutDiscount": string(),
-        "billing_finalPrice_totalByTaximeter": string(),
-        "billing_finalPrice_totalByStoppedTime": string(),
-        "billing_finalPrice_totalByKm": string(),
-        "billing_finalPrice_minPrice": string(),
-    },
-)
+    Attributes:
+        table_id: Nome da tabela/collection no MongoDB
+        dump_mode: Modo de dump ('overwrite' ou 'append')
+        partition_cols: Lista de colunas de particionamento
+        use_period: Se deve processar por período (True) ou dump completo (False)
+        frequency: Frequência para quebra por período ('D' para diário, None se não usa período)
+    """
 
-RANKINGRACES = Schema(
-    {
-        "id": string(),
-        "createdAt": string(),
-        "updatedAt": string(),
-        "ano_particao": string(),
-        "mes_particao": string(),
-        "dia_particao": string(),
-        "race": string(),
-        "competitors": string(),
-    },
-)
+    def __init__(
+        self,
+        table_id: str,
+        dump_mode: str = "overwrite",
+        partition_cols: Optional[list[str]] = None,
+        use_period: bool = False,
+        frequency: Optional[str] = None,
+    ):
+        self.table_id = table_id
+        self.dump_mode = dump_mode
+        self.partition_cols = partition_cols or []
+        self.use_period = use_period
+        self.frequency = frequency
 
-USERS = Schema(
-    {
-        "id": string(),
-        "displayName": string(),
-        "fullName": string(),
-        "email": string(),
-        "phoneNumber": string(),
-        "cpf": string(),
-        "createdAt": string(),
-        "birthDate": string(),
-        "validadoReceita": string(),
-        "ano_particao": string(),
-        "mes_particao": string(),
-        "dia_particao": string(),
-        "federalRevenueData_name": string(),
-        "federalRevenueData_birthDate": string(),
-        "federalRevenueData_mothersName": string(),
-        "federalRevenueData_yearOfDeath": string(),
-        "federalRevenueData_phone": string(),
-        "federalRevenueData_sex": string(),
-    },
-)
+
+# Configurações de cada tabela do TaxiRio
+TABLE_CONFIGS = {
+    "cities": TableConfig(
+        table_id="cities",
+        dump_mode="overwrite",
+        partition_cols=[],
+        use_period=False,
+    ),
+    "drivers": TableConfig(
+        table_id="drivers",
+        dump_mode="overwrite",
+        partition_cols=["ano_particao", "mes_particao"],
+        use_period=False,
+    ),
+    "races": TableConfig(
+        table_id="races",
+        dump_mode="append",
+        partition_cols=["ano_particao", "mes_particao", "dia_particao"],
+        use_period=True,
+        frequency="D",
+    ),
+    "passengers": TableConfig(
+        table_id="passengers",
+        dump_mode="append",
+        partition_cols=["ano_particao", "mes_particao", "dia_particao"],
+        use_period=True,
+        frequency="D",
+    ),
+    "users": TableConfig(
+        table_id="users",
+        dump_mode="overwrite",
+        partition_cols=["ano_particao", "mes_particao"],
+        use_period=False,
+    ),
+    "discounts": TableConfig(
+        table_id="discounts",
+        dump_mode="overwrite",
+        partition_cols=[],
+        use_period=False,
+    ),
+    "paymentmethods": TableConfig(
+        table_id="paymentmethods",
+        dump_mode="overwrite",
+        partition_cols=[],
+        use_period=False,
+    ),
+    "rankingraces": TableConfig(
+        table_id="rankingraces",
+        dump_mode="append",
+        frequency="D",
+        partition_cols=["ano_particao", "mes_particao", "dia_particao"],
+        use_period=True,
+    ),
+    "metricsdriverunoccupieds": TableConfig(
+        table_id="metricsdriverunoccupieds",
+        dump_mode="append",
+        partition_cols=["ano_particao", "mes_particao", "dia_particao"],
+        use_period=True,
+        frequency="D",
+    ),
+}

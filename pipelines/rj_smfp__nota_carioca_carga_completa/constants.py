@@ -1,36 +1,17 @@
-"""Constants of rj_smfp__nota_carioca_carga_completa."""
+"""Constantes da carga completa da Nota Carioca."""
 
-from typing import Final
+# ``<nome do flow>/<nome do deployment>`` dos deployments de prod encadeados por padrão (conferidos na API do Prefect).
+# O deployment de staging da carga completa passa os de staging pelos parâmetros ``oracle_to_bq_deployment`` e
+# ``bq_to_oracle_deployment`` (prefect.yaml).
+ORACLE_TO_BQ_DEPLOYMENT = "rj-smfp--nota-carioca-oracle-to-bq/rj-smfp--nota-carioca-oracle-to-bq--prod"
+BQ_TO_ORACLE_DEPLOYMENT = "rj-smfp--nota-carioca-bq-to-oracle/rj-smfp--nota-carioca-bq-to-oracle--prod"
+# Extração XML (documentos fiscais nacionais → DFEN) na aplicação, que antes era acionada à mão: roda primeiro.
+EXTRACTION_DEPLOYMENT = "rj-smfp--nota-carioca-extracao-xml/rj-smfp--nota-carioca-extracao-xml--prod"
 
-EXTRACTION_DEPLOYMENT: Final = "rj-smfp--nota-carioca-extracao-xml/rj-smfp--nota-carioca-extracao-xml--prod"
-"""The `<flow>/<deployment>` of the XML extraction in production, before the loads."""
+EXTRACTION_LABEL = "Extração XML"
+ORACLE_TO_BQ_LABEL = "Oracle → BigQuery"
+BQ_TO_ORACLE_LABEL = "BigQuery → Oracle"
 
-ORACLE_TO_BQ_DEPLOYMENT: Final = "rj-smfp--nota-carioca-oracle-to-bq/rj-smfp--nota-carioca-oracle-to-bq--prod"
-"""The `<flow>/<deployment>` of the load from Oracle to BigQuery, in production."""
-
-BQ_TO_ORACLE_DEPLOYMENT: Final = "rj-smfp--nota-carioca-bq-to-oracle/rj-smfp--nota-carioca-bq-to-oracle--prod"
-"""The `<flow>/<deployment>` of the load from BigQuery to Oracle, in production."""
-
-EXTRACTION_LABEL: Final = "Extração XML"
-ORACLE_TO_BQ_LABEL: Final = "Oracle → BigQuery"
-BQ_TO_ORACLE_LABEL: Final = "BigQuery → Oracle"
-
-SECONDS_PER_HOUR: Final = 3600
-
-POLL_SECONDS: Final = 30.0
-"""The pod only waits, so reading the state of the child runs every 30 s is enough."""
-
-COMPLETED_STATE: Final = "COMPLETED"
-FINISHED_STATES: Final = frozenset({"COMPLETED", "FAILED", "CRASHED", "CANCELLED"})
-BUSY_STATES: Final = frozenset({"RUNNING", "PENDING", "CANCELLING"})
-SCHEDULED_STATE: Final = "SCHEDULED"
-
-SCHEDULED_WINDOW_MINUTES: Final = 10
-"""A run scheduled to start within this time counts as busy."""
-
-MAX_LISTED_RUNS: Final = 3
-
-DISPATCH_TAG: Final = "disparo:carga-completa"
-ITEM_TAG_PREFIX: Final = "carga-completa-item:"
-"""The tag with the position of a child run among the sets of parameters."""
-INHERITED_TAG_PREFIXES: Final = ("disparo:", "discord-user:")
+SECONDS_PER_HOUR = 3600
+# O pod só espera: consultar o estado do filho a cada 30 s basta (o padrão do Prefect é 5 s, por horas).
+POLL_SECONDS = 30.0

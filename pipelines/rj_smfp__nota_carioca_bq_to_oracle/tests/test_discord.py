@@ -1,32 +1,24 @@
+# ruff: noqa: PLR2004
+import json
+import math
 from dataclasses import replace
 from datetime import UTC, datetime
-from json import dumps, loads
-from math import nan
-from typing import final
 
-import httpx2
+import httpx
 import pytest
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers import discord as discord_module
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import discord as discord_module
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord import (
     DiscordStatusMessage,
     Environment,
+    current_environment,
     environment_from_deployment,
     never_raises,
     resolve_webhook,
     webhook_from_env,
+    webhook_from_secret_block,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_embed import (
-    build_announcement,
-    build_payload,
-    format_validation_line,
-)
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_format import (
-    flow_run_url,
-    format_short_duration,
-    progress_bar,
-)
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import (
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_embed import (
     COLOR_CANCELLED,
     COLOR_FAILURE,
     COLOR_RUNNING,
@@ -39,6 +31,14 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.helpers.discord_view import (
     RunView,
     TableView,
     ValidationLine,
+    build_announcement,
+    build_payload,
+    format_validation_line,
+)
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_format import (
+    flow_run_url,
+    format_short_duration,
+    progress_bar,
 )
 
 URL = "https://discord.example/api/webhooks/1/secret-token"
@@ -46,7 +46,6 @@ NOW = datetime(2026, 10, 9, 15, 30, 5, tzinfo=UTC)
 
 
 def view(status: RunStatus = RunStatus.RUNNING, **overrides: object) -> RunView:
-    """Return the view."""
     base = RunView(
         flow_label="Oracle → BigQuery",
         dataset_id="brutos_nota_fiscal",
@@ -72,23 +71,20 @@ def view(status: RunStatus = RunStatus.RUNNING, **overrides: object) -> RunView:
     return replace(base, **overrides)
 
 
-def parse_embed(payload: dict[str, object]) -> dict[str, object]:
-    """Parse embed."""
+def embed_of(payload: dict[str, object]) -> dict[str, object]:
     embeds = payload["embeds"]
     assert isinstance(embeds, list)
     return embeds[0]
 
 
-def list_fields(embed: dict[str, object]) -> list[dict[str, str]]:
-    """List fields."""
+def fields_of(embed: dict[str, object]) -> list[dict[str, str]]:
     fields = embed["fields"]
     assert isinstance(fields, list)
     return fields
 
 
 def total_chars(embed: dict[str, object]) -> int:
-    """Return the total chars."""
-    fields = list_fields(embed)
+    fields = fields_of(embed)
     footer = embed["footer"]
     assert isinstance(footer, dict)
     return (
@@ -100,12 +96,11 @@ def total_chars(embed: dict[str, object]) -> int:
 
 
 @pytest.mark.parametrize(
-    ("fraction", "filled"), [(0.0, 0), (0.5, 10), (0.999, 19), (1.0, 20), (7.0, 20), (-1.0, 0), (nan, 0)]
+    ("fraction", "filled"), [(0.0, 0), (0.5, 10), (0.999, 19), (1.0, 20), (7.0, 20), (-1.0, 0), (math.nan, 0)]
 )
 def test_progress_bar_clamps_to_the_width(fraction: float, filled: int) -> None:
     # Given a fraction, in or out of range
     # When the bar is drawn
-    """Check that progress bar clamps to the width."""
     bar = progress_bar(fraction)
     # Then it always has 20 cells, filled in proportion and clamped
     assert bar == "█" * filled + "░" * (20 - filled)
@@ -114,11 +109,9 @@ def test_progress_bar_clamps_to_the_width(fraction: float, filled: int) -> None:
 def test_running_payload_has_state_color_link_fields_and_brt_footer() -> None:
     # Given a running view at 12:30:05 BRT
     # When the payload is built
-    """Check that running payload has state color link fields and brt footer."""
     payload = build_payload(view())
-    embed = parse_embed(payload)
-    # Then color, title, url, status line, bar and the BRT footer are there, and nobody
-    # is mentioned
+    embed = embed_of(payload)
+    # Then color, title, url, status line, bar and the BRT footer are there, and nobody is mentioned
     assert embed["color"] == COLOR_RUNNING
     assert embed["title"] == "Oracle → BigQuery · brutos_nota_fiscal"
     assert embed["url"] == "https://prefect.example/runs/flow-run/abc"
@@ -127,47 +120,44 @@ def test_running_payload_has_state_color_link_fields_and_brt_footer() -> None:
     assert f"`{progress_bar(0.42)}` 42,0%" in description
     assert "**DPS** · Extração" in description
     assert embed["footer"] == {"text": "atualizado em 09/10/2026 12:30:05 · brutos_nota_fiscal"}
-    names = [field["name"] for field in list_fields(embed)]
+    names = [field["name"] for field in fields_of(embed)]
     assert names[:3] == ["⏱️ Decorrido", "🏁 Previsão de término", "🧭 Etapa atual"]
     assert "Etapas" in names
-    eta = next(field for field in list_fields(embed) if field["name"] == "🏁 Previsão de término")
+    eta = next(field for field in fields_of(embed) if field["name"] == "🏁 Previsão de término")
     assert eta["value"] == "~12:40 (BRT)"
     assert payload["allowed_mentions"] == {"parse": []}
-    dumps(payload)
+    json.dumps(payload)
 
 
 def test_embed_without_url_or_eta_omits_them() -> None:
     # Given a view with no link and no ETA
-    """Check that embed without url or eta omits them."""
-    embed = parse_embed(build_payload(view(url=None, eta_seconds=None)))
+    embed = embed_of(build_payload(view(url=None, eta_seconds=None)))
     # Then neither the url key nor the forecast field exist
     assert "url" not in embed
-    assert "🏁 Previsão de término" not in [field["name"] for field in list_fields(embed)]
+    assert "🏁 Previsão de término" not in [field["name"] for field in fields_of(embed)]
 
 
 def test_success_payload_is_green_with_one_summary_line_per_table() -> None:
     # Given a finished view
-    """Check that success payload is green with one summary line per table."""
-    embed = parse_embed(build_payload(view(RunStatus.SUCCESS, fraction=1.0, eta_seconds=None)))
+    embed = embed_of(build_payload(view(RunStatus.SUCCESS, fraction=1.0, eta_seconds=None)))
     # Then it is green, says CONCLUÍDO and summarizes each table in one line
     assert embed["color"] == COLOR_SUCCESS
     description = str(embed["description"])
     assert "✅ **CONCLUÍDO**" in description
     assert "✅ **PESSOAS** — 40.000 linhas · 3min 02s" in description
-    assert "🏁 Previsão de término" not in [field["name"] for field in list_fields(embed)]
+    assert "🏁 Previsão de término" not in [field["name"] for field in fields_of(embed)]
 
 
 def test_failure_payload_is_red_with_stage_and_truncated_error() -> None:
     # Given a failure with a huge error message
-    """Check that failure payload is red with stage and truncated error."""
     error = "ORA-00001: " + "x" * 5000
     failed = view(RunStatus.FAILED, failed_stage="Extração", error=error)
     # When the payload is built
-    embed = parse_embed(build_payload(failed))
+    embed = embed_of(build_payload(failed))
     # Then it is red, names the stage, and every Discord limit holds
     assert embed["color"] == COLOR_FAILURE
     assert "❌ **FALHOU**" in str(embed["description"])
-    fields = {field["name"]: field["value"] for field in list_fields(embed)}
+    fields = {field["name"]: field["value"] for field in fields_of(embed)}
     assert fields["🧭 Etapa atual"] == "Falhou em Extração"
     assert str(fields["❌ Erro"]).startswith("```\nORA-00001")
     assert all(len(value) <= 1024 for value in fields.values())
@@ -177,32 +167,29 @@ def test_failure_payload_is_red_with_stage_and_truncated_error() -> None:
 
 def test_cancelled_payload_is_gray() -> None:
     # Given a cancelled view
-    """Check that cancelled payload is gray."""
-    embed = parse_embed(build_payload(view(RunStatus.CANCELLED, failed_stage="Carga")))
+    embed = embed_of(build_payload(view(RunStatus.CANCELLED, failed_stage="Carga")))
     # Then it is gray and says CANCELADO, not FALHOU
     assert embed["color"] == COLOR_CANCELLED
     assert "⚪ **CANCELADO**" in str(embed["description"])
-    stage = next(field for field in list_fields(embed) if field["name"] == "🧭 Etapa atual")
+    stage = next(field for field in fields_of(embed) if field["name"] == "🧭 Etapa atual")
     assert stage["value"] == "Cancelado em Carga"
 
 
 def test_oversized_views_are_cut_to_the_discord_limits() -> None:
     # Given 60 tables with long text and 30 facts
-    """Check that oversized views are cut to the discord limits."""
     tables = tuple(TableView(f"TABELA_{n}", "Extração", ItemStatus.RUNNING, 0.5, "d" * 400, 10) for n in range(60))
     facts = tuple(Fact(f"fato {n}", "v" * 900) for n in range(30))
     # When the payload is built
-    embed = parse_embed(build_payload(view(tables=tables, facts=facts, error="e" * 3000, status=RunStatus.FAILED)))
+    embed = embed_of(build_payload(view(tables=tables, facts=facts, error="e" * 3000, status=RunStatus.FAILED)))
     # Then description, fields and the total stay inside the limits
     assert len(str(embed["description"])) <= 4096
-    assert len(list_fields(embed)) <= 25
-    assert all(len(field["value"]) <= 1024 for field in list_fields(embed))
+    assert len(fields_of(embed)) <= 25
+    assert all(len(field["value"]) <= 1024 for field in fields_of(embed))
     assert total_chars(embed) <= 6000
 
 
 def test_announcement_lines() -> None:
     # Given the three final states
-    """Check that announcement lines."""
     done = build_announcement(view(RunStatus.SUCCESS, elapsed_seconds=41 * 60 + 5))["content"]
     failed = build_announcement(
         view(RunStatus.FAILED, elapsed_seconds=12 * 60, failed_stage="Extração", error="boom `x`\nlinha 2")
@@ -211,11 +198,11 @@ def test_announcement_lines() -> None:
     # Then each is a one-line summary with the right icon, stage, duration and link
     assert done == (
         "✅ **Oracle → BigQuery** (`brutos_nota_fiscal`) concluído em 41min · 2 tabelas · "
-        + "<https://prefect.example/runs/flow-run/abc>"
+        "<https://prefect.example/runs/flow-run/abc>"
     )
     assert failed == (
         "❌ **Oracle → BigQuery** (`brutos_nota_fiscal`) falhou na etapa **Extração** após 12min: "
-        + "`boom 'x' linha 2` · <https://prefect.example/runs/flow-run/abc>"
+        "`boom 'x' linha 2` · <https://prefect.example/runs/flow-run/abc>"
     )
     assert (
         cancelled["content"] == "⚪ **Oracle → BigQuery** (`brutos_nota_fiscal`) cancelado na etapa **Carga** após 30s"
@@ -228,7 +215,6 @@ def test_announcement_lines() -> None:
 def test_flow_run_url_prefers_ui_then_api_without_the_api_suffix() -> None:
     # Given the Prefect settings in each combination
     # Then the UI URL wins, the API URL loses its /api, and nothing yields no link
-    """Check that flow run url prefers ui then api without the api suffix."""
     assert flow_run_url("https://ui.example/", "https://x/api", "r1") == "https://ui.example/runs/flow-run/r1"
     assert flow_run_url("", "https://api.example/api", "r1") == "https://api.example/runs/flow-run/r1"
     assert flow_run_url(None, "https://api.example/api/", "r1") == "https://api.example/runs/flow-run/r1"
@@ -236,7 +222,6 @@ def test_flow_run_url_prefers_ui_then_api_without_the_api_suffix() -> None:
 
 
 def test_short_duration() -> None:
-    """Check that short duration."""
     assert [format_short_duration(s) for s in (5, 59, 60, 2459, 3600, 3900)] == [
         "5s",
         "59s",
@@ -247,39 +232,32 @@ def test_short_duration() -> None:
     ]
 
 
-@final
 class Server:
     """Discord falso: responde com a fila de respostas e guarda as requisições."""
 
-    def __init__(self, *responses: httpx2.Response | Exception) -> None:
-        """Store the arguments."""
+    def __init__(self, *responses: httpx.Response | Exception) -> None:
         self.responses = list(responses)
-        self.requests: list[httpx2.Request] = []
-        self.transport = httpx2.MockTransport(self.handle)
+        self.requests: list[httpx.Request] = []
+        self.transport = httpx.MockTransport(self.handle)
 
-    def handle(self, request: httpx2.Request) -> httpx2.Response:
-        """Handle."""
+    def handle(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
-        reply = self.responses.pop(0) if self.responses else httpx2.Response(200, json={"id": "m1"})
+        reply = self.responses.pop(0) if self.responses else httpx.Response(200, json={"id": "m1"})
         if isinstance(reply, Exception):
             raise reply
         return reply
 
 
-@final
 class Clock:
     def __init__(self) -> None:
-        """Store the arguments."""
         self.now = 1000.0
 
     def monotonic(self) -> float:
-        """Return the monotonic."""
         return self.now
 
 
 @pytest.fixture
 def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
-    """Return the clock."""
     fake = Clock()
     monkeypatch.setattr(discord_module, "time", fake)
     return fake
@@ -287,28 +265,21 @@ def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
 
 @pytest.fixture
 def warnings(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Return the warnings."""
     captured: list[str] = []
     monkeypatch.setattr(discord_module, "warn", captured.append)
+    monkeypatch.setattr(discord_module, "info", lambda _: None)
     return captured
 
 
 def client(server: Server) -> DiscordStatusMessage:
-    """Return the client."""
     return DiscordStatusMessage(URL, min_interval_seconds=20.0, transport=server.transport)
 
 
-def test_missing_or_empty_webhook_disables_the_client_without_requests(
-    warnings: list[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_missing_or_empty_webhook_disables_the_client_without_requests(warnings: list[str]) -> None:
     # Given an empty and an absent environment variable
-    """Check that missing or empty webhook disables the client without requests."""
-    monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
-    assert webhook_from_env() is None
-    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "  ")
-    assert webhook_from_env() is None
-    monkeypatch.setenv("DISCORD_WEBHOOK_URL", f" {URL} ")
-    assert webhook_from_env() == URL
+    assert webhook_from_env({}) is None
+    assert webhook_from_env({"DISCORD_WEBHOOK_URL_NOTA_CARIOCA": "  "}) is None
+    assert webhook_from_env({"DISCORD_WEBHOOK_URL_NOTA_CARIOCA": f" {URL} "}) == URL
     server = Server()
     message = DiscordStatusMessage(None, transport=server.transport)
     # When it is used
@@ -322,8 +293,7 @@ def test_missing_or_empty_webhook_disables_the_client_without_requests(
 
 def test_first_publish_posts_with_wait_and_the_next_patches_the_same_message(clock: Clock) -> None:
     # Given a server that returns the message id
-    """Post the first publish with wait, and patch the same message after."""
-    server = Server(httpx2.Response(200, json={"id": "777"}), httpx2.Response(200, json={"id": "777"}))
+    server = Server(httpx.Response(200, json={"id": "777"}), httpx.Response(200, json={"id": "777"}))
     message = client(server)
     # When publishing twice, the second time after the interval
     message.publish({"embeds": ["first"]})
@@ -332,14 +302,13 @@ def test_first_publish_posts_with_wait_and_the_next_patches_the_same_message(clo
     # Then the first is POST ?wait=true and the second PATCHes /messages/777
     first, second = server.requests
     assert (first.method, first.url.params["wait"], str(first.url).split("?")[0]) == ("POST", "true", URL)
-    assert loads(first.content) == {"embeds": ["first"]}
+    assert json.loads(first.content) == {"embeds": ["first"]}
     assert (second.method, str(second.url)) == ("PATCH", f"{URL}/messages/777")
-    assert loads(second.content) == {"embeds": ["second"]}
+    assert json.loads(second.content) == {"embeds": ["second"]}
 
 
 def test_edits_are_throttled_and_force_bypasses_the_interval(clock: Clock) -> None:
     # Given a created message
-    """Edit are throttled and force bypasses the interval."""
     server = Server()
     message = client(server)
     message.publish({"n": 1})
@@ -352,15 +321,14 @@ def test_edits_are_throttled_and_force_bypasses_the_interval(clock: Clock) -> No
     # Then only the one past the interval goes out, and force goes out any time
     assert len(server.requests) == 2
     message.publish({"n": 4}, force=True)
-    assert [loads(request.content)["n"] for request in server.requests] == [1, 3, 4]
+    assert [json.loads(request.content)["n"] for request in server.requests] == [1, 3, 4]
 
 
 @pytest.mark.usefixtures("clock")
 def test_deleted_message_is_recreated_on_the_next_publish(warnings: list[str]) -> None:
     # Given a message that someone deleted (404 on edit)
-    """Check that deleted message is recreated on the next publish."""
     server = Server(
-        httpx2.Response(200, json={"id": "1"}), httpx2.Response(404, json={}), httpx2.Response(200, json={"id": "2"})
+        httpx.Response(200, json={"id": "1"}), httpx.Response(404, json={}), httpx.Response(200, json={"id": "2"})
     )
     message = client(server)
     message.publish({"n": 1})
@@ -376,8 +344,7 @@ def test_deleted_message_is_recreated_on_the_next_publish(warnings: list[str]) -
 
 def test_rate_limit_is_swallowed_logged_once_and_respected(clock: Clock, warnings: list[str]) -> None:
     # Given a 429 asking to wait 90 s
-    """Check that rate limit is swallowed logged once and respected."""
-    server = Server(httpx2.Response(429, json={"retry_after": 90.0}))
+    server = Server(httpx.Response(429, json={"retry_after": 90.0}))
     message = client(server)
     message.publish({"n": 1})
     # When trying again before and after the deadline
@@ -395,8 +362,7 @@ def test_rate_limit_is_swallowed_logged_once_and_respected(clock: Clock, warning
 @pytest.mark.usefixtures("clock")
 def test_server_errors_and_invalid_json_are_swallowed(warnings: list[str]) -> None:
     # Given a 500 and then a 200 whose body is not JSON
-    """Check that server errors and invalid json are swallowed."""
-    server = Server(httpx2.Response(500), httpx2.Response(200, content=b"<html>"), httpx2.Response(200, json={"x": 1}))
+    server = Server(httpx.Response(500), httpx.Response(200, content=b"<html>"), httpx.Response(200, json={"x": 1}))
     message = client(server)
     for _ in range(3):
         message.publish({"n": 1}, force=True)
@@ -408,14 +374,12 @@ def test_server_errors_and_invalid_json_are_swallowed(warnings: list[str]) -> No
 @pytest.mark.usefixtures("clock")
 def test_network_error_is_swallowed_logged_once_and_never_leaks_the_url(warnings: list[str]) -> None:
     # Given a network that is down and whose error text contains the webhook URL
-    """Check that network error is swallowed logged once and never leaks the url."""
-    server = Server(*[httpx2.ConnectError(f"cannot reach {URL}") for _ in range(3)])
+    server = Server(*[httpx.ConnectError(f"cannot reach {URL}") for _ in range(3)])
     message = client(server)
     # When publishing repeatedly
     for _ in range(3):
         message.publish({"n": 1}, force=True)
-    # Then it did not raise, logged the same failure once, and the secret is not in the
-    # log
+    # Then it did not raise, logged the same failure once, and the secret is not in the log
     assert len(warnings) == 1
     assert "ConnectError" in warnings[0]
     assert "secret-token" not in warnings[0]
@@ -424,8 +388,7 @@ def test_network_error_is_swallowed_logged_once_and_never_leaks_the_url(warnings
 @pytest.mark.usefixtures("warnings")
 def test_failures_back_off_so_a_dead_discord_costs_little(clock: Clock) -> None:
     # Given a failed attempt
-    """Failure back off so a dead discord costs little."""
-    server = Server(httpx2.ConnectError("down"))
+    server = Server(httpx.ConnectError("down"))
     message = client(server)
     message.publish({"n": 1})
     # When publishing at the normal interval, and then after the doubled wait
@@ -441,25 +404,21 @@ def test_failures_back_off_so_a_dead_discord_costs_little(clock: Clock) -> None:
 @pytest.mark.usefixtures("clock")
 def test_announce_posts_a_standalone_message_and_swallows_failures(warnings: list[str]) -> None:
     # Given a live message and then a failing announcement
-    """Check that announce posts a standalone message and swallows failures."""
     server = Server(
-        httpx2.Response(200, json={"id": "9"}), httpx2.Response(200, json={"id": "10"}), httpx2.ConnectError("x")
+        httpx.Response(200, json={"id": "9"}), httpx.Response(200, json={"id": "10"}), httpx.ConnectError("x")
     )
     message = client(server)
     message.publish({"embeds": []})
     # When announcing twice
     message.announce({"content": "pronto"})
     message.announce({"content": "de novo"})
-    # Then the first is a new POST (never a PATCH), the failure is logged, and nothing
-    # raised
+    # Then the first is a new POST (never a PATCH), the failure is logged, and nothing raised
     assert [request.method for request in server.requests] == ["POST", "POST", "POST"]
-    assert loads(server.requests[1].content) == {"content": "pronto"}
+    assert json.loads(server.requests[1].content) == {"content": "pronto"}
     assert len(warnings) == 1
 
 
 def test_never_raises_swallows_and_warns(warnings: list[str]) -> None:
-    """Check that never raises swallows and warns."""
-
     # Given a notification method with a bug
     @never_raises
     def broken() -> None:
@@ -472,11 +431,10 @@ def test_never_raises_swallows_and_warns(warnings: list[str]) -> None:
     assert "broken" in warnings[0]
 
 
-# --- validation comparison
+# --- validation comparison ---------------------------------------------------------------------------------------
 
 
 def equal_line() -> ValidationLine:
-    """Return the equal line."""
     sides = (
         CountSide("Oracle (SCN)", 193_000_000),
         CountSide("arquivos", 193_000_000),
@@ -488,27 +446,23 @@ def equal_line() -> ValidationLine:
 def test_equal_counts_render_a_green_line_with_the_note() -> None:
     # Given equal counts on every side
     # Then the line is ✅, joined by "=", in pt-BR format, with the note
-    """Check that equal counts render a green line with the note."""
     assert equal_line().is_valid
     assert format_validation_line(equal_line()) == (
         "✅ DPS · Oracle (SCN) 193.000.000 = arquivos 193.000.000 = BigQuery 193.000.000 · "
-        + "Σ VALOR_SERVICO, NUMERO_DPS iguais"
+        "Σ VALOR_SERVICO, NUMERO_DPS iguais"
     )
 
 
 def test_a_mismatch_renders_a_red_line_and_drops_the_note() -> None:
     # Given a destination with fewer rows
-    """Check that a mismatch renders a red line and drops the note."""
     line = replace(equal_line(), sides=(CountSide("Oracle (SCN)", 10), CountSide("BigQuery", 9)))
-    # Then the line is ❌, marks the difference with "≠" and does not claim the checksum
-    # matched
+    # Then the line is ❌, marks the difference with "≠" and does not claim the checksum matched
     assert not line.is_valid
     assert format_validation_line(line) == "❌ DPS · Oracle (SCN) 10 ≠ BigQuery 9"
 
 
 def test_a_missing_side_is_a_dash_and_never_valid_and_no_counts_at_all_is_pending() -> None:
     # Given a table with only the source counted, and one never reached
-    """Show a dash for a missing side, and never validate with no counts."""
     partial = ValidationLine("DPS", (CountSide("Oracle (SCN)", 5), CountSide("BigQuery", None)))
     untouched = ValidationLine("NOTAS", (CountSide("Oracle (SCN)", None), CountSide("BigQuery", None)))
     # Then the first is ❌ with "—", the second is ⬜ and neither counts as validated
@@ -520,18 +474,16 @@ def test_a_missing_side_is_a_dash_and_never_valid_and_no_counts_at_all_is_pendin
 
 def test_validation_field_is_in_the_final_embed_only_when_there_are_lines() -> None:
     # Given a success view with one validation line, and one without
-    """Check that validation field is in the final embed only when there are lines."""
-    with_lines = parse_embed(build_payload(view(RunStatus.SUCCESS, validation=(equal_line(),))))
-    without = parse_embed(build_payload(view(RunStatus.SUCCESS)))
+    with_lines = embed_of(build_payload(view(RunStatus.SUCCESS, validation=(equal_line(),))))
+    without = embed_of(build_payload(view(RunStatus.SUCCESS)))
     # Then the section is a field named 🔎 Validação with the line, and absent otherwise
-    values = {field["name"]: field["value"] for field in list_fields(with_lines)}
+    values = {field["name"]: field["value"] for field in fields_of(with_lines)}
     assert values["🔎 Validação"] == format_validation_line(equal_line())
-    assert "🔎 Validação" not in [field["name"] for field in list_fields(without)]
+    assert "🔎 Validação" not in [field["name"] for field in fields_of(without)]
 
 
 def test_announcement_summarizes_how_many_tables_were_validated() -> None:
     # Given 3 tables of which all, or only 1, validated
-    """Check that announcement summarizes how many tables were validated."""
     good = equal_line()
     bad = replace(good, sides=(CountSide("Oracle (SCN)", 1), CountSide("BigQuery", None)))
     done = build_announcement(view(RunStatus.SUCCESS, url=None, validation=(good, good, good)))["content"]
@@ -539,8 +491,7 @@ def test_announcement_summarizes_how_many_tables_were_validated() -> None:
         view(RunStatus.FAILED, url=None, failed_stage="Carga", error="boom", validation=(good, bad, bad))
     )["content"]
     single = build_announcement(view(RunStatus.SUCCESS, url=None, validation=(good,)))["content"]
-    # Then success says all equal at source and destination; failure only counts; one
-    # table is singular
+    # Then success says all equal at source and destination; failure only counts; one table is singular
     assert str(done).endswith("em 12min · 3/3 tabelas validadas (linhas iguais na origem e no destino)")
     assert str(failed).endswith("`boom` · 1/3 tabelas validadas")
     assert "· 1/1 tabela validada (linhas iguais" in str(single)
@@ -548,89 +499,176 @@ def test_announcement_summarizes_how_many_tables_were_validated() -> None:
 
 def test_many_long_validation_lines_stay_inside_the_discord_limits() -> None:
     # Given 40 tables with huge names and notes
-    """Check that many long validation lines stay inside the discord limits."""
     sides = (CountSide("Oracle (SCN)", 1), CountSide("BigQuery", 1))
     lines = tuple(ValidationLine("T" * 200, sides, "n" * 400) for _ in range(40))
     # When the final payload is built
-    embed = parse_embed(build_payload(view(RunStatus.SUCCESS, validation=lines)))
+    embed = embed_of(build_payload(view(RunStatus.SUCCESS, validation=lines)))
     # Then every line, field and the total respect the limits
     assert all(len(format_validation_line(line)) <= 300 for line in lines)
-    assert all(len(field["value"]) <= 1024 for field in list_fields(embed))
+    assert all(len(field["value"]) <= 1024 for field in fields_of(embed))
     assert len(str(embed["description"])) <= 4096
     assert total_chars(embed) <= 6000
 
 
-def test_webhook_comes_from_the_environment_variable(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given the variable set, with surrounding spaces
-    """Check that webhook comes from the environment variable."""
-    monkeypatch.setenv("DISCORD_WEBHOOK_URL", f"  {URL} ")
+def test_webhook_prefers_the_environment_variable_over_the_secret_block() -> None:
+    # Given both sources holding a webhook
+    loaded: list[str] = []
 
-    # When the webhook is resolved, Then the trimmed value is used
-    assert resolve_webhook() == URL
+    def load(name: str) -> str:
+        loaded.append(name)
+        return "https://discord.test/block"
 
-
-def test_a_missing_variable_disables_notifications(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given no variable
-    """Check that a missing variable disables notifications."""
-    monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
-
-    # When the webhook is resolved, Then there is none
-    assert resolve_webhook() is None
+    # When the webhook is resolved, Then the variable wins and the block is not read
+    assert resolve_webhook({"DISCORD_WEBHOOK_URL_NOTA_CARIOCA": URL}, load) == URL
+    assert loaded == []
 
 
-def embed_of(payload: dict[str, object]) -> dict[str, object]:
-    """Return the only embed of a payload."""
-    embeds = payload["embeds"]
-    assert isinstance(embeds, list)
-    assert len(embeds) == 1
-    embed = embeds[0]
-    assert isinstance(embed, dict)
+def test_webhook_falls_back_to_the_secret_block_without_the_variable() -> None:
+    # Given no variable and a Secret block with surrounding spaces
+    def load(name: str) -> str:
+        assert name == "discord-webhook-nota-carioca"
+        return f"  {URL} "
 
-    return embed
+    # When the webhook is resolved, Then the block value is used
+    assert resolve_webhook({}, load) == URL
+
+
+def test_unreadable_or_empty_secret_block_disables_notifications() -> None:
+    # Given a block that fails to load and one that is empty
+    def missing(name: str) -> str:
+        raise ValueError(f"block {name} not found")
+
+    # When it is read, Then no webhook is returned and nothing is raised
+    assert webhook_from_secret_block(missing) is None
+    assert webhook_from_secret_block(lambda _name: "   ") is None
+    assert resolve_webhook({}, missing) is None
+
+
+# --- environment: prod vs staging ---------------------------------------------------------------------------------
+
+PROD_ENV = "DISCORD_WEBHOOK_URL_NOTA_CARIOCA"
+STAGING_ENV = "DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGING"
+PROD_BLOCK = "discord-webhook-nota-carioca"
+STAGING_BLOCK = "discord-webhook-nota-carioca-staging"
+PROD_URL = "https://discord.example/api/webhooks/1/prod-token"
+STAGING_URL = "https://discord.example/api/webhooks/2/staging-token"
 
 
 @pytest.mark.parametrize(
     ("deployment_name", "expected"),
     [
-        pytest.param("rj-smfp--nota-carioca-oracle-to-bq--staging", Environment.STAGING, id="a_staging_deployment"),
-        pytest.param("rj-smfp--nota-carioca-oracle-to-bq--prod", Environment.PROD, id="a_prod_deployment"),
-        pytest.param("rj-smfp--nota-carioca-oracle-to-bq--staging-copy", Environment.PROD, id="staging_in_the_middle"),
-        pytest.param("", Environment.PROD, id="an_empty_name"),
-        pytest.param(None, Environment.PROD, id="a_run_with_no_deployment"),
+        ("rj-smfp--nota-carioca-oracle-to-bq--staging", Environment.STAGING),
+        ("rj-smfp--nota-carioca-oracle-to-bq--prod", Environment.PROD),
+        ("rj-smfp--nota-carioca-oracle-to-bq--staging-copy", Environment.PROD),
+        ("", Environment.PROD),
+        (None, Environment.PROD),
     ],
 )
 def test_environment_is_staging_only_when_the_deployment_name_ends_with_staging(
     deployment_name: str | None, expected: Environment
 ) -> None:
-    """Take only a name that ends in `--staging` as staging."""
+    # Given a deployment name (or none, as in a local run)
+    # When the environment is derived from it
+    # Then only a name ending in --staging is staging; everything else, including no deployment, is prod
     assert environment_from_deployment(deployment_name) is expected
 
 
+@pytest.mark.usefixtures("warnings")
+@pytest.mark.parametrize(
+    ("runtime_name", "expected"),
+    [("rj-smfp--nota-carioca-bq-to-oracle--staging", Environment.STAGING), (None, Environment.PROD)],
+)
+def test_current_environment_reads_the_prefect_runtime_deployment_name(
+    monkeypatch: pytest.MonkeyPatch, runtime_name: str | None, expected: Environment
+) -> None:
+    # Given the Prefect runtime reporting a deployment name, or no deployment at all
+    if runtime_name is not None:
+        monkeypatch.setenv("PREFECT__RUNTIME__DEPLOYMENT__NAME", runtime_name)
+    # When the current environment is read, Then it follows the name reported by the runtime
+    assert current_environment() is expected
+
+
+def test_staging_reads_only_its_own_variable_and_block() -> None:
+    # Given both variables set and a loader that serves every block
+    loaded: list[str] = []
+
+    def load(name: str) -> str:
+        loaded.append(name)
+        return STAGING_URL
+
+    environ = {PROD_ENV: PROD_URL, STAGING_ENV: f" {STAGING_URL} "}
+    # When staging resolves its webhook, Then its variable wins over the block, which is not read
+    assert resolve_webhook(environ, load, Environment.STAGING) == STAGING_URL
+    assert webhook_from_env(environ, Environment.STAGING) == STAGING_URL
+    assert loaded == []
+    # And without the variable, the staging block is the source
+    assert resolve_webhook({PROD_ENV: PROD_URL}, load, Environment.STAGING) == STAGING_URL
+    assert loaded == [STAGING_BLOCK]
+
+
+def test_staging_never_falls_back_to_the_prod_webhook() -> None:
+    # Given prod fully configured (variable and block) and staging's block missing
+    loaded: list[str] = []
+
+    def load(name: str) -> str:
+        loaded.append(name)
+        if name == PROD_BLOCK:
+            return PROD_URL
+        raise ValueError(f"block {name} not found")
+
+    # When staging resolves its webhook
+    webhook = resolve_webhook({PROD_ENV: PROD_URL}, load, Environment.STAGING)
+    # Then there is none (notifications off) and the prod block was never even read
+    assert webhook is None
+    assert loaded == [STAGING_BLOCK]
+    assert webhook_from_secret_block(load, Environment.STAGING) is None
+
+
+def test_empty_staging_variable_and_block_disable_staging_notifications() -> None:
+    # Given blank staging sources next to a configured prod variable
+    # Then staging resolves nothing instead of using prod's
+    assert resolve_webhook({PROD_ENV: PROD_URL, STAGING_ENV: "  "}, lambda _name: "  ", Environment.STAGING) is None
+
+
+def test_prod_ignores_the_staging_variable_and_block() -> None:
+    # Given the staging variable set and a loader that tells the blocks apart
+    loaded: list[str] = []
+
+    def load(name: str) -> str:
+        loaded.append(name)
+        return PROD_URL if name == PROD_BLOCK else STAGING_URL
+
+    # When prod resolves its webhook, with the environment spelled out or by default
+    # Then it uses prod's block only, exactly as before staging existed
+    assert resolve_webhook({STAGING_ENV: STAGING_URL}, load, Environment.PROD) == PROD_URL
+    assert resolve_webhook({STAGING_ENV: STAGING_URL}, load) == PROD_URL
+    assert resolve_webhook({STAGING_ENV: STAGING_URL, PROD_ENV: PROD_URL}, load) == PROD_URL
+    assert loaded == [PROD_BLOCK, PROD_BLOCK]
+
+
 def test_staging_marks_the_embed_title_and_changes_nothing_else() -> None:
-    """Put the mark in front of the title, and leave the rest of the embed as it is."""
+    # Given the same running view in prod and in staging
     prod = embed_of(build_payload(view()))
     staging = embed_of(build_payload(view(staging=True)))
-
+    # Then only the title differs, with the marker in front
     assert prod["title"] == "Oracle → BigQuery · brutos_nota_fiscal"
     assert staging["title"] == "🧪 STAGING · Oracle → BigQuery · brutos_nota_fiscal"
-    assert {key: value for key, value in staging.items() if key != "title"} == {
-        key: value for key, value in prod.items() if key != "title"
-    }
+    assert {k: v for k, v in staging.items() if k != "title"} == {k: v for k, v in prod.items() if k != "title"}
 
 
 @pytest.mark.parametrize(
     ("status", "extra"),
     [
-        pytest.param(RunStatus.SUCCESS, {}, id="success"),
-        pytest.param(RunStatus.FAILED, {"failed_stage": "Extração", "error": "boom"}, id="failure"),
-        pytest.param(RunStatus.CANCELLED, {"failed_stage": "Carga"}, id="cancel"),
+        (RunStatus.SUCCESS, {}),
+        (RunStatus.FAILED, {"failed_stage": "Extração", "error": "boom"}),
+        (RunStatus.CANCELLED, {"failed_stage": "Carga"}),
     ],
 )
 def test_staging_prefixes_every_final_announcement_line(status: RunStatus, extra: dict[str, object]) -> None:
-    """Put the mark before the final line in each final state, with mentions off."""
+    # Given a finished run in each final state, in prod and in staging
     prod = build_announcement(view(status, **extra))
     staging = build_announcement(view(status, staging=True, **extra))
-
+    # Then the staging line is the prod line behind the marker, and mentions stay disabled
     assert "STAGING" not in str(prod["content"])
     assert staging["content"] == f"🧪 STAGING · {prod['content']}"
     assert staging["allowed_mentions"] == {"parse": []}
