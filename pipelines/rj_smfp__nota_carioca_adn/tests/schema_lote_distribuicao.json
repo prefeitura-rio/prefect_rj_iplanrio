@@ -1,0 +1,179 @@
+{
+ "x-origem": "https://github.com/nfse-nacional/nfse-php/blob/main/references/api-specs/production/prod-API-NFS-e-ADN-Municipio-(v1).json (components.schemas, cópia literal do subconjunto usado pelo dublê)",
+ "schemas": {
+  "LoteDistribuicaoNSUResponse": {
+   "type": "object",
+   "properties": {
+    "StatusProcessamento": {
+     "allOf": [
+      {
+       "$ref": "#/components/schemas/StatusProcessamentoDistribuicao"
+      }
+     ]
+    },
+    "LoteDFe": {
+     "type": "array",
+     "items": {
+      "$ref": "#/components/schemas/DistribuicaoNSU"
+     },
+     "nullable": true
+    },
+    "Alertas": {
+     "type": "array",
+     "items": {
+      "$ref": "#/components/schemas/MensagemProcessamento"
+     },
+     "nullable": true
+    },
+    "Erros": {
+     "type": "array",
+     "items": {
+      "$ref": "#/components/schemas/MensagemProcessamento"
+     },
+     "nullable": true
+    },
+    "TipoAmbiente": {
+     "allOf": [
+      {
+       "$ref": "#/components/schemas/TipoAmbiente"
+      }
+     ]
+    },
+    "VersaoAplicativo": {
+     "type": "string",
+     "nullable": true
+    },
+    "DataHoraProcessamento": {
+     "type": "string",
+     "format": "date-time"
+    }
+   },
+   "additionalProperties": false
+  },
+  "DistribuicaoNSU": {
+   "type": "object",
+   "properties": {
+    "NSU": {
+     "type": "integer",
+     "format": "int64",
+     "nullable": true
+    },
+    "ChaveAcesso": {
+     "type": "string",
+     "nullable": true
+    },
+    "TipoDocumento": {
+     "allOf": [
+      {
+       "$ref": "#/components/schemas/TipoDocumentoRequisicao"
+      }
+     ]
+    },
+    "TipoEvento": {
+     "allOf": [
+      {
+       "$ref": "#/components/schemas/TipoEvento"
+      }
+     ],
+     "nullable": true
+    },
+    "ArquivoXml": {
+     "type": "string",
+     "nullable": true
+    },
+    "DataHoraGeracao": {
+     "type": "string",
+     "format": "date-time",
+     "nullable": true
+    }
+   },
+   "additionalProperties": false
+  },
+  "StatusProcessamentoDistribuicao": {
+   "enum": [
+    "REJEICAO",
+    "NENHUM_DOCUMENTO_LOCALIZADO",
+    "DOCUMENTOS_LOCALIZADOS"
+   ],
+   "type": "string"
+  },
+  "MensagemProcessamento": {
+   "type": "object",
+   "properties": {
+    "Mensagem": {
+     "allOf": [
+      {
+       "$ref": "#/components/schemas/Enum"
+      }
+     ],
+     "nullable": true
+    },
+    "Parametros": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "nullable": true
+    },
+    "Codigo": {
+     "type": "string",
+     "nullable": true
+    },
+    "Descricao": {
+     "type": "string",
+     "nullable": true
+    },
+    "Complemento": {
+     "type": "string",
+     "nullable": true
+    }
+   },
+   "additionalProperties": false
+  },
+  "TipoAmbiente": {
+   "enum": [
+    "PRODUCAO",
+    "HOMOLOGACAO"
+   ],
+   "type": "string"
+  },
+  "TipoDocumentoRequisicao": {
+   "enum": [
+    "NENHUM",
+    "DPS",
+    "PEDIDO_REGISTRO_EVENTO",
+    "NFSE",
+    "EVENTO",
+    "CNC"
+   ],
+   "type": "string"
+  },
+  "TipoEvento": {
+   "enum": [
+    "CANCELAMENTO",
+    "SOLICITACAO_CANCELAMENTO_ANALISE_FISCAL",
+    "CANCELAMENTO_POR_SUBSTITUICAO",
+    "CANCELAMENTO_DEFERIDO_ANALISE_FISCAL",
+    "CANCELAMENTO_INDEFERIDO_ANALISE_FISCAL",
+    "CONFIRMACAO_PRESTADOR",
+    "REJEICAO_PRESTADOR",
+    "CONFIRMACAO_TOMADOR",
+    "REJEICAO_TOMADOR",
+    "CONFIRMACAO_INTERMEDIARIO",
+    "REJEICAO_INTERMEDIARIO",
+    "CONFIRMACAO_TACITA",
+    "ANULACAO_REJEICAO",
+    "CANCELAMENTO_POR_OFICIO",
+    "BLOQUEIO_POR_OFICIO",
+    "DESBLOQUEIO_POR_OFICIO",
+    "INCLUSAO_NFSE_DAN",
+    "TRIBUTOS_NFSE_RECOLHIDOS"
+   ],
+   "type": "string"
+  },
+  "Enum": {
+   "type": "object",
+   "additionalProperties": false
+  }
+ }
+}
