@@ -115,7 +115,7 @@ remove_optout as (
     select remove_duplicados.*,
     coalesce(pf.nome_social, pf.nome) as nome,
     from remove_duplicados
-    left join `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf using(cpf)
+    left join `rj-rmi.rmi_dados_mestres.pessoa_fisica` pf using(cpf)
     where pf.telefone.principal.indicador_optout = false
     and pf.telefone.principal.indicador_quarentena = false
 )

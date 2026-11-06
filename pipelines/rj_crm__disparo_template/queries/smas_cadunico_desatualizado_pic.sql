@@ -251,7 +251,7 @@ responsavel_rmi AS (
     END AS phone_priority
 
   FROM
-    `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS pf
+    `rj-rmi.rmi_dados_mestres.pessoa_fisica` AS pf
 
   WHERE
     pf.assistencia_social.cadunico.id_familia IS NOT NULL
