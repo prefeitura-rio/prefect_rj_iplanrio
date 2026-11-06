@@ -563,6 +563,12 @@ def convert_string_to_json(s, context=None):
         raise BaseException(f"JSON parse error{context_msg}: {e}")
 
 
+def decode_pattern(key) -> str:
+    """Miolo do regex: chave numerica casa com ou sem zeros a esquerda."""
+    key = str(key)
+    return rf"0*{int(key)}" if key.isdigit() else key
+
+
 def create_cadunico_dbt_consolidated_models(
     dbt_repository_path: str,
     dataframe: pd.DataFrame,
@@ -780,9 +786,10 @@ def create_cadunico_dbt_consolidated_models(
                             + f"            WHEN REGEXP_CONTAINS({col_name}, r'^\\s*$') THEN NULL\n"
                         )
                         for key in dicionario_atributos.keys():
+                            pattern = decode_pattern(key)
                             col_expression = (
                                 col_expression
-                                + f"            WHEN REGEXP_CONTAINS({col_name}, r'^{key}$') THEN '{dicionario_atributos[key]}'\n"  # noqa
+                                + f"            WHEN REGEXP_CONTAINS({col_name}, r'^{pattern}$') THEN '{dicionario_atributos[key]}'\n"  # noqa
                             )
                         col_expression = (
                             col_expression
