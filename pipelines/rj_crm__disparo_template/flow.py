@@ -333,7 +333,7 @@ def rj_crm__disparo_template_sf(
             if "others" in current_df.columns:
                 mask_none = current_df["telefone"].isna()
                 current_df.loc[mask_none, "telefone"] = current_df.loc[mask_none, "others"].apply(
-                    lambda x: x[0] if isinstance(x, list) and len(x) >= 1 else None
+                    lambda x: x[0] if hasattr(x, "__len__") and len(x) >= 1 else None
                 )
             current_df = current_df.dropna(subset=["telefone"])
             if current_df.shape[0] == 0:
@@ -341,7 +341,7 @@ def rj_crm__disparo_template_sf(
                 break
         else:
             if "others" in base_df.columns and not base_df["others"].apply(
-                lambda x: isinstance(x, list) and len(x) >= i
+                lambda x: hasattr(x, "__len__") and len(x) >= i
             ).any():
                 print(f"✅ No others available for retry attempt {i}. Ending retry loop.")
                 break
@@ -363,7 +363,7 @@ def rj_crm__disparo_template_sf(
                 break
 
             retry_df["telefone"] = retry_df["others"].apply(
-                lambda x: x[i - 1] if isinstance(x, list) and len(x) >= i else None
+                lambda x: x[i - 1] if hasattr(x, "__len__") and len(x) >= i else None
             )
             current_df = retry_df.dropna(subset=["telefone"])
 

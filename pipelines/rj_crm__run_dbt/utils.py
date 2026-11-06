@@ -39,8 +39,8 @@ async def send_discord_webhook(
 
     webhook_url = getenv_or_action("DBT_RUN__DISCORD_WEBHOOK_URL_NOTIFICATIONS")
 
-    if len(text_content) > 2000:
-        raise ValueError(f"Message content is too long: {len(text_content)} > 2000 characters.")
+    if len(text_content) > 1000:
+        text_content = text_content[:1000] + "\n…[truncado]"
 
     async with aiohttp.ClientSession() as session:
         kwargs = {"content": text_content, "allowed_mentions": AllowedMentions(users=True)}
@@ -86,7 +86,7 @@ def send_message(title, message, flow_info: dict, file_path=None, username=None,
 > Flow Run: [{flow_name}](https://prefect.squirrel-regulus.ts.net/runs/flow-run/{flow_run_id})
     """
     # Calculate max char count for message
-    message_max_char_count = 2000 - len(header_content)
+    message_max_char_count = 1000 - len(header_content)
 
     # Split message into lines
     message_lines = message.split("\n")
