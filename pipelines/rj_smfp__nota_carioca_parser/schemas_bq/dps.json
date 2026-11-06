@@ -1,0 +1,375 @@
+[
+  {
+    "name": "DPS",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Id da DPS sem o prefixo DPS."
+  },
+  {
+    "name": "VERSAO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "TIPO_AMBIENTE",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "DATA_EMISSAO",
+    "type": "DATETIME",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VERSAO_APLICACAO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "SERIE_DPS",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "NUMERO_DPS",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "DATA_COMPETENCIA",
+    "type": "DATETIME",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "TIPO_EMITENTE",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "MUNICIPIO_EMISSOR",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "CHAVE_ACESSO_SUBSTITUIDA",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "MOTIVO_SUBSTITUICAO",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "JUSTIFICATIVA_SUBSTITUICAO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "CHAVE_ACESSO_REJEITADA",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "MOTIVO_EMISSAO_TOMADOR_INTERM",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "PESSOA_PRESTADOR",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "HASH_ID (hex maiúsculo, 64) do prestador em raw.pessoas; no Oracle é o GUID PESSOA_NACIONAL."
+  },
+  {
+    "name": "PESSOA_TOMADOR",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "HASH_ID (hex maiúsculo, 64) do tomador em raw.pessoas; no Oracle é o GUID PESSOA_NACIONAL."
+  },
+  {
+    "name": "PESSOA_INTERMEDIARIO",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "HASH_ID (hex maiúsculo, 64) do intermediário em raw.pessoas; no Oracle é o GUID PESSOA_NACIONAL."
+  },
+  {
+    "name": "LOCALIDADE_PRESTACAO",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "PAIS_PRESTACAO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "OPCAO_CONSUMO_SERVICO",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "TRIBUTACAO_NACIONAL",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "cTribNac como número (010101 vira 10101)."
+  },
+  {
+    "name": "TRIBUTACAO_MUNICIPAL",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "DESCRICAO_SERVICO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "NBS",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "CODIGO_CONTRIBUINTE",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "RESPONSABILIDADE_TECNICA",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "DOC_REFERENCIA",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "INFORMACAO_COMPLEMENTAR",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "NUMERO_PEDIDO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "GRUPO_SERVICO",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Derivada: SUBSTR(LPAD(TRIBUTACAO_NACIONAL,6,'0'),1,2)."
+  },
+  {
+    "name": "SUBGRUPO_SERVICO",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Derivada: SUBSTR(LPAD(TRIBUTACAO_NACIONAL,6,'0'),1,4)."
+  },
+  {
+    "name": "SERVICO_NACIONAL",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Derivada: LPAD(TRIBUTACAO_NACIONAL,6,'0') || LPAD(TRIBUTACAO_MUNICIPAL,3,'0')."
+  },
+  {
+    "name": "VALOR_RECEBIDO",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_SERVICO",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_DESCONTO_INCONDICIONADO",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_DESCONTO_CONDICIONADO",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "PERCENTUAL_DEDUCAO_REDUCAO",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_DEDUCAO_REDUCAO",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "ISSQN",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "PAIS_RESULTADO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "BENEFICIO_NACIONAL",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "BENEFICIO",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "nBM como número (o .NET grava Long, sem zeros à esquerda) em coluna de texto."
+  },
+  {
+    "name": "VALOR_REDUCAO_BC_BENEFICIO",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "PERC_REDUCAO_BC_BENEFICIO",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "TIPO_SUSPENSAO",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "NUMERO_PROCESSO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "TIPO_IMUNIDADE_ISSQN",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "ALIQUOTA",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "TIPO_RETENCAO_ISSQN",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "CST",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_BASE_CALCULO_PIS_COFINS",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "ALIQUOTA_PIS",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "ALIQUOTA_COFINS",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_PIS",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_COFINS",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "TIPO_RETENCAO_PIS_COFINS",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_CP",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_IRRF",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_CSLL",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_TOTAL_TRIBUTO_FEDERAL",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_TOTAL_TRIBUTO_ESTADUAL",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_TOTAL_TRIBUTO_MUNICIPAL",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "PERC_TOTAL_TRIBUTO_FEDERAL",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "PERC_TOTAL_TRIBUTO_ESTADUAL",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "PERC_TOTAL_TRIBUTO_MUNICIPAL",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "INDICA_VALOR_TOTAL_TRIBUTOS",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "PERC_TRIBUTO_SIMPLES_NACIONAL",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "NSU",
+    "type": "INT64",
+    "mode": "REQUIRED",
+    "description": "NSU do ADN do documento de origem."
+  },
+  {
+    "name": "DATA_HORA_GERACAO",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE",
+    "description": "DataHoraGeracao do ADN (índice documentos); coluna de partição."
+  },
+  {
+    "name": "VERSAO_PARSER",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Versão do parser que gerou a linha."
+  },
+  {
+    "name": "INGERIDO_EM",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Instante em que o parser gerou a linha."
+  }
+]

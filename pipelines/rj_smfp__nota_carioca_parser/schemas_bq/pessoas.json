@@ -1,0 +1,147 @@
+[
+  {
+    "name": "CPF_CNPJ",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "NIF",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "MOTIVO_NIF_NAO_INFORMADO",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "CAEPF",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "INSCRICAO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "NOME",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "NOME_FANTASIA",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "MUNICIPIO_IBGE",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "CEP",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "LOGRADOURO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "NUMERO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "COMPLEMENTO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "BAIRRO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "UF",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "CODIGO_PAIS",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "CODIGO_POSTAL_EXTERIOR",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "LOCALIDADE_EXTERIOR",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "CIDADE_EXTERIOR",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "TELEFONE",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "EMAIL",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "OPCAO_SIMPLES_NACIONAL",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "REGIME_APURACAO_SIMPLES",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "REGIME_TRIBUTACAO",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "HASH_ID",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "RAWTOHEX(HASH_ID): SHA-256 UTF-8 dos 23 campos (R-03), hex maiúsculo de 64 caracteres."
+  },
+  {
+    "name": "NSU",
+    "type": "INT64",
+    "mode": "REQUIRED",
+    "description": "NSU do ADN do documento de origem."
+  },
+  {
+    "name": "DATA_HORA_GERACAO",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE",
+    "description": "DataHoraGeracao do ADN (índice documentos); coluna de partição."
+  },
+  {
+    "name": "VERSAO_PARSER",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Versão do parser que gerou a linha."
+  },
+  {
+    "name": "INGERIDO_EM",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Instante em que o parser gerou a linha."
+  }
+]

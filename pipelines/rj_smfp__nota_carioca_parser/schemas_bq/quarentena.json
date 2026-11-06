@@ -1,0 +1,32 @@
+[
+  {
+    "name": "nsu",
+    "type": "INT64",
+    "mode": "REQUIRED",
+    "description": "NSU do documento em avaliação."
+  },
+  {
+    "name": "prioridade",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "P1 a P5 (1 receita, 2 ilegível, 3 Rio sem receita, 4 fora do município, 5 evento órfão); nulo = devolvido (válido nesta versao_parser)."
+  },
+  {
+    "name": "erro",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Motivo da recusa; nulo quando devolvido."
+  },
+  {
+    "name": "versao_parser",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Versão do parser que fez a avaliação."
+  },
+  {
+    "name": "avaliado_em",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Instante da avaliação; vale a mais recente de cada NSU."
+  }
+]
