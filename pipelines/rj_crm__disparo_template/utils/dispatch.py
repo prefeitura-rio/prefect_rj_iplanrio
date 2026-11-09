@@ -1069,7 +1069,7 @@ def get_telefone_attempt_anterior(row: pd.Series, attempt_i: int) -> Optional[st
         return str(tel) if pd.notna(tel) else None
     # attempt_i >= 2: others[attempt_i - 2]
     others = row.get("others")
-    if hasattr(others, "__len__") and len(others) >= attempt_i - 1:
+    if isinstance(others, list) and len(others) >= attempt_i - 1:
         return str(others[attempt_i - 2])
     return None
 

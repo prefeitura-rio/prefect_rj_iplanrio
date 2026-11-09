@@ -273,6 +273,16 @@ def rj_crm__disparo_template_sf(
     print(f"Query retornou {len(df)} linhas. Colunas: {list(df.columns)}")
     print(f"[DEBUG] Sample data:\n{df.head(10).to_dict('records')}")
 
+    # Normaliza a coluna 'others' para lista Python pura.
+    # O BigQuery retorna arrays como numpy.ndarray; garantir list aqui evita
+    # comportamentos inesperados em todos os pontos do loop de retry que
+    # acessam others por índice ou verificam len().
+    if "others" in df.columns:
+        df["others"] = df["others"].apply(
+            lambda x: list(x) if hasattr(x, "__iter__") and not isinstance(x, str) else ([] if x is None else x)
+        )
+        print(f"[DEBUG] others após normalização: {df['others'].head(3).tolist()}")
+
     # Dedup por CPF — base para o loop de retentativas
     df = filter_duplicated(
         df=df,
@@ -335,28 +345,17 @@ def rj_crm__disparo_template_sf(
             if "others" in current_df.columns:
                 mask_none = current_df["telefone"].isna()
                 current_df.loc[mask_none, "telefone"] = current_df.loc[mask_none, "others"].apply(
-                    lambda x: x[0] if hasattr(x, "__len__") and len(x) >= 1 else None
+                    lambda x: x[0] if isinstance(x, list) and len(x) >= 1 else None
                 )
             current_df = current_df.dropna(subset=["telefone"])
             if current_df.shape[0] == 0:
                 print("✅ No destinations available for dispatch attempt 0. Ending.")
                 break
         else:
-            if "others" in base_df.columns:
-                sample = base_df["others"].iloc[0] if not base_df.empty else None
-                print(f"[DEBUG retry {i}] others sample value: {repr(sample)}")
-                print(f"[DEBUG retry {i}] others sample type: {type(sample)}")
-                print(f"[DEBUG retry {i}] hasattr __len__: {hasattr(sample, '__len__')}")
-                print(f"[DEBUG retry {i}] len(sample): {len(sample) if hasattr(sample, '__len__') else 'N/A'}")
-                print(f"[DEBUG retry {i}] len >= i ({i}): {len(sample) >= i if hasattr(sample, '__len__') else 'N/A'}")
-                evals = base_df["others"].apply(lambda x: hasattr(x, "__len__") and len(x) >= i)
-                print(f"[DEBUG retry {i}] evals por linha: {evals.tolist()}")
-                print(f"[DEBUG retry {i}] .any(): {evals.any()}")
-                if not evals.any():
-                    print(f"✅ No others available for retry attempt {i}. Ending retry loop.")
-                    break
-            else:
-                print(f"[DEBUG retry {i}] coluna 'others' não existe em base_df. Encerrando.")
+            if "others" not in base_df.columns or not base_df["others"].apply(
+                lambda x: isinstance(x, list) and len(x) >= i
+            ).any():
+                print(f"✅ No others available for retry attempt {i}. Ending retry loop.")
                 break
 
             print(f"⚠️  Sleep 30 minutes before retry dispatch.")
@@ -416,7 +415,7 @@ def rj_crm__disparo_template_sf(
                 break
 
             retry_df["telefone"] = retry_df["others"].apply(
-                lambda x: x[i - 1] if hasattr(x, "__len__") and len(x) >= i else None
+                lambda x: x[i - 1] if isinstance(x, list) and len(x) >= i else None
             )
             current_df = retry_df.dropna(subset=["telefone"])
 
