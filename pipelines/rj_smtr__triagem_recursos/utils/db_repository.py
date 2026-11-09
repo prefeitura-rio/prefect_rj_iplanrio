@@ -36,20 +36,39 @@ import numpy as np
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
 
-from prefect_rj_iplanrio.logging import get_logger
-from prefect_rj_iplanrio.sql import load_query
+import logging
+import re
+import string
+
+try:
+    from prefect_rj_iplanrio.logging import get_logger
+    logger = get_logger(__name__)
+except ImportError:
+    logger = logging.getLogger(__name__)
 
 from ..constants import (
     LOCAL_PDFS_DIR,
     PIPELINE_DIR,
     TABELA_CALIBRACAO,
+    TABELA_EVENTOS,
     TABELA_FILA,
     TABELA_PREDICOES,
     TABELA_PROCESSOS,
     StatusProcessamento,
 )
 
-logger = get_logger(__name__)
+try:
+    from prefect_rj_iplanrio.sql import load_query
+except ImportError:
+    def load_query(anchor: str, name: str, **kwargs: Any) -> str:
+        sql_path = Path(anchor).parent / "queries" / f"{name}.sql"
+        if not sql_path.exists():
+            sql_path = PIPELINE_DIR / "queries" / f"{name}.sql"
+        with open(sql_path, "r", encoding="utf-8") as sql_file:
+            raw_sql = sql_file.read()
+        raw_sql = re.sub(r"\{#.*?#\}", "", raw_sql, flags=re.DOTALL)
+        template = string.Template(raw_sql)
+        return template.safe_substitute(**kwargs)
 
 
 def converter_valor_para_sql_null(valor: Any) -> float | None:
@@ -254,31 +273,58 @@ def persistir_lote_resultados_ia(db_url: str, resultados: list[dict[str, Any]]) 
         "update_status_fila",
         tabela_fila=TABELA_FILA,
     )
+    query_evento = load_query(
+        str(PIPELINE_DIR / "flow.py"),
+        "insert_evento",
+        tabela_eventos=TABELA_EVENTOS,
+    )
 
     conn = psycopg2.connect(db_url)
     try:
         with conn.cursor() as cursor:
             execute_values(cursor, query_predicoes, valores)
-            cursor.execute(
-                query_update_fila,
-                (StatusProcessamento.CONCLUIDO_IA.value, processos_ids),
-            )
-            for r in resultados:
+
+            ids_sucesso = [
+                r["processo_id"]
+                for r in resultados
+                if r.get("status_fila") != StatusProcessamento.ERRO_PROCESSAMENTO.value
+            ]
+            ids_erro = [
+                r["processo_id"]
+                for r in resultados
+                if r.get("status_fila") == StatusProcessamento.ERRO_PROCESSAMENTO.value
+            ]
+
+            if ids_sucesso:
                 cursor.execute(
-                    """
-                    INSERT INTO eventos (processo_id, usuario_sei, tipo_evento, detalhes_json)
-                    VALUES (%s, %s, %s, %s);
-                    """,
+                    query_update_fila,
+                    (StatusProcessamento.CONCLUIDO_IA.value, ids_sucesso),
+                )
+            if ids_erro:
+                cursor.execute(
+                    query_update_fila,
+                    (StatusProcessamento.ERRO_PROCESSAMENTO.value, ids_erro),
+                )
+
+            for r in resultados:
+                tipo_ev = (
+                    "ERRO"
+                    if r.get("status_triagem") == "ERRO_PDF_CORROMPIDO"
+                    else "TRIADO_IA"
+                )
+                cursor.execute(
+                    query_evento,
                     (
                         r["processo_id"],
                         "prefect.pipeline",
-                        "TRIADO_IA",
+                        tipo_ev,
                         json.dumps(
                             {
-                                "classe_predita": r["n1_classe_predita"],
-                                "faixa": r["faixa_operacional"],
-                                "probabilidade": float(r["probabilidade_final"]),
-                                "rota": r["rota_execucao"],
+                                "classe_predita": r.get("n1_classe_predita"),
+                                "faixa": r.get("faixa_operacional"),
+                                "probabilidade": float(r.get("probabilidade_final", 0.0)),
+                                "rota": r.get("rota_execucao"),
+                                "erro": r.get("auditoria_sistema", {}).get("erro_detalhado"),
                             }
                         ),
                     ),
@@ -390,40 +436,43 @@ def buscar_processos_para_triagem_ou_fallback(
         processos_sincronizados = []
         conn = psycopg2.connect(db_url)
         try:
+            query_upsert_proc = load_query(
+                str(PIPELINE_DIR / "flow.py"),
+                "upsert_processo_sei",
+                tabela_processos=TABELA_PROCESSOS,
+            )
+            query_enfileirar = load_query(
+                str(PIPELINE_DIR / "flow.py"),
+                "enfileirar_processo",
+                tabela_fila=TABELA_FILA,
+            )
+
+            origem_lote_val = "PASSIVO" if modo == "PASSIVO" else "MENSAL"
+
             with conn.cursor() as cursor:
                 for p in processos_pendentes[:limite]:
                     num_sei = str(p.get("numero_processo_sei") or p.get("numero_processo"))
                     id_proc = str(p.get("id_procedimento_sei") or "")
                     id_doc = str(p.get("id_documento_sei") or "")
-                    codigo_jari = str(p.get("sigla_unidade") or "1_JARI")
+
+                    sigla_raw = str(p.get("sigla_unidade") or "10_JARI")
+                    if "JARI" in sigla_raw.upper():
+                        m_jari = re.search(r"(\d+)\s*[ªaAºoO]?\s*JARI", sigla_raw, re.IGNORECASE)
+                        codigo_jari = f"{m_jari.group(1)}_JARI" if m_jari else sigla_raw[:20]
+                    else:
+                        codigo_jari = sigla_raw[:20] if sigla_raw else "10_JARI"
+
                     relator = str(p.get("usuario_atribuido_sigla") or "")
                     status_dist = "DISTRIBUIDO" if relator else "PENDENTE"
 
                     cursor.execute(
-                        """
-                        INSERT INTO processos_administrativos (
-                            numero_processo_sei,
-                            id_procedimento_sei,
-                            id_documento_sei,
-                            numero_auto_infracao,
-                            origem_lote,
-                            codigo_jari,
-                            atribuido_a_login_sei,
-                            status_distribuicao
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (numero_processo_sei) DO UPDATE SET
-                            id_procedimento_sei = COALESCE(EXCLUDED.id_procedimento_sei, processos_administrativos.id_procedimento_sei),
-                            id_documento_sei = COALESCE(EXCLUDED.id_documento_sei, processos_administrativos.id_documento_sei),
-                            atribuido_a_login_sei = COALESCE(EXCLUDED.atribuido_a_login_sei, processos_administrativos.atribuido_a_login_sei),
-                            status_distribuicao = EXCLUDED.status_distribuicao
-                        RETURNING processo_id;
-                        """,
+                        query_upsert_proc,
                         (
                             num_sei,
                             id_proc or None,
                             id_doc or None,
                             "AUTO_SEI",
-                            "MENSAL",
+                            origem_lote_val,
                             codigo_jari,
                             relator or None,
                             status_dist,
@@ -432,12 +481,12 @@ def buscar_processos_para_triagem_ou_fallback(
                     proc_id = cursor.fetchone()[0]
 
                     cursor.execute(
-                        """
-                        INSERT INTO fila_trabalho (processo_id, status)
-                        VALUES (%s, %s)
-                        ON CONFLICT DO NOTHING;
-                        """,
-                        (proc_id, StatusProcessamento.PENDENTE_IA.value),
+                        query_enfileirar,
+                        (
+                            proc_id,
+                            StatusProcessamento.PENDENTE_IA.value,
+                            proc_id,
+                        ),
                     )
 
                     p_item = dict(p)

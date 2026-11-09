@@ -25,10 +25,14 @@ import io
 import os
 from pathlib import Path
 import shutil
-from prefect_rj_iplanrio.logging import get_logger
 import pymupdf
+import logging
 
-logger = get_logger(__name__)
+try:
+    from prefect_rj_iplanrio.logging import get_logger
+    logger = get_logger(__name__)
+except ImportError:
+    logger = logging.getLogger(__name__)
 
 TESSERACT_CONFIGURADO = False
 

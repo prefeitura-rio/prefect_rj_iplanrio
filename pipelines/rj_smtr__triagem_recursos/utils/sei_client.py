@@ -48,8 +48,8 @@ class SeiConfig:
     usuario: str = os.getenv("SEI_SERVICE_USER", "usuario_servico")
     senha: str = os.getenv("SEI_SERVICE_PASSWORD", "senha_servico")
     id_unidade: str = os.getenv("SEI_ID_UNIDADE", "110000001")
-    orgao: int = 0
-    timeout: int = 30
+    orgao: int = int(os.getenv("SEI_ORGAO", "12"))
+    timeout: int = int(os.getenv("SEI_TIMEOUT", "60"))
 
 
 class ModWsseiClient:
@@ -316,33 +316,79 @@ class ModWsseiClient:
         return conteudo_bytes
 
     def obter_pdf_recurso_processo(self, id_procedimento: int | str) -> tuple[str, bytes]:
-        """Localiza o documento de recurso do cidadão e baixa seus bytes em RAM.
+        """Localiza os documentos de recurso do cidadão e baixa seus bytes em RAM.
 
-        Identifica automaticamente o anexo externo (tipoDocumento='E') do processo.
+        Identifica automaticamente anexos externos e petições recursais do processo.
+        Caso existam múltiplos arquivos em anexo (petição dividida ou documentos complementares),
+        realiza o download em memória RAM e consolida os fluxos em um único documento PDF
+        através do PyMuPDF, sem persistir em disco nem no banco de dados (LGPD).
 
         :param id_procedimento: ID interno do processo no SEI.
-        :returns: Tupla (id_documento_sei, pdf_bytes).
+        :returns: Tupla contendo o(s) ID(s) do(s) documento(s) SEI e o fluxo consolidado em bytes.
         :raises FileNotFoundError: Se nenhum documento de recurso for localizado.
+        :raises RuntimeError: Se o download falhar ou nenhum PDF válido for gerado.
         """
         documentos = self.listar_documentos_processo(id_procedimento)
 
-        doc_alvo = None
+        candidatos: list[dict[str, Any]] = []
         for d in documentos:
-            tipo_doc = d.get("tipo_documento", "").upper()
-            mime = d.get("mime_type", "").lower()
-            nome = d.get("nome_composto", "").lower()
-            tipo = d.get("tipo", "").lower()
+            tipo_doc = str(d.get("tipo_documento", "")).upper()
+            mime = str(d.get("mime_type", "")).lower()
+            nome = str(d.get("nome_composto", "")).lower()
+            tipo = str(d.get("tipo", "")).lower()
 
-            if tipo_doc == "E" or "pdf" in mime or "recurso" in nome or "recurso" in tipo:
-                doc_alvo = d
-                break
+            if (
+                tipo_doc in ("E", "X")
+                or "pdf" in mime
+                or "recurso" in nome
+                or "recurso" in tipo
+                or "anexo" in nome
+                or "requerimento" in nome
+            ):
+                candidatos.append(d)
 
-        if not doc_alvo and documentos:
-            doc_alvo = documentos[0]
+        if not candidatos and documentos:
+            candidatos = [documentos[0]]
 
-        if not doc_alvo:
+        if not candidatos:
             raise FileNotFoundError(f"Nenhum documento anexado localizado para o processo {id_procedimento}.")
 
-        id_doc = doc_alvo["id_documento_sei"]
-        pdf_bytes = self.baixar_documento(id_doc)
-        return id_doc, pdf_bytes
+        if len(candidatos) == 1:
+            id_doc = str(candidatos[0]["id_documento_sei"])
+            pdf_bytes = self.baixar_documento(id_doc)
+            return id_doc, pdf_bytes
+
+        # Múltiplos anexos: baixa em streaming na RAM e une via PyMuPDF
+        import fitz
+
+        logger.info(
+            "Processo %s possui %d anexos. Consolidando em fluxo único em RAM...",
+            id_procedimento,
+            len(candidatos),
+        )
+        doc_consolidado = fitz.open()
+        ids_docs_baixados: list[str] = []
+
+        for d in candidatos:
+            id_d = str(d["id_documento_sei"])
+            try:
+                b = self.baixar_documento(id_d)
+                doc_parte = fitz.open(stream=b, filetype="pdf")
+                doc_consolidado.insert_pdf(doc_parte)
+                doc_parte.close()
+                ids_docs_baixados.append(id_d)
+            except Exception as exc:
+                logger.warning(
+                    "Falha ao unir anexo %s do processo %s: %s",
+                    id_d,
+                    id_procedimento,
+                    exc,
+                )
+
+        if len(doc_consolidado) == 0:
+            doc_consolidado.close()
+            raise RuntimeError(f"Nenhum PDF válido pôde ser baixado para o processo {id_procedimento}.")
+
+        pdf_bytes = doc_consolidado.tobytes(garbage=4, deflate=True)
+        doc_consolidado.close()
+        return ",".join(ids_docs_baixados), pdf_bytes

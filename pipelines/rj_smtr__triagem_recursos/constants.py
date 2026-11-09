@@ -37,6 +37,7 @@ TABELA_PREDICOES = "predicoes_pipeline"
 TABELA_FILA = "fila_trabalho"
 TABELA_AUDITORIA = "trilha_auditoria_juridica"
 TABELA_CALIBRACAO = "configuracoes_calibracao"
+TABELA_EVENTOS = "eventos"
 
 # ==============================================================================
 # STORAGE E CAMINHOS

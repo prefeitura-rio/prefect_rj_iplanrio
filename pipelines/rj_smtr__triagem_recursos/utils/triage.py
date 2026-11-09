@@ -41,7 +41,13 @@ from typing import Any
 
 import pandas as pd
 
-from prefect_rj_iplanrio.logging import get_logger
+import logging
+
+try:
+    from prefect_rj_iplanrio.logging import get_logger
+    logger = get_logger(__name__)
+except ImportError:
+    logger = logging.getLogger(__name__)
 
 from ..constants import (
     BETA_CONSENSO,
@@ -69,7 +75,6 @@ from .router import (
 from .storage import carregar_bytes_pdf
 from .windowing import extrair_smart_window_pdf
 
-logger = get_logger(__name__)
 
 
 def triar_processo(
@@ -125,24 +130,74 @@ def triar_processo(
 
     cliente_llm = OpenAILLMClient(default_model=modelo_llm)
 
-    # 1. Download em memória RAM (sem salvar em disco ou GCS)
-    if fonte_pdf == "sei" and cliente_sei is not None:
-        if hasattr(cliente_sei, "obter_pdf_recurso_processo") and id_procedimento_sei and not id_doc_sei:
-            id_doc_sei, pdf_bytes = cliente_sei.obter_pdf_recurso_processo(id_procedimento_sei)
-            processo["id_documento_sei"] = id_doc_sei
+    # 1. Download em memória RAM (sem salvar em disco ou GCS) e Smart Windowing
+    try:
+        if fonte_pdf == "sei" and cliente_sei is not None:
+            if hasattr(cliente_sei, "obter_pdf_recurso_processo") and id_procedimento_sei and not id_doc_sei:
+                id_doc_sei, pdf_bytes = cliente_sei.obter_pdf_recurso_processo(id_procedimento_sei)
+                processo["id_documento_sei"] = id_doc_sei
+            else:
+                pdf_bytes = carregar_bytes_pdf(
+                    identificador=id_doc_sei or processo.get("nome_arquivo_origem", ""),
+                    fonte_pdf=fonte_pdf,
+                    cliente_sei=cliente_sei,
+                )
         else:
             pdf_bytes = carregar_bytes_pdf(
-                identificador=id_doc_sei or processo.get("nome_arquivo_origem", ""),
+                identificador=processo["nome_arquivo_origem"],
                 fonte_pdf=fonte_pdf,
                 cliente_sei=cliente_sei,
             )
-    else:
-        pdf_bytes = carregar_bytes_pdf(
-            identificador=processo["nome_arquivo_origem"],
-            fonte_pdf=fonte_pdf,
-            cliente_sei=cliente_sei,
+
+        if not pdf_bytes:
+            raise ValueError(f"Arquivo de recurso vazio ou nulo para o processo {numero_sei}.")
+
+        pdf_window_bytes = extrair_smart_window_pdf(pdf_bytes, max_paginas=max_paginas)
+    except Exception as exc:
+        logger.error(
+            "Falha na obtenção/validação do PDF para o processo %s: %s",
+            numero_sei,
+            exc,
         )
-    pdf_window_bytes = extrair_smart_window_pdf(pdf_bytes, max_paginas=max_paginas)
+        return {
+            "processo_id": processo_id,
+            "id_documento_sei": id_doc_sei,
+            "numero_processo_sei": numero_sei,
+            "calibracao_id": calibracao_id,
+            "modelo_llm": modelo_llm,
+            "versao_prompt": versao_prompt,
+            "n1_classe_predita": "OUTROS",
+            "n1_encaminhamento": "REVISAO_HUMANA",
+            "n1_cot_justificativa": f"Falha de integridade do documento ou download no SEI: {exc}",
+            "n1_lauda_evidencia": 1,
+            "n1_frase_citada": "",
+            "n1_tipo_citacao": "DOCUMENTO_ILEGIVEL",
+            "sinais_epistemicos": {},
+            "probabilidade_calibrada": 0.0,
+            "probabilidade_final": 0.0,
+            "conjunto_conformal": ["OUTROS"],
+            "tamanho_conjunto_conformal": 1,
+            "rota_execucao": "HITL_ERRO_ARQUIVO",
+            "faixa_operacional": "VERMELHA",
+            "estagio2_executado": False,
+            "n2_classe_predita": None,
+            "n2_cot_justificativa": None,
+            "n2_delta_cot_dispersao": None,
+            "n2_log_odds_atualizado": None,
+            "status_fila": StatusProcessamento.ERRO_PROCESSAMENTO.value,
+            "status_triagem": "ERRO_PDF_CORROMPIDO",
+            "tokens_prompt_total": 0,
+            "tokens_completion": 0,
+            "tokens_cached": 0,
+            "custo_real_usd": 0.0,
+            "custo_sem_cache_usd": 0.0,
+            "economia_cache_usd": 0.0,
+            "tempo_execucao_s": round(time.time() - t_inicio, 3),
+            "auditoria_sistema": {
+                "erro_detalhado": str(exc),
+                "status": "ERRO_PDF_CORROMPIDO",
+            },
+        }
 
     # 2. Inferência Primária N=1 (T=0.0)
     decisao_1, usage_1 = cliente_llm.classificar(

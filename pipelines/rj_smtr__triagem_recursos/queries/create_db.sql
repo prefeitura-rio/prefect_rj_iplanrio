@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS papeis (
     email                  VARCHAR(128) NOT NULL UNIQUE, -- E-mail corporativo (Claude Enterprise SSO)
     nome                   VARCHAR(128) NOT NULL,
     papel                  VARCHAR(20) NOT NULL CHECK (papel IN ('JARISTA', 'GESTOR', 'ADMIN')),
-    codigo_jari            VARCHAR(20) NOT NULL,         -- Unidade JARI (ex.: '1_JARI')
+    codigo_jari            VARCHAR(64) NOT NULL,         -- Unidade JARI (ex.: '1_JARI')
     unidade_sei_id         VARCHAR(32),                  -- ID numérico da unidade no SEI (ex.: '110000001')
     ativo                  BOOLEAN DEFAULT TRUE NOT NULL,
     criado_em              TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS processos_administrativos (
     hash_sha256_documento   CHAR(64),
     
     -- Metadados de Unidade JARI e Atribuição Nominal
-    codigo_jari             VARCHAR(20) DEFAULT '1_JARI' NOT NULL,
+    codigo_jari             VARCHAR(64) DEFAULT '1_JARI' NOT NULL,
     unidade_sei_id          VARCHAR(32),
     atribuido_a_login_sei   VARCHAR(64),                 -- Login/Matrícula do Jarista relator responsável
     status_distribuicao     VARCHAR(20) DEFAULT 'PENDENTE' NOT NULL 

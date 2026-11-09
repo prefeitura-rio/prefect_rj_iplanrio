@@ -27,7 +27,13 @@ import sys
 import types
 from typing import Any
 import joblib
-from prefect_rj_iplanrio.logging import get_logger
+import logging
+
+try:
+    from prefect_rj_iplanrio.logging import get_logger
+    logger = get_logger(__name__)
+except ImportError:
+    logger = logging.getLogger(__name__)
 
 from ..constants import (
     LOCAL_ARTIFACTS_DIR,
@@ -40,8 +46,6 @@ from .meta_calibrator import (
     ModeloCalibrador,
     criar_calibrador_dos_parametros_banco,
 )
-
-logger = get_logger(__name__)
 
 
 def registrar_aliases_legados() -> None:
