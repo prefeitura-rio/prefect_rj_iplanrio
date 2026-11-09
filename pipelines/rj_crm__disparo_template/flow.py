@@ -342,10 +342,21 @@ def rj_crm__disparo_template_sf(
                 print("✅ No destinations available for dispatch attempt 0. Ending.")
                 break
         else:
-            if "others" in base_df.columns and not base_df["others"].apply(
-                lambda x: hasattr(x, "__len__") and len(x) >= i
-            ).any():
-                print(f"✅ No others available for retry attempt {i}. Ending retry loop.")
+            if "others" in base_df.columns:
+                sample = base_df["others"].iloc[0] if not base_df.empty else None
+                print(f"[DEBUG retry {i}] others sample value: {repr(sample)}")
+                print(f"[DEBUG retry {i}] others sample type: {type(sample)}")
+                print(f"[DEBUG retry {i}] hasattr __len__: {hasattr(sample, '__len__')}")
+                print(f"[DEBUG retry {i}] len(sample): {len(sample) if hasattr(sample, '__len__') else 'N/A'}")
+                print(f"[DEBUG retry {i}] len >= i ({i}): {len(sample) >= i if hasattr(sample, '__len__') else 'N/A'}")
+                evals = base_df["others"].apply(lambda x: hasattr(x, "__len__") and len(x) >= i)
+                print(f"[DEBUG retry {i}] evals por linha: {evals.tolist()}")
+                print(f"[DEBUG retry {i}] .any(): {evals.any()}")
+                if not evals.any():
+                    print(f"✅ No others available for retry attempt {i}. Ending retry loop.")
+                    break
+            else:
+                print(f"[DEBUG retry {i}] coluna 'others' não existe em base_df. Encerrando.")
                 break
 
             print(f"⚠️  Sleep 30 minutes before retry dispatch.")
