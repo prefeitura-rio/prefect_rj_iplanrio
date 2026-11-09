@@ -1054,6 +1054,26 @@ def get_pares_cpf_telefone_processados(billing_project_id: str, campaign_name: s
         return set()
 
 
+def get_telefone_attempt_anterior(row: pd.Series, attempt_i: int) -> Optional[str]:
+    """
+    Retorna o telefone que foi disparado no attempt anterior a `attempt_i`.
+
+    - attempt_i == 1: o attempt 0 disparou a coluna "telefone" original da query.
+    - attempt_i >= 2: o attempt (i-1) disparou others[i-2].
+
+    Retorna None se o valor estiver ausente ou a lista others for curta demais.
+    Usado para montar pares (cpf, telefone) a comparar contra status_disparo.
+    """
+    if attempt_i == 1:
+        tel = row.get("telefone")
+        return str(tel) if pd.notna(tel) else None
+    # attempt_i >= 2: others[attempt_i - 2]
+    others = row.get("others")
+    if hasattr(others, "__len__") and len(others) >= attempt_i - 1:
+        return str(others[attempt_i - 2])
+    return None
+
+
 def check_campaign_success(
     billing_project_id: str,
     campaign_name: str,
