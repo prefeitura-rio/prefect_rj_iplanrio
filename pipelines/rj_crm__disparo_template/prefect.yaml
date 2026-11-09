@@ -44,7 +44,7 @@ deployments:
 
       - cron: "0 15 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: oneshot-smtr-enem-sem-cadastro
         flow_run_name: smtr-enem-sem-cadastro
         parameters:
@@ -63,7 +63,7 @@ deployments:
 
       - cron: "0 16 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: oneshot-smtr-enem-com-cadastro-sem-gratuidade
         flow_run_name: smtr-enem-com-cadastro-sem-gratuidade
         parameters:
@@ -82,7 +82,7 @@ deployments:
 
       - cron: "0 17 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: oneshot-smtr-enem-com-cadastro-com-gratuidade
         flow_run_name: smtr-enem-com-cadastro-com-gratuidade
         parameters:
