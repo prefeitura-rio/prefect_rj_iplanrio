@@ -993,10 +993,17 @@ def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
     """
     campaign_filter = f"AND LOWER(nome_hsm) = LOWER('{campaign_name}')" if campaign_name else ""
     query = f"""
-        -- Agora só teremos Salesforce como fonte
+        -- indicador_quarentena deveria cobrir isso, mas falha_meta_descricao na tabela
+        -- status_disparo recebe not_sent_reason ("Message Undeliverable.") em vez de
+        -- error_code ("WA-131026"), então o like '%131026%' nunca bate.
+        -- Checamos as duas formas enquanto o modelo dbt não é corrigido.
         SELECT DISTINCT cpf
         FROM `rj-crm-registry.brutos_salesforce.status_disparo`
-        WHERE indicador_quarentena = TRUE
+        WHERE (
+            indicador_quarentena = TRUE
+            OR descricao_falha LIKE '%131026%'
+            OR descricao_falha LIKE '%Undeliverable%'
+        )
         AND processado_datahora >= datetime_sub(current_datetime("America/Sao_Paulo"), INTERVAL 4 hour)
         AND data_particao >= date_sub(current_date("America/Sao_Paulo"), INTERVAL 1 day)
         {campaign_filter}
