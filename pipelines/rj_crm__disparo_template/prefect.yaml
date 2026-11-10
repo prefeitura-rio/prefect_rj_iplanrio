@@ -169,7 +169,7 @@ deployments:
           filter_duplicated_phones: false
           filter_duplicated_cpfs: true
           filter_failed_phones: true
-          query_file: queries/sme/sme_alfabetizacao_incentivo_leitura.sql
+          query_file: queries/sme/sme_alfabeticazao_incentivo_leitura.sql
 
       - cron: "0 15 * * *"
         timezone: America/Sao_Paulo
@@ -202,7 +202,7 @@ deployments:
           table_id: disparos_efetuados
           filter_duplicated_phones: true
           filter_duplicated_cpfs: true
-          query_file: queries/cvl_disparo_em_massa.sql
+          query_file: queries/cvl/cvl_disparo_em_massa.sql
           batch_size: 10000
           batch_sleep_minutes: 5
 
@@ -219,7 +219,7 @@ deployments:
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           filter_duplicated_cpfs: false
-          query_file: queries/smas_cadunico_desatualizado_pic.sql
+          query_file: queries/smas/smas_cadunico_desatualizado_pic.sql
           batch_size: 10000
           batch_sleep_minutes: 5
 
@@ -237,7 +237,7 @@ deployments:
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           filter_duplicated_cpfs: true
-          query_file: queries/smtr_multa_pf.sql
+          query_file: queries/smtr/smtr_multa_pf.sql
 
       - cron: "0 11 * * *"
         timezone: America/Sao_Paulo
@@ -258,7 +258,7 @@ deployments:
           table_id: disparos_efetuados
           filter_duplicated_phones: true
           filter_duplicated_cpfs: true
-          query_file: queries/cvl_pesquisa_1746.sql
+          query_file: queries/cvl/cvl_pesquisa_1746.sql
 
       - cron: "00 13 * * *"
         timezone: America/Sao_Paulo
@@ -283,7 +283,7 @@ deployments:
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_cpfs: true
-          query_file: queries/pgm_divida_ativa_cobranca.sql
+          query_file: queries/pgm/pgm_divida_ativa_cobranca.sql
 
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
@@ -303,7 +303,7 @@ deployments:
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_cpfs: false
-          query_file: queries/pgm_divida_ativa_lembrete.sql
+          query_file: queries/pgm/pgm_divida_ativa_lembrete.sql
 
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
@@ -324,7 +324,7 @@ deployments:
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_phones: true
           filter_duplicated_cpfs: true
-          query_file: queries/pgm_divida_ativa_agradecimento.sql
+          query_file: queries/pgm/pgm_divida_ativa_agradecimento.sql
 
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
@@ -350,7 +350,7 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerpera_confirma_agendamento.sql
+          query_file: queries/sms/sms_puerpera_confirma_agendamento.sql
 
       - cron: "0 14 * * *"
         timezone: America/Sao_Paulo
@@ -376,7 +376,7 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_d0_explica_pesquisa.sql
+          query_file: queries/sms/sms_puerperas_d0_explica_pesquisa.sql
 
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
@@ -413,7 +413,7 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_pesquisa_template.sql
+          query_file: queries/sms/sms_puerperas_pesquisa_template.sql
 
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
@@ -445,7 +445,7 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_pesquisa_template.sql
+          query_file: queries/sms/sms_puerperas_pesquisa_template.sql
 
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
@@ -478,7 +478,7 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_pesquisa_template.sql
+          query_file: queries/sms/sms_puerperas_pesquisa_template.sql
 
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
@@ -508,7 +508,7 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_pesquisa_template.sql
+          query_file: queries/sms/sms_puerperas_pesquisa_template.sql
 
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
@@ -526,7 +526,7 @@ deployments:
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_cpfs: true
-          query_file: queries/smas_cadunico_confirma_agendamento.sql
+          query_file: queries/smas/smas_cadunico_confirma_agendamento.sql
 
       - cron: "30 17 * * *"
         timezone: America/Sao_Paulo
@@ -545,7 +545,7 @@ deployments:
           filter_dispatched_phones_or_cpfs: false
           filter_duplicated_cpfs: true
           filter_failed_phones: false
-          query_file: queries/smas_cartaopic_evento.sql
+          query_file: queries/smas/smas_cartaopic_evento.sql
 
       - cron: "20 12 * * *"
         timezone: America/Sao_Paulo
@@ -562,7 +562,7 @@ deployments:
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           filter_duplicated_cpfs: true
-          query_file: queries/smas_cartaopic_lembrete.sql
+          query_file: queries/smas/smas_cartaopic_lembrete.sql
 
   - name: rj-crm--disparo-template-sf--prod
     version: '{{ get-commit-hash.stdout }}'
@@ -598,7 +598,7 @@ deployments:
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           filter_duplicated_cpfs: true
-          query_file: queries/smtr_multa_pf.sql
+          query_file: queries/smtr/smtr_multa_pf.sql
 
       - cron: "0 11 * * *"
         timezone: America/Sao_Paulo
@@ -619,7 +619,7 @@ deployments:
           table_id: disparos_efetuados
           filter_duplicated_phones: true
           filter_duplicated_cpfs: true
-          query_file: queries/cvl_pesquisa_1746.sql
+          query_file: queries/cvl/cvl_pesquisa_1746.sql
 
       - cron: "30 9 * * 1-5"
         timezone: America/Sao_Paulo
@@ -644,7 +644,7 @@ deployments:
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_cpfs: true
-          query_file: queries/pgm_divida_ativa_cobranca.sql
+          query_file: queries/pgm/pgm_divida_ativa_cobranca.sql
 
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
@@ -664,7 +664,7 @@ deployments:
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_cpfs: false
-          query_file: queries/pgm_divida_ativa_lembrete.sql
+          query_file: queries/pgm/pgm_divida_ativa_lembrete.sql
 
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
@@ -685,7 +685,7 @@ deployments:
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_phones: true
           filter_duplicated_cpfs: true
-          query_file: queries/pgm_divida_ativa_agradecimento.sql
+          query_file: queries/pgm/pgm_divida_ativa_agradecimento.sql
 
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
@@ -711,7 +711,7 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerpera_confirma_agendamento.sql
+          query_file: queries/sms/sms_puerpera_confirma_agendamento.sql
 
       - cron: "0 14 * * *"
         timezone: America/Sao_Paulo
@@ -737,7 +737,7 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_d0_explica_pesquisa.sql
+          query_file: queries/sms/sms_puerperas_d0_explica_pesquisa.sql
 
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
@@ -774,7 +774,7 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_pesquisa_template.sql
+          query_file: queries/sms/sms_puerperas_pesquisa_template.sql
 
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
@@ -806,7 +806,7 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_pesquisa_template.sql
+          query_file: queries/sms/sms_puerperas_pesquisa_template.sql
 
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
@@ -839,7 +839,7 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_pesquisa_template.sql
+          query_file: queries/sms/sms_puerperas_pesquisa_template.sql
 
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
@@ -869,7 +869,7 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_pesquisa_template.sql
+          query_file: queries/sms/sms_puerperas_pesquisa_template.sql
 
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
@@ -887,7 +887,7 @@ deployments:
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_cpfs: true
-          query_file: queries/cadunico_confirma_agendamento.sql
+          query_file: queries/smas/smas_cadunico_confirma_agendamento.sql
 
       - cron: "10 09 * * *"
         timezone: America/Sao_Paulo
@@ -906,7 +906,7 @@ deployments:
           filter_dispatched_phones_or_cpfs: false
           filter_duplicated_cpfs: true
           filter_failed_phones: false
-          query_file: queries/smas_cartaopic_evento.sql
+          query_file: queries/smas/smas_cartaopic_evento.sql
 
       - cron: "0 12 * * *"
         timezone: America/Sao_Paulo
@@ -923,7 +923,7 @@ deployments:
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           filter_duplicated_cpfs: true
-          query_file: queries/smas_cartaopic_lembrete.sql
+          query_file: queries/smas/smas_cartaopic_lembrete.sql
 
       # Multas de transito (SMTR): holdout diario com cota em rampa
       - cron: "0 11 * * 1-5"
@@ -940,7 +940,7 @@ deployments:
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           filter_duplicated_cpfs: true
-          query_file: queries/smtr_multa_holdout.sql
+          query_file: queries/smtr/smtr_multa_holdout.sql
           query_replacements: {"cota_inicial_placeholder": 500, "incremento_cota_placeholder": 50,
             "cota_maxima_placeholder": 5000, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5,
             "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}
