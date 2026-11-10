@@ -538,7 +538,7 @@ def rj_crm__run_dbt(
     bigquery_project: str = "rj-crm",
     target: str = "dev",
     # GCP parameters
-    gcs_buckets: GcsBucket = None,
+    gcs_buckets: Optional[GcsBucket] = None,
 ) -> None:
     """
     Main DBT Transform Flow migrated from Prefect 1.4 to 3.0
