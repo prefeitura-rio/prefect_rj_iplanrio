@@ -419,7 +419,22 @@ def rj_crm__disparo_template_sf(
                     )
 
             if not pares_encontrados:
-                print(f"✅ Nenhum par (cpf, telefone) do attempt {i-1} apareceu na status_disparo após {max_sf_wait_attempts} tentativas. Encerrando retentativas.")
+                msg = (
+                    f"✅ Nenhum par (cpf, telefone) do attempt {i-1} apareceu na status_disparo "
+                    f"após {max_sf_wait_attempts} tentativas. Encerrando retentativas."
+                )
+                print(msg)
+                webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+                if webhook_url:
+                    from prefect.runtime import flow_run as prefect_flow_run  # já importado no topo, mas garantindo escopo
+                    discord_msg = f"""
+<@821121576455634955> <@1458456241683824744> <@302518123066556426>
+⚠️ **Retentativa {i} não realizada — disparo do attempt {i-1} não apareceu na status_disparo**
+📋 **Campanha:** {campaign_name}
+🔍 **Motivo:** Nenhum par (cpf, telefone) do attempt {i-1} foi encontrado na tabela após {max_sf_wait_attempts} checagens de 20 minutos.
+🔗 **Link:** {prefect_flow_run.ui_url or "URL indisponível"}
+"""
+                    send_discord_notification(webhook_url, discord_msg)
                 break
 
             failed_cpfs = get_failed_cpfs(billing_project_id=billing_project_id, campaign_name=campaign_name)
