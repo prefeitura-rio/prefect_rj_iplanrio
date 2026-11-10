@@ -393,14 +393,33 @@ def rj_crm__disparo_template_sf(
             pares_attempt_anterior = {
                 (cpf, tel) for cpf, tel in pares_attempt_anterior if tel is not None
             }
-            pares_processados = get_pares_cpf_telefone_processados(
-                billing_project_id=billing_project_id,
-                campaign_name=campaign_name,
-            )
-            pares_encontrados = pares_attempt_anterior.intersection(pares_processados)
-            print(f"🔍 Pares (cpf, telefone) do attempt {i-1} encontrados na status_disparo: {len(pares_encontrados)}/{len(pares_attempt_anterior)}")
+            # Aguarda o Salesforce processar o attempt anterior antes de prosseguir.
+            # Se nenhum par (cpf, telefone) aparecer na status_disparo, espera 20 minutos,
+            # rematerializa e tenta novamente — até 3 vezes antes de desistir.
+            max_sf_wait_attempts = 3
+            pares_encontrados = set()
+            for sf_wait in range(max_sf_wait_attempts):
+                pares_processados = get_pares_cpf_telefone_processados(
+                    billing_project_id=billing_project_id,
+                    campaign_name=campaign_name,
+                )
+                pares_encontrados = pares_attempt_anterior.intersection(pares_processados)
+                print(f"🔍 Pares (cpf, telefone) do attempt {i-1} encontrados na status_disparo: {len(pares_encontrados)}/{len(pares_attempt_anterior)} (checagem {sf_wait + 1}/{max_sf_wait_attempts})")
+                if pares_encontrados:
+                    break
+                if sf_wait < max_sf_wait_attempts - 1:
+                    print(f"⏳ Nenhum par encontrado ainda. Aguardando 20 minutos antes de rematerializar e tentar novamente...")
+                    time.sleep(20 * 60)
+                    github_token = getenv_or_action("GITHUB_TOKEN")
+                    git_repository_path = f"https://{github_token}@github.com/prefeitura-rio/queries-rj-crm-registry.git"
+                    execute_dbt_task(
+                        select="+int_crm_status_disparo",
+                        target="prod",
+                        git_repository_path=git_repository_path,
+                    )
+
             if not pares_encontrados:
-                print(f"✅ Nenhum par (cpf, telefone) do attempt {i-1} apareceu na status_disparo ainda. Encerrando retentativas.")
+                print(f"✅ Nenhum par (cpf, telefone) do attempt {i-1} apareceu na status_disparo após {max_sf_wait_attempts} tentativas. Encerrando retentativas.")
                 break
 
             failed_cpfs = get_failed_cpfs(billing_project_id=billing_project_id, campaign_name=campaign_name)
