@@ -21,7 +21,7 @@ Fluxo de Dependências:
 from dataclasses import dataclass
 import os
 from pathlib import Path
-import pandas as pd
+import polars as pl
 
 
 @dataclass
@@ -103,12 +103,12 @@ def calcular_custo_chamada(
 def gerar_relatorio_comparativo_modelos(
     caminhos_resultados: list[Path],
     taxa_cambio_brl: float = 5.80,
-) -> pd.DataFrame:
-    """Consolida múltiplos DataFrames de execução e gera matriz de custo-benefício.
+) -> pl.DataFrame:
+    """Consolida múltiplos resultados de execução e gera matriz de custo-benefício.
 
     :param caminhos_resultados: Lista de caminhos para arquivos CSV de execução.
     :param taxa_cambio_brl: Cotação de conversão cambial USD/BRL.
-    :returns: DataFrame com resumo comparativo consolidado.
+    :returns: DataFrame Polars com resumo comparativo consolidado.
     """
     linhas_resumo = []
 
@@ -116,17 +116,17 @@ def gerar_relatorio_comparativo_modelos(
         if not caminho.exists():
             continue
 
-        df = pd.read_csv(caminho)
-        if df.empty:
+        df = pl.read_csv(caminho)
+        if df.is_empty():
             continue
 
-        modelo = str(df["modelo"].iloc[0])
-        total_casos = len(df)
-        acuracia = float(df["acertou_hipotese"].mean() * 100) if "acertou_hipotese" in df else 0.0
+        colunas = set(df.columns)
+        modelo = str(df["modelo"][0]) if "modelo" in colunas else "desconhecido"
+        acuracia = float(df["acertou_hipotese"].mean() * 100) if "acertou_hipotese" in colunas and df["acertou_hipotese"].mean() is not None else 0.0
 
-        media_tokens_in = float(df["tokens_input"].mean()) if "tokens_input" in df else 3500.0
-        media_tokens_out = float(df["tokens_output"].mean()) if "tokens_output" in df else 150.0
-        media_tokens_cache = float(df["tokens_cached"].mean()) if "tokens_cached" in df else 0.0
+        media_tokens_in = float(df["tokens_input"].mean()) if "tokens_input" in colunas and df["tokens_input"].mean() is not None else 3500.0
+        media_tokens_out = float(df["tokens_output"].mean()) if "tokens_output" in colunas and df["tokens_output"].mean() is not None else 150.0
+        media_tokens_cache = float(df["tokens_cached"].mean()) if "tokens_cached" in colunas and df["tokens_cached"].mean() is not None else 0.0
 
         info_custo = calcular_custo_chamada(
             modelo=modelo,
@@ -156,4 +156,4 @@ def gerar_relatorio_comparativo_modelos(
             }
         )
 
-    return pd.DataFrame(linhas_resumo)
+    return pl.DataFrame(linhas_resumo)

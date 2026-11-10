@@ -21,7 +21,7 @@ Fluxo de Dependências:
 
 from typing import Any
 import numpy as np
-import pandas as pd
+import polars as pl
 
 
 def calcular_ece(
@@ -99,43 +99,57 @@ def calcular_brier_score(confiancas: np.ndarray, acertos: np.ndarray) -> float:
 
 
 def calcular_cece(
-    df: pd.DataFrame,
+    df: Any,
     col_classe: str = "ouro_hipotese",
     col_confianca: str = "pred_confianca",
     col_acerto: str = "acertou_hipotese",
     n_bins: int = 4,
 ) -> dict[str, Any]:
-    """Calcula o ECE condicional independente para cada classe de hipótese legal.
-
-    :param df: DataFrame contendo as predições e os acertos observados.
-    :param col_classe: Nome da coluna de classe real.
-    :param col_confianca: Nome da coluna com probabilidades calibradas.
-    :param col_acerto: Nome da coluna booleana de acerto.
-    :param n_bins: Quantidade de intervalos de probabilidade por classe.
-    :returns: Dicionário mapeando cada classe ao seu ECE, MCE e volume.
-    """
+    """Calcula o ECE condicional independente para cada classe de hipotese legal."""
     cece_por_classe: dict[str, Any] = {}
-    classes_unicas = df[col_classe].dropna().unique()
 
-    for cls in sorted(classes_unicas):
-        sub_df = df[df[col_classe] == cls]
-        if len(sub_df) == 0:
-            continue
+    if hasattr(df, "filter"):  # Polars
+        classes_unicas = [c for c in df[col_classe].drop_nulls().unique().to_list() if c is not None]
+        for cls in sorted(classes_unicas):
+            sub_df = df.filter(pl.col(col_classe) == cls)
+            if len(sub_df) == 0:
+                continue
+            conf_cls = sub_df[col_confianca].to_numpy()
+            acerto_cls = sub_df[col_acerto].cast(pl.Int32).to_numpy()
 
-        conf_cls = sub_df[col_confianca].to_numpy(dtype=float)
-        acerto_cls = sub_df[col_acerto].astype(int).to_numpy()
+            ece_c, mce_c, bins_c = calcular_ece(conf_cls, acerto_cls, n_bins=n_bins)
+            brier_c = calcular_brier_score(conf_cls, acerto_cls)
 
-        ece_c, mce_c, bins_c = calcular_ece(conf_cls, acerto_cls, n_bins=n_bins)
-        brier_c = calcular_brier_score(conf_cls, acerto_cls)
+            cece_por_classe[str(cls)] = {
+                "volume_amostral": len(sub_df),
+                "acuracia_empirica": round(float(sub_df[col_acerto].mean() or 0.0), 4),
+                "confianca_media": round(float(sub_df[col_confianca].mean() or 0.0), 4),
+                "ece": ece_c,
+                "mce": mce_c,
+                "brier_score": brier_c,
+                "bins": bins_c,
+            }
+    else:  # pandas
+        classes_unicas = df[col_classe].dropna().unique()
+        for cls in sorted(classes_unicas):
+            sub_df = df[df[col_classe] == cls]
+            if len(sub_df) == 0:
+                continue
 
-        cece_por_classe[str(cls)] = {
-            "volume_amostral": len(sub_df),
-            "acuracia_empirica": round(float(sub_df[col_acerto].mean()), 4),
-            "confianca_media": round(float(sub_df[col_confianca].mean()), 4),
-            "ece": ece_c,
-            "mce": mce_c,
-            "brier_score": brier_c,
-            "bins": bins_c,
-        }
+            conf_cls = sub_df[col_confianca].to_numpy(dtype=float)
+            acerto_cls = sub_df[col_acerto].astype(int).to_numpy()
+
+            ece_c, mce_c, bins_c = calcular_ece(conf_cls, acerto_cls, n_bins=n_bins)
+            brier_c = calcular_brier_score(conf_cls, acerto_cls)
+
+            cece_por_classe[str(cls)] = {
+                "volume_amostral": len(sub_df),
+                "acuracia_empirica": round(float(sub_df[col_acerto].mean()), 4),
+                "confianca_media": round(float(sub_df[col_confianca].mean()), 4),
+                "ece": ece_c,
+                "mce": mce_c,
+                "brier_score": brier_c,
+                "bins": bins_c,
+            }
 
     return cece_por_classe

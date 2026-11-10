@@ -30,9 +30,12 @@ from difflib import SequenceMatcher
 import re
 from typing import Any
 import numpy as np
+from prefect.logging import get_logger
 from scipy.spatial.distance import mahalanobis
 
 from ..utils.schemas import EsquemaDecisao
+
+logger = get_logger("toolkit")
 
 SENTENCE_MODEL: Any | None = None
 MODELO_EMBEDDING_NOME = "paraphrase-multilingual-MiniLM-L12-v2"
@@ -121,15 +124,25 @@ class VetorSinaisEpistemicos:
 
 
 def obter_modelo_embedding() -> Any:
-    """Carrega o modelo sentence-transformers em memória com padrão singleton."""
+    """Carrega o modelo sentence-transformers em memoria com padrao singleton.
+
+    Levanta RuntimeError explicito se o pacote ou modelo nao puder ser carregado.
+    """
     global SENTENCE_MODEL
     if SENTENCE_MODEL is None:
         try:
             from sentence_transformers import SentenceTransformer
 
             SENTENCE_MODEL = SentenceTransformer(MODELO_EMBEDDING_NOME)
-        except Exception:
-            SENTENCE_MODEL = False
+        except ImportError as exc:
+            raise RuntimeError(
+                "A biblioteca 'sentence-transformers' e obrigatoria para a extracao de sinais epistemicos, "
+                f"mas nao foi encontrada no ambiente ({exc}). Instale a dependencia no container."
+            ) from exc
+        except Exception as exc:
+            raise RuntimeError(
+                f"Falha ao carregar o modelo de embedding '{MODELO_EMBEDDING_NOME}': {exc}"
+            ) from exc
     return SENTENCE_MODEL
 
 
@@ -214,23 +227,13 @@ def calcular_densidade_adversativa(texto_cot: str) -> float:
 
 
 def gerar_embedding_texto(texto: str) -> np.ndarray:
-    """Gera o vetor normalizado de embedding local para o raciocínio explicativo.
-
-    :param texto: Texto de entrada para gerar representação densa.
-    :returns: Array NumPy 1D com 384 dimensões.
-    """
+    """Gera o vetor normalizado de embedding local para o raciocinio explicativo."""
     if not texto or not texto.strip():
         return np.zeros(384, dtype=np.float64)
 
     modelo = obter_modelo_embedding()
-    if modelo:
-        try:
-            emb = modelo.encode(texto, normalize_embeddings=True, show_progress_bar=False)
-            return np.asarray(emb, dtype=np.float64)
-        except Exception:
-            pass
-
-    return np.zeros(384, dtype=np.float64)
+    emb = modelo.encode(texto, normalize_embeddings=True, show_progress_bar=False)
+    return np.asarray(emb, dtype=np.float64)
 
 
 def calcular_similaridade_centroides(

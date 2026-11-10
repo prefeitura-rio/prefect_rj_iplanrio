@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 import lightgbm as lgb
 import numpy as np
-import pandas as pd
+import polars as pl
 
 from .feature_extractor import (
     EstatisticasSemanticasClasses,
@@ -160,8 +160,9 @@ def predizer_probabilidade_calibrada(
     prep = getattr(modelo, "preprocessor", None)
     if clf is not None and prep is not None:
         try:
-            df = pd.DataFrame([vetor], columns=feature_names)
-            x_trans = prep.transform(df)
+            df = pl.DataFrame([dict(zip(feature_names, vetor, strict=True))])
+            x_input = df.to_pandas() if hasattr(df, "to_pandas") else vetor.reshape(1, -1)
+            x_trans = prep.transform(x_input)
             prob_calibrada = float(clf.predict_proba(x_trans)[0][1])
             return round(float(np.clip(prob_calibrada, 0.0, 1.0)), 4)
         except Exception:

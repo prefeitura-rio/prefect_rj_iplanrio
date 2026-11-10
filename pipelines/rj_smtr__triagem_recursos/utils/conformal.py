@@ -26,7 +26,7 @@ import math
 from pathlib import Path
 from typing import Any
 import numpy as np
-import pandas as pd
+import polars as pl
 
 
 @dataclass
@@ -135,23 +135,21 @@ def carregar_artefatos_conforme(caminho_arquivo: Path) -> ArtefatosConforme:
 
 
 def aplicar_clustered_pooling(
-    df_scores: pd.DataFrame,
+    df_scores: Any,
     classes_raras: list[str],
     col_score: str = "score_nao_conformidade",
     col_classe: str = "classe_real",
     alpha: float = 0.05,
 ) -> float:
-    """Gera um quantil conservador único para classes raras via agregação em pool.
+    """Gera um quantil conservador unico para classes raras via agregacao em pool."""
+    classes_raras_norm = {normalizar_rotulo_str(c) for c in classes_raras}
+    if hasattr(df_scores, "filter"):
+        sub_df = df_scores.filter(
+            pl.col(col_classe).map_elements(normalizar_rotulo_str, return_dtype=pl.String).is_in(list(classes_raras_norm))
+        )
+        scores_pool = sub_df[col_score].to_numpy()
+    else:
+        sub_df = df_scores[df_scores[col_classe].apply(normalizar_rotulo_str).isin(classes_raras_norm)]
+        scores_pool = sub_df[col_score].to_numpy(dtype=float)
 
-    :param df_scores: DataFrame contendo as instâncias de calibração.
-    :param classes_raras: Lista de hipóteses com baixo volume amostral.
-    :param col_score: Nome da coluna contendo o score de não-conformidade.
-    :param col_classe: Nome da coluna com o rótulo de classe real.
-    :param alpha: Nível de significância estatística.
-    :returns: Quantil empírico agregado para o pool de classes raras.
-    """
-    classes_raras_norm = [normalizar_rotulo_str(c) for c in classes_raras]
-    sub_df = df_scores[df_scores[col_classe].apply(normalizar_rotulo_str).isin(classes_raras_norm)]
-
-    scores_pool = sub_df[col_score].to_numpy(dtype=float)
     return calcular_quantil_conforme_empirico(scores_pool, alpha=alpha)
