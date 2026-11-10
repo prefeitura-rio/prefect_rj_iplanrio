@@ -1061,6 +1061,28 @@ def get_pares_cpf_telefone_processados(billing_project_id: str, campaign_name: s
         return set()
 
 
+def pick_next_phone(others: list, start_idx: int, failed_phones: set) -> Optional[str]:
+    """
+    Percorre `others` a partir de `start_idx` e retorna o primeiro número
+    que não esteja em `failed_phones`. Retorna None se todos estiverem em
+    quarentena ou se a lista for curta demais.
+
+    Args:
+        others: Lista de telefones alternativos do destinatário.
+        start_idx: Índice inicial de busca (normalmente i-1 no loop de retry).
+        failed_phones: Conjunto de telefones em quarentena (get_failed_phones).
+
+    Returns:
+        Primeiro telefone disponível ou None.
+    """
+    if not isinstance(others, list):
+        return None
+    for phone in others[start_idx:]:
+        if str(phone) not in failed_phones:
+            return str(phone)
+    return None
+
+
 def get_telefone_attempt_anterior(row: pd.Series, attempt_i: int) -> Optional[str]:
     """
     Retorna o telefone que foi disparado no attempt anterior a `attempt_i`.

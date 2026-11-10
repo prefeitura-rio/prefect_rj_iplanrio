@@ -41,6 +41,7 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     get_retry_destinations,
     get_telefone_attempt_anterior,
     monitor_dispatch_status,
+    pick_next_phone,
     remove_contacts_from_whitelist,
     save_csv_for_sftp,
     send_to_sftp,
@@ -414,8 +415,11 @@ def rj_crm__disparo_template_sf(
                 print(f"No others column or no rows for retry attempt {i}.")
                 break
 
+            # Busca telefones em quarentena para pular números já inválidos em 'others'
+            failed_phones_set = get_failed_phones(billing_project_id=billing_project_id)
+
             retry_df["telefone"] = retry_df["others"].apply(
-                lambda x: x[i - 1] if isinstance(x, list) and len(x) >= i else None
+                lambda x: pick_next_phone(x, i - 1, failed_phones_set)
             )
             current_df = retry_df.dropna(subset=["telefone"])
 
