@@ -8,7 +8,14 @@ deployments:
       name: default-pool
       job_variables:
         secretName: prefect-jobs-secrets-staging
+    tags:
+      - environment:staging
+      - severity:high
+      - code_owner:unassigned
     parameters:
+      is_local: false
+      fonte_pdf: "sei"
+      executar_n2: true
       modo_execucao: "incremental"
       limite_lote: 50
       limiar_alta: 0.85
@@ -22,12 +29,29 @@ deployments:
       name: default-pool
       job_variables:
         secretName: prefect-jobs-secrets
+    tags:
+      - environment:prod
+      - severity:high
+      - code_owner:unassigned
+    parameters:
+      is_local: false
+      fonte_pdf: "sei"
+      executar_n2: true
+      modo_execucao: "incremental"
+      limite_lote: 300
+      limiar_alta: 0.85
+      limiar_baixa: 0.50
+      limiar_dispersao: 0.50
+      infisical_secret_path: "/smtr-triagem-ia"
     schedules:
       - interval: 86400
         anchor_date: "2026-01-01T03:00:00"
         timezone: America/Sao_Paulo
         slug: triagem_recursos_smtr_diario
         parameters:
+          is_local: false
+          fonte_pdf: "sei"
+          executar_n2: true
           modo_execucao: "incremental"
           limite_lote: 300
           limiar_alta: 0.85

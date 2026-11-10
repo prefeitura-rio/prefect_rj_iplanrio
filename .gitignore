@@ -27,6 +27,7 @@ __pypackages__/
 
 # Environments
 .env
+.env.local
 .venv
 env/
 venv/
@@ -50,6 +51,10 @@ pipelines/**/*.egg-info/
 # despite the blanket "**/**/test*" ignore rule at the top of this file.
 !pipelines/rj_iplanrio__nf_agent/tests/
 !pipelines/rj_iplanrio__nf_agent/tests/**
+
+# Allow SMTR triage pipeline tests
+!pipelines/rj_smtr__triagem_recursos/tests/
+!pipelines/rj_smtr__triagem_recursos/tests/**
 
 # scripts/run_local.py artifacts (local-only test runs, real fiscal PDFs +
 # their extracted/cached data — never meant to be committed):
