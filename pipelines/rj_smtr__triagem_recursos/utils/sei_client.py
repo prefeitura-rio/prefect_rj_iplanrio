@@ -1,48 +1,29 @@
-"""Cliente HTTP REST para integração com o SEI-Rio através do módulo mod-wssei.
+"""HTTP client for SEI-Rio integration via the mod-wssei REST API.
 
-Descrição Técnica & Arquitetura:
-Fornece a interface de comunicação de rede com o Sistema Eletrônico de Informações (SEI-Rio)
-via API REST exposta pelo módulo `mod-wssei`. Gerencia a autenticação com obtenção de token JWT,
-renovação automática de credenciais expiradas (HTTP 401/403), paginação de processos
-na caixa da JARI (com distinção entre visão de Gestor e visão de Jarista/relator), listagem
-de anexos processuais e download de petições recursais em streaming binário diretamente
-na memória RAM, garantindo que nenhum documento sensível seja persistido em disco (LGPD).
-
-Fluxo de Dependências:
-- Consumidores Diretos:
-  * `flow.py`: instancia `ModWsseiClient` automaticamente quando o parâmetro `fonte_pdf="sei"`.
-  * `utils/db_repository.py`: consome `listar_processos_caixa` para identificar recursos pendentes.
-  * `utils/storage.py` & `utils/triage.py`: invoca `obter_pdf_recurso_processo` e `baixar_documento`
-    para receber os bytes do PDF na memória RAM durante a análise.
-  * `scripts/mock_sei_server.py`: serve como contraparte de simulação dos mesmos contratos de endpoints.
-- Dependências Diretas:
-  * `prefect_rj_iplanrio.logging`: logger pré-configurado com integração OpenTelemetry.
-  * Módulo de rede HTTP (`requests`) com tratamento de exceções de conexão e timeouts.
+Provides streaming downloads with strict memory limits, token auto-renewal,
+retries with backoff on 502/503/504, and process listing for JARI triage.
 """
 
-import os
 from dataclasses import dataclass
 from http import HTTPStatus
+import os
+import time
 from typing import Any
 
-import requests
+import httpx
+from prefect.logging import get_logger
 
-try:
-    from prefect_rj_iplanrio.logging import get_logger
+logger = get_logger("toolkit")
 
-    logger = get_logger(__name__)
-except ImportError:
-    import logging
-
-    logger = logging.getLogger(__name__)
+MAX_DOCUMENT_BYTES = 30 * 1024 * 1024  # 30 MB teto de memoria por documento
+CHUNK_SIZE = 64 * 1024  # 64 KB por chunk de streaming
+STATUS_RETENTAVEIS = frozenset({HTTPStatus.BAD_GATEWAY, HTTPStatus.SERVICE_UNAVAILABLE, HTTPStatus.GATEWAY_TIMEOUT})
+ATRASOS_RETENTATIVA = (0.5, 1.0, 2.0)
 
 
 @dataclass(frozen=True)
 class SeiConfig:
-    """Configuração de conexão e autenticação para a API REST mod-wssei.
-
-    Agrupa parâmetros de conexão seguindo o guia de estilo do repositório.
-    """
+    """Connection and authentication configuration for mod-wssei REST API."""
 
     base_url: str = os.getenv("SEI_API_BASE_URL", "http://localhost:8000")
     usuario: str = os.getenv("SEI_SERVICE_USER", "usuario_servico")
@@ -53,18 +34,14 @@ class SeiConfig:
 
 
 class ModWsseiClient:
-    """Cliente HTTP para comunicação com a API REST do SEI-Rio (mod-wssei)."""
+    """HTTP client communicating with the SEI-Rio REST API (mod-wssei)."""
 
     def __init__(
         self,
         config: SeiConfig | None = None,
         base_url: str | None = None,
     ) -> None:
-        """Inicializa o cliente com os parâmetros de configuração.
-
-        :param config: Objeto SeiConfig com as credenciais e URLs.
-        :param base_url: URL base alternativa (se config não for fornecido).
-        """
+        """Initialize the SEI client with config or custom base URL."""
         if config is not None:
             self.config = config
         elif base_url is not None:
@@ -74,6 +51,8 @@ class ModWsseiClient:
 
         self.base_url = self.config.base_url.rstrip("/")
         self.token: str | None = None
+        self.sigla_usuario: str | None = None
+        self.nome_usuario: str | None = None
 
     def autenticar(
         self,
@@ -81,14 +60,7 @@ class ModWsseiClient:
         senha: str | None = None,
         orgao: int | None = None,
     ) -> str:
-        """Obtém o token JWT de autenticação através do endpoint POST /autenticar.
-
-        :param usuario: Nome de usuário opcional (se None, usa a config).
-        :param senha: Senha opcional (se None, usa a config).
-        :param orgao: ID do órgão opcional (se None, usa a config).
-        :returns: String do token JWT recebido do SEI.
-        :raises RuntimeError: Se a autenticação falhar ou a resposta indicar erro.
-        """
+        """Authenticate via POST /autenticar and store JWT token."""
         user = usuario or self.config.usuario
         pwd = senha or self.config.senha
         org = self.config.orgao if orgao is None else orgao
@@ -100,29 +72,32 @@ class ModWsseiClient:
             "orgao": org,
         }
 
-        logger.info("Autenticando no mod-wssei em: %s (usuário: %s)", url, user)
-        response = requests.post(url, data=payload, timeout=self.config.timeout)
+        logger.info("Autenticando no mod-wssei em: %s (usuario: %s)", url, user)
+        with httpx.Client(timeout=self.config.timeout) as client:
+            response = client.post(url, data=payload)
 
         if response.status_code != HTTPStatus.OK:
-            raise RuntimeError(f"Falha na autenticação do SEI ({response.status_code}): {response.text}")
+            raise RuntimeError(f"Falha na autenticacao do SEI ({response.status_code}): {response.text}")
 
         data = response.json()
         if not data.get("sucesso"):
-            raise RuntimeError(f"O SEI recusou a autenticação: {data.get('mensagem', data)}")
+            raise RuntimeError(f"O SEI recusou a autenticacao: {data.get('mensagem', data)}")
 
-        token = data.get("data", {}).get("token")
+        payload_data = data.get("data", {})
+        token = payload_data.get("token")
         if not token:
-            raise RuntimeError("Resposta do SEI não continha o campo 'token'.")
+            raise RuntimeError("Resposta do SEI nao continha o campo 'token'.")
+
+        login_data = payload_data.get("loginData") or {}
+        self.sigla_usuario = (login_data.get("sigla") or "").strip() or None
+        self.nome_usuario = (login_data.get("nome") or "").strip() or None
 
         self.token = token
-        logger.info("Autenticação no mod-wssei concluída com sucesso.")
+        logger.info("Autenticacao no mod-wssei concluida com sucesso (sigla: %s).", self.sigla_usuario)
         return token
 
     def obter_headers(self) -> dict[str, str]:
-        """Gera os headers HTTP padrões incluindo token e unidade de sessão.
-
-        :returns: Dicionário com cabeçalhos HTTP necessários.
-        """
+        """Return default headers with auth token and active JARI unit."""
         if not self.token:
             self.autenticar()
 
@@ -137,50 +112,55 @@ class ModWsseiClient:
         endpoint: str,
         params: dict[str, Any] | None = None,
         json_data: dict[str, Any] | None = None,
-        stream: bool = False,
-    ) -> requests.Response:
-        """Executa requisição com suporte a auto-renovação de token em caso de HTTP 401.
-
-        :param metodo: Método HTTP ('GET', 'POST', etc.).
-        :param endpoint: Rota da API (ex.: '/processo/listar').
-        :param params: Parâmetros de query string.
-        :param json_data: Payload JSON opcional.
-        :param stream: Se True, mantém o socket aberto para streaming binário.
-        :returns: Objeto Response da biblioteca requests.
-        :raises RuntimeError: Se a requisição falhar após tentativa de reconexão.
-        """
+        timeout: int | float | None = None,
+    ) -> httpx.Response:
+        """Execute HTTP request with retry on 502/503/504 and re-auth on 401/403."""
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
-        headers = self.obter_headers()
+        req_timeout = timeout or self.config.timeout
 
-        response = requests.request(
-            method=metodo,
-            url=url,
-            headers=headers,
-            params=params,
-            json=json_data,
-            stream=stream,
-            timeout=self.config.timeout,
-        )
-
-        # Se o token expirou (HTTP 401 ou 403), reautentica e tenta mais uma vez
-        if response.status_code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
-            logger.warning(
-                "Token expirado ou inválido (HTTP %d). Reautenticando...",
-                response.status_code,
-            )
-            self.autenticar()
+        for tentativa, atraso in enumerate((*ATRASOS_RETENTATIVA, None)):
             headers = self.obter_headers()
-            response = requests.request(
-                method=metodo,
-                url=url,
-                headers=headers,
-                params=params,
-                json=json_data,
-                stream=stream,
-                timeout=self.config.timeout,
-            )
+            try:
+                with httpx.Client(timeout=req_timeout) as client:
+                    response = client.request(
+                        method=metodo,
+                        url=url,
+                        headers=headers,
+                        params=params,
+                        json=json_data,
+                    )
 
-        return response
+                if response.status_code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
+                    logger.warning("Token expirado (HTTP %d). Reautenticando...", response.status_code)
+                    self.autenticar()
+                    headers = self.obter_headers()
+                    with httpx.Client(timeout=req_timeout) as client:
+                        response = client.request(
+                            method=metodo,
+                            url=url,
+                            headers=headers,
+                            params=params,
+                            json=json_data,
+                        )
+
+                if response.status_code not in STATUS_RETENTAVEIS or atraso is None:
+                    return response
+
+                logger.warning(
+                    "SEI respondeu HTTP %d; retentativa %d/%d em %.1fs",
+                    response.status_code,
+                    tentativa + 1,
+                    len(ATRASOS_RETENTATIVA),
+                    atraso,
+                )
+                time.sleep(atraso)
+            except httpx.TransportError as exc:
+                if atraso is None:
+                    raise RuntimeError(f"Erro de transporte HTTP no SEI apos retentativas: {exc}") from exc
+                logger.warning("Erro de conexao no SEI (%s); retentando em %.1fs", exc, atraso)
+                time.sleep(atraso)
+
+        raise RuntimeError("Inalcancavel")
 
     def listar_processos_caixa(
         self,
@@ -189,94 +169,83 @@ class ModWsseiClient:
         limit: int = 100,
         start: int = 0,
     ) -> list[dict[str, Any]]:
-        """Lista os processos presentes na caixa da JARI.
-
-        Na visão do Gestor (apenas_meus=False), lista todos os processos da unidade.
-        Na visão do Jarista (apenas_meus=True), filtra apenas os atribuídos a ele.
-
-        :param apenas_meus: Se True, envia apenasMeus='S' para filtrar pelo relator logado.
-        :param usuario_id: ID numérico opcional de usuário atribuído para filtro específico.
-        :param limit: Quantidade máxima de processos por página.
-        :param start: Offset para paginação.
-        :returns: Lista de dicionários representando cada processo retornado pelo SEI.
-        :raises RuntimeError: Se a chamada à API retornar erro.
-        """
+        """List processes currently present in the unit inbox with pagination."""
+        endpoint = "/processo/listar"
         params: dict[str, Any] = {
             "limit": limit,
             "start": start,
+            "apenasMeus": "S" if apenas_meus else "",
         }
-        if apenas_meus:
-            params["apenasMeus"] = "S"
         if usuario_id is not None:
-            params["usuario"] = usuario_id
-
-        response = self.executar_requisicao("GET", "/processo/listar", params=params)
-        if response.status_code != HTTPStatus.OK:
-            raise RuntimeError(f"Erro ao listar processos no mod-wssei ({response.status_code}): {response.text}")
-
-        payload = response.json()
-        if not payload.get("sucesso", True):
-            raise RuntimeError(f"O SEI retornou erro: {payload.get('mensagem')}")
-
-        processos_brutos = payload.get("data", [])
-        lista_formatada = []
-
-        for p in processos_brutos:
-            atributos = p.get("atributos", {})
-            usuario_atrib = atributos.get("usuarioAtribuido") or {}
-
-            lista_formatada.append(
-                {
-                    "id_procedimento_sei": str(atributos.get("idProcedimento") or p.get("id")),
-                    "numero_processo_sei": str(atributos.get("numero", "")),
-                    "tipo_processo": str(atributos.get("tipoProcesso", "")),
-                    "id_unidade": str(atributos.get("unidade", {}).get("idUnidade", self.config.id_unidade)),
-                    "sigla_unidade": str(atributos.get("unidade", {}).get("sigla", "")),
-                    "usuario_atribuido_id": str(usuario_atrib.get("idUsuario") or ""),
-                    "usuario_atribuido_sigla": str(usuario_atrib.get("sigla") or ""),
-                    "dados_brutos": p,
-                }
-            )
-
-        logger.info(
-            "mod-wssei: %d processo(s) recuperado(s) na caixa (apenas_meus=%s).",
-            len(lista_formatada),
-            apenas_meus,
-        )
-        return lista_formatada
-
-    def listar_documentos_processo(
-        self,
-        id_procedimento: int | str,
-        limit: int = 100,
-        start: int = 0,
-    ) -> list[dict[str, Any]]:
-        """Lista todos os documentos anexados a um processo no SEI.
-
-        :param id_procedimento: Identificador numérico interno do processo no SEI.
-        :param limit: Limite de registros por página.
-        :param start: Offset da paginação.
-        :returns: Lista de dicionários descrevendo cada documento do processo.
-        :raises RuntimeError: Se a consulta falhar.
-        """
-        endpoint = f"/documento/listar/{id_procedimento}"
-        params = {"limit": limit, "start": start}
+            params["idUsuarioAtribuido"] = str(usuario_id)
 
         response = self.executar_requisicao("GET", endpoint, params=params)
         if response.status_code != HTTPStatus.OK:
+            raise RuntimeError(f"Falha ao listar processos ({response.status_code}): {response.text}")
+
+        data = response.json()
+        if not data.get("sucesso"):
+            raise RuntimeError(f"Erro retornado pelo SEI ao listar processos: {data.get('mensagem')}")
+
+        processos_brutos = data.get("data", {}).get("processos", [])
+        lista_processos = []
+
+        for p in processos_brutos:
+            proc_formatado = {
+                "processo_id": p.get("idProcedimento"),
+                "id_procedimento_sei": str(p.get("idProcedimento", "")),
+                "numero_processo_sei": p.get("protocoloFormatado", ""),
+                "numero_processo": p.get("protocoloFormatado", ""),
+                "id_documento_sei": p.get("idDocumento"),
+                "id_documento": p.get("idDocumento"),
+                "sigla_unidade": p.get("siglaUnidade", "10_JARI"),
+                "usuario_atribuido_sigla": p.get("usuarioAtribuido", {}).get("sigla")
+                if isinstance(p.get("usuarioAtribuido"), dict)
+                else None,
+                "data_autuacao": p.get("dataGeracao"),
+                "dados_brutos": p,
+            }
+            lista_processos.append(proc_formatado)
+
+        return lista_processos
+
+    def consultar_processo_completo(self, protocolo_ou_id: str) -> dict[str, Any]:
+        """Query full process details and document tree from SEI."""
+        endpoint = f"/processo/consultar/{protocolo_ou_id.strip()}"
+        response = self.executar_requisicao("GET", endpoint)
+
+        if response.status_code != HTTPStatus.OK:
+            raise RuntimeError(f"Falha ao consultar processo {protocolo_ou_id} ({response.status_code}): {response.text}")
+
+        data = response.json()
+        if not data.get("sucesso"):
+            raise RuntimeError(f"Erro ao consultar processo {protocolo_ou_id}: {data.get('mensagem')}")
+
+        return data.get("data", {})
+
+    def listar_documentos_processo(self, id_procedimento: int | str) -> list[dict[str, Any]]:
+        """List all documents attached to a process."""
+        endpoint = f"/procedimento/{id_procedimento}/documentos/todos"
+        response = self.executar_requisicao("GET", endpoint)
+
+        if response.status_code != HTTPStatus.OK:
             raise RuntimeError(
-                f"Erro ao listar documentos do processo {id_procedimento} ({response.status_code}): {response.text}"
+                f"Falha ao listar documentos do processo {id_procedimento} ({response.status_code}): {response.text}"
             )
 
-        payload = response.json()
-        docs_brutos = payload.get("data", [])
+        data = response.json()
+        if not data.get("sucesso"):
+            raise RuntimeError(f"Erro ao listar documentos do processo {id_procedimento}: {data.get('mensagem')}")
+
+        documentos_brutos = data.get("data", {}).get("documentos", [])
         lista_docs = []
 
-        for d in docs_brutos:
+        for d in documentos_brutos:
             atributos = d.get("atributos", {})
             lista_docs.append(
                 {
-                    "id_documento_sei": str(atributos.get("idProtocolo") or d.get("id")),
+                    "id_documento_sei": str(d.get("idProtocolo", "")),
+                    "id_procedimento_sei": str(id_procedimento),
                     "protocolo_formatado": str(atributos.get("protocoloFormatado", "")),
                     "tipo_documento": str(atributos.get("tipoDocumento", "")),
                     "mime_type": str(atributos.get("mimeType", "")),
@@ -288,46 +257,91 @@ class ModWsseiClient:
 
         return lista_docs
 
-    def baixar_documento(self, id_documento: int | str) -> bytes:
-        """Realiza o download em streaming dos bytes de um documento em memória RAM.
+    def baixar_documento(
+        self,
+        id_documento: int | str,
+        max_bytes: int = MAX_DOCUMENT_BYTES,
+        timeout: int | float | None = None,
+    ) -> bytes:
+        """Download document bytes using chunked streaming with memory cap and validation.
 
-        Cumpre a regra estrita de não salvar o PDF em disco nem no banco de dados.
-
-        :param id_documento: Identificador do documento (idProtocolo no SEI).
-        :returns: Stream binário com os bytes puros do PDF.
-        :raises RuntimeError: Se o download falhar ou retornar status diferente de 200.
+        Enforces streaming chunk iteration, checks PDF magic bytes and bounds memory.
         """
         endpoint = f"/documento/baixar/anexo/{id_documento}"
-        logger.info("Baixando documento %s via mod-wssei em memória RAM...", id_documento)
+        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        req_timeout = timeout or self.config.timeout
+        logger.info("Baixando documento %s via mod-wssei em streaming chunked...", id_documento)
 
-        response = self.executar_requisicao("GET", endpoint, stream=True)
-        if response.status_code != HTTPStatus.OK:
-            raise RuntimeError(
-                f"Falha ao baixar anexo {id_documento} no mod-wssei ({response.status_code}): {response.text}"
+        headers = self.obter_headers()
+        chunks: list[bytes] = []
+        total_bytes = 0
+
+        try:
+            with httpx.Client(timeout=req_timeout) as client:
+                with client.stream("GET", url, headers=headers) as response:
+                    # Se expirado, tenta renovar token
+                    if response.status_code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
+                        logger.warning("Token expirado ao baixar anexo %s. Reautenticando...", id_documento)
+                        self.autenticar()
+                        headers = self.obter_headers()
+                        with client.stream("GET", url, headers=headers) as retry_response:
+                            if retry_response.status_code != HTTPStatus.OK:
+                                raise RuntimeError(
+                                    f"Falha ao baixar anexo {id_documento} apos reautenticacao ({retry_response.status_code})"
+                                )
+                            response = retry_response  # noqa: PLW2901
+
+                    if response.status_code != HTTPStatus.OK:
+                        raise RuntimeError(
+                            f"Falha ao baixar anexo {id_documento} no mod-wssei ({response.status_code})"
+                        )
+
+                    primeiro_chunk = True
+                    for chunk in response.iter_bytes(chunk_size=CHUNK_SIZE):
+                        if not chunk:
+                            continue
+
+                        if primeiro_chunk:
+                            primeiro_chunk = False
+                            # Valida se a resposta e um JSON de erro disfarcado
+                            if b'"sucesso":false' in chunk or (b"{" in chunk and b'"mensagem"' in chunk):
+                                response.close()
+                                raise RuntimeError(
+                                    f"O SEI retornou erro ao baixar anexo {id_documento}: {chunk.decode('utf-8', errors='ignore')}"
+                                )
+
+                        total_bytes += len(chunk)
+                        if total_bytes > max_bytes:
+                            response.close()
+                            raise ValueError(
+                                f"Documento {id_documento} excede o limite maximo permitido "
+                                f"({total_bytes} > {max_bytes} bytes / {max_bytes / (1024*1024):.1f} MB)."
+                            )
+                        chunks.append(chunk)
+
+            conteudo_bytes = b"".join(chunks)
+
+            # Valida cabecalho minimo do arquivo binario
+            if not conteudo_bytes.startswith(b"%PDF-"):
+                logger.warning(
+                    "Anexo %s baixado (%d bytes) nao inicia com magic bytes %%PDF-.",
+                    id_documento,
+                    len(conteudo_bytes),
+                )
+
+            logger.info(
+                "Documento %s baixado com sucesso: %d bytes (%.1f KB).",
+                id_documento,
+                len(conteudo_bytes),
+                len(conteudo_bytes) / 1024.0,
             )
-
-        conteudo_bytes = response.content
-        logger.info(
-            "Documento %s baixado com sucesso: %d bytes (%.1f KB).",
-            id_documento,
-            len(conteudo_bytes),
-            len(conteudo_bytes) / 1024.0,
-        )
-        return conteudo_bytes
+            return conteudo_bytes
+        except Exception as exc:
+            logger.error("Erro durante o download em streaming do anexo %s: %s", id_documento, exc)
+            raise
 
     def obter_pdf_recurso_processo(self, id_procedimento: int | str) -> tuple[str, bytes]:
-        """Localiza os documentos de recurso do cidadão e baixa seus bytes em RAM.
-
-        Identifica automaticamente anexos externos e petições recursais do processo.
-        Caso existam múltiplos arquivos em anexo (petição dividida ou documentos complementares),
-        realiza o download em memória RAM e consolida os fluxos em um único documento PDF
-        através do PyMuPDF, sem persistir em disco nem no banco de dados (LGPD).
-
-        :param id_procedimento: ID interno do processo no SEI.
-        :returns: Tupla contendo o(s) ID(s) do(s) documento(s) SEI e o fluxo consolidado em bytes.
-        :raises FileNotFoundError: Se nenhum documento de recurso for localizado.
-        :raises RuntimeError: Se o download falhar ou nenhum PDF válido for gerado.
-        """
+        """Locate citizen appeal documents and return consolidated binary PDF bytes in RAM."""
         documentos = self.listar_documentos_processo(id_procedimento)
 
         candidatos: list[dict[str, Any]] = []
@@ -358,11 +372,11 @@ class ModWsseiClient:
             pdf_bytes = self.baixar_documento(id_doc)
             return id_doc, pdf_bytes
 
-        # Múltiplos anexos: baixa em streaming na RAM e une via PyMuPDF
+        # Multiplos anexos: baixa em streaming na RAM e une via PyMuPDF
         import fitz
 
         logger.info(
-            "Processo %s possui %d anexos. Consolidando em fluxo único em RAM...",
+            "Processo %s possui %d anexos. Consolidando em fluxo unico em RAM...",
             id_procedimento,
             len(candidatos),
         )
@@ -387,7 +401,7 @@ class ModWsseiClient:
 
         if len(doc_consolidado) == 0:
             doc_consolidado.close()
-            raise RuntimeError(f"Nenhum PDF válido pôde ser baixado para o processo {id_procedimento}.")
+            raise RuntimeError(f"Nenhum PDF valido pode ser baixado para o processo {id_procedimento}.")
 
         pdf_bytes = doc_consolidado.tobytes(garbage=4, deflate=True)
         doc_consolidado.close()
