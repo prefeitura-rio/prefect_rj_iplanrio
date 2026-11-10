@@ -22,18 +22,16 @@ Fluxo de Dependências:
 """
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 import sys
 import types
 from typing import Any
 import joblib
-import logging
 
-try:
-    from prefect_rj_iplanrio.logging import get_logger
-    logger = get_logger(__name__)
-except ImportError:
-    logger = logging.getLogger(__name__)
+from prefect.logging import get_logger
+
+logger = get_logger("toolkit")
 
 from ..constants import (
     LOCAL_ARTIFACTS_DIR,
@@ -77,14 +75,24 @@ BASELINE_CACHE: BaselineReferencia | None = None
 def carregar_prompt_sistema(
     caminho_prompt: Path | None = None,
     gcs_uri: str | None = None,
+    infisical_secret_path: str | None = None,
 ) -> str:
-    """Carrega o texto das instruções operacionais do GCS ou do disco local.
+    """Carrega o texto das instrucoes operacionais do Infisical/ambiente, GCS ou disco local."""
+    # 1. Checa injecao de segredo via Infisical no ambiente do container
+    for var_nome in ("PROMPT_SISTEMA_V4", "PROMPT_SISTEMA", "SMTR_TRIAGEM_PROMPT"):
+        valor_env = os.environ.get(var_nome)
+        if valor_env and len(valor_env.strip()) > 50:
+            logger.info("Prompt carregado com sucesso a partir da variavel de ambiente (%s).", var_nome)
+            return valor_env.strip()
 
-    :param caminho_prompt: Caminho local opcional do arquivo de prompt.
-    :param gcs_uri: URI opcional gs:// do arquivo no Google Cloud Storage.
-    :returns: Conteúdo do prompt como string.
-    :raises FileNotFoundError: Se nenhum prompt for localizado.
-    """
+    if infisical_secret_path:
+        chave_derivada = infisical_secret_path.strip("/").replace("-", "_").upper() + "_PROMPT"
+        valor_derivado = os.environ.get(chave_derivada)
+        if valor_derivado and len(valor_derivado.strip()) > 50:
+            logger.info("Prompt carregado via chave derivada do Infisical (%s).", chave_derivada)
+            return valor_derivado.strip()
+
+    # 2. Google Cloud Storage
     from ..constants import GCS_PROMPT_URI
 
     uri_alvo = gcs_uri or GCS_PROMPT_URI
@@ -102,10 +110,12 @@ def carregar_prompt_sistema(
                     check=True,
                 )
                 if res.stdout and len(res.stdout.strip()) > 100:
+                    logger.info("Prompt carregado com sucesso a partir do GCS (%s).", uri_alvo)
                     return res.stdout
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Falha ao carregar prompt do GCS (%s): %s", uri_alvo, exc)
 
+    # 3. Filesystem local
     if caminho_prompt and caminho_prompt.exists():
         return caminho_prompt.read_text(encoding="utf-8")
 
@@ -117,20 +127,14 @@ def carregar_prompt_sistema(
     if arquivos:
         return arquivos[0].read_text(encoding="utf-8")
 
-    raise FileNotFoundError("Nenhum arquivo de prompt localizado em prompts/.")
+    raise FileNotFoundError("Nenhum arquivo de prompt localizado em prompts/ ou no ambiente.")
 
 
 def carregar_baseline_referencia(
     forcar_recarga: bool = False,
     diretorio_artefatos: Path | None = None,
 ) -> BaselineReferencia:
-    """Carrega o Meta-Calibrador e os quantis conformais em memória uma única vez.
-
-    :param forcar_recarga: Se True, ignora o cache em memória e recarrega os arquivos.
-    :param diretorio_artefatos: Diretório customizado onde os arquivos .joblib residem.
-    :returns: Instância de BaselineReferencia com modelos e quantis.
-    :raises FileNotFoundError: Se os arquivos de modelo não forem encontrados.
-    """
+    """Carrega o Meta-Calibrador e os quantis conformais em memoria uma unica vez."""
     global BASELINE_CACHE
     if BASELINE_CACHE is not None and not forcar_recarga:
         return BASELINE_CACHE
@@ -169,13 +173,9 @@ def carregar_baseline_referencia(
 def carregar_artefatos_pipeline(
     is_local: bool = True,
     arquivo_prompt: str = f"{VERSAO_PROMPT_PADRAO}.txt",
+    infisical_secret_path: str | None = None,
 ) -> dict[str, Any]:
-    """Carrega os artefatos da pipeline via PostgreSQL ativo com fallback para arquivos locais.
-
-    :param is_local: Flag de ambiente local versus nuvem.
-    :param arquivo_prompt: Nome do arquivo de prompt a ser carregado.
-    :returns: Dicionário contendo calibrador, conformal, prompt e metadados de versão.
-    """
+    """Carrega os artefatos da pipeline via PostgreSQL ativo com fallback para arquivos locais."""
     from .db_repository import buscar_configuracao_calibracao_ativa
 
     db_url = resolver_banco_url(is_local)
@@ -185,20 +185,20 @@ def carregar_artefatos_pipeline(
     versao_modelo = "baseline_congelada_v3"
 
     try:
-        logger.info("Recuperando configuração de calibração ativa no PostgreSQL...")
+        logger.info("Recuperando configuracao de calibracao ativa no PostgreSQL...")
         config_db = buscar_configuracao_calibracao_ativa(db_url)
         calibrador = criar_calibrador_dos_parametros_banco(config_db)
         conformal = criar_artefatos_conforme_do_banco(config_db)
         calibracao_id = config_db.get("calibracao_id")
         versao_modelo = config_db.get("versao_modelo", "db_ativa")
         logger.info(
-            "Configuração ativa do banco carregada | Versão: %s | ID: %s",
+            "Configuracao ativa do banco carregada | Versao: %s | ID: %s",
             versao_modelo,
             calibracao_id,
         )
     except Exception as exc:
         logger.warning(
-            "Configuração no banco indisponível (%s). Usando baseline congelada...",
+            "Configuracao no banco indisponivel (%s). Usando baseline congelada...",
             exc,
         )
         baseline = carregar_baseline_referencia()
@@ -209,7 +209,10 @@ def carregar_artefatos_pipeline(
     if not caminho_prompt.exists():
         caminho_prompt = PROMPTS_DIR / f"{VERSAO_PROMPT_PADRAO}.txt"
 
-    prompt_sistema = caminho_prompt.read_text(encoding="utf-8")
+    prompt_sistema = carregar_prompt_sistema(
+        caminho_prompt=caminho_prompt,
+        infisical_secret_path=infisical_secret_path,
+    )
     versao_prompt = caminho_prompt.stem
 
     return {

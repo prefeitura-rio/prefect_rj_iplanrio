@@ -64,29 +64,9 @@ def rj_smtr__triagem_recursos(
     infisical_secret_path: str | None = None,
     reasoning_effort: str = "medium",
     arquivos_especificos: list[Any] | None = None,
-    executar_n2: bool = False,
+    executar_n2: bool = True,
 ) -> dict[str, Any]:
-    """Orquestra a triagem automatizada e calibração de recursos da SMTR.
-
-    :param is_local: Se True, opera contra banco local; False para Cloud SQL.
-    :param fonte_pdf: Origem dos documentos ("local" ou "sei").
-    :param cliente_sei: Cliente do SEI opcional para download em memória.
-    :param modo_execucao: Modo de carga ("INCREMENTAL" ou "PASSIVO").
-    :param limite_lote: Quantidade máxima de processos a triar nesta execução.
-    :param limiar_alta: Ponto de corte para admissão na Faixa Verde.
-    :param limiar_baixa: Limiar inferior para envio direto ao HITL.
-    :param limiar_dispersao: Tolerância máxima de dispersão de CoT para N=2.
-    :param max_paginas: Quantidade máxima de laudas da petição (smart windowing).
-    :param modelo_llm: Nome do modelo de linguagem no provedor/gateway.
-    :param arquivo_prompt: Nome do arquivo em prompts/ a utilizar.
-    :param data_inicio: Filtro temporal inicial opcional.
-    :param data_fim: Filtro temporal final opcional.
-    :param infisical_secret_path: Caminho de credenciais no Infisical.
-    :param reasoning_effort: Esforço de raciocínio da LLM ("high", "medium", "low", "off").
-    :param arquivos_especificos: Lista arbitrária opcional de arquivos para triagem pontual.
-    :param executar_n2: Flag para habilitar o segundo estágio adaptativo sob incerteza.
-    :returns: Sumário operacional e financeiro consolidado do lote.
-    """
+    """Orchestrate automated triage and selective classification of SMTR appeals."""
     logger = get_run_logger()
     logger.info(
         "Iniciando pipeline | Local=%s | Fonte=%s | Modo=%s | Limite=%d",
@@ -97,7 +77,11 @@ def rj_smtr__triagem_recursos(
     )
 
     # 1. Carrega artefatos da baseline (PostgreSQL com fallback para joblib congelado)
-    artefatos = task_carregar_artefatos_referencia(is_local=is_local, arquivo_prompt=arquivo_prompt)
+    artefatos = task_carregar_artefatos_referencia(
+        is_local=is_local,
+        arquivo_prompt=arquivo_prompt,
+        infisical_secret_path=infisical_secret_path,
+    )
 
     # Inicializa cliente SEI automaticamente se a fonte for 'sei' e não tiver sido injetado
     if fonte_pdf == "sei" and cliente_sei is None:

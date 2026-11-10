@@ -39,15 +39,10 @@ import time
 from datetime import datetime
 from typing import Any
 
-import pandas as pd
+import polars as pl
+from prefect.logging import get_logger
 
-import logging
-
-try:
-    from prefect_rj_iplanrio.logging import get_logger
-    logger = get_logger(__name__)
-except ImportError:
-    logger = logging.getLogger(__name__)
+logger = get_logger("toolkit")
 
 from ..constants import (
     BETA_CONSENSO,
@@ -66,7 +61,6 @@ from .feature_extractor import extrair_sinais_epistemicos
 from .guardrails import aplicar_guardrail_epistemico
 from .meta_calibrator import predizer_probabilidade_calibrada
 from .ocr_engine import extrair_ocr_pagina_especifica
-from .providers.openai_client import OpenAILLMClient
 from .router import (
     atualizar_probabilidade_bayesiana_log_odds,
     calcular_dispersao_cot,
@@ -75,6 +69,19 @@ from .router import (
 from .storage import carregar_bytes_pdf
 from .windowing import extrair_smart_window_pdf
 
+
+def obter_cliente_llm(modelo: str | None = None) -> Any:
+    """Instantiate the LLM client according to LLM_PROVIDER configuration."""
+    from ..constants import LLM_PROVIDER
+
+    p = (LLM_PROVIDER or "openai").strip().lower()
+    if p in ("google", "vertex", "gemini"):
+        from .providers.google_client import GoogleLLMClient
+
+        return GoogleLLMClient(default_model=modelo)
+    from .providers.openai_client import OpenAILLMClient
+
+    return OpenAILLMClient(default_model=modelo)
 
 
 def triar_processo(
@@ -89,7 +96,7 @@ def triar_processo(
     max_paginas: int = MAX_PAGINAS_PDF,
     modelo_llm: str = VERTEX_LLM_MODEL,
     reasoning_effort: str = "medium",
-    executar_n2: bool = False,
+    executar_n2: bool = True,
 ) -> dict[str, Any]:
     """Executa a triagem individual com inferência determinística e calibração tabular.
 
@@ -128,7 +135,7 @@ def triar_processo(
     versao_prompt = artefatos.get("versao_prompt", "v4_baseline")
     stats_classes = getattr(calibrador, "estatisticas_classes", None)
 
-    cliente_llm = OpenAILLMClient(default_model=modelo_llm)
+    cliente_llm = obter_cliente_llm(modelo=modelo_llm)
 
     # 1. Download em memória RAM (sem salvar em disco ou GCS) e Smart Windowing
     try:
@@ -251,62 +258,68 @@ def triar_processo(
     elif p_cal_1 < limiar_baixa or len(set_conformal) == 0:
         rota_inicial = RotaExecucao.HITL_BAIXA_CONFIANCA.value
     else:
-        rota_inicial = RotaExecucao.N2_CONSENSO.value
+        rota_inicial = "CANDIDATO_N2"
 
     estagio2_executado = False
     delta_cot = None
     log_odds_atualizado = None
     p_final = p_cal_1
-    rota_final = rota_inicial
     decisao_2 = None
     usage_2 = {"prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0}
 
     # 7. Estágio N=2 Condicional (T=0.7)
-    if executar_n2 and rota_inicial not in [
-        RotaExecucao.N1_DIRETO.value,
-        RotaExecucao.HITL_BAIXA_CONFIANCA.value,
-    ]:
-        logger.info(
-            "Incerteza operacional em %s (p1=%.3f). Disparando N=2 (T=0.7)...",
-            numero_sei,
-            p_cal_1,
-        )
-        decisao_2, usage_2 = cliente_llm.classificar(
-            pdf_bytes=pdf_window_bytes,
-            prompt_sistema=prompt_sistema,
-            modelo=modelo_llm,
-            temperature=0.7,
-            reasoning_effort=reasoning_effort,
-        )
-        decisao_2 = aplicar_guardrail_epistemico(decisao_2)
-        estagio2_executado = True
+    if rota_inicial == "CANDIDATO_N2":
+        if executar_n2:
+            logger.info(
+                "Incerteza operacional em %s (p1=%.3f). Disparando N=2 (T=0.7)...",
+                numero_sei,
+                p_cal_1,
+            )
+            decisao_2, usage_2 = cliente_llm.classificar(
+                pdf_bytes=pdf_window_bytes,
+                prompt_sistema=prompt_sistema,
+                modelo=modelo_llm,
+                temperature=0.7,
+                reasoning_effort=reasoning_effort,
+            )
+            decisao_2 = aplicar_guardrail_epistemico(decisao_2)
+            estagio2_executado = True
 
-        hip_1 = hipotese_1_str
-        hip_2 = str(
-            decisao_2.hipotese_legal.value if hasattr(decisao_2.hipotese_legal, "value") else decisao_2.hipotese_legal
-        )
+            hip_1 = hipotese_1_str
+            hip_2 = str(
+                decisao_2.hipotese_legal.value if hasattr(decisao_2.hipotese_legal, "value") else decisao_2.hipotese_legal
+            )
 
-        delta_cot = calcular_dispersao_cot(
-            decisao_1.justificativa_analise_previa,
-            decisao_2.justificativa_analise_previa,
-        )
+            delta_cot = calcular_dispersao_cot(
+                decisao_1.justificativa_analise_previa,
+                decisao_2.justificativa_analise_previa,
+            )
 
-        resultado_bayes = atualizar_probabilidade_bayesiana_log_odds(
-            p_1=p_cal_1,
-            hip_1=hip_1,
-            hip_2=hip_2,
-            delta_cot=delta_cot,
-            beta_consenso=BETA_CONSENSO,
-            beta_divergencia=BETA_DIVERGENCIA,
-        )
-        if resultado_bayes and isinstance(resultado_bayes, tuple) and len(resultado_bayes) == 2:
-            p_final, rota_final = resultado_bayes
+            resultado_bayes = atualizar_probabilidade_bayesiana_log_odds(
+                p_1=p_cal_1,
+                hip_1=hip_1,
+                hip_2=hip_2,
+                delta_cot=delta_cot,
+                beta_consenso=BETA_CONSENSO,
+                beta_divergencia=BETA_DIVERGENCIA,
+            )
+            if resultado_bayes and isinstance(resultado_bayes, tuple) and len(resultado_bayes) == 2:
+                p_final, rota_final = resultado_bayes
+            else:
+                p_final = p_cal_1
+                if hip_1 == hip_2 and (delta_cot or 0.0) <= limiar_dispersao_max:
+                    rota_final = RotaExecucao.N2_CONSENSO.value
+                else:
+                    rota_final = RotaExecucao.HITL_DIVERGENCIA_DUPLA.value
+
+            log_odds_atualizado = p_final
+            if rota_final == RotaExecucao.HITL_DIVERGENCIA_DUPLA.value:
+                set_conformal = {hip_1, hip_2}
         else:
-            p_final = p_cal_1
-
-        log_odds_atualizado = p_final
-        if rota_final == RotaExecucao.HITL_DIVERGENCIA_DUPLA.value:
-            set_conformal = {hip_1, hip_2}
+            # Sem N=2, NUNCA registrar falso consenso de segundo estagio
+            rota_final = RotaExecucao.HITL_BAIXA_CONFIANCA.value
+    else:
+        rota_final = rota_inicial
 
     # 8. Faixa Operacional (Piso de 0.50 fixo para Faixa Amarela)
     if p_final >= limiar_alta:
@@ -404,29 +417,29 @@ def triar_processo(
 
 
 def gerar_sumario_lote(resultados: list[dict[str, Any]]) -> dict[str, Any]:
-    """Consolida as métricas operacionais e financeiras da execução do lote.
-
-    :param resultados: Lista de dicionários de predição do lote.
-    :returns: Sumário operacional e financeiro consolidado.
-    """
+    """Consolida as metricas operacionais e financeiras da execucao do lote."""
     total = len(resultados)
     if total == 0:
         return {}
 
-    df = pd.DataFrame(resultados)
-    qtd_verde = int((df["faixa_operacional"] == FaixaOperacional.VERDE.value).sum())
-    qtd_amarela = int((df["faixa_operacional"] == FaixaOperacional.AMARELA.value).sum())
-    qtd_vermelha = int((df["faixa_operacional"] == FaixaOperacional.VERMELHA.value).sum())
+    df = pl.DataFrame(resultados)
+    colunas = set(df.columns)
 
-    total_chamadas = int(df["estagio2_executado"].sum()) + total
+    qtd_verde = int((df["faixa_operacional"] == FaixaOperacional.VERDE.value).sum()) if "faixa_operacional" in colunas else 0
+    qtd_amarela = int((df["faixa_operacional"] == FaixaOperacional.AMARELA.value).sum()) if "faixa_operacional" in colunas else 0
+    qtd_vermelha = int((df["faixa_operacional"] == FaixaOperacional.VERMELHA.value).sum()) if "faixa_operacional" in colunas else 0
+
+    estagio2_sum = int(df["estagio2_executado"].sum()) if "estagio2_executado" in colunas else 0
+    total_chamadas = estagio2_sum + total
     mult_chamadas = round(total_chamadas / total, 2)
-    custo_total = round(float(df["custo_estimado_usd"].sum()), 4)
-    custo_sem_cache = round(float(df["custo_sem_cache_usd"].sum()), 4) if "custo_sem_cache_usd" in df else custo_total
-    economia_cache = round(float(df["economia_cache_usd"].sum()), 4) if "economia_cache_usd" in df else 0.0
 
-    total_tokens_in = int(df["tokens_prompt_total"].sum()) if "tokens_prompt_total" in df else 0
-    total_tokens_out = int(df["tokens_completion"].sum()) if "tokens_completion" in df else 0
-    total_tokens_cache = int(df["tokens_cached"].sum()) if "tokens_cached" in df else 0
+    custo_total = round(float(df["custo_estimado_usd"].sum()), 4) if "custo_estimado_usd" in colunas else 0.0
+    custo_sem_cache = round(float(df["custo_sem_cache_usd"].sum()), 4) if "custo_sem_cache_usd" in colunas else custo_total
+    economia_cache = round(float(df["economia_cache_usd"].sum()), 4) if "economia_cache_usd" in colunas else 0.0
+
+    total_tokens_in = int(df["tokens_prompt_total"].sum()) if "tokens_prompt_total" in colunas else 0
+    total_tokens_out = int(df["tokens_completion"].sum()) if "tokens_completion" in colunas else 0
+    total_tokens_cache = int(df["tokens_cached"].sum()) if "tokens_cached" in colunas else 0
     pct_cache = round((total_tokens_cache / total_tokens_in * 100), 1) if total_tokens_in > 0 else 0.0
 
     sumario = {
