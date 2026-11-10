@@ -359,8 +359,8 @@ def rj_crm__disparo_template_sf(
                 print(f"✅ No others available for retry attempt {i}. Ending retry loop.")
                 break
 
-            print(f"⚠️  Sleep 30 minutes before retry dispatch.")
-            time.sleep(30 * 60)
+            print(f"⚠️  Sleep 15 minutes before retry dispatch.")
+            time.sleep(15 * 60)
             print(f"\n⚠️  Starting retry attempt {i} for campaign_name={campaign_name}...")
 
             # Materializa int_crm_status_disparo para garantir que os webhooks de falha
