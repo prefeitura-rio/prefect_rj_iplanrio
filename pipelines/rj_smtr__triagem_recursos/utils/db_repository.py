@@ -36,15 +36,12 @@ import numpy as np
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
 
-import logging
 import re
 import string
 
-try:
-    from prefect_rj_iplanrio.logging import get_logger
-    logger = get_logger(__name__)
-except ImportError:
-    logger = logging.getLogger(__name__)
+from prefect.logging import get_logger
+
+logger = get_logger("toolkit")
 
 from ..constants import (
     LOCAL_PDFS_DIR,
@@ -152,6 +149,17 @@ def filtrar_processos_ja_triados(db_url: str, numeros_processos_sei: list[str]) 
         conn.close()
 
 
+def recuperar_processos_travados(cursor: Any, timeout_minutos: int = 30) -> int:
+    """Recupera itens que ficaram presos em PROCESSANDO_IA alem do tempo limite."""
+    query = load_query(
+        str(PIPELINE_DIR / "flow.py"),
+        "recuperar_processos_travados",
+        tabela_fila=TABELA_FILA,
+    )
+    cursor.execute(query, (timeout_minutos,))
+    return int(cursor.rowcount)
+
+
 def buscar_processos_para_triagem(
     db_url: str,
     modo: str = "INCREMENTAL",
@@ -159,15 +167,7 @@ def buscar_processos_para_triagem(
     data_inicio: str | None = None,
     data_fim: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Busca processos na fila de trabalho com status PENDENTE_IA.
-
-    :param db_url: URL de conexão do PostgreSQL.
-    :param modo: Modo operacional (INCREMENTAL para MENSAL ou PASSIVO).
-    :param limite: Quantidade máxima de registros a recuperar.
-    :param data_inicio: Filtro temporal inicial opcional.
-    :param data_fim: Filtro temporal final opcional.
-    :returns: Lista de dicionários representando os processos pendentes.
-    """
+    """Busca e reserva atomicamente processos na fila de trabalho com status PENDENTE_IA."""
     origem_alvo = "MENSAL" if modo.upper() == "INCREMENTAL" else "PASSIVO"
 
     query = load_query(
@@ -180,6 +180,12 @@ def buscar_processos_para_triagem(
     conn = psycopg2.connect(db_url)
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            # 1. Recupera processos presos em PROCESSANDO_IA por mais de 30 minutos
+            recuperados = recuperar_processos_travados(cursor, timeout_minutos=30)
+            if recuperados > 0:
+                logger.warning("Fila: %d processo(s) travado(s) recuperado(s) para PENDENTE_IA.", recuperados)
+
+            # 2. Reserva atomica com SKIP LOCKED e atualizacao imediata para PROCESSANDO_IA
             cursor.execute(
                 query,
                 (
@@ -192,7 +198,12 @@ def buscar_processos_para_triagem(
                     limite,
                 ),
             )
-            return [dict(r) for r in cursor.fetchall()]
+            processos = [dict(r) for r in cursor.fetchall()]
+        conn.commit()
+        return processos
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
@@ -485,7 +496,6 @@ def buscar_processos_para_triagem_ou_fallback(
                         (
                             proc_id,
                             StatusProcessamento.PENDENTE_IA.value,
-                            proc_id,
                         ),
                     )
 

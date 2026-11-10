@@ -161,7 +161,7 @@ ON predicoes_pipeline (processo_id, vigente);
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS fila_trabalho (
     fila_id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    processo_id             UUID NOT NULL REFERENCES processos_administrativos(processo_id) ON DELETE RESTRICT,
+    processo_id             UUID NOT NULL UNIQUE REFERENCES processos_administrativos(processo_id) ON DELETE RESTRICT,
     status                  VARCHAR(32) DEFAULT 'PENDENTE_IA' NOT NULL 
                             CHECK (status IN (
                                 'PENDENTE_IA', 
@@ -172,7 +172,8 @@ CREATE TABLE IF NOT EXISTS fila_trabalho (
                             )),
     tentativas              INTEGER DEFAULT 0 NOT NULL,
     ultima_mensagem_erro    TEXT,
-    atualizado_em           TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+    atualizado_em           TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT uq_fila_processo UNIQUE (processo_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_fila_processo_status 
