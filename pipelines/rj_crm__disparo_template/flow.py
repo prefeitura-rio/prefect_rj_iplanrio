@@ -17,6 +17,7 @@ from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
 from prefect import flow  # pylint: disable=E0611, E0401
 from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
+from prefect.runtime import flow_run as prefect_flow_run  # pylint: disable=E0611, E0401
 
 from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
@@ -426,7 +427,6 @@ def rj_crm__disparo_template_sf(
                 print(msg)
                 webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
                 if webhook_url:
-                    from prefect.runtime import flow_run as prefect_flow_run  # já importado no topo, mas garantindo escopo
                     discord_msg = f"""
 <@821121576455634955> <@1458456241683824744> <@302518123066556426>
 ⚠️ **Retentativa {i} não realizada — disparo do attempt {i-1} não apareceu na status_disparo**
@@ -451,11 +451,16 @@ def rj_crm__disparo_template_sf(
 
             # Busca telefones em quarentena para pular números já inválidos em 'others'
             failed_phones_set = get_failed_phones(billing_project_id=billing_project_id)
+            print(f"📵 Telefones em quarentena (failed_phones): {len(failed_phones_set)}")
 
-            retry_df["telefone"] = retry_df["others"].apply(
-                lambda x: pick_next_phone(x, i - 1, failed_phones_set)
+            retry_df["telefone"] = retry_df.apply(
+                lambda row: pick_next_phone(row, i, failed_phones_set, debug=debug), axis=1
             )
             current_df = retry_df.dropna(subset=["telefone"])
+
+            descartados = len(retry_df) - len(current_df)
+            if descartados > 0:
+                print(f"⛔ {descartados} CPF(s) descartados pois todos os others estão em quarentena.")
 
             if current_df.empty:
                 print(f"✅ No retry phones available for attempt {i}. Ending retry loop.")

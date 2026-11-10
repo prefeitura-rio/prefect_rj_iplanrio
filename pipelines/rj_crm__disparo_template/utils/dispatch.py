@@ -1061,25 +1061,36 @@ def get_pares_cpf_telefone_processados(billing_project_id: str, campaign_name: s
         return set()
 
 
-def pick_next_phone(others: list, start_idx: int, failed_phones: set) -> Optional[str]:
+def pick_next_phone(row: pd.Series, attempt_i: int, failed_phones: set, debug: bool = False) -> Optional[str]:
     """
-    Percorre `others` a partir de `start_idx` e retorna o primeiro número
-    que não esteja em `failed_phones`. Retorna None se todos estiverem em
-    quarentena ou se a lista for curta demais.
+    Seleciona o próximo telefone disponível em `others` a partir do índice `attempt_i - 1`,
+    pulando números em quarentena.
 
     Args:
-        others: Lista de telefones alternativos do destinatário.
-        start_idx: Índice inicial de busca (normalmente i-1 no loop de retry).
+        row: Linha do DataFrame com colunas 'cpf' e 'others'.
+        attempt_i: Número do attempt atual no loop de retry.
         failed_phones: Conjunto de telefones em quarentena (get_failed_phones).
+        debug: Se True, imprime detalhes de cada decisão.
 
     Returns:
         Primeiro telefone disponível ou None.
     """
+    others = row.get("others")
+    cpf = row.get("cpf", "?")
+    start_idx = attempt_i - 1
     if not isinstance(others, list):
         return None
-    for phone in others[start_idx:]:
-        if str(phone) not in failed_phones:
-            return str(phone)
+    for idx in range(start_idx, len(others)):
+        phone = str(others[idx])
+        if phone in failed_phones:
+            if debug:
+                print(f"  ⛔ CPF {cpf}: others[{idx}]={phone} em quarentena — descartado")
+        else:
+            if debug and idx > start_idx:
+                print(f"  ✅ CPF {cpf}: pulou {idx - start_idx} número(s) em quarentena, usando others[{idx}]={phone}")
+            return phone
+    if debug:
+        print(f"  ❌ CPF {cpf}: todos os others a partir do índice {start_idx} estão em quarentena — sem número disponível")
     return None
 
 
