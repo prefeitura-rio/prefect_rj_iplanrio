@@ -17,6 +17,7 @@ from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
 from prefect import flow  # pylint: disable=E0611, E0401
 from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
+from prefect.runtime import flow_run as prefect_flow_run  # pylint: disable=E0611, E0401
 
 from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
@@ -37,8 +38,11 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     get_already_dispatched_data,
     get_failed_cpfs,
     get_failed_phones,
+    get_pares_cpf_telefone_processados,
     get_retry_destinations,
+    get_telefone_attempt_anterior,
     monitor_dispatch_status,
+    pick_next_phone,
     remove_contacts_from_whitelist,
     save_csv_for_sftp,
     send_to_sftp,
@@ -271,6 +275,16 @@ def rj_crm__disparo_template_sf(
     print(f"Query retornou {len(df)} linhas. Colunas: {list(df.columns)}")
     print(f"[DEBUG] Sample data:\n{df.head(10).to_dict('records')}")
 
+    # Normaliza a coluna 'others' para lista Python pura.
+    # O BigQuery retorna arrays como numpy.ndarray; garantir list aqui evita
+    # comportamentos inesperados em todos os pontos do loop de retry que
+    # acessam others por índice ou verificam len().
+    if "others" in df.columns:
+        df["others"] = df["others"].apply(
+            lambda x: list(x) if hasattr(x, "__iter__") and not isinstance(x, str) else ([] if x is None else x)
+        )
+        print(f"[DEBUG] others após normalização: {df['others'].head(3).tolist()}")
+
     # Dedup por CPF — base para o loop de retentativas
     df = filter_duplicated(
         df=df,
@@ -340,15 +354,88 @@ def rj_crm__disparo_template_sf(
                 print("✅ No destinations available for dispatch attempt 0. Ending.")
                 break
         else:
-            if "others" in base_df.columns and not base_df["others"].apply(
+            if "others" not in base_df.columns or not base_df["others"].apply(
                 lambda x: isinstance(x, list) and len(x) >= i
             ).any():
                 print(f"✅ No others available for retry attempt {i}. Ending retry loop.")
                 break
 
-            print(f"⚠️  Sleep 3 minutes before retry dispatch.")
-            time.sleep(3 * 60)
+            print(f"⚠️  Sleep 15 minutes before retry dispatch.")
+            time.sleep(15 * 60)
             print(f"\n⚠️  Starting retry attempt {i} for campaign_name={campaign_name}...")
+
+            # Materializa int_crm_status_disparo para garantir que os webhooks de falha
+            # do Salesforce já estejam disponíveis na tabela antes de consultar get_failed_cpfs.
+            # Isso é necessário mesmo quando monitor_after_sftp=False e materialize_after_sftp=False,
+            # pois sem materialização a coluna indicador_quarentena não reflete os webhooks recentes.
+            print(f"⏳ Materializando int_crm_status_disparo antes de verificar falhas (retry {i})...")
+            github_token = getenv_or_action("GITHUB_TOKEN")
+            git_repository_path = f"https://{github_token}@github.com/prefeitura-rio/queries-rj-crm-registry.git"
+            execute_dbt_task(
+                select="+int_crm_status_disparo",
+                target="prod",
+                git_repository_path=git_repository_path,
+            )
+
+            # Verifica se o Salesforce já processou o attempt anterior checando se algum par
+            # (cpf, telefone_disparado_no_attempt_anterior) do base_df apareceu na status_disparo.
+            # - i=1: o attempt anterior (i=0) disparou base_df["telefone"] (coluna original da query)
+            # - i>=2: o attempt anterior (i-1) disparou base_df["others"][i-2]
+            pares_attempt_anterior = set(
+                base_df.apply(
+                    lambda row: (
+                        str(row["cpf"]),
+                        get_telefone_attempt_anterior(row, i),
+                    ),
+                    axis=1,
+                ).dropna()
+            )
+            # Remove tuplas onde o telefone é None (dropna não filtra dentro da tupla)
+            pares_attempt_anterior = {
+                (cpf, tel) for cpf, tel in pares_attempt_anterior if tel is not None
+            }
+            # Aguarda o Salesforce processar o attempt anterior antes de prosseguir.
+            # Se nenhum par (cpf, telefone) aparecer na status_disparo, espera 20 minutos,
+            # rematerializa e tenta novamente — até 3 vezes antes de desistir.
+            max_sf_wait_attempts = 3
+            pares_encontrados = set()
+            for sf_wait in range(max_sf_wait_attempts):
+                pares_processados = get_pares_cpf_telefone_processados(
+                    billing_project_id=billing_project_id,
+                    campaign_name=campaign_name,
+                )
+                pares_encontrados = pares_attempt_anterior.intersection(pares_processados)
+                print(f"🔍 Pares (cpf, telefone) do attempt {i-1} encontrados na status_disparo: {len(pares_encontrados)}/{len(pares_attempt_anterior)} (checagem {sf_wait + 1}/{max_sf_wait_attempts})")
+                if pares_encontrados:
+                    break
+                if sf_wait < max_sf_wait_attempts - 1:
+                    print(f"⏳ Nenhum par encontrado ainda. Aguardando 20 minutos antes de rematerializar e tentar novamente...")
+                    time.sleep(20 * 60)
+                    github_token = getenv_or_action("GITHUB_TOKEN")
+                    git_repository_path = f"https://{github_token}@github.com/prefeitura-rio/queries-rj-crm-registry.git"
+                    execute_dbt_task(
+                        select="+int_crm_status_disparo",
+                        target="prod",
+                        git_repository_path=git_repository_path,
+                    )
+
+            if not pares_encontrados:
+                msg = (
+                    f"✅ Nenhum par (cpf, telefone) do attempt {i-1} apareceu na status_disparo "
+                    f"após {max_sf_wait_attempts} tentativas. Encerrando retentativas."
+                )
+                print(msg)
+                webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+                if webhook_url:
+                    discord_msg = f"""
+<@821121576455634955> <@1458456241683824744> <@302518123066556426>
+⚠️ **Retentativa {i} não realizada — disparo do attempt {i-1} não apareceu na status_disparo**
+📋 **Campanha:** {campaign_name}
+🔍 **Motivo:** Nenhum par (cpf, telefone) do attempt {i-1} foi encontrado na tabela após {max_sf_wait_attempts} checagens de 20 minutos.
+🔗 **Link:** {prefect_flow_run.ui_url or "URL indisponível"}
+"""
+                    send_discord_notification(webhook_url, discord_msg)
+                break
 
             failed_cpfs = get_failed_cpfs(billing_project_id=billing_project_id, campaign_name=campaign_name)
 
@@ -362,10 +449,18 @@ def rj_crm__disparo_template_sf(
                 print(f"No others column or no rows for retry attempt {i}.")
                 break
 
-            retry_df["telefone"] = retry_df["others"].apply(
-                lambda x: x[i - 1] if isinstance(x, list) and len(x) >= i else None
+            # Busca telefones em quarentena para pular números já inválidos em 'others'
+            failed_phones_set = get_failed_phones(billing_project_id=billing_project_id)
+            print(f"📵 Telefones em quarentena (failed_phones): {len(failed_phones_set)}")
+
+            retry_df["telefone"] = retry_df.apply(
+                lambda row: pick_next_phone(row, i, failed_phones_set, debug=debug), axis=1
             )
             current_df = retry_df.dropna(subset=["telefone"])
+
+            descartados = len(retry_df) - len(current_df)
+            if descartados > 0:
+                print(f"⛔ {descartados} CPF(s) descartados pois todos os others estão em quarentena.")
 
             if current_df.empty:
                 print(f"✅ No retry phones available for attempt {i}. Ending retry loop.")
@@ -415,18 +510,23 @@ def rj_crm__disparo_template_sf(
         # Esse filtro impede que o mesmo cidadão (CPF ou Telefone) receba QUALQUER outra campanha
         # no dia de hoje para evitar fadiga de comunicação.
         # Se filter_dispatched_phones_or_cpfs for:
-        #   - "None":
-        #       - No i == 0: não filtramos se o cpf/telefone recebeu algum disparo hj
-        #       - No i > 0:  não filtramos se o cpf/telefone recebeu algum disparo hj
-        #   - "cpf":
-        #       - No i == 0: Filtramos CPFs que receberam QUALQUER campanha hoje.
-        #       - No i > 0: não filtramos se o cpf/telefone recebeu algum disparo hj, o telefone pode já ter tido um disparo pra outra campanha
-        #   - "telefone":
-        #       - Filtramos telefones que receberam QUALQUER campanha hoje (tanto no i == 0 quanto no i > 0).
+        #   - None:     nunca filtra (nem no disparo inicial, nem nos retries).
+        #   - "cpf":    i==0 → filtra CPFs que receberam qualquer campanha hoje.
+        #               i>0  → filtra por TELEFONE (o alternativo de others) que recebeu qualquer
+        #                       campanha hoje. Não filtra por CPF porque o attempt anterior falhou
+        #                       — o cidadão não recebeu nada, então outro telefone pode tentar.
+        #   - "telefone": filtra por telefone em qualquer attempt (i==0 e i>0).
         # --------------------------------------------------------------------------------------
-        filter_dispatched_phones_or_cpfs = None if i > 0 and filter_dispatched_phones_or_cpfs == "cpf" else filter_dispatched_phones_or_cpfs
-        if filter_dispatched_phones_or_cpfs and not already_dispatched_df.empty:
-            print(f"🔍 Aplicando filtro diário de quem já recebeu alguma campanha hoje '{filter_dispatched_phones_or_cpfs}'...")
+        # Usa variável local para não mutar o parâmetro do flow entre iterações.
+        # No retry (i > 0), não faz sentido filtrar por CPF (o disparo anterior falhou,
+        # então o cidadão não recebeu nada); mas faz sentido checar se o telefone alternativo
+        # já foi usado em outra campanha hoje. Por isso "cpf" vira "telefone" nos retries.
+        effective_filter = (
+            "telefone" if i > 0 and filter_dispatched_phones_or_cpfs == "cpf"
+            else filter_dispatched_phones_or_cpfs
+        )
+        if effective_filter and not already_dispatched_df.empty:
+            print(f"🔍 Aplicando filtro diário de quem já recebeu alguma campanha hoje '{effective_filter}'...")
             
             hoje = pd.Timestamp.now(tz='America/Sao_Paulo').date()
             datas_disparadas = pd.to_datetime(already_dispatched_df["data_particao"]).dt.date
@@ -440,7 +540,7 @@ def rj_crm__disparo_template_sf(
             current_df = filter_already_dispatched_phones_or_cpfs(
                 df=current_df,
                 already_dispatched_df=df_dispatched_today,
-                current_filter=filter_dispatched_phones_or_cpfs,
+                current_filter=effective_filter,
             )
             
             print(f"🔍 Foram removidas {qnt_pessoas - current_df.shape[0]} pessoas da lista de envio que já receberam alguma campanha hoje.")

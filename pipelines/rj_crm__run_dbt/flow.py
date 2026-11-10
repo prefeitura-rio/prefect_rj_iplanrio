@@ -13,7 +13,8 @@ from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials
 from iplanrio.pipelines_utils.logging import log
 from prefect import flow, runtime, task
 from prefect.states import Failed
-from prefect_dbt import PrefectDbtRunner
+from dbt_common.events.base_types import EventLevel
+from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
 from utils import (
     Summarizer,
     download_from_cloud_storage,
@@ -154,7 +155,8 @@ def execute_dbt(
 
     # Initialize PrefectDbtRunner
     runner = PrefectDbtRunner(
-        raise_on_failure=False  # Allow the flow to handle failures gracefully
+        raise_on_failure=False,  # Allow the flow to handle failures gracefully
+        settings=PrefectDbtSettings(log_level=EventLevel.DEBUG),
     )
 
     # Execute the dbt command with the constructed arguments
@@ -182,7 +184,8 @@ def install_dbt_dependencies():
 
     # Initialize PrefectDbtRunner
     runner = PrefectDbtRunner(
-        raise_on_failure=False  # Allow the flow to handle failures gracefully
+        raise_on_failure=False,  # Allow the flow to handle failures gracefully
+        settings=PrefectDbtSettings(log_level=EventLevel.DEBUG),
     )
 
     # Execute the dbt deps command

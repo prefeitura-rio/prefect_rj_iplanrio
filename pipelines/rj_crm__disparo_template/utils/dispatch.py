@@ -993,10 +993,17 @@ def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
     """
     campaign_filter = f"AND LOWER(nome_hsm) = LOWER('{campaign_name}')" if campaign_name else ""
     query = f"""
-        -- Agora só teremos Salesforce como fonte
+        -- indicador_quarentena deveria cobrir isso, mas falha_meta_descricao na tabela
+        -- status_disparo recebe not_sent_reason ("Message Undeliverable.") em vez de
+        -- error_code ("WA-131026"), então o like '%131026%' nunca bate.
+        -- Checamos as duas formas enquanto o modelo dbt não é corrigido.
         SELECT DISTINCT cpf
         FROM `rj-crm-registry.brutos_salesforce.status_disparo`
-        WHERE indicador_quarentena = TRUE
+        WHERE (
+            indicador_quarentena = TRUE
+            OR descricao_falha LIKE '%131026%'
+            OR descricao_falha LIKE '%Undeliverable%'
+        )
         AND processado_datahora >= datetime_sub(current_datetime("America/Sao_Paulo"), INTERVAL 4 hour)
         AND data_particao >= date_sub(current_date("America/Sao_Paulo"), INTERVAL 1 day)
         {campaign_filter}
@@ -1020,7 +1027,92 @@ def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
         return set()
     
     return failed_cpfs
-    
+
+
+def get_pares_cpf_telefone_processados(billing_project_id: str, campaign_name: str) -> set:
+    """
+    Retorna um conjunto de tuplas (cpf, telefone) que já apareceram na tabela
+    brutos_salesforce.status_disparo para a campanha informada nas últimas 4 horas.
+
+    Usado para verificar se o Salesforce já processou o attempt anterior antes de
+    consultar falhas — comparando contra os pares (cpf, others[i-1]) do base_df.
+    """
+    campaign_filter = f"AND LOWER(nome_hsm) = LOWER('{campaign_name}')" if campaign_name else ""
+    query = f"""
+        SELECT DISTINCT
+            cpf,
+            contato_telefone AS telefone
+        FROM `rj-crm-registry.brutos_salesforce.status_disparo`
+        WHERE processado_datahora >= datetime_sub(current_datetime("America/Sao_Paulo"), INTERVAL 4 hour)
+          AND data_particao >= date_sub(current_date("America/Sao_Paulo"), INTERVAL 1 day)
+          {campaign_filter}
+    """
+    try:
+        df = download_data_from_bigquery(
+            query=query,
+            billing_project_id=billing_project_id,
+            bucket_name=billing_project_id,
+        )
+        if df.empty:
+            return set()
+        return set(zip(df["cpf"].astype(str), df["telefone"].astype(str)))
+    except Exception as e:
+        log(f"Erro ao buscar pares cpf/telefone processados: {e}", level="warning")
+        return set()
+
+
+def pick_next_phone(row: pd.Series, attempt_i: int, failed_phones: set, debug: bool = False) -> Optional[str]:
+    """
+    Seleciona o próximo telefone disponível em `others` a partir do índice `attempt_i - 1`,
+    pulando números em quarentena.
+
+    Args:
+        row: Linha do DataFrame com colunas 'cpf' e 'others'.
+        attempt_i: Número do attempt atual no loop de retry.
+        failed_phones: Conjunto de telefones em quarentena (get_failed_phones).
+        debug: Se True, imprime detalhes de cada decisão.
+
+    Returns:
+        Primeiro telefone disponível ou None.
+    """
+    others = row.get("others")
+    cpf = row.get("cpf", "?")
+    start_idx = attempt_i - 1
+    if not isinstance(others, list):
+        return None
+    for idx in range(start_idx, len(others)):
+        phone = str(others[idx])
+        if phone in failed_phones:
+            if debug:
+                print(f"  ⛔ CPF {cpf}: others[{idx}]={phone} em quarentena — descartado")
+        else:
+            if debug and idx > start_idx:
+                print(f"  ✅ CPF {cpf}: pulou {idx - start_idx} número(s) em quarentena, usando others[{idx}]={phone}")
+            return phone
+    if debug:
+        print(f"  ❌ CPF {cpf}: todos os others a partir do índice {start_idx} estão em quarentena — sem número disponível")
+    return None
+
+
+def get_telefone_attempt_anterior(row: pd.Series, attempt_i: int) -> Optional[str]:
+    """
+    Retorna o telefone que foi disparado no attempt anterior a `attempt_i`.
+
+    - attempt_i == 1: o attempt 0 disparou a coluna "telefone" original da query.
+    - attempt_i >= 2: o attempt (i-1) disparou others[i-2].
+
+    Retorna None se o valor estiver ausente ou a lista others for curta demais.
+    Usado para montar pares (cpf, telefone) a comparar contra status_disparo.
+    """
+    if attempt_i == 1:
+        tel = row.get("telefone")
+        return str(tel) if pd.notna(tel) else None
+    # attempt_i >= 2: others[attempt_i - 2]
+    others = row.get("others")
+    if isinstance(others, list) and len(others) >= attempt_i - 1:
+        return str(others[attempt_i - 2])
+    return None
+
 
 def check_campaign_success(
     billing_project_id: str,

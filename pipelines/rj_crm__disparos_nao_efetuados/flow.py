@@ -45,7 +45,7 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
 
     run_url = flow_run.ui_url or "URL indisponível"
     message = (
-        "<@821121576455634955> <@1458456241683824744> <@302518123066556426>\n"
+        "<@821121576455634955> <@302518123066556426>\n"
         "Prefect flow de verificação de disparos não efetuados falhou! 🚨\n"
         f"Flow: {flow.name}\n"
         f"Flow Run: {flow_run.name}\n"

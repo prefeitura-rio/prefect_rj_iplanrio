@@ -34,19 +34,165 @@ deployments:
         image_pull_policy: Always
     parameters:
       campaign_name: disparo-template-sf
-      dataset_id: brutos_wetalkie
-      table_id: disparos_efetuados_sf
+      dataset_id: brutos_salesforce
+      table_id: disparos_efetuados
       dump_mode: append
       filter_dispatched_phones_or_cpfs: cpf
       filter_duplicated_phones: false
       filter_duplicated_cpfs: true
     schedules:
-      # Disparo infrequência escolar (SME)
+
       - cron: "0 15 * * *"
         timezone: America/Sao_Paulo
         active: false
-        slug: oneshot-disparo-infrequencia-escolar
-        flow_run_name: disparo-infrequencia-escolar
+        slug: oneshot-smtr-enem-sem-cadastro
+        flow_run_name: smtr-enem-sem-cadastro
+        parameters:
+          flow_environment: staging
+          campaign_name: smtr_jae_beneficio_enem_1
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          data_extension_filename: whatsapp_smtr_jae_beneficio_enem_1
+          de_columns: ["nome_sobrenome"]
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: false
+          filter_failed_phones: true
+          batch_size: 10000
+          batch_sleep_minutes: 3
+          query_file: queries/smtr/enem/sem_cadastro.sql
+
+      - cron: "0 16 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-smtr-enem-com-cadastro-sem-gratuidade
+        flow_run_name: smtr-enem-com-cadastro-sem-gratuidade
+        parameters:
+          flow_environment: staging
+          campaign_name: smtr_jae_beneficio_enem_2
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          data_extension_filename: whatsapp_smtr_jae_beneficio_enem_2
+          de_columns: ["nome_sobrenome", "data"]
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: false
+          filter_failed_phones: true
+          batch_size: 10000
+          batch_sleep_minutes: 3
+          query_file: queries/smtr/enem/com_cadastro_sem_gratuidade.sql
+
+      - cron: "0 17 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-smtr-enem-com-cadastro-com-gratuidade
+        flow_run_name: smtr-enem-com-cadastro-com-gratuidade
+        parameters:
+          flow_environment: staging
+          campaign_name: smtr_jae_beneficio_enem_3
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          data_extension_filename: whatsapp_smtr_jae_beneficio_enem_3
+          de_columns: ["nome_sobrenome", "data"]
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: false
+          filter_failed_phones: true
+          batch_size: 10000
+          batch_sleep_minutes: 3
+          query_file: queries/smtr/enem/com_cadastro_com_gratuidade.sql
+
+      - cron: "0 19 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-recado_dia_servidor
+        flow_run_name: recado_dia_servidor
+        parameters:
+          flow_environment: staging
+          campaign_name: recado_dia_do_servidor_v3
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          data_extension_filename: whatsapp_sma_dia_servidor_2026
+          de_columns: []
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: false
+          filter_failed_phones: true
+          batch_size: 10000
+          batch_sleep_minutes: 5
+          query_file: queries/sma/bonus_servidores/recado_dia_servidor.sql
+
+      - cron: "0 9 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-recado_dia_servidor_mobirio
+        flow_run_name: recado_mobirio
+        parameters:
+          flow_environment: staging
+          campaign_name: recado_mobirio_pref_rio_bonus_v1
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          data_extension_filename: whatsapp_sma_mobirio_bonus_2026
+          de_columns: ["nome_servidor"]
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: false
+          filter_failed_phones: true
+          query_file: queries/sma/bonus_servidores/bonus_mobi_rio.sql
+
+      - cron: "0 9 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-recado_dia_servidor_bonus_segundo_envio
+        flow_run_name: dia_servidor_bonus_segundo_envio
+        parameters:
+          flow_environment: staging
+          campaign_name: recado_servidores_pref_rio_14
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          data_extension_filename: whatsapp_sma_servidores_ar_2026
+          de_columns: ["nome_servidor"]
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: false
+          filter_failed_phones: true
+          batch_size: 10000
+          batch_sleep_minutes: 5
+          query_file: queries/sma/bonus_servidores/bonus_servidores_segundo_envio.sql
+
+      - cron: "0 15 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-sme-alfabetizacao-incentivo-leitura
+        flow_run_name: sme-alfabetizacao-incentivo-leitura
+        parameters:
+          flow_environment: staging
+          campaign_name: sme_alfabetizacao_v9
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          data_extension_filename: whatsapp_sme_alfabetizacao
+          de_columns: ["telefone", "nome_responsavel", "nome_aluno", "matricula"]
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: true
+          filter_failed_phones: true
+          query_file: queries/sme/sme_alfabeticazao_incentivo_leitura.sql
+
+      - cron: "0 15 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-sme-prova-avalia
+        flow_run_name: sme-prova-avalia
+        parameters:
+          flow_environment: staging
+          campaign_name: sme_prova_avalia
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          data_extension_filename: whatsapp_sme_prova_avalia
+          de_columns: ["telefone", "nome_responsavel", "nome_aluno", "matricula"]
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: false
+          filter_failed_phones: true
+          query_file: queries/sme/sme_prova_avalia.sql
+
+      - cron: "0 15 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-sme-infrequencia-escolar
+        flow_run_name: sme-infrequencia-escolar
         parameters:
           flow_environment: staging
           campaign_name: sme_infrequencia_v1
@@ -57,14 +203,13 @@ deployments:
           filter_duplicated_phones: false
           filter_duplicated_cpfs: false
           filter_failed_phones: true
-          query_file: queries/sme_infrequencia_escolar.sql
+          query_file: queries/sme/sme_infrequencia_escolar.sql
 
-      # Disparo emergencial (ex: ventos fortes)
       - cron: "0 11 * * *"
         timezone: America/Sao_Paulo
         active: false
-        slug: oneshot-disparo-emergencial
-        flow_run_name: disparo-emergencial
+        slug: oneshot-sme-disparo-emergencial-ventos-fortes
+        flow_run_name: sme-disparo-emergencial-ventos-fortes
         parameters:
           flow_environment: staging
           campaign_name: ventos_fortes_v1
@@ -74,11 +219,10 @@ deployments:
           table_id: disparos_efetuados
           filter_duplicated_phones: true
           filter_duplicated_cpfs: true
-          query_file: queries/cvl_disparo_em_massa.sql
+          query_file: queries/cvl/cvl_disparo_em_massa.sql
           batch_size: 10000
           batch_sleep_minutes: 5
 
-      # Cadunico com cadastro desatualizado
       - cron: "0 11 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -92,11 +236,26 @@ deployments:
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           filter_duplicated_cpfs: false
-          query_file: queries/smas_cadunico_desatualizado_pic.sql
+          query_file: queries/smas/smas_cadunico_desatualizado_pic.sql
           batch_size: 10000
           batch_sleep_minutes: 5
 
-      # Ciclo de vida da pesquisa 1746 (unificado)
+      - cron: "0 11 * * 1-5"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: daily-smtr-multa-pf
+        flow_run_name: smtr-multa-pf
+        parameters:
+          flow_environment: staging
+          campaign_name: smtrmultasdetransitov1
+          data_extension_filename: whatsapp_smtr_multas_transito
+          de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo",
+            "id_autuacao"]
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          filter_duplicated_cpfs: true
+          query_file: queries/smtr/smtr_multa_pf.sql
+
       - cron: "0 11 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -116,9 +275,8 @@ deployments:
           table_id: disparos_efetuados
           filter_duplicated_phones: true
           filter_duplicated_cpfs: true
-          query_file: queries/cvl_pesquisa_1746.sql
+          query_file: queries/cvl/cvl_pesquisa_1746.sql
 
-      # Divida ativa cobrança
       - cron: "00 13 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -142,13 +300,12 @@ deployments:
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_cpfs: true
-          query_file: queries/pgm_divida_ativa_cobranca.sql
+          query_file: queries/pgm/pgm_divida_ativa_cobranca.sql
 
-      # Divida ativa lembrete
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
         active: false
-        slug: daily-pgm-divida-ativa-lembrete-prod-v1
+        slug: daily-pgm-divida-ativa-lembrete
         flow_run_name: pgm-divida-ativa-lembrete
         parameters:
           flow_environment: staging
@@ -163,14 +320,13 @@ deployments:
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_cpfs: false
-          query_file: queries/pgm_divida_ativa_lembrete.sql
+          query_file: queries/pgm/pgm_divida_ativa_lembrete.sql
 
-      # Divida ativa agradecimento
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
         active: false
-        slug: daily-pgm-divida-ativa-confirma-pgto-prod-v1
-        flow_run_name: pgm-divida-ativa-confirma-pgto-prod-v1
+        slug: daily-pgm-divida-ativa-confirma-pgto
+        flow_run_name: pgm-divida-ativa-confirma-pgto
         parameters:
           flow_environment: staging
           query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2",
@@ -185,9 +341,8 @@ deployments:
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_phones: true
           filter_duplicated_cpfs: true
-          query_file: queries/pgm_divida_ativa_agradecimento.sql
+          query_file: queries/pgm/pgm_divida_ativa_agradecimento.sql
 
-      # Puérpera confirma agendamento
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -212,14 +367,13 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerpera_confirma_agendamento.sql
+          query_file: queries/sms/sms_puerpera_confirma_agendamento.sql
 
-      # Puérpera D0 - Explicação pesquisa
       - cron: "0 14 * * *"
         timezone: America/Sao_Paulo
         active: false
-        slug: daily-sms-puerperas-d0
-        flow_run_name: sms-puerperas-d0
+        slug: daily-sms-puerperas-d0-explica-pesquisa
+        flow_run_name: sms-puerperas-d0-explica-pesquisa
         parameters:
           flow_environment: staging
           query_replacements:
@@ -239,22 +393,18 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_d0_explica_pesquisa.sql
+          query_file: queries/sms/sms_puerperas_d0_explica_pesquisa.sql
 
-      # Puérpera D1/D3/D5/D10/D13/D16/D19 - Pesquisa 1
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
-        slug: daily-sms-puerperas-d1-d3-d5-d10-d13-d16-d19
-        flow_run_name: sms-puerperas-d1-d3-d5-d10-d13-d16-d19
+        slug: daily-sms-puerperas-pesquisa1-d1-d3-d5-d10-d13-d16-d19
+        flow_run_name: sms-puerperas-pesquisa1-d1-d3-d5-d10-d13-d16-d19
         parameters:
           flow_environment: staging
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo4v3
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
-            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
-            # 588 = antiga Pesquisa 1 (D1/3/5/10), 562 = antiga Pesquisa 3 (D13/16/19), unificadas aqui.
             id_hsm_legado_placeholder: "588, 562"
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 1"
@@ -280,14 +430,13 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_pesquisa_template.sql
+          query_file: queries/sms/sms_puerperas_pesquisa_template.sql
 
-      # Puérpera D7/D22 - Pesquisa 4
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
-        slug: daily-sms-puerperas-d7-d22
-        flow_run_name: sms-puerperas-d7-d22
+        slug: daily-sms-puerperas-pesquisa4-d7-d22
+        flow_run_name: sms-puerperas-pesquisa4-d7-d22
         parameters:
           flow_environment: staging
           query_replacements:
@@ -304,7 +453,7 @@ deployments:
           dataset_id: brutos_salesforce
           campaign_name: smspuerperadisparo6
           data_extension_filename: whatsapp_sms_puerperas_pesquisa4
-          de_columns: ["nome", "numero_dias", "maternidade"] # única pesquisa cuja hsm usa a variável numero_dias
+          de_columns: ["nome", "numero_dias", "maternidade"]
           max_dispatch_retries: 0
           whitelist_percentage: 0
           whitelist_environment: production
@@ -313,20 +462,18 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_pesquisa_template.sql
+          query_file: queries/sms/sms_puerperas_pesquisa_template.sql
 
-      # Puérpera D25/D28/D34 - Pesquisa 5
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
-        slug: daily-sms-puerperas-d25-d28-d34
-        flow_run_name: sms-puerperas-d25-d28-d34
+        slug: daily-sms-puerperas-pesquisa5-d25-d28-d34
+        flow_run_name: sms-puerperas-pesquisa5-d25-d28-d34
         parameters:
           flow_environment: staging
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo12
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            # 564 = antiga Pesquisa 5 (D25/28), 566 = antiga Pesquisa 6 (D34), unificadas aqui.
             id_hsm_legado_placeholder: "564, 566"
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 5"
@@ -348,14 +495,13 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_pesquisa_template.sql
+          query_file: queries/sms/sms_puerperas_pesquisa_template.sql
 
-      # Puérpera D40 - Pesquisa 7
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
-        slug: daily-sms-puerperas-d40
-        flow_run_name: sms-puerperas-d40
+        slug: daily-sms-puerperas-pesquisa7-d40
+        flow_run_name: sms-puerperas-pesquisa7-d40
         parameters:
           flow_environment: staging
           query_replacements:
@@ -379,9 +525,8 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_pesquisa_template.sql
+          query_file: queries/sms/sms_puerperas_pesquisa_template.sql
 
-      # Confirmação de agendamento do CadÚnico
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -398,9 +543,8 @@ deployments:
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_cpfs: true
-          query_file: queries/smas_cadunico_confirma_agendamento.sql
+          query_file: queries/smas/smas_cadunico_confirma_agendamento.sql
 
-      # SMAS - Carta PIC - Evento
       - cron: "30 17 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -418,9 +562,8 @@ deployments:
           filter_dispatched_phones_or_cpfs: false
           filter_duplicated_cpfs: true
           filter_failed_phones: false
-          query_file: queries/smas_cartaopic_evento.sql
+          query_file: queries/smas/smas_cartaopic_evento.sql
 
-      # Lembrete evento Cartao PIC
       - cron: "20 12 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -436,7 +579,7 @@ deployments:
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           filter_duplicated_cpfs: true
-          query_file: queries/smas_cartaopic_lembrete.sql
+          query_file: queries/smas/smas_cartaopic_lembrete.sql
 
   - name: rj-crm--disparo-template-sf--prod
     version: '{{ get-commit-hash.stdout }}'
@@ -458,9 +601,22 @@ deployments:
       filter_duplicated_cpfs: true
 
     schedules:
-  # Daily schedule para flow cvl-pesquisa1746 (unifica com solução + sem resolução num único
-  # CSV/Data Extension; STATUS_DEMANDA distingue as duas linhas e a Journey no Salesforce
-  # decide qual HSM enviar por linha)
+      - cron: "0 11 * * 1-5"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: daily-smtr-multa-pf
+        flow_run_name: smtr-multa-pf
+        parameters:
+          flow_environment: production
+          campaign_name: smtrmultasdetransitov1
+          data_extension_filename: whatsapp_smtr_multas_transito
+          de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo",
+            "id_autuacao"]
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          filter_duplicated_cpfs: true
+          query_file: queries/smtr/smtr_multa_pf.sql
+
       - cron: "0 11 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -480,9 +636,8 @@ deployments:
           table_id: disparos_efetuados
           filter_duplicated_phones: true
           filter_duplicated_cpfs: true
-          query_file: queries/cvl_pesquisa_1746.sql
+          query_file: queries/cvl/cvl_pesquisa_1746.sql
 
-      # PGM Dívida Ativa
       - cron: "30 9 * * 1-5"
         timezone: America/Sao_Paulo
         active: true
@@ -506,13 +661,12 @@ deployments:
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_cpfs: true
-          query_file: queries/pgm_divida_ativa_cobranca.sql
+          query_file: queries/pgm/pgm_divida_ativa_cobranca.sql
 
-      # PGM Dívida Ativa - Lembrete
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
         active: true
-        slug: daily-pgm-divida-ativa-lembrete-prod-v1
+        slug: daily-pgm-divida-ativa-lembrete
         flow_run_name: pgm-divida-ativa-lembrete
         parameters:
           flow_environment: production
@@ -527,14 +681,13 @@ deployments:
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_cpfs: false
-          query_file: queries/pgm_divida_ativa_lembrete.sql
+          query_file: queries/pgm/pgm_divida_ativa_lembrete.sql
 
-      # PGM Dívida Ativa - Confirmação de pagamento
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
         active: true
-        slug: daily-pgm-divida-ativa-confirma-pgto-prod-v1
-        flow_run_name: pgm-divida-ativa-confirma-pgto-prod-v1
+        slug: daily-pgm-divida-ativa-confirma-pgto
+        flow_run_name: pgm-divida-ativa-confirma-pgto
         parameters:
           flow_environment: production
           query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2",
@@ -549,9 +702,8 @@ deployments:
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_phones: true
           filter_duplicated_cpfs: true
-          query_file: queries/pgm_divida_ativa_agradecimento.sql
+          query_file: queries/pgm/pgm_divida_ativa_agradecimento.sql
 
-      # SMS Puérpera - Confirmação de agendamento
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: true
@@ -576,14 +728,13 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerpera_confirma_agendamento.sql
+          query_file: queries/sms/sms_puerpera_confirma_agendamento.sql
 
-      # SMS Puérpera - D0
       - cron: "0 14 * * *"
         timezone: America/Sao_Paulo
         active: true
-        slug: daily-sms-puerperas-d0
-        flow_run_name: sms-puerperas-d0
+        slug: daily-sms-puerperas-d0-explica-pesquisa
+        flow_run_name: sms-puerperas-d0-explica-pesquisa
         parameters:
           flow_environment: production
           query_replacements:
@@ -603,22 +754,18 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_d0_explica_pesquisa.sql
+          query_file: queries/sms/sms_puerperas_d0_explica_pesquisa.sql
 
-      # SMS Puérpera - D1, D3, D5, D10, D13, D16, D19 - Pesquisa 1
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: true
-        slug: daily-sms-puerperas-d1-d3-d5-d10-d13-d16-d19
-        flow_run_name: sms-puerperas-d1-d3-d5-d10-d13-d16-d19
+        slug: daily-sms-puerperas-pesquisa1-d1-d3-d5-d10-d13-d16-d19
+        flow_run_name: sms-puerperas-pesquisa1-d1-d3-d5-d10-d13-d16-d19
         parameters:
           flow_environment: production
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo4v3
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
-            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
-            # 588 = antiga Pesquisa 1 (D1/3/5/10), 562 = antiga Pesquisa 3 (D13/16/19), unificadas aqui.
             id_hsm_legado_placeholder: "588, 562"
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 1"
@@ -644,14 +791,13 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_pesquisa_template.sql
+          query_file: queries/sms/sms_puerperas_pesquisa_template.sql
 
-      # SMS Puérpera - D7, D22 - Pesquisa 4
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: true
-        slug: daily-sms-puerperas-d7-d22
-        flow_run_name: sms-puerperas-d7-d22
+        slug: daily-sms-puerperas-pesquisa4-d7-d22
+        flow_run_name: sms-puerperas-pesquisa4-d7-d22
         parameters:
           flow_environment: production
           query_replacements:
@@ -668,7 +814,7 @@ deployments:
           dataset_id: brutos_salesforce
           campaign_name: smspuerperadisparo6
           data_extension_filename: whatsapp_sms_puerperas_pesquisa4
-          de_columns: ["nome", "numero_dias", "maternidade"] # única pesquisa cuja hsm usa a variável numero_dias
+          de_columns: ["nome", "numero_dias", "maternidade"]
           max_dispatch_retries: 0
           whitelist_percentage: 0
           whitelist_environment: production
@@ -677,20 +823,18 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_pesquisa_template.sql
+          query_file: queries/sms/sms_puerperas_pesquisa_template.sql
 
-      # SMS Puérpera - D25, D28, D34 - Pesquisa 5
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: true
-        slug: daily-sms-puerperas-d25-d28-d34
-        flow_run_name: sms-puerperas-d25-d28-d34
+        slug: daily-sms-puerperas-pesquisa5-d25-d28-d34
+        flow_run_name: sms-puerperas-pesquisa5-d25-d28-d34
         parameters:
           flow_environment: production
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo12
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            # 564 = antiga Pesquisa 5 (D25/28), 566 = antiga Pesquisa 6 (D34), unificadas aqui.
             id_hsm_legado_placeholder: "564, 566"
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 5"
@@ -712,14 +856,13 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_pesquisa_template.sql
+          query_file: queries/sms/sms_puerperas_pesquisa_template.sql
 
-      # SMS Puérpera - D40 - Pesquisa 7
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: true
-        slug: daily-sms-puerperas-d40
-        flow_run_name: sms-puerperas-d40
+        slug: daily-sms-puerperas-pesquisa7-d40
+        flow_run_name: sms-puerperas-pesquisa7-d40
         parameters:
           flow_environment: production
           query_replacements:
@@ -743,9 +886,8 @@ deployments:
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query_file: queries/sms_puerperas_pesquisa_template.sql
+          query_file: queries/sms/sms_puerperas_pesquisa_template.sql
 
-      # Confirmação de agendamento do CadÚnico
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -762,9 +904,8 @@ deployments:
           table_id: disparos_efetuados
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_cpfs: true
-          query_file: queries/cadunico_confirma_agendamento.sql          
+          query_file: queries/smas/smas_cadunico_confirma_agendamento.sql
 
-      # SMAS - Carta PIC - Evento
       - cron: "10 09 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -782,9 +923,8 @@ deployments:
           filter_dispatched_phones_or_cpfs: false
           filter_duplicated_cpfs: true
           filter_failed_phones: false
-          query_file: queries/smas_cartaopic_evento.sql
+          query_file: queries/smas/smas_cartaopic_evento.sql
 
-      # SMAS - Cartao PIC - Lembrete
       - cron: "0 12 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -800,7 +940,7 @@ deployments:
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           filter_duplicated_cpfs: true
-          query_file: queries/smas_cartaopic_lembrete.sql
+          query_file: queries/smas/smas_cartaopic_lembrete.sql
 
       # Multas de transito (SMTR): holdout diario com cota em rampa
       - cron: "0 11 * * 1-5"
@@ -817,7 +957,7 @@ deployments:
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           filter_duplicated_cpfs: true
-          query_file: queries/smtr_multa_holdout.sql
-          query_replacements: {"cota_inicial_placeholder": 500, "incremento_cota_placeholder": 50,
+          query_file: queries/smtr/smtr_multa_holdout.sql
+          query_replacements: {"cota_inicial_placeholder": 200, "incremento_cota_placeholder": 0,
             "cota_maxima_placeholder": 5000, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5,
             "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}

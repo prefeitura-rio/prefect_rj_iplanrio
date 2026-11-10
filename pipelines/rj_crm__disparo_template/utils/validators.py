@@ -296,11 +296,11 @@ def validate_campaign_name(
             {query}
         """
         log(message)
-        webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
-        if not webhook_url:
-            print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send notification.")
-        else:
-            send_discord_notification(webhook_url, message)
+        # webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+        # if not webhook_url:
+        #     print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send notification.")
+        # else:
+        #     send_discord_notification(webhook_url, message)
         return None
 
     log(f"campaign_name='{campaign_name}' validado com sucesso ({total} registro(s) encontrado(s)).")
