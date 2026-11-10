@@ -468,6 +468,7 @@ def dispara_full_refresh_chatbot(
             "github_repo": github_repo,
             "bigquery_project": bigquery_project,
             "target": "prod",
+            "gcs_buckets": {"prod": "rj-crm-registry_dbt", "dev": "rj-crm-registry-dev_dbt"},
         },
     )
     print(f"[TAXONOMIA] full refresh '{select}': flow run {flow_run.id} terminou em {flow_run.state.name}.")
