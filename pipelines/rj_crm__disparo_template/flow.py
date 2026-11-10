@@ -277,7 +277,9 @@ def rj_crm__disparo_template_sf(
     # O BigQuery retorna arrays como numpy.ndarray; garantir list aqui evita
     # comportamentos inesperados em todos os pontos do loop de retry que
     # acessam others por índice ou verificam len().
+    print(f"[DEBUG] Normalizando coluna 'others' para listas Python {df.columns}")
     if "others" in df.columns:
+        print("Aplicando normalização da coluna 'others' para listas Python...")
         df["others"] = df["others"].apply(
             lambda x: list(x) if hasattr(x, "__iter__") and not isinstance(x, str) else ([] if x is None else x)
         )
@@ -290,7 +292,7 @@ def rj_crm__disparo_template_sf(
         filter_indicator=filter_duplicated_cpfs,
         label="CPFs",
     )
-    print(f"[DEBUG] Após filtrar cpfs duplicados:\n{df.head(10).to_dict('records')}") if debug else None
+    print(f"Após filtrar cpfs duplicados:\n{df.head(10).to_dict('records')}")
     if df.empty:
         send_dispatch_no_destinations_found(campaign_name, test_mode)
         return
@@ -305,7 +307,7 @@ def rj_crm__disparo_template_sf(
                 df.loc[df["telefone"].isin(failed_phones), "telefone"] = None
             else:
                 df = df[~df["telefone"].isin(failed_phones)]
-            print(f"[DEBUG] Após filtrar quarentena:\n{df.head(10).to_dict('records')}") if debug else None
+            print(f"Após filtrar quarentena:\n{df.head(10).to_dict('records')}")
 
         if df.empty:
             send_dispatch_no_destinations_found(campaign_name, test_mode)
@@ -342,12 +344,15 @@ def rj_crm__disparo_template_sf(
             current_df = base_df.copy()
             # Para linhas com telefone None (marcadas por filter_failed_phones),
             # tenta usar o primeiro número disponível em 'others' antes de descartar
+            print(f"DEBUG: colunas do current_df: {current_df.columns}, com shape {current_df.shape}")
             if "others" in current_df.columns:
                 mask_none = current_df["telefone"].isna()
                 current_df.loc[mask_none, "telefone"] = current_df.loc[mask_none, "others"].apply(
                     lambda x: x[0] if isinstance(x, list) and len(x) >= 1 else None
                 )
+                print(f"DEBUG: colunas do current_df após preencher None com others[0] e antes dropar nans: {current_df.columns}, com shape {current_df.shape}")
             current_df = current_df.dropna(subset=["telefone"])
+            print(f"DEBUG: colunas do current_df após preencher None com others[0] e dropar nans: {current_df.columns}, com shape {current_df.shape}")
             if current_df.shape[0] == 0:
                 print("✅ No destinations available for dispatch attempt 0. Ending.")
                 break
@@ -359,7 +364,7 @@ def rj_crm__disparo_template_sf(
                 break
 
             print(f"⚠️  Sleep 30 minutes before retry dispatch.")
-            time.sleep(30 * 60)
+            time.sleep(10 * 60)  # TODO: mudar pra 30
             print(f"\n⚠️  Starting retry attempt {i} for campaign_name={campaign_name}...")
 
             # Materializa int_crm_status_disparo para garantir que os webhooks de falha
@@ -436,22 +441,20 @@ def rj_crm__disparo_template_sf(
         # --------------------------------------------------------------------------------------
         # PASSO 1: FILTRO DE SEGURANÇA DA MESMA CAMPANHA
         # --------------------------------------------------------------------------------------
-        # Esse filtro impede que o mesmo CPF (i==0) ou telefone (i>0) receba a MESMA campanha mais de uma
-        # vez dentro da janela configurada (ex: 7 dias).
-        # No primeiro disparo (i == 0):
-        #   - Se for "cpf" ou None (padrão), filtramos por "cpf".
-        # No retry (i > 0):
-        #   - Filtramos por "telefone" para garantir que o número de retry não recebeu a campanha antes,
-        #     permitindo que o mesmo CPF tente um telefone alternativo.
+        # Impede que o mesmo cidadão (CPF) receba a MESMA campanha mais de uma vez dentro
+        # da janela configurada (dispatch_interval_days). Sempre filtra por CPF — inclusive
+        # no retry — porque o objetivo é proteger o cidadão, não o número. O telefone
+        # alternativo pode já ter recebido outra campanha, mas o CPF nunca recebeu esta.
         # --------------------------------------------------------------------------------------
         qnt_pessoas = current_df.shape[0]
-        if not already_dispatched_df.empty:  # Vale para qq tentativa, mas no retry só avalia o tefone
+        if not already_dispatched_df.empty:
             print(f"🔍 Aplicando filtro de mesma campanha ({campaign_name})...")
             df_same_campaign = already_dispatched_df[already_dispatched_df["nome_campanha"] == campaign_name]
             print(f"[DEBUG] Mesma campanha data:\n{df_same_campaign.head(10).to_dict('records')}") if debug else None
 
-            # Determina a coluna para o filtro da mesma campanha
-            same_campaign_filter = "cpf" if i == 0 else "telefone"
+            # Sempre filtra por CPF: evita que o mesmo cidadão receba a mesma campanha
+            # duas vezes, independente de ser disparo inicial ou retry.
+            same_campaign_filter = "cpf"
 
             current_df = filter_already_dispatched_phones_or_cpfs(
                 df=current_df,
