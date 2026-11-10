@@ -222,11 +222,18 @@ def carrega_catalogo_regras(
     return df
 
 
-def _aplica_regras(df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida: str, rotulo_etapa: str) -> pd.DataFrame:
+def _aplica_regras(
+    df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida: str, rotulo_etapa: str, coluna_texto: str
+) -> pd.DataFrame:
     """Lógica compartilhada entre aplica_regras_tema e aplica_regras_causa: roda cada
-    regra do catálogo (já sandboxed) contra o `resumo` normalizado (ver
-    `_normaliza_resumo`) das sessões relevantes, e preenche `coluna_saida` com os nomes
+    regra do catálogo (já sandboxed) contra o texto normalizado (ver `_normaliza_resumo`)
+    da `coluna_texto` das sessões relevantes, e preenche `coluna_saida` com os nomes
     das categorias que bateram (pode ser mais de uma — por isso a coluna é array).
+
+    `coluna_texto` é o texto sobre o qual a regra foi induzida e teve a precisão medida
+    no clustering: `resumo` pra tema, `motivo` pra motivo (clustering_v3 treina e audita
+    as regras de motivo sobre o campo `motivo`, ver queries/carregar_sessoes_motivo.sql).
+    Aplicar a regra de motivo sobre o `resumo` muda o que ela pega e invalida a precisão.
 
     Hierárquico: agrupamento (hoje o macrotema) > tema > motivo.
     - A sessão só é avaliada contra as regras do SEU agrupamento — o valor da coluna da
@@ -240,7 +247,7 @@ def _aplica_regras(df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida
       empresta motivo. Bug real que motivou o filtro por tema: causa_nome vinha com
       motivo de um cluster ao qual a sessão não pertencia.
 
-    Sessão não relevante, sem resumo, sem agrupamento (macrotema_principal NULL: o prompt
+    Sessão não relevante, sem texto na `coluna_texto`, sem agrupamento (macrotema_principal NULL: o prompt
     de macrotema não rodou ou devolveu rótulo fora do catálogo) ou de agrupamento sem regra
     continua com `coluna_saida` vazio (já é o default vindo de monta_dataframe_final).
 
@@ -281,8 +288,8 @@ def _aplica_regras(df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida
         # nullable boolean (pd.NA) não aceita `not x` direto — comparação explícita
         if row.get("conteudo_relevante") is not True:
             return []
-        resumo = row.get("resumo")
-        if not resumo or (isinstance(resumo, float) and pd.isna(resumo)):
+        texto = row.get(coluna_texto)
+        if texto is None or (isinstance(texto, float) and pd.isna(texto)) or not str(texto).strip():
             return []
 
         # NULL do BigQuery chega como float('nan'), que é truthy — pd.isna explícito
@@ -301,12 +308,12 @@ def _aplica_regras(df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida
         temas_da_sessao = set(row.get("tema_nome") or [])
 
         matches = []
-        resumo_norm = _normaliza_resumo(resumo)
+        texto_norm = _normaliza_resumo(texto)
         for regra in regras:
             if regra["categoria_pai"] is not None and regra["categoria_pai"] not in temas_da_sessao:
                 continue  # motivo de um tema que esta sessão não tem — fora de escopo
             try:
-                if regra["funcao"](resumo_norm):
+                if regra["funcao"](texto_norm):
                     matches.append(regra["nome_categoria"])
             except Exception as e:  # função individual não pode derrubar a sessão inteira
                 print(
@@ -330,13 +337,14 @@ def _aplica_regras(df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida
 @task(log_prints=True)
 def aplica_regras_tema(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.DataFrame:
     """Etapa 2 (tema, dentro do agrupamento da sessão) — ver _aplica_regras pra lógica completa."""
-    return _aplica_regras(df_final, df_regras, coluna_saida="tema_nome", rotulo_etapa="tema")
+    return _aplica_regras(df_final, df_regras, coluna_saida="tema_nome", rotulo_etapa="tema", coluna_texto="resumo")
 
 
 @task(log_prints=True)
 def aplica_regras_causa(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.DataFrame:
     """Etapa 3 (causa sistêmica/motivo) — mesma lógica de aplica_regras_tema (mesmo
-    sandbox, mesma avaliação contra `resumo`), só que escreve em causa_nome e filtra o
+    sandbox), só que avalia a regra contra o campo `motivo` (não o `resumo`: é sobre ele
+    que a regra de motivo é induzida e medida), escreve em causa_nome e filtra o
     catálogo por etapa='motivo' (ver TAXONOMIA_ETAPA_MOTIVO em constants.py). Diferente
     do tema, motivo é escopado DENTRO do tema (categoria_pai em taxonomia_regras) — uma
     regra de motivo só é avaliada em sessão cujo tema_nome (calculado por
@@ -344,7 +352,7 @@ def aplica_regras_causa(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.D
     filtro por categoria_pai em _aplica_regras). df_final PRECISA vir com tema_nome já
     preenchido — chamar esta função antes de aplica_regras_tema faz toda regra de motivo
     ser descartada (nenhum tema bate)."""
-    return _aplica_regras(df_final, df_regras, coluna_saida="causa_nome", rotulo_etapa="motivo")
+    return _aplica_regras(df_final, df_regras, coluna_saida="causa_nome", rotulo_etapa="motivo", coluna_texto="motivo")
 
 
 # ---------------------------------------------------------------------------
@@ -364,7 +372,8 @@ def aplica_regras_causa(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.D
 @task(log_prints=True, retries=2, retry_delay_seconds=30)
 def extrai_sessoes_para_recalculo_taxonomia(project_id: str, dataset_id: str, table_id: str) -> pd.DataFrame:
     """Lê da própria tabela destino (não da fonte, não rechama a LLM) só o que
-    as regras precisam: id_sessao, resumo, a coluna de agrupamento da sessão (macrotema_principal)
+    as regras precisam: id_sessao, resumo (texto das regras de tema), motivo (texto das
+    regras de motivo), a coluna de agrupamento da sessão (macrotema_principal)
     e conteudo_relevante — mesmo filtro (conteudo_relevante = true) que a etapa 1 já usa
     internamente pra decidir quem entra na avaliação de regra. Todo o histórico, sem
     filtro de data: o recálculo reescreve tema_nome/causa_nome de todas as sessões
@@ -372,7 +381,7 @@ def extrai_sessoes_para_recalculo_taxonomia(project_id: str, dataset_id: str, ta
     client = get_bq_client(project_id)
     full_id = _full_table_id(project_id, dataset_id, table_id)
     query = f"""
-        SELECT id_sessao, resumo, macrotema_principal, conteudo_relevante, causa_nome
+        SELECT id_sessao, resumo, motivo, macrotema_principal, conteudo_relevante, causa_nome
         FROM `{full_id}`
         WHERE conteudo_relevante = true
     """
