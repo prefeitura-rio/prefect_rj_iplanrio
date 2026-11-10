@@ -122,6 +122,12 @@ WITH segmentacao_original AS (
             )
         ) AS nome,
         maternidade,
-        ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo) AS others
+        ARRAY(
+            SELECT x
+            FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WITH OFFSET pos
+            WHERE x IS NOT NULL AND x != celular_disparo
+            QUALIFY ROW_NUMBER() OVER (PARTITION BY x ORDER BY pos) = 1
+            ORDER BY pos
+        ) AS others
     from final
     where celular_disparo is not null
