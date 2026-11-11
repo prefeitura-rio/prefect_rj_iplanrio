@@ -15,7 +15,6 @@ nenhuma mensagem do usuário -> descartada (nunca é classificada, igual ao note
 
 from __future__ import annotations
 
-import functools
 import json
 import re
 import time
@@ -29,10 +28,13 @@ import requests
 from prefect import task
 
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import carrega_classificacoes
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.roteamento import (
+    SECRETARIA_FORA_DA_LISTA,
+    TaxonomiaRoteamento,
+)
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import aplica_regras_causa, aplica_regras_tema
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
-_TAXONOMIAS_DIR = Path(__file__).resolve().parent.parent / "taxonomias"
 
 # Colunas de metadado da sessão (vindas da extração/enriquecimento) que precisam
 # sobreviver até a tabela destino — tanto pras sessões que passam pela LLM quanto
@@ -57,74 +59,6 @@ _COLUNAS_METADADO_SESSAO = [
 _TEMPLATE_COM_HSM = (_PROMPTS_DIR / "classificacao_hsm.txt").read_text()
 _TEMPLATE_SEM_HSM = (_PROMPTS_DIR / "classificacao_sem_hsm.txt").read_text()
 
-# Taxonomias dos prompts de roteamento (macrotema, secretaria) — o JSON é a fonte única:
-# vira a lista renderizada no prompt e o catálogo de rótulos válidos na validação
-# (_MACROTEMAS_VALIDOS/_SECRETARIAS_VALIDAS, mais abaixo), então editar o JSON já muda
-# os dois juntos. Renderizada uma vez aqui (não por sessão): fica no começo do prompt,
-# antes da conversa, e é idêntica em toda chamada — prefixo estável aproveita o cache
-# implícito de contexto do Gemini.
-_MACROTEMAS = json.loads((_TAXONOMIAS_DIR / "macrotemas.json").read_text())
-_SECRETARIAS = json.loads((_TAXONOMIAS_DIR / "secretarias.json").read_text())
-# Os relacionados chegam da LLM e são gravados separados por vírgula — rótulo com
-# vírgula seria quebrado em pedaços que não batem com o catálogo e descartado.
-_ROTULOS_COM_VIRGULA = [m["nome"] for m in _MACROTEMAS if "," in m["nome"]] + [
-    s["sigla"] for s in _SECRETARIAS if "," in s["sigla"]
-]
-if _ROTULOS_COM_VIRGULA:
-    raise ValueError(f"rótulo de taxonomia com vírgula (separador dos relacionados): {_ROTULOS_COM_VIRGULA}")
-_TEMPLATE_MACROTEMA = (_PROMPTS_DIR / "classificacao_macrotema.txt").read_text().replace(
-    "<<MACROTEMAS>>", "\n".join(f"- {m['nome']}: {m['descricao']}" for m in _MACROTEMAS)
-)
-# Secretaria: o prompt mostra só as candidatas dos macrotemas da sessão (campo
-# "secretarias" de cada macrotema no macrotemas.json) — a lista inteira tem 63 órgãos e
-# era metade dos tokens de uma sessão relevante. Macrotema sem lista ("Outros") ou
-# ausente usa a lista completa. Na lista filtrada a LLM pode responder "OUTRA" (órgão da
-# Prefeitura fora das candidatas), e aí a pergunta é refeita com a lista completa.
-_TEMPLATE_SECRETARIA_BASE = (_PROMPTS_DIR / "classificacao_secretaria.txt").read_text()
-_SECRETARIA_FORA_DA_LISTA = "OUTRA"
-_REGRA_FORA_DA_LISTA_COMPLETA = (
-    "3. Se o assunto não for responsabilidade de nenhum órgão da lista (ex.: CEDAE, Light, Detran, "
-    "INSS, Governo do Estado), os dois campos devem ser null."
-)
-_REGRA_FORA_DA_LISTA_FILTRADA = (
-    "3. A lista abaixo traz só os órgãos ligados ao assunto desta conversa. Se o assunto for de um "
-    f'órgão da Prefeitura que não está nela, responda "{_SECRETARIA_FORA_DA_LISTA}" nos dois campos. '
-    "Se não for responsabilidade de nenhum órgão da Prefeitura (ex.: CEDAE, Light, Detran, INSS, "
-    "Governo do Estado), os dois campos devem ser null."
-)
-_SECRETARIAS_POR_MACROTEMA = {m["nome"]: m["secretarias"] for m in _MACROTEMAS if m.get("secretarias")}
-_SIGLAS_DESCONHECIDAS = {s for v in _SECRETARIAS_POR_MACROTEMA.values() for s in v} - {
-    s["sigla"] for s in _SECRETARIAS
-}
-if _SIGLAS_DESCONHECIDAS:
-    raise ValueError(f"macrotemas.json cita sigla fora de secretarias.json: {sorted(_SIGLAS_DESCONHECIDAS)}")
-
-
-@functools.lru_cache(maxsize=None)
-def _template_secretaria(candidatas: tuple[str, ...] | None) -> str:
-    """Template de secretaria com a lista de órgãos já renderizada — completa (None) ou só
-    as candidatas, na ordem do catálogo: o mesmo conjunto gera sempre o mesmo prefixo,
-    que o cache implícito do Gemini aproveita."""
-    if candidatas is None:
-        orgaos, regra = _SECRETARIAS, _REGRA_FORA_DA_LISTA_COMPLETA
-    else:
-        orgaos, regra = [s for s in _SECRETARIAS if s["sigla"] in candidatas], _REGRA_FORA_DA_LISTA_FILTRADA
-    return _TEMPLATE_SECRETARIA_BASE.replace(
-        "<<SECRETARIAS>>", "\n".join(f"- {s['sigla']} – {s['nome']}: {s['descricao']}" for s in orgaos)
-    ).replace("<<REGRA_FORA_DA_LISTA>>", regra)
-
-
-def _secretarias_candidatas(macrotemas_relacionados) -> tuple[str, ...] | None:
-    """União das secretarias dos macrotemas da sessão (relacionados já inclui o
-    principal). None = lista completa: sem macrotema, ou algum deles sem lista própria."""
-    if not macrotemas_relacionados:
-        return None
-    candidatas: set[str] = set()
-    for nome in macrotemas_relacionados.split(", "):
-        if nome not in _SECRETARIAS_POR_MACROTEMA:
-            return None
-        candidatas.update(_SECRETARIAS_POR_MACROTEMA[nome])
-    return tuple(sorted(candidatas))
 # Texto que entra no lugar do HSM nos prompts de roteamento quando a sessão é sem_hsm —
 # eles são um template só pros dois casos (diferente do prompt principal, que tem
 # com_hsm/sem_hsm separados porque sem HSM não há relacao_hsm/telefone pra avaliar).
@@ -345,8 +279,6 @@ def monta_prompts(df_enriquecido: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFr
 # ---------------------------------------------------------------------------
 _RELACAO_HSM_VALIDAS = ["DENTRO_DO_ESCOPO", "FORA_DO_ESCOPO", "MISTO"]
 _NATUREZA_VALIDAS = ["Dúvida", "Problema", "Reclamação", "Elogio", "Solicitação", "Informação"]
-_SECRETARIAS_VALIDAS = [s["sigla"] for s in _SECRETARIAS]
-_MACROTEMAS_VALIDOS = [m["nome"] for m in _MACROTEMAS]
 # telefone_confirmacao_flag: item 7 do prompt com_hsm, ver docstring de monta_dataframe_final
 # pro caso RESPOSTA_ATRASADA_BTN e pra como telefone_confirmacao_datahora é preenchida.
 _TELEFONE_CONFIRMACAO_VALIDAS = ["PERTENCE", "INDEFINIDO", "NAO_PERTENCE"]
@@ -435,8 +367,7 @@ def classifica_sessoes(
     classificacao_resposta_atrasada: str,
     justificativa_resposta_atrasada: str,
     prompt_versao: str,
-    prompt_versao_macrotema: str,
-    prompt_versao_secretaria: str,
+    taxonomia: TaxonomiaRoteamento,
     project_id: str,
     dataset_id: str,
     table_id: str,
@@ -511,40 +442,40 @@ def classifica_sessoes(
         Retorna (campos pra linha destino, usages das chamadas)."""
         hsm = hsm_texto if isinstance(hsm_texto, str) and hsm_texto.strip() else _HSM_AUSENTE
         parsed_mt, bruto_mt, usage_mt = _pergunta(
-            _render(_TEMPLATE_MACROTEMA, hsm_texto=hsm, conversa_completa=conversa_completa)
+            _render(taxonomia.template_macrotema, hsm_texto=hsm, conversa_completa=conversa_completa)
         )
         macrotema_principal, macrotemas_relacionados = _valida_principal_e_relacionados(
-            parsed_mt.get("macrotema_principal"), parsed_mt.get("macrotemas_relacionados"), _MACROTEMAS_VALIDOS
+            parsed_mt.get("macrotema_principal"), parsed_mt.get("macrotemas_relacionados"), taxonomia.macrotemas_validos
         )
         # secretaria depende do macrotema: só as candidatas dele, com "OUTRA" refazendo
-        # com a lista completa (ver _template_secretaria)
-        candidatas = _secretarias_candidatas(macrotemas_relacionados)
+        # com a lista completa (ver TaxonomiaRoteamento.template_secretaria)
+        candidatas = taxonomia.secretarias_candidatas(macrotemas_relacionados)
         parsed_sec, bruto_sec, usage_sec = _pergunta(
-            _render(_template_secretaria(candidatas), hsm_texto=hsm, conversa_completa=conversa_completa)
+            _render(taxonomia.template_secretaria(candidatas), hsm_texto=hsm, conversa_completa=conversa_completa)
         )
         usages = [usage_mt, usage_sec]
         if candidatas is not None and _normaliza_rotulo(
             parsed_sec.get("secretaria_principal") or ""
-        ) == _normaliza_rotulo(_SECRETARIA_FORA_DA_LISTA):
+        ) == _normaliza_rotulo(SECRETARIA_FORA_DA_LISTA):
             parsed_sec, bruto_completa, usage_completa = _pergunta(
-                _render(_template_secretaria(None), hsm_texto=hsm, conversa_completa=conversa_completa)
+                _render(taxonomia.template_secretaria(None), hsm_texto=hsm, conversa_completa=conversa_completa)
             )
             bruto_sec = f"{bruto_sec}\n--- lista completa ---\n{bruto_completa}"
             usages.append(usage_completa)
         secretaria_principal, secretarias_relacionadas = _valida_principal_e_relacionados(
-            parsed_sec.get("secretaria_principal"), parsed_sec.get("secretarias_relacionadas"), _SECRETARIAS_VALIDAS
+            parsed_sec.get("secretaria_principal"), parsed_sec.get("secretarias_relacionadas"), taxonomia.secretarias_validas
         )
         campos = {
             "macrotema_principal": macrotema_principal,
             "macrotemas_relacionados": macrotemas_relacionados,
             "justificativa_macrotema": parsed_mt.get("justificativa_macrotema"),
             "resposta_llm_bruta_macrotema": bruto_mt,
-            "prompt_versao_macrotema": prompt_versao_macrotema,
+            "prompt_versao_macrotema": taxonomia.prompt_versao_macrotema,
             "secretaria_principal": secretaria_principal,
             "secretarias_relacionadas": secretarias_relacionadas,
             "justificativa_secretaria": parsed_sec.get("justificativa_secretaria"),
             "resposta_llm_bruta_secretaria": bruto_sec,
-            "prompt_versao_secretaria": prompt_versao_secretaria,
+            "prompt_versao_secretaria": taxonomia.prompt_versao_secretaria,
         }
         return campos, usages
 
