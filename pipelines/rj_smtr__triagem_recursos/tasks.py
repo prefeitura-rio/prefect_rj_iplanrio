@@ -21,6 +21,7 @@ Fluxo de Dependências:
 """
 
 from typing import Any
+
 from prefect import get_run_logger, task
 
 from .constants import (
@@ -42,11 +43,11 @@ from .utils.triage import gerar_sumario_lote, triar_processo
 
 @task(name="carregar_artefatos_referencia", retries=2, retry_delay_seconds=5)
 def task_carregar_artefatos_referencia(
-    is_local: bool = True,
+    is_local: bool = False,
     arquivo_prompt: str = f"{VERSAO_PROMPT_PADRAO}.txt",
     infisical_secret_path: str | None = None,
 ) -> dict[str, Any]:
-    """Carrega parâmetros de calibração do PostgreSQL com fallback para artefatos congelados."""
+    """Carrega parâmetros de calibração do PostgreSQL (com fallback local apenas se is_local=True)."""
     return carregar_artefatos_pipeline(
         is_local=is_local,
         arquivo_prompt=arquivo_prompt,
@@ -56,8 +57,8 @@ def task_carregar_artefatos_referencia(
 
 @task(name="buscar_processos_pendentes", retries=2, retry_delay_seconds=5)
 def task_buscar_processos_pendentes(
-    is_local: bool = True,
-    fonte_pdf: str = "local",
+    is_local: bool = False,
+    fonte_pdf: str = "sei",
     cliente_sei: Any | None = None,
     modo: str = "INCREMENTAL",
     limite: int = 300,
@@ -69,6 +70,7 @@ def task_buscar_processos_pendentes(
     db_url = resolver_banco_url(is_local)
     return buscar_processos_para_triagem_ou_fallback(
         db_url=db_url,
+        is_local=is_local,
         fonte_pdf=fonte_pdf,
         cliente_sei=cliente_sei,
         modo=modo,
@@ -88,8 +90,8 @@ def task_buscar_processos_pendentes(
 def task_triar_processo_individual(
     processo: dict[str, Any],
     artefatos: dict[str, Any],
-    is_local: bool = True,
-    fonte_pdf: str = "local",
+    is_local: bool = False,
+    fonte_pdf: str = "sei",
     cliente_sei: Any | None = None,
     limiar_alta: float = LIMIAR_ALTA,
     limiar_baixa: float = LIMIAR_BAIXA,
@@ -117,9 +119,14 @@ def task_triar_processo_individual(
 
 
 @task(name="persistir_lote_resultados", retries=2, retry_delay_seconds=5)
-def task_persistir_lote_resultados(resultados: list[dict[str, Any]], is_local: bool = True) -> None:
-    """Persiste as predicoes e auditorias na base e atualiza a fila de trabalho."""
-    logger = get_run_logger()
+def task_persistir_lote_resultados(resultados: list[dict[str, Any]], is_local: bool = False) -> None:
+    """Persiste as predicoes e atualiza a fila de trabalho no banco de dados."""
+    try:
+        logger = get_run_logger()
+    except Exception:
+        from prefect.logging import get_logger
+
+        logger = get_logger("toolkit")
     db_url = resolver_banco_url(is_local)
 
     logger.info("Gravando %d resultado(s) no banco de dados...", len(resultados))
@@ -128,8 +135,7 @@ def task_persistir_lote_resultados(resultados: list[dict[str, Any]], is_local: b
         logger.info("Resultados persistidos com sucesso.")
     except Exception as exc:
         logger.error("Falha ao persistir no banco de dados: %s", exc)
-        if not is_local:
-            raise
+        raise
 
 
 @task(name="gerar_sumario_lote")

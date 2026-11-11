@@ -21,10 +21,11 @@ Fluxo de Dependências:
   * NumPy, Pandas e Math para cálculos de quantis conformais empíricos e funções de score.
 """
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
 import numpy as np
 import polars as pl
 
@@ -145,7 +146,9 @@ def aplicar_clustered_pooling(
     classes_raras_norm = {normalizar_rotulo_str(c) for c in classes_raras}
     if hasattr(df_scores, "filter"):
         sub_df = df_scores.filter(
-            pl.col(col_classe).map_elements(normalizar_rotulo_str, return_dtype=pl.String).is_in(list(classes_raras_norm))
+            pl.col(col_classe)
+            .map_elements(normalizar_rotulo_str, return_dtype=pl.String)
+            .is_in(list(classes_raras_norm))
         )
         scores_pool = sub_df[col_score].to_numpy()
     else:

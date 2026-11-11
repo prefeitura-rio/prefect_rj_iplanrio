@@ -18,9 +18,10 @@ Fluxo de Dependências:
   * Módulo folha de tarifação orçamentária (sem dependências de outros submódulos da pipeline).
 """
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 from pathlib import Path
+
 import polars as pl
 
 
@@ -122,11 +123,27 @@ def gerar_relatorio_comparativo_modelos(
 
         colunas = set(df.columns)
         modelo = str(df["modelo"][0]) if "modelo" in colunas else "desconhecido"
-        acuracia = float(df["acertou_hipotese"].mean() * 100) if "acertou_hipotese" in colunas and df["acertou_hipotese"].mean() is not None else 0.0
+        acuracia = (
+            float(df["acertou_hipotese"].mean() * 100)
+            if "acertou_hipotese" in colunas and df["acertou_hipotese"].mean() is not None
+            else 0.0
+        )
 
-        media_tokens_in = float(df["tokens_input"].mean()) if "tokens_input" in colunas and df["tokens_input"].mean() is not None else 3500.0
-        media_tokens_out = float(df["tokens_output"].mean()) if "tokens_output" in colunas and df["tokens_output"].mean() is not None else 150.0
-        media_tokens_cache = float(df["tokens_cached"].mean()) if "tokens_cached" in colunas and df["tokens_cached"].mean() is not None else 0.0
+        media_tokens_in = (
+            float(df["tokens_input"].mean())
+            if "tokens_input" in colunas and df["tokens_input"].mean() is not None
+            else 3500.0
+        )
+        media_tokens_out = (
+            float(df["tokens_output"].mean())
+            if "tokens_output" in colunas and df["tokens_output"].mean() is not None
+            else 150.0
+        )
+        media_tokens_cache = (
+            float(df["tokens_cached"].mean())
+            if "tokens_cached" in colunas and df["tokens_cached"].mean() is not None
+            else 0.0
+        )
 
         info_custo = calcular_custo_chamada(
             modelo=modelo,

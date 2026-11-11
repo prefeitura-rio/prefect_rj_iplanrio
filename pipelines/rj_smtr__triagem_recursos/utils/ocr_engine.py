@@ -18,21 +18,18 @@ Fluxo de Dependências:
 - Dependências Diretas:
   * PyMuPDF (`pymupdf`): extração de texto vetorial e renderização raster de laudas em memória.
   * Tesseract OCR (`pytesseract`): motor óptico de reconhecimento com detecção automática de binário.
-  * `prefect_rj_iplanrio.logging`: logger com rastreabilidade OpenTelemetry.
+  * `prefect.logging`: logger com rastreabilidade OpenTelemetry.
 """
 
 import io
 import os
-from pathlib import Path
 import shutil
-import pymupdf
-import logging
+from pathlib import Path
 
-try:
-    from prefect_rj_iplanrio.logging import get_logger
-    logger = get_logger(__name__)
-except ImportError:
-    logger = logging.getLogger(__name__)
+import pymupdf
+from prefect.logging import get_logger
+
+logger = get_logger("toolkit")
 
 TESSERACT_CONFIGURADO = False
 

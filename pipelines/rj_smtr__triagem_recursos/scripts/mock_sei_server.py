@@ -29,15 +29,9 @@ from urllib.parse import parse_qs
 
 import uvicorn
 from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
+from prefect.logging import get_logger
 
-try:
-    from prefect_rj_iplanrio.logging import get_logger
-
-    logger = get_logger(__name__)
-except ImportError:
-    import logging
-
-    logger = logging.getLogger(__name__)
+logger = get_logger("toolkit")
 
 app = FastAPI(
     title="Simulador SEI-Rio (mod-wssei Mock)",

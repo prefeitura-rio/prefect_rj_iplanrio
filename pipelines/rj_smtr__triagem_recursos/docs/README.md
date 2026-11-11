@@ -68,94 +68,79 @@ A partir de estudo de ablação empírico sobre o Golden Set de 730 processos, o
 pipelines/rj_smtr__triagem_recursos/
 ├── flow.py                         # Orquestrador @flow da pipeline
 ├── tasks.py                        # Definição fina de @task decoradas
-├── constants.py                    # Constantes de negócio, limiares e resolução de ambiente
+├── constants.py                    # Constantes de negócio, limiares e resolução de banco
 ├── pyproject.toml                  # Manifesto Hatchling do pacote no workspace
-├── prefect.yaml                    # Deployments e schedules da SMTR
-├── Dockerfile                      # Imagem de execução com dependências de OCR/Tesseract
-├── prompts/                        # Prompts de sistema versionados
-│   ├── v2-4_fix-confianca.txt
-│   └── v3_baseline.txt             # Prompt v3 baseline em produção
-├── scripts/                        # Scripts operacionais de banco e suporte
-│   ├── setup_local_db.py           # Inicializador de DDL e fila local
-│   └── seed_goldenset_to_cloudsql.py # Ingestão do Golden Set no PostgreSQL / Cloud SQL
-├── utils/                          # Módulos puros (sem acoplamento com Prefect)
-│   ├── artifacts.py                # Manipulação de artefatos
-│   ├── calibration.py              # Utilitários de métricas de calibração
+├── prefect.yaml                    # Deployments staging e prod da SMTR
+├── Dockerfile                      # Imagem de execução com Tesseract OCR e cache MiniLM
+├── queries/                        # Consultas SQL externalizadas
+│   ├── buscar_configuracao_calibracao_ativa.sql
+│   ├── buscar_processos_para_triagem.sql
+│   ├── enfileirar_processo.sql
+│   ├── filtrar_processos_ja_triados.sql
+│   ├── insert_predicoes.sql
+│   ├── recuperar_processos_travados.sql
+│   ├── update_processo_documento.sql
+│   ├── update_status_fila.sql
+│   └── upsert_processo_sei.sql
+├── scripts/                        # Utilitários operacionais locais e mock SEI
+│   ├── mock_sei_server.py          # Mock HTTP do mod-wssei para testes locais
+│   └── run_local.py                # Entrypoint CLI para testes locais
+├── utils/                          # Módulos internos (calibração, OCR, SEI, LLM, DB)
+│   ├── artifacts.py                # Carregamento do calibrador (PostgreSQL + fallback local) e prompt
+│   ├── calibration.py              # Métricas de calibração (ECE, MCE, CECE, Brier)
 │   ├── conformal.py                # Predição conforme condicional por classe (CCCP) e CRC
-│   ├── cost_analyzer.py            # Estimativa de custos de chamadas de LLM
-│   ├── db.py                       # Helpers de conexão
-│   ├── db_repository.py            # Persistência transacional e consulta de fila
+│   ├── cost_analyzer.py            # Estimativa de custos e economia de cache
+│   ├── db_repository.py            # Persistência transacional e consulta de fila no PostgreSQL
 │   ├── feature_extractor.py        # Extração dos 8 sinais epistêmicos
 │   ├── guardrails.py               # Guardrails de consistência fática
 │   ├── meta_calibrator.py          # Carregamento e inferência do LightGBM calibrado
 │   ├── ocr_engine.py               # Lazy OCR Tesseract na lauda citada
 │   ├── router.py                   # Atualização de log-odds e chaveamento de rotas
 │   ├── schemas.py                  # Schemas Pydantic / Enums operacionais
-│   ├── storage.py                  # Abstração polimórfica (Local vs GCS)
+│   ├── sei_client.py               # Cliente REST assíncrono/httpx para SEI-Rio (mod-wssei)
+│   ├── storage.py                  # Leitura de bytes de PDF em RAM (local ou SEI)
+│   ├── triage.py                   # Fluxo completo de inferência, calibração e roteamento
 │   ├── windowing.py                # Smart windowing de PDFs (até 20 páginas em RAM)
-│   ├── queries/
-│   │   └── create_db.sql           # DDL das 4 tabelas operacionais e triggers
 │   └── providers/
 │       ├── base.py                 # Interface abstrata de provedor LLM
-│       ├── google_client.py        # Conexão nativa Vertex AI
-│       └── openai_client.py        # Conexão com Gateway Bifrost / LiteLLM
+│       ├── google_client.py        # Cliente direto Gemini (Google GenAI SDK)
+│       └── openai_client.py        # Conexão com Gateway Bifrost (API compatível OpenAI)
 ├── pdfs/                           # (Local / .gitignore) PDFs para testes
-├── artifacts/                      # (Local / .gitignore) Artefatos .joblib de calibração
-└── docs/                           # (Local / .gitignore) Documentações auxiliares
-
+├── artifacts/                      # (Local / .gitignore) Artefatos .joblib locais (não versionados)
+├── prompts/                        # (Local / .gitignore) Prompts locais (em nuvem vem do Infisical PROMPT_SISTEMA_V4)
+├── outputs/                        # (Local / .gitignore) Exports SQL gerados para carga inicial
+└── docs/                           # Documentação técnica da pipeline
 ```
 
 ---
 
 ## Como Executar a Pipeline
 
-A pipeline foi estruturada para suportar execuções pontuais de teste (como um único processo usando os artefatos já calibrados como baseline) ou lotes de produção, alternando entre ambiente local e nuvem.
+As tabelas e migrações DDL pertencem ao repositório externo de banco (`mcp-triagem-smtr`), não à pipeline. Em **staging/prod**, a conexão usa `DATABASE_URL` e o prompt vem de `PROMPT_SISTEMA_V4` via Infisical, enquanto a baseline ativa do calibrador e os parâmetros CCCP residem na tabela `configuracoes_calibracao`. Em execução **local** (`is_local=True`), utiliza-se `DB_URL_LOCAL` (com fallback local opcional em `artifacts/` e `prompts/`).
 
-### 1. Preparação do Ambiente Local (Docker PostgreSQL)
+### 1. Execução Local (via `scripts/run_local.py`)
 
-Inicie o contêiner de banco de dados e configure as tabelas e o caso de teste:
+Inicie um PostgreSQL 16 local compatível com o schema das migrações (ex.: `smtr-postgres-local`) e rode o entrypoint CLI:
 
 ```powershell
-# Subir contêiner PostgreSQL 16
-docker run --name smtr-postgres-local -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=smtr_triagem -p 5432:5432 -d postgres:16
+# Teste local lendo PDFs da pasta pdfs/
+uv run --package rj_smtr__triagem_recursos python pipelines/rj_smtr__triagem_recursos/scripts/run_local.py --local --fonte-pdf local --limite 5
 
-# Inicializar esquema DDL e enfileirar registro de teste
-uv run pipelines/rj_smtr__triagem_recursos/scripts/setup_local_db.py
+# Teste local integrado ao SEI / Mock SEI (com --cloud para apontar para DATABASE_URL)
+uv run --package rj_smtr__triagem_recursos python pipelines/rj_smtr__triagem_recursos/scripts/run_local.py --local --fonte-pdf sei --modo PASSIVO --limite 5
+```
 
+### 2. Execução em Nuvem (Staging / Cloud SQL via Prefect)
+
+No cluster (via deployment `rj-smtr--triagem-recursos--staging` em `prefect.yaml`), o entrypoint carrega os segredos com `python -m utils.secrets`, lê `DATABASE_URL` e `PROMPT_SISTEMA_V4` do Infisical e consome `configuracoes_calibracao` diretamente do Cloud SQL:
+
+```powershell
+uv run --package rj_smtr__triagem_recursos python -c "from pipelines.rj_smtr__triagem_recursos.flow import rj_smtr__triagem_recursos; rj_smtr__triagem_recursos(is_local=False, modo_execucao='INCREMENTAL', limite_lote=50)"
 ```
 
 ---
 
-### 2. Execução da Pipeline
-
-A pipeline pode rodar localmente consumindo os arquivos `.joblib` congelados como referência para calibrar novos casos sem a necessidade de reprocessar o Golden Set inteiro.
-
-#### Execução de Teste Unitário / Pontual (1 Processo):
-
-Executa a triagem pontual do processo pendente na fila utilizando os artefatos de referência congelados:
-
-```powershell
-uv run --env-file .env python -c "from pipelines.rj_smtr__triagem_recursos.flow import rj_smtr__triagem_recursos; rj_smtr__triagem_recursos(is_local=True, limite_lote=1)"
-
-```
-
-#### Execução em Lote com Prefect CLI:
-
-```powershell
-uv run prefect flow-run execute-flow --name rj_smtr__triagem_recursos --param is_local=true --param limite_lote=50
-
-```
-
-#### Execução apontando para Nuvem (Google Cloud SQL e GCS):
-
-```powershell
-uv run python -c "from pipelines.rj_smtr__triagem_recursos.flow import rj_smtr__triagem_recursos; rj_smtr__triagem_recursos(is_local=False, modo_execucao='INCREMENTAL', limite_lote=300)"
-
-```
-
----
-
-### 3. Auditoria do Banco Local
+### 3. Auditoria do Banco
 
 Para inspecionar as predições, o chaveamento de rotas e as features gravadas:
 
@@ -175,7 +160,6 @@ FROM predicoes_pipeline pr
 JOIN processos_administrativos p ON p.processo_id = pr.processo_id
 JOIN fila_trabalho f ON f.processo_id = pr.processo_id;
 "
-
 ```
 
 ---

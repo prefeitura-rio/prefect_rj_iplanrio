@@ -25,14 +25,17 @@ Fluxo de Dependências:
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import joblib
 import lightgbm as lgb
 import numpy as np
-import polars as pl
 
 from .feature_extractor import (
     EstatisticasSemanticasClasses,
     VetorSinaisEpistemicos,
 )
+
+EPSILON_SIGMA = 1e-7
 
 COLUNAS_FEATURES_PADRAO = [
     "fuzz_ratio",
@@ -72,11 +75,20 @@ def criar_calibrador_dos_parametros_banco(config_db: dict[str, Any]) -> ModeloCa
     medias = config_db["medias_scaler"]
     desvios = config_db["desvios_scaler"]
 
-    model_str = config_db["lightgbm_model_text"]
+    model_str = str(config_db["lightgbm_model_text"]).replace("\r\n", "\n").replace("\r", "\n")
     booster = lgb.Booster(model_str=model_str)
 
     stats_json = config_db.get("estatisticas_classes") or {}
-    curva_iso = stats_json.get("curva_isotonica")
+    centroides_raw = stats_json.get("centroides") or {}
+    cov_inv_raw = stats_json.get("cov_inv") or {}
+
+    centroides_np = {k: np.asarray(v, dtype=np.float64) for k, v in centroides_raw.items()}
+    cov_inv_np = {k: np.asarray(v, dtype=np.float64) for k, v in cov_inv_raw.items()}
+
+    estatisticas_classes = EstatisticasSemanticasClasses(
+        centroides=centroides_np,
+        cov_inv=cov_inv_np,
+    )
 
     metadados = {
         "versao_modelo": config_db.get("versao_modelo"),
@@ -91,8 +103,8 @@ def criar_calibrador_dos_parametros_banco(config_db: dict[str, Any]) -> ModeloCa
         medias_scaler=medias,
         desvios_scaler=desvios,
         booster=booster,
-        curva_isotonica=curva_iso,
-        estatisticas_classes=stats_json,
+        curva_isotonica=None,
+        estatisticas_classes=estatisticas_classes,
         metadados_treino=metadados,
     )
 
@@ -123,7 +135,7 @@ def imputar_e_padronizar_numpy(
 
         mu = float(medias.get(feat, 0.0))
         sigma = float(desvios.get(feat, 1.0))
-        if sigma <= 1e-7:
+        if sigma <= EPSILON_SIGMA:
             sigma = 1.0
 
         vetor_proc[i] = (val - mu) / sigma
@@ -137,10 +149,15 @@ def predizer_probabilidade_calibrada(
 ) -> float:
     """Estima a probabilidade matemática calibrada p_cal in [0.0, 1.0].
 
+    Aplica inferência vetorial com o LightGBM Booster treinado com função de perda
+    log-loss binária (sigmoid:1), retornando a probabilidade empírica contínua real
+    sem discretizações em degrau ou saturação artificial.
+
     :param sinais: Vetor de sinais epistêmicos, dicionário ou array de features.
     :param modelo: Objeto ModeloCalibrador (do banco ou joblib).
-    :returns: Probabilidade calibrada arredondada a 4 casas decimais.
+    :returns: Probabilidade calibrada contínua arredondada a 4 casas decimais.
     :raises TypeError: Se o tipo do parâmetro sinais não for suportado.
+    :raises RuntimeError: Se o modelo calibrador não possuir booster ou parâmetros válidos.
     """
     feature_names = getattr(modelo, "feature_names", COLUNAS_FEATURES_PADRAO)
 
@@ -156,45 +173,43 @@ def predizer_probabilidade_calibrada(
     else:
         raise TypeError(f"Tipo de entrada não suportado: {type(sinais)}")
 
-    clf = getattr(modelo, "classificador_calibrado", None)
-    prep = getattr(modelo, "preprocessor", None)
-    if clf is not None and prep is not None:
-        try:
-            df = pl.DataFrame([dict(zip(feature_names, vetor, strict=True))])
-            x_input = df.to_pandas() if hasattr(df, "to_pandas") else vetor.reshape(1, -1)
-            x_trans = prep.transform(x_input)
-            prob_calibrada = float(clf.predict_proba(x_trans)[0][1])
-            return round(float(np.clip(prob_calibrada, 0.0, 1.0)), 4)
-        except Exception:
-            pass
-
     booster = getattr(modelo, "booster", None)
-    if booster is not None:
-        medianas = getattr(modelo, "medianas_imputacao", {})
-        medias = getattr(modelo, "medias_scaler", {})
-        desvios = getattr(modelo, "desvios_scaler", {})
+    if booster is None:
+        clf = getattr(modelo, "classificador_calibrado", None)
+        if clf is not None and hasattr(clf, "calibrated_classifiers_") and len(clf.calibrated_classifiers_) > 0:
+            booster = clf.calibrated_classifiers_[0].estimator.booster_
 
-        vetor_proc = imputar_e_padronizar_numpy(
-            vetor_bruto=vetor,
-            feature_names=feature_names,
-            medianas=medianas,
-            medias=medias,
-            desvios=desvios,
-        )
+    if booster is None:
+        raise RuntimeError("Booster do modelo calibrador não foi inicializado. Calibração falhou explicitamente.")
 
-        prob_bruta = float(booster.predict(vetor_proc)[0])
+    medianas = getattr(modelo, "medianas_imputacao", None)
+    medias = getattr(modelo, "medias_scaler", None)
+    desvios = getattr(modelo, "desvios_scaler", None)
 
-        curva_iso = getattr(modelo, "curva_isotonica", None)
-        if curva_iso and "x" in curva_iso and "y" in curva_iso:
-            x_pts = curva_iso["x"]
-            y_pts = curva_iso["y"]
-            prob_calibrada = float(np.interp(prob_bruta, x_pts, y_pts))
-        else:
-            prob_calibrada = prob_bruta
+    if not medianas or not medias or not desvios:
+        prep = getattr(modelo, "preprocessor", None)
+        if prep is not None and hasattr(prep, "named_steps"):
+            med_arr = prep.named_steps["imputer"].statistics_
+            mean_arr = prep.named_steps["scaler"].mean_
+            scale_arr = prep.named_steps["scaler"].scale_
+            medianas = dict(zip(feature_names, [float(x) for x in med_arr], strict=True))
+            medias = dict(zip(feature_names, [float(x) for x in mean_arr], strict=True))
+            desvios = dict(zip(feature_names, [float(x) for x in scale_arr], strict=True))
 
-        return round(float(np.clip(prob_calibrada, 0.0, 1.0)), 4)
+    if not medianas or not medias or not desvios:
+        raise RuntimeError("Parâmetros de normalização (medianas, médias, desvios) ausentes no modelo calibrador.")
 
-    return 0.5000
+    vetor_proc = imputar_e_padronizar_numpy(
+        vetor_bruto=vetor,
+        feature_names=feature_names,
+        medianas=medianas,
+        medias=medias,
+        desvios=desvios,
+    )
+
+    prob_bruta = float(booster.predict(vetor_proc)[0])
+    prob_continua = float(np.clip(prob_bruta, 0.0001, 0.9999))
+    return round(prob_continua, 4)
 
 
 def salvar_calibrador(modelo: ModeloCalibrador, caminho_arquivo: Path) -> None:
@@ -203,7 +218,5 @@ def salvar_calibrador(modelo: ModeloCalibrador, caminho_arquivo: Path) -> None:
     :param modelo: Instância de ModeloCalibrador a serializar.
     :param caminho_arquivo: Destino onde salvar o arquivo joblib.
     """
-    import joblib
-
     caminho_arquivo.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(modelo, caminho_arquivo)

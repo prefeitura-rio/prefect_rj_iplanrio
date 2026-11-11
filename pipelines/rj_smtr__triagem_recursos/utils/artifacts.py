@@ -18,20 +18,18 @@ Fluxo de Dependências:
   * `utils/db_repository.py`: invoca `buscar_configuracao_calibracao_ativa` para consultar o banco.
   * `utils/meta_calibrator.py`: utiliza `criar_calibrador_dos_parametros_banco` para compor o `ModeloCalibrador`.
   * `utils/conformal.py`: utiliza `criar_artefatos_conforme_do_banco` para compor `ArtefatosConforme`.
-  * `prefect_rj_iplanrio.logging`: logger com rastreabilidade OpenTelemetry.
+  * `prefect.logging`: logger com rastreabilidade OpenTelemetry.
 """
 
-from dataclasses import dataclass
 import os
-from pathlib import Path
 import sys
 import types
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+
 import joblib
-
 from prefect.logging import get_logger
-
-logger = get_logger("toolkit")
 
 from ..constants import (
     LOCAL_ARTIFACTS_DIR,
@@ -44,6 +42,8 @@ from .meta_calibrator import (
     ModeloCalibrador,
     criar_calibrador_dos_parametros_banco,
 )
+
+logger = get_logger("toolkit")
 
 
 def registrar_aliases_legados() -> None:
@@ -74,11 +74,10 @@ BASELINE_CACHE: BaselineReferencia | None = None
 
 def carregar_prompt_sistema(
     caminho_prompt: Path | None = None,
-    gcs_uri: str | None = None,
     infisical_secret_path: str | None = None,
+    is_local: bool = False,
 ) -> str:
-    """Carrega o texto das instrucoes operacionais do Infisical/ambiente, GCS ou disco local."""
-    # 1. Checa injecao de segredo via Infisical no ambiente do container
+    """Carrega o texto das instrucoes operacionais via Infisical/ambiente (ou disco em modo local)."""
     for var_nome in ("PROMPT_SISTEMA_V4", "PROMPT_SISTEMA", "SMTR_TRIAGEM_PROMPT"):
         valor_env = os.environ.get(var_nome)
         if valor_env and len(valor_env.strip()) > 50:
@@ -92,30 +91,11 @@ def carregar_prompt_sistema(
             logger.info("Prompt carregado via chave derivada do Infisical (%s).", chave_derivada)
             return valor_derivado.strip()
 
-    # 2. Google Cloud Storage
-    from ..constants import GCS_PROMPT_URI
+    if not is_local:
+        raise RuntimeError(
+            "Variavel de ambiente PROMPT_SISTEMA_V4 nao localizada no Infisical para execucao em cloud/staging."
+        )
 
-    uri_alvo = gcs_uri or GCS_PROMPT_URI
-    if uri_alvo and str(uri_alvo).startswith("gs://"):
-        try:
-            import shutil
-            import subprocess
-
-            cmd = shutil.which("gcloud")
-            if cmd:
-                res = subprocess.run(
-                    [cmd, "storage", "cat", str(uri_alvo)],
-                    capture_output=True,
-                    encoding="utf-8",
-                    check=True,
-                )
-                if res.stdout and len(res.stdout.strip()) > 100:
-                    logger.info("Prompt carregado com sucesso a partir do GCS (%s).", uri_alvo)
-                    return res.stdout
-        except Exception as exc:
-            logger.warning("Falha ao carregar prompt do GCS (%s): %s", uri_alvo, exc)
-
-    # 3. Filesystem local
     if caminho_prompt and caminho_prompt.exists():
         return caminho_prompt.read_text(encoding="utf-8")
 
@@ -159,6 +139,20 @@ def carregar_baseline_referencia(
         raise FileNotFoundError(f"Nenhum arquivo conformal_artifacts_*.joblib encontrado em {pasta.resolve()}")
 
     calibrador: ModeloCalibrador = joblib.load(arquivos_calibrador[0])
+    if calibrador.booster is None and getattr(calibrador, "classificador_calibrado", None) is not None:
+        clf = calibrador.classificador_calibrado
+        if hasattr(clf, "calibrated_classifiers_") and len(clf.calibrated_classifiers_) > 0:
+            calibrador.booster = clf.calibrated_classifiers_[0].estimator.booster_
+        prep = getattr(calibrador, "preprocessor", None)
+        if prep is not None and hasattr(prep, "named_steps"):
+            med_arr = prep.named_steps["imputer"].statistics_
+            mean_arr = prep.named_steps["scaler"].mean_
+            scale_arr = prep.named_steps["scaler"].scale_
+            calibrador.medianas_imputacao = dict(
+                zip(calibrador.feature_names, [float(x) for x in med_arr], strict=True)
+            )
+            calibrador.medias_scaler = dict(zip(calibrador.feature_names, [float(x) for x in mean_arr], strict=True))
+            calibrador.desvios_scaler = dict(zip(calibrador.feature_names, [float(x) for x in scale_arr], strict=True))
     conformal: ArtefatosConforme = joblib.load(arquivos_conformal[0])
     prompt_sistema = carregar_prompt_sistema()
 
@@ -171,11 +165,11 @@ def carregar_baseline_referencia(
 
 
 def carregar_artefatos_pipeline(
-    is_local: bool = True,
+    is_local: bool = False,
     arquivo_prompt: str = f"{VERSAO_PROMPT_PADRAO}.txt",
-    infisical_secret_path: str | None = None,
+    infisical_secret_path: str | None = "/rj_smtr__triagem_recursos",
 ) -> dict[str, Any]:
-    """Carrega os artefatos da pipeline via PostgreSQL ativo com fallback para arquivos locais."""
+    """Carrega calibracao ativa do PostgreSQL (fallback local apenas se is_local=True) e prompt do sistema."""
     from .db_repository import buscar_configuracao_calibracao_ativa
 
     db_url = resolver_banco_url(is_local)
@@ -197,8 +191,11 @@ def carregar_artefatos_pipeline(
             calibracao_id,
         )
     except Exception as exc:
+        if not is_local:
+            logger.error("Configuracao de calibracao ativa indisponivel no Cloud SQL: %s", exc)
+            raise RuntimeError(f"Falha ao carregar configuracao de calibracao ativa no Cloud SQL: {exc}") from exc
         logger.warning(
-            "Configuracao no banco indisponivel (%s). Usando baseline congelada...",
+            "Configuracao no banco local indisponivel (%s). Usando baseline congelada...",
             exc,
         )
         baseline = carregar_baseline_referencia()
@@ -212,8 +209,9 @@ def carregar_artefatos_pipeline(
     prompt_sistema = carregar_prompt_sistema(
         caminho_prompt=caminho_prompt,
         infisical_secret_path=infisical_secret_path,
+        is_local=is_local,
     )
-    versao_prompt = caminho_prompt.stem
+    versao_prompt = Path(arquivo_prompt).stem or VERSAO_PROMPT_PADRAO
 
     return {
         "calibrador": calibrador,

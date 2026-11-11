@@ -55,6 +55,7 @@ from ..constants import (
     VERTEX_LLM_MODEL,
     FaixaOperacional,
     RotaExecucao,
+    StatusProcessamento,
 )
 from .cost_analyzer import calcular_custo_chamada
 from .feature_extractor import extrair_sinais_epistemicos
@@ -87,8 +88,8 @@ def obter_cliente_llm(modelo: str | None = None) -> Any:
 def triar_processo(
     processo: dict[str, Any],
     artefatos: dict[str, Any],
-    is_local: bool = True,
-    fonte_pdf: str = "local",
+    is_local: bool = False,
+    fonte_pdf: str = "sei",
     cliente_sei: Any | None = None,
     limiar_alta: float = LIMIAR_ALTA,
     limiar_baixa: float = LIMIAR_BAIXA,
@@ -138,9 +139,10 @@ def triar_processo(
     cliente_llm = obter_cliente_llm(modelo=modelo_llm)
 
     # 1. Download em memória RAM (sem salvar em disco ou GCS) e Smart Windowing
+    t0_download = time.perf_counter()
     try:
         if fonte_pdf == "sei" and cliente_sei is not None:
-            if hasattr(cliente_sei, "obter_pdf_recurso_processo") and id_procedimento_sei and not id_doc_sei:
+            if hasattr(cliente_sei, "obter_pdf_recurso_processo") and id_procedimento_sei:
                 id_doc_sei, pdf_bytes = cliente_sei.obter_pdf_recurso_processo(id_procedimento_sei)
                 processo["id_documento_sei"] = id_doc_sei
             else:
@@ -159,11 +161,18 @@ def triar_processo(
         if not pdf_bytes:
             raise ValueError(f"Arquivo de recurso vazio ou nulo para o processo {numero_sei}.")
 
+        t_download = time.perf_counter() - t0_download
+
+        t0_window = time.perf_counter()
         pdf_window_bytes = extrair_smart_window_pdf(pdf_bytes, max_paginas=max_paginas)
+        t_window = time.perf_counter() - t0_window
     except Exception as exc:
+        t_download = time.perf_counter() - t0_download
+        t_window = 0.0
         logger.error(
-            "Falha na obtenção/validação do PDF para o processo %s: %s",
+            "Falha na obtenção/validação do PDF para o processo %s (%.2fs): %s",
             numero_sei,
+            t_download,
             exc,
         )
         return {
@@ -207,6 +216,7 @@ def triar_processo(
         }
 
     # 2. Inferência Primária N=1 (T=0.0)
+    t0_gemini_n1 = time.perf_counter()
     decisao_1, usage_1 = cliente_llm.classificar(
         pdf_bytes=pdf_window_bytes,
         prompt_sistema=prompt_sistema,
@@ -214,6 +224,7 @@ def triar_processo(
         temperature=0.0,
         reasoning_effort=reasoning_effort,
     )
+    t_gemini_n1 = time.perf_counter() - t0_gemini_n1
     if decisao_1 is None:
         raise ValueError(f"A LLM retornou decisão nula para o processo {numero_sei}")
 
@@ -223,6 +234,7 @@ def triar_processo(
     )
 
     # 3. Lazy OCR com tolerância de lauda adjacente
+    t0_ocr = time.perf_counter()
     texto_ocr, ocr_conf = "", 0.0
     if decisao_1.pagina_evidencia and decisao_1.pagina_evidencia > 0:
         resultado_ocr = extrair_ocr_pagina_especifica(
@@ -234,16 +246,20 @@ def triar_processo(
         )
         if resultado_ocr and isinstance(resultado_ocr, tuple) and len(resultado_ocr) == 2:
             texto_ocr, ocr_conf = resultado_ocr
+    t_ocr = time.perf_counter() - t0_ocr
 
     # 4. Extração das 8 features ativas
+    t0_signals = time.perf_counter()
     sinais_1 = extrair_sinais_epistemicos(
         decisao=decisao_1,
         texto_ocr_pagina=texto_ocr,
         tesseract_mean_conf=ocr_conf,
         estatisticas_classes=stats_classes,
     )
+    t_signals = time.perf_counter() - t0_signals
 
     # 5. Meta-calibração tabular supervisionada
+    t0_calib = time.perf_counter()
     p_cal_1 = predizer_probabilidade_calibrada(sinais_1, calibrador)
     set_conformal = construir_prediction_set_aps(
         decisao=decisao_1,
@@ -251,6 +267,7 @@ def triar_processo(
         estatisticas_classes=stats_classes,
         alpha=getattr(conformal, "alpha", 0.05),
     )
+    t_calib = time.perf_counter() - t0_calib
 
     # 6. Avaliação do roteamento adaptativo
     if p_cal_1 >= limiar_alta and len(set_conformal) <= 1:
@@ -266,6 +283,7 @@ def triar_processo(
     p_final = p_cal_1
     decisao_2 = None
     usage_2 = {"prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0}
+    t_gemini_n2 = 0.0
 
     # 7. Estágio N=2 Condicional (T=0.7)
     if rota_inicial == "CANDIDATO_N2":
@@ -275,6 +293,7 @@ def triar_processo(
                 numero_sei,
                 p_cal_1,
             )
+            t0_gemini_n2 = time.perf_counter()
             decisao_2, usage_2 = cliente_llm.classificar(
                 pdf_bytes=pdf_window_bytes,
                 prompt_sistema=prompt_sistema,
@@ -282,12 +301,15 @@ def triar_processo(
                 temperature=0.7,
                 reasoning_effort=reasoning_effort,
             )
+            t_gemini_n2 = time.perf_counter() - t0_gemini_n2
             decisao_2 = aplicar_guardrail_epistemico(decisao_2)
             estagio2_executado = True
 
             hip_1 = hipotese_1_str
             hip_2 = str(
-                decisao_2.hipotese_legal.value if hasattr(decisao_2.hipotese_legal, "value") else decisao_2.hipotese_legal
+                decisao_2.hipotese_legal.value
+                if hasattr(decisao_2.hipotese_legal, "value")
+                else decisao_2.hipotese_legal
             )
 
             delta_cot = calcular_dispersao_cot(
@@ -335,6 +357,17 @@ def triar_processo(
     total_cached_tokens = usage_1.get("cached_tokens", 0) + usage_2.get("cached_tokens", 0)
 
     tempo_total = round(time.time() - t_inicio, 2)
+    tempos_etapas = {
+        "download_sei_s": round(t_download, 3),
+        "janela_extracao_s": round(t_window, 3),
+        "gemini_n1_s": round(t_gemini_n1, 3),
+        "ocr_s": round(t_ocr, 3),
+        "sinais_s": round(t_signals, 3),
+        "calibracao_s": round(t_calib, 3),
+        "gemini_n2_s": round(t_gemini_n2, 3),
+        "tempo_total_s": tempo_total,
+    }
+
     info_custo = calcular_custo_chamada(
         modelo=modelo_llm,
         prompt_tokens=total_prompt_tokens,
@@ -353,6 +386,18 @@ def triar_processo(
             "possui_espelho_nada_consta": getattr(aud, "possui_espelho_nada_consta", True),
         }
 
+    logger.info(
+        "ETAPAS [%s]: SEI Download=%.2fs | Window=%.2fs | Gemini N=1=%.2fs | OCR=%.2fs | Sinais=%.2fs | Calibração=%.2fs | N=2=%.2fs | TOTAL=%.2fs",
+        numero_sei,
+        t_download,
+        t_window,
+        t_gemini_n1,
+        t_ocr,
+        t_signals,
+        t_calib,
+        t_gemini_n2,
+        tempo_total,
+    )
     logger.info(
         "Triagem de %s concluída em %.2fs | Faixa: %s | p_final: %.4f | Rota: %s | Tokens: In=%d, Out=%d",
         numero_sei,
@@ -413,6 +458,7 @@ def triar_processo(
         "economia_cache_usd": info_custo["economia_cache_usd"],
         "custo_estimado_usd": info_custo["custo_total_usd"],
         "tempo_execucao_s": tempo_total,
+        "tempos_etapas": tempos_etapas,
     }
 
 
@@ -425,16 +471,24 @@ def gerar_sumario_lote(resultados: list[dict[str, Any]]) -> dict[str, Any]:
     df = pl.DataFrame(resultados)
     colunas = set(df.columns)
 
-    qtd_verde = int((df["faixa_operacional"] == FaixaOperacional.VERDE.value).sum()) if "faixa_operacional" in colunas else 0
-    qtd_amarela = int((df["faixa_operacional"] == FaixaOperacional.AMARELA.value).sum()) if "faixa_operacional" in colunas else 0
-    qtd_vermelha = int((df["faixa_operacional"] == FaixaOperacional.VERMELHA.value).sum()) if "faixa_operacional" in colunas else 0
+    qtd_verde = (
+        int((df["faixa_operacional"] == FaixaOperacional.VERDE.value).sum()) if "faixa_operacional" in colunas else 0
+    )
+    qtd_amarela = (
+        int((df["faixa_operacional"] == FaixaOperacional.AMARELA.value).sum()) if "faixa_operacional" in colunas else 0
+    )
+    qtd_vermelha = (
+        int((df["faixa_operacional"] == FaixaOperacional.VERMELHA.value).sum()) if "faixa_operacional" in colunas else 0
+    )
 
     estagio2_sum = int(df["estagio2_executado"].sum()) if "estagio2_executado" in colunas else 0
     total_chamadas = estagio2_sum + total
     mult_chamadas = round(total_chamadas / total, 2)
 
     custo_total = round(float(df["custo_estimado_usd"].sum()), 4) if "custo_estimado_usd" in colunas else 0.0
-    custo_sem_cache = round(float(df["custo_sem_cache_usd"].sum()), 4) if "custo_sem_cache_usd" in colunas else custo_total
+    custo_sem_cache = (
+        round(float(df["custo_sem_cache_usd"].sum()), 4) if "custo_sem_cache_usd" in colunas else custo_total
+    )
     economia_cache = round(float(df["economia_cache_usd"].sum()), 4) if "economia_cache_usd" in colunas else 0.0
 
     total_tokens_in = int(df["tokens_prompt_total"].sum()) if "tokens_prompt_total" in colunas else 0
@@ -442,8 +496,10 @@ def gerar_sumario_lote(resultados: list[dict[str, Any]]) -> dict[str, Any]:
     total_tokens_cache = int(df["tokens_cached"].sum()) if "tokens_cached" in colunas else 0
     pct_cache = round((total_tokens_cache / total_tokens_in * 100), 1) if total_tokens_in > 0 else 0.0
 
+    from datetime import timezone
+
     sumario = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "total": total,
         "faixa_verde": qtd_verde,
         "faixa_amarela": qtd_amarela,
@@ -469,7 +525,8 @@ def gerar_sumario_lote(resultados: list[dict[str, Any]]) -> dict[str, Any]:
         mult_chamadas,
     )
     logger.info(
-        "SUMÁRIO FINANCEIRO / CACHE: Tokens In: %d (Cached: %d | %.1f%%) | Tokens Out: %d | Custo Real: $%.4f USD | Economia Cache: $%.4f USD",
+        "SUMÁRIO FINANCEIRO / CACHE: Tokens In: %d (Cached: %d | %.1f%%) | Tokens Out: %d "
+        "| Custo Real: $%.4f USD | Economia Cache: $%.4f USD",
         total_tokens_in,
         total_tokens_cache,
         pct_cache,

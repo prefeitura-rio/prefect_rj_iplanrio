@@ -12,14 +12,13 @@ probabilidades descalibradas levam a falsos positivos graves na automação. Imp
 
 Fluxo de Dependências:
 - Consumidores Diretos:
-  * `scripts/executar_benchmark_730_oof.py`: avalia a confiabilidade das predições out-of-fold
-    nos experimentos com os 730 casos validados do Golden Set.
-  * Módulos analíticos de auditoria contínua de confiabilidade dos modelos.
+  * Módulos analíticos de auditoria contínua e calibração de confiabilidade dos modelos.
 - Dependências Diretas:
-  * NumPy e Pandas para partição de bins e álgebra vetorial.
+  * NumPy e Polars para partição de bins e álgebra vetorial.
 """
 
 from typing import Any
+
 import numpy as np
 import polars as pl
 

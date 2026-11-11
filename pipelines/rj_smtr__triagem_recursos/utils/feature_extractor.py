@@ -25,10 +25,11 @@ Fluxo de Dependências:
   * SequenceMatcher e regex compiladas de marcadores linguísticos adversativos.
 """
 
+import re
 from dataclasses import asdict, dataclass
 from difflib import SequenceMatcher
-import re
 from typing import Any
+
 import numpy as np
 from prefect.logging import get_logger
 from scipy.spatial.distance import mahalanobis
@@ -39,19 +40,6 @@ logger = get_logger("toolkit")
 
 SENTENCE_MODEL: Any | None = None
 MODELO_EMBEDDING_NOME = "paraphrase-multilingual-MiniLM-L12-v2"
-
-# Perfis médios reais apurados na base histórica de 730 processos do Goldenset
-PERFIS_MEDIOS_GOLDENSET: dict[str, dict[str, float]] = {
-    "citran": {"media_sim": 0.8967, "media_maha": 3.0528},
-    "erro_captura_imagem": {"media_sim": 0.8520, "media_maha": 3.0682},
-    "hipotese_esgotada": {"media_sim": 0.8843, "media_maha": 3.5848},
-    "nao_indicacao_condutor": {"media_sim": 0.8978, "media_maha": 3.2030},
-    "prescricao": {"media_sim": 0.8954, "media_maha": 2.5475},
-    "roubo_furto_clonagem": {"media_sim": 0.8680, "media_maha": 3.6933},
-    "veiculo_especial": {"media_sim": 0.8462, "media_maha": 3.6312},
-}
-MEDIANA_SIM_GOLDENSET = 0.8959
-MEDIANA_MAHA_GOLDENSET = 3.3785
 
 MARCADORES_ADVERSATIVOS = [
     r"\bcontudo\b",
@@ -140,9 +128,7 @@ def obter_modelo_embedding() -> Any:
                 f"mas nao foi encontrada no ambiente ({exc}). Instale a dependencia no container."
             ) from exc
         except Exception as exc:
-            raise RuntimeError(
-                f"Falha ao carregar o modelo de embedding '{MODELO_EMBEDDING_NOME}': {exc}"
-            ) from exc
+            raise RuntimeError(f"Falha ao carregar o modelo de embedding '{MODELO_EMBEDDING_NOME}': {exc}") from exc
     return SENTENCE_MODEL
 
 
@@ -245,24 +231,35 @@ def calcular_similaridade_centroides(
 
     :param emb_cot: Vetor de embedding da CoT.
     :param classe_predita: Hipótese classificada pela LLM.
-    :param centroides: Dicionário opcional com os centróides médios por hipótese.
-    :returns: Valor de similaridade de cosseno normalizado (entre 0.0 e 1.0).
+    :param centroides: Dicionário obrigatório com os centróides médios por hipótese.
+    :returns: Valor de similaridade de cosseno normalizado (entre -1.0 e 1.0).
+    :raises ValueError: Se os centróides não forem fornecidos ou a classe não existir.
     """
-    if centroides is not None and len(centroides) > 0 and np.any(emb_cot != 0):
-        centroid_vec = centroides.get(classe_predita)
-        if centroid_vec is not None:
-            norm_c = float(np.linalg.norm(centroid_vec))
-            norm_e = float(np.linalg.norm(emb_cot))
-            if norm_c > 0 and norm_e > 0:
-                dot_product = float(np.dot(emb_cot, centroid_vec))
-                cos_sim = dot_product / (norm_c * norm_e)
-                return round(float(max(0.0, min(1.0, cos_sim))), 4)
+    if centroides is None or len(centroides) == 0:
+        raise ValueError(
+            f"Dicionário de centróides de referência ausente para a classe '{classe_predita}'. "
+            "Falha explícita de calibração sem fallbacks."
+        )
 
-    perfil = PERFIS_MEDIOS_GOLDENSET.get(classe_predita)
-    if perfil:
-        return perfil["media_sim"]
+    centroid_vec = centroides.get(classe_predita)
+    if centroid_vec is None:
+        raise ValueError(
+            f"Centróide não encontrado para a classe '{classe_predita}'. "
+            f"Classes disponíveis: {list(centroides.keys())}."
+        )
 
-    return MEDIANA_SIM_GOLDENSET
+    if np.all(emb_cot == 0):
+        return 0.0
+
+    arr_c = np.asarray(centroid_vec, dtype=np.float64)
+    norm_c = float(np.linalg.norm(arr_c))
+    norm_e = float(np.linalg.norm(emb_cot))
+    if norm_c <= 0 or norm_e <= 0:
+        return 0.0
+
+    dot_product = float(np.dot(emb_cot, arr_c))
+    cos_sim = dot_product / (norm_c * norm_e)
+    return round(float(np.clip(cos_sim, -1.0, 1.0)), 4)
 
 
 def calcular_distancia_mahalanobis(
@@ -275,31 +272,37 @@ def calcular_distancia_mahalanobis(
     :param emb_cot: Vetor de embedding do raciocínio analítico.
     :param classe_predita: Hipótese legal classificada.
     :param estatisticas: Estatísticas geométricas ou dicionário com centroides e covariância inversa.
-    :returns: Distância de Mahalanobis calculada ou fallback empírico.
+    :returns: Distância de Mahalanobis calculada explicitamente.
+    :raises ValueError: Se as estatísticas ou matrizes de covariância estiverem ausentes.
     """
-    if estatisticas is not None and np.any(emb_cot != 0):
-        if isinstance(estatisticas, dict):
-            centroides = estatisticas.get("centroides") or {}
-            cov_inv = estatisticas.get("cov_inv") or estatisticas.get("matrizes_covariancia") or {}
-        else:
-            centroides = getattr(estatisticas, "centroides", {}) or {}
-            cov_inv = getattr(estatisticas, "cov_inv", {}) or {}
+    if estatisticas is None:
+        raise ValueError(f"Estatísticas geométricas ausentes para cálculo de Mahalanobis da classe '{classe_predita}'.")
 
-        if classe_predita in centroides and classe_predita in cov_inv:
-            mu = np.asarray(centroides[classe_predita], dtype=np.float64)
-            inv_c = np.asarray(cov_inv[classe_predita], dtype=np.float64)
-            try:
-                dist = mahalanobis(emb_cot, mu, inv_c)
-                if not np.isnan(dist):
-                    return round(float(dist), 4)
-            except Exception:
-                pass
+    if isinstance(estatisticas, dict):
+        centroides = estatisticas.get("centroides") or {}
+        cov_inv = estatisticas.get("cov_inv") or estatisticas.get("matrizes_covariancia") or {}
+    else:
+        centroides = getattr(estatisticas, "centroides", {}) or {}
+        cov_inv = getattr(estatisticas, "cov_inv", {}) or {}
 
-    perfil = PERFIS_MEDIOS_GOLDENSET.get(classe_predita)
-    if perfil:
-        return perfil["media_maha"]
+    if classe_predita not in centroides:
+        raise ValueError(
+            f"Centróide ausente para classe '{classe_predita}'. Classes disponíveis: {list(centroides.keys())}."
+        )
+    if classe_predita not in cov_inv:
+        raise ValueError(
+            f"Matriz de covariância inversa ausente para classe '{classe_predita}'. Classes disponíveis: {list(cov_inv.keys())}."
+        )
 
-    return MEDIANA_MAHA_GOLDENSET
+    mu = np.asarray(centroides[classe_predita], dtype=np.float64)
+    inv_c = np.asarray(cov_inv[classe_predita], dtype=np.float64)
+
+    dist = mahalanobis(emb_cot, mu, inv_c)
+    if np.isnan(dist) or np.isinf(dist):
+        raise ValueError(
+            f"Distância de Mahalanobis resultou em valor inválido ({dist}) para classe '{classe_predita}'."
+        )
+    return round(float(dist), 4)
 
 
 def extrair_sinais_epistemicos(
@@ -310,10 +313,10 @@ def extrair_sinais_epistemicos(
 ) -> VetorSinaisEpistemicos:
     """Extrai o vetor completo de 8 características epistêmicas ativas da inferência.
 
-    Aplica mascaramento condicional para evitar penalizações espúrias de grounding em:
-    1. Hipótese Esgotada (sem necessidade de citação).
-    2. Dados Estruturados / Omissões Sistêmicas (validação por espelho).
-    3. Manuscritos (ajuste ponderado pelo ruído do OCR).
+    Cálculo genuíno sem fallbacks estáticos ou mascaramentos artificiais:
+    1. Grounding factual calculado diretamente contra o texto da lauda de evidência.
+    2. Análise linguística de marcadores adversativos na cadeia de raciocínio (CoT).
+    3. Projeção semântica com modelo de embedding em relação aos centróides e covariância real.
 
     :param decisao: Decisão estruturada retornada pela inferência LLM.
     :param texto_ocr_pagina: Texto extraído via OCR na página apontada como evidência.
@@ -326,58 +329,26 @@ def extrair_sinais_epistemicos(
     hipotese = (
         decisao.hipotese_legal.value if hasattr(decisao.hipotese_legal, "value") else str(decisao.hipotese_legal)
     ).lower()
-    tipo_cit = (
-        decisao.tipo_citacao.value if hasattr(decisao.tipo_citacao, "value") else str(decisao.tipo_citacao)
-    ).upper()
     is_manuscrito = getattr(decisao, "is_manuscrito", False)
 
     c_norm = " ".join(citacao.lower().split())
     t_norm = " ".join(texto_ocr_pagina.lower().split())
 
-    # Tratamento Condicional de Grounding
-    if hipotese == "hipotese_esgotada" and (
-        not citacao
-        or tipo_cit in ["NENHUMA_MENCAO", "ALEGACAO_HIPOTETICA"]
-        or getattr(decisao, "pagina_evidencia", 0) == 0
-    ):
-        fuzz = 1.0
-        containment = 1.0
-        exact = 1.0
-    elif tipo_cit == "DADO_ESTRUTURADO":
-        aud = getattr(decisao, "auditoria_sistema", None)
-        tem_espelho = getattr(aud, "possui_espelho_nada_consta", True) if aud else True
-        expedicao = getattr(aud, "data_expedicao_penalidade", "") if aud else ""
-
-        if not tem_espelho or "VALOR_NULO" in expedicao or "TRACO" in expedicao:
-            fuzz = 1.0
-            containment = 1.0
-            exact = 1.0
-        else:
-            fuzz_raw = calcular_fuzzy_levenshtein_janela(citacao, texto_ocr_pagina)
-            containment_raw = calcular_token_containment(citacao, texto_ocr_pagina)
-            fuzz = max(fuzz_raw, 0.75) if fuzz_raw > 0.25 else fuzz_raw
-            containment = max(containment_raw, 0.75) if containment_raw > 0.25 else containment_raw
-            exact = 1.0 if (c_norm and c_norm in t_norm) else 0.0
-    elif is_manuscrito:
-        fuzz_raw = calcular_fuzzy_levenshtein_janela(citacao, texto_ocr_pagina)
-        containment_raw = calcular_token_containment(citacao, texto_ocr_pagina)
-        if tesseract_mean_conf < 0.70:
-            fuzz = max(fuzz_raw, 0.80)
-            containment = max(containment_raw, 0.80)
-        else:
-            fuzz = fuzz_raw
-            containment = containment_raw
-        exact = 1.0 if (c_norm and c_norm in t_norm) else 0.0
-    else:
+    # Cômputo Real de Grounding Textual (sem overrides arbitrários ou fallbacks)
+    if citacao and texto_ocr_pagina:
         fuzz = calcular_fuzzy_levenshtein_janela(citacao, texto_ocr_pagina)
         containment = calcular_token_containment(citacao, texto_ocr_pagina)
         exact = 1.0 if (c_norm and c_norm in t_norm) else 0.0
+    else:
+        fuzz = 0.0
+        containment = 0.0
+        exact = 0.0
 
     # Características Linguísticas e de Raciocínio
     adv_density = calcular_densidade_adversativa(cot)
     emb_cot = gerar_embedding_texto(cot)
 
-    # Extração segura de centróides
+    # Extração de centróides
     if isinstance(estatisticas_classes, dict):
         centroides_dict = estatisticas_classes.get("centroides") or {}
     elif estatisticas_classes is not None:
@@ -385,7 +356,11 @@ def extrair_sinais_epistemicos(
     else:
         centroides_dict = None
 
-    sim_pred = calcular_similaridade_centroides(emb_cot=emb_cot, classe_predita=hipotese, centroides=centroides_dict)
+    sim_pred = calcular_similaridade_centroides(
+        emb_cot=emb_cot,
+        classe_predita=hipotese,
+        centroides=centroides_dict,
+    )
 
     mahal_dist = calcular_distancia_mahalanobis(
         emb_cot=emb_cot,

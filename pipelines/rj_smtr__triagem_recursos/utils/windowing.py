@@ -19,6 +19,7 @@ Fluxo de Dependências:
 
 import io
 from pathlib import Path
+
 import pymupdf as fitz
 
 

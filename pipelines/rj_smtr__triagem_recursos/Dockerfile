@@ -1,22 +1,25 @@
-FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:latest
+FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:shared
 
-USER root
+LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_rj_iplanrio
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-por \
     libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-WORKDIR /opt/prefect/prefect_rj_iplanrio/
+WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 COPY ./src ./src/
 COPY ./packages ./packages/
 COPY ./pipelines/rj_smtr__triagem_recursos ./pipelines/rj_smtr__triagem_recursos/
 
-RUN uv sync --package rj-smtr-triagem-recursos
+RUN uv sync --frozen --package rj-smtr-triagem-recursos --inexact --no-dev --no-cache
 
-# Retorna para usuário sem privilégios
-RUN id -u prefect &>/dev/null || useradd -u 1001 -m -s /bin/bash prefect \
-    && chown -R 1001:1001 /opt/prefect/prefect_rj_iplanrio
-USER 1001
+ENV HF_HOME=/opt/prefect/hf_cache \
+    SENTENCE_TRANSFORMERS_HOME=/opt/prefect/hf_cache
+
+RUN uv run --no-sync --package rj-smtr-triagem-recursos python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')" \
+    && chmod -R a+rX /opt/prefect/hf_cache

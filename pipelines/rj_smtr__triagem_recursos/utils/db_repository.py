@@ -10,8 +10,7 @@ para evitar duplicidade no reprocessamento de lotes. Responsável por:
 3. Filtrar processos já triados (status CONCLUIDO_IA) garantindo execução idempotente.
 4. Recuperar a calibração tabular ativa (LightGBM e quantis conformais CCCP).
 5. Persistir em lote (batch insert) as predições de IA, os 8 sinais epistêmicos,
-   a telemetria de tokens/custos, a transição de status da fila e o registro
-   do evento auditável TRIADO_IA na tabela `eventos`.
+   a telemetria de tokens/custos e a transição de status da fila.
 
 Fluxo de Dependências:
 - Consumidores Diretos:
@@ -19,53 +18,52 @@ Fluxo de Dependências:
     e `persistir_lote_resultados_ia` ao término da triagem concorrente.
   * `utils/artifacts.py`: consome `buscar_configuracao_calibracao_ativa` para instanciar
     o calibrador a partir dos parâmetros persistidos em banco.
-  * `scripts/setup_local_db.py`: executa a inicialização do esquema DDL consolidado.
 - Dependências Diretas:
   * `constants.py`: importa os nomes canônicos de tabelas (`TABELA_PROCESSOS`, `TABELA_FILA`,
-    `TABELA_PREDICOES`, etc.) e os valores de `StatusProcessamento`.
-  * `prefect_rj_iplanrio.sql`: utiliza a função `load_query` para carregar e compilar
-    os arquivos SQL externos de `queries/*.sql`.
-  * `prefect_rj_iplanrio.logging`: logger pré-configurado do workspace.
+    `TABELA_PREDICOES`, `TABELA_CALIBRACAO`) e os valores de `StatusProcessamento`.
+  * `queries/*.sql`: templates SQL carregados via `load_query`.
+  * `prefect.logging`: logger pré-configurado do workspace.
 """
 
 import json
+import re
+import string
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import psycopg2
-from psycopg2.extras import RealDictCursor, execute_values
-
-import re
-import string
-
 from prefect.logging import get_logger
-
-logger = get_logger("toolkit")
+from psycopg2.extras import RealDictCursor, execute_values
 
 from ..constants import (
     LOCAL_PDFS_DIR,
     PIPELINE_DIR,
     TABELA_CALIBRACAO,
-    TABELA_EVENTOS,
     TABELA_FILA,
     TABELA_PREDICOES,
     TABELA_PROCESSOS,
     StatusProcessamento,
 )
 
-try:
-    from prefect_rj_iplanrio.sql import load_query
-except ImportError:
-    def load_query(anchor: str, name: str, **kwargs: Any) -> str:
-        sql_path = Path(anchor).parent / "queries" / f"{name}.sql"
-        if not sql_path.exists():
-            sql_path = PIPELINE_DIR / "queries" / f"{name}.sql"
-        with open(sql_path, "r", encoding="utf-8") as sql_file:
-            raw_sql = sql_file.read()
-        raw_sql = re.sub(r"\{#.*?#\}", "", raw_sql, flags=re.DOTALL)
-        template = string.Template(raw_sql)
-        return template.safe_substitute(**kwargs)
+logger = get_logger("toolkit")
+
+
+def load_query(anchor: str, name: str, **kwargs: Any) -> str:
+    """Load and render an external SQL template from `queries/`.
+
+    :param anchor: Reference module file path.
+    :param name: SQL filename without `.sql` extension.
+    :returns: Rendered SQL query string.
+    """
+    sql_path = Path(anchor).parent / "queries" / f"{name}.sql"
+    if not sql_path.exists():
+        sql_path = PIPELINE_DIR / "queries" / f"{name}.sql"
+    with open(sql_path, encoding="utf-8") as sql_file:
+        raw_sql = sql_file.read()
+    raw_sql = re.sub(r"\{#.*?#\}", "", raw_sql, flags=re.DOTALL)
+    template = string.Template(raw_sql)
+    return template.safe_substitute(**kwargs)
 
 
 def converter_valor_para_sql_null(valor: Any) -> float | None:
@@ -79,7 +77,7 @@ def converter_valor_para_sql_null(valor: Any) -> float | None:
     try:
         val = float(valor)
         return None if np.isnan(val) else val
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 
@@ -284,16 +282,23 @@ def persistir_lote_resultados_ia(db_url: str, resultados: list[dict[str, Any]]) 
         "update_status_fila",
         tabela_fila=TABELA_FILA,
     )
-    query_evento = load_query(
+    query_update_doc = load_query(
         str(PIPELINE_DIR / "flow.py"),
-        "insert_evento",
-        tabela_eventos=TABELA_EVENTOS,
+        "update_processo_documento",
+        tabela_processos=TABELA_PROCESSOS,
     )
 
     conn = psycopg2.connect(db_url)
     try:
         with conn.cursor() as cursor:
             execute_values(cursor, query_predicoes, valores)
+
+            for r in resultados:
+                doc_raw = str(r.get("id_documento_sei") or "").strip()
+                if doc_raw and r.get("processo_id"):
+                    primeiro_doc = doc_raw.split(",")[0].strip()
+                    if primeiro_doc:
+                        cursor.execute(query_update_doc, (primeiro_doc, str(r["processo_id"])))
 
             ids_sucesso = [
                 r["processo_id"]
@@ -316,30 +321,6 @@ def persistir_lote_resultados_ia(db_url: str, resultados: list[dict[str, Any]]) 
                     query_update_fila,
                     (StatusProcessamento.ERRO_PROCESSAMENTO.value, ids_erro),
                 )
-
-            for r in resultados:
-                tipo_ev = (
-                    "ERRO"
-                    if r.get("status_triagem") == "ERRO_PDF_CORROMPIDO"
-                    else "TRIADO_IA"
-                )
-                cursor.execute(
-                    query_evento,
-                    (
-                        r["processo_id"],
-                        "prefect.pipeline",
-                        tipo_ev,
-                        json.dumps(
-                            {
-                                "classe_predita": r.get("n1_classe_predita"),
-                                "faixa": r.get("faixa_operacional"),
-                                "probabilidade": float(r.get("probabilidade_final", 0.0)),
-                                "rota": r.get("rota_execucao"),
-                                "erro": r.get("auditoria_sistema", {}).get("erro_detalhado"),
-                            }
-                        ),
-                    ),
-                )
         conn.commit()
         logger.info(
             "Gravados %d resultados no banco de triagem com sucesso.",
@@ -353,9 +334,43 @@ def persistir_lote_resultados_ia(db_url: str, resultados: list[dict[str, Any]]) 
         conn.close()
 
 
+def registrar_processo_e_enfileirar(
+    cursor: Any,
+    query_upsert_proc: str,
+    query_enfileirar: str,
+    numero_sei: str,
+    id_procedimento_sei: str | None,
+    id_documento_sei: str | None,
+    numero_auto_infracao: str,
+    origem_lote: str,
+) -> str:
+    """Insere ou atualiza processo em `processos_administrativos` e garante entrada na fila."""
+    doc_principal = id_documento_sei.split(",")[0].strip() if id_documento_sei else None
+    cursor.execute(
+        query_upsert_proc,
+        (
+            numero_sei[:32],
+            str(id_procedimento_sei)[:32] if id_procedimento_sei else None,
+            str(doc_principal)[:64] if doc_principal else None,
+            str(numero_auto_infracao or "AUTO_SEI")[:20],
+            origem_lote,
+        ),
+    )
+    row = cursor.fetchone()
+    if not row:
+        raise RuntimeError(f"Upsert de {numero_sei} não retornou processo_id.")
+    proc_id = str(row[0])
+    cursor.execute(
+        query_enfileirar,
+        (proc_id, StatusProcessamento.PENDENTE_IA.value, proc_id),
+    )
+    return proc_id
+
+
 def buscar_processos_para_triagem_ou_fallback(
     db_url: str,
-    fonte_pdf: str = "local",
+    is_local: bool = False,
+    fonte_pdf: str = "sei",
     cliente_sei: Any | None = None,
     modo: str = "INCREMENTAL",
     limite: int = 300,
@@ -363,9 +378,10 @@ def buscar_processos_para_triagem_ou_fallback(
     data_fim: str | None = None,
     arquivos_especificos: list[Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Consulta ou filtra os processos elegíveis para triagem com suporte a fallbacks.
+    """Consulta ou filtra os processos elegíveis para triagem (fail-fast em cloud/staging).
 
     :param db_url: URL de conexão do PostgreSQL.
+    :param is_local: Permite fallback em memória apenas quando True e fonte_pdf == 'local'.
     :param fonte_pdf: "local" para PDFs em disco ou "sei" para integração direta.
     :param cliente_sei: Cliente do SEI com listar_processos_caixa().
     :param modo: Modo de processamento (INCREMENTAL ou PASSIVO).
@@ -375,46 +391,105 @@ def buscar_processos_para_triagem_ou_fallback(
     :param arquivos_especificos: Lista opcional pré-selecionada de arquivos ou dicionários.
     :returns: Lista de processos estruturados para a triagem.
     """
+    origem_lote_val = "PASSIVO" if modo.upper() == "PASSIVO" else "MENSAL"
+
     if arquivos_especificos:
         logger.info(
             "Processando lista específica de %d arquivos fornecidos.",
             len(arquivos_especificos),
         )
-        lista_proc = []
-        for i, item in enumerate(arquivos_especificos[:limite], 1):
-            if isinstance(item, dict):
-                nome = item.get("nome_arquivo_origem") or item.get("arquivo")
-                lista_proc.append(
-                    {
-                        "processo_id": item.get("processo_id") or f"00000000-0000-0000-0000-{i:012d}",
-                        "numero_processo_sei": item.get("numero_processo_sei") or f"SEI-{Path(nome).stem[:28]}",
-                        "id_documento_sei": item.get("id_documento_sei"),
-                        "id_procedimento_sei": item.get("id_procedimento_sei"),
-                        "numero_auto_infracao": item.get("numero_auto_infracao") or "AUTO_LOCAL",
-                        "nome_arquivo_origem": nome,
+        lista_proc: list[dict[str, Any]] = []
+        conn = None
+        cursor = None
+        query_upsert_proc = ""
+        query_enfileirar = ""
+        try:
+            conn = psycopg2.connect(db_url)
+            cursor = conn.cursor()
+            query_upsert_proc = load_query(
+                str(PIPELINE_DIR / "flow.py"),
+                "upsert_processo_sei",
+                tabela_processos=TABELA_PROCESSOS,
+            )
+            query_enfileirar = load_query(
+                str(PIPELINE_DIR / "flow.py"),
+                "enfileirar_processo",
+                tabela_fila=TABELA_FILA,
+            )
+        except Exception as exc:
+            if not is_local or fonte_pdf != "local":
+                raise RuntimeError(f"Banco inacessível para registrar arquivos_especificos: {exc}") from exc
+            logger.warning("Banco local inacessível (%s). Usando IDs em memória.", exc)
+            conn = None
+            cursor = None
+
+        try:
+            for i, item in enumerate(arquivos_especificos[:limite], 1):
+                if isinstance(item, dict):
+                    nome = item.get("nome_arquivo_origem") or item.get("arquivo") or ""
+                    num_sei = str(
+                        item.get("numero_processo_sei") or (f"SEI-{Path(nome).stem[:28]}" if nome else f"SEI-{i}")
+                    )
+                    id_proc = item.get("id_procedimento_sei") or item.get("id_procedimento")
+                    id_doc = item.get("id_documento_sei") or item.get("id_documento")
+                    auto = str(item.get("numero_auto_infracao") or item.get("descricao_auto") or "AUTO_SEI")[:20]
+                    p_id = item.get("processo_id")
+                    extra = {
                         "data_autuacao": item.get("data_autuacao"),
                         "ouro_hipotese": item.get("ouro_hipotese"),
                         "ouro_encaminhamento": item.get("ouro_encaminhamento"),
                     }
-                )
-            else:
-                nome = item if isinstance(item, str) else item.name
+                else:
+                    nome = item if isinstance(item, str) else item.name
+                    num_sei = f"SEI-{Path(nome).stem[:28]}"
+                    id_proc = None
+                    id_doc = None
+                    auto = "AUTO_LOCAL"
+                    p_id = None
+                    extra = {"data_autuacao": None, "ouro_hipotese": None, "ouro_encaminhamento": None}
+
+                if not p_id and cursor:
+                    p_id = registrar_processo_e_enfileirar(
+                        cursor=cursor,
+                        query_upsert_proc=query_upsert_proc,
+                        query_enfileirar=query_enfileirar,
+                        numero_sei=num_sei,
+                        id_procedimento_sei=str(id_proc) if id_proc else None,
+                        id_documento_sei=str(id_doc) if id_doc else None,
+                        numero_auto_infracao=auto,
+                        origem_lote=origem_lote_val,
+                    )
+
+                if not p_id:
+                    if not is_local or fonte_pdf != "local":
+                        raise RuntimeError(f"Falha ao obter processo_id real no banco para {num_sei}.")
+                    p_id = f"00000000-0000-0000-0000-{i:012d}"
+
                 lista_proc.append(
                     {
-                        "processo_id": f"00000000-0000-0000-0000-{i:012d}",
-                        "numero_processo_sei": f"SEI-{Path(nome).stem[:28]}",
-                        "id_documento_sei": None,
-                        "id_procedimento_sei": None,
-                        "numero_auto_infracao": "AUTO_LOCAL",
+                        "processo_id": str(p_id),
+                        "numero_processo_sei": num_sei,
+                        "id_documento_sei": str(id_doc) if id_doc else None,
+                        "id_procedimento_sei": str(id_proc) if id_proc else None,
+                        "numero_auto_infracao": auto,
                         "nome_arquivo_origem": nome,
-                        "data_autuacao": None,
-                        "ouro_hipotese": None,
-                        "ouro_encaminhamento": None,
+                        **extra,
                     }
                 )
+            if conn:
+                conn.commit()
+        except Exception:
+            if conn:
+                conn.rollback()
+            raise
+        finally:
+            if conn:
+                conn.close()
         return lista_proc
 
-    if fonte_pdf == "sei" and cliente_sei is not None:
+    if fonte_pdf == "sei":
+        if cliente_sei is None:
+            raise RuntimeError("cliente_sei obrigatório quando fonte_pdf='sei'.")
         logger.info("Listando processos diretamente da caixa da JARI no SEI...")
         processos_caixa = cliente_sei.listar_processos_caixa()
         if not processos_caixa:
@@ -422,15 +497,7 @@ def buscar_processos_para_triagem_ou_fallback(
             return []
 
         numeros_sei = [str(p.get("numero_processo_sei") or p.get("numero_processo")) for p in processos_caixa]
-
-        try:
-            ja_triados = set(filtrar_processos_ja_triados(db_url, numeros_sei))
-        except Exception as exc:
-            logger.warning(
-                "Falha ao consultar banco para idempotência (%s). Processando lote da caixa.",
-                exc,
-            )
-            ja_triados = set()
+        ja_triados = set(filtrar_processos_ja_triados(db_url, numeros_sei))
 
         processos_pendentes = [
             p
@@ -444,7 +511,7 @@ def buscar_processos_para_triagem_ou_fallback(
             len(processos_pendentes),
         )
 
-        processos_sincronizados = []
+        processos_sincronizados: list[dict[str, Any]] = []
         conn = psycopg2.connect(db_url)
         try:
             query_upsert_proc = load_query(
@@ -458,53 +525,33 @@ def buscar_processos_para_triagem_ou_fallback(
                 tabela_fila=TABELA_FILA,
             )
 
-            origem_lote_val = "PASSIVO" if modo == "PASSIVO" else "MENSAL"
-
             with conn.cursor() as cursor:
                 for p in processos_pendentes[:limite]:
                     num_sei = str(p.get("numero_processo_sei") or p.get("numero_processo"))
                     id_proc = str(p.get("id_procedimento_sei") or "")
                     id_doc = str(p.get("id_documento_sei") or "")
 
-                    sigla_raw = str(p.get("sigla_unidade") or "10_JARI")
-                    if "JARI" in sigla_raw.upper():
-                        m_jari = re.search(r"(\d+)\s*[ªaAºoO]?\s*JARI", sigla_raw, re.IGNORECASE)
-                        codigo_jari = f"{m_jari.group(1)}_JARI" if m_jari else sigla_raw[:20]
-                    else:
-                        codigo_jari = sigla_raw[:20] if sigla_raw else "10_JARI"
-
-                    relator = str(p.get("usuario_atribuido_sigla") or "")
-                    status_dist = "DISTRIBUIDO" if relator else "PENDENTE"
-
-                    cursor.execute(
-                        query_upsert_proc,
-                        (
-                            num_sei,
-                            id_proc or None,
-                            id_doc or None,
-                            "AUTO_SEI",
-                            origem_lote_val,
-                            codigo_jari,
-                            relator or None,
-                            status_dist,
-                        ),
-                    )
-                    proc_id = cursor.fetchone()[0]
-
-                    cursor.execute(
-                        query_enfileirar,
-                        (
-                            proc_id,
-                            StatusProcessamento.PENDENTE_IA.value,
-                        ),
+                    proc_id = registrar_processo_e_enfileirar(
+                        cursor=cursor,
+                        query_upsert_proc=query_upsert_proc,
+                        query_enfileirar=query_enfileirar,
+                        numero_sei=num_sei,
+                        id_procedimento_sei=id_proc or None,
+                        id_documento_sei=id_doc or None,
+                        numero_auto_infracao="AUTO_SEI",
+                        origem_lote=origem_lote_val,
                     )
 
                     p_item = dict(p)
-                    p_item["processo_id"] = str(proc_id)
+                    p_item["processo_id"] = proc_id
+                    p_item["id_documento_sei"] = id_doc or None
                     p_item["numero_auto_infracao"] = "AUTO_SEI"
                     p_item["nome_arquivo_origem"] = f"{num_sei.replace('/', '_')}.pdf"
                     processos_sincronizados.append(p_item)
             conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             conn.close()
 
@@ -526,12 +573,16 @@ def buscar_processos_para_triagem_ou_fallback(
         logger.info("%d processo(s) elegível(is) encontrado(s) no banco.", len(processos))
         return processos
     except Exception as exc:
+        if not is_local or fonte_pdf != "local":
+            logger.error("Falha crítica ao consultar fila no banco: %s", exc)
+            raise
         logger.warning(
-            "Falha ao consultar fila no banco (%s). Verificando PDFs na pasta local...",
+            "Falha ao consultar fila local (%s). Verificando PDFs em %s...",
             exc,
+            LOCAL_PDFS_DIR,
         )
 
-        def _chave_ordenacao(p: Path) -> int:
+        def chave_ordenacao(p: Path) -> int:
             try:
                 return int(p.stem.split("(")[1].split(")")[0])
             except Exception:
@@ -539,7 +590,7 @@ def buscar_processos_para_triagem_ou_fallback(
 
         arquivos_req = sorted(
             LOCAL_PDFS_DIR.glob("REQUERIMENTOS INTEMPESTIVOS*.pdf"),
-            key=_chave_ordenacao,
+            key=chave_ordenacao,
         )
         arquivos_locais = arquivos_req if arquivos_req else sorted(LOCAL_PDFS_DIR.glob("*.pdf"))
         return [

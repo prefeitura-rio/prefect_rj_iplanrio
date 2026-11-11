@@ -47,11 +47,12 @@ Fluxo de Dependências:
   * `utils/guardrails.py`: validações estruturais de integridade das decisões.
 """
 
+import math
 from collections import Counter
 from dataclasses import dataclass, field
-import math
 from pathlib import Path
 from typing import Any
+
 import numpy as np
 
 from .conformal import ArtefatosConforme

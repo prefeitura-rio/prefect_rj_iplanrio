@@ -5,14 +5,20 @@ Adheres to Styleguide Section 4.1 & 6.4 (no `if __name__ == '__main__':` in flow
 """
 
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 
 try:
     from dotenv import find_dotenv, load_dotenv
+
     load_dotenv(find_dotenv(usecwd=True))
 except ImportError:
     pass
+
+import os
+
+if not os.getenv("PREFECT_API_URL"):
+    os.environ["PREFECT_SERVER_ALLOW_EPHEMERAL_MODE"] = "true"
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PIPELINE_DIR = SCRIPT_DIR.parent
@@ -26,9 +32,7 @@ from pipelines.rj_smtr__triagem_recursos.flow import rj_smtr__triagem_recursos
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments for local execution."""
-    parser = argparse.ArgumentParser(
-        description="Executa o flow de triagem SMTR localmente ou integrado ao SEI."
-    )
+    parser = argparse.ArgumentParser(description="Executa o flow de triagem SMTR localmente ou integrado ao SEI.")
     parser.add_argument(
         "--local",
         action="store_true",
@@ -68,7 +72,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--executar-n2",
         action="store_true",
-        default=False,
+        default=True,
         help="Habilita execução de N=2 na faixa de incerteza moderada.",
     )
     return parser.parse_args()

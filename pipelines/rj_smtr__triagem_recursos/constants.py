@@ -17,8 +17,8 @@ Fluxo de Dependências:
   * Módulo folha de constantes de sistema (sem dependências de outros submódulos da pipeline).
 """
 
-from enum import Enum
 import os
+from enum import Enum
 from pathlib import Path
 
 PIPELINE_DIR = Path(__file__).resolve().parent
@@ -30,19 +30,18 @@ DB_URL_LOCAL = os.getenv(
     "DB_URL_LOCAL",
     "postgresql://postgres:postgres@localhost:5432/smtr_triagem",
 )
-DB_URL_CLOUD = os.getenv("DB_URL_CLOUD", DB_URL_LOCAL)
+DB_URL_CLOUD = os.getenv("DATABASE_URL") or os.getenv("DB_URL_CLOUD")
 
 TABELA_PROCESSOS = "processos_administrativos"
 TABELA_PREDICOES = "predicoes_pipeline"
 TABELA_FILA = "fila_trabalho"
 TABELA_AUDITORIA = "trilha_auditoria_juridica"
 TABELA_CALIBRACAO = "configuracoes_calibracao"
-TABELA_EVENTOS = "eventos"
 
 # ==============================================================================
 # STORAGE E CAMINHOS
 # ==============================================================================
-DEFAULT_ENVIRONMENT = os.getenv("ENVIRONMENT", "local").strip().lower()
+DEFAULT_ENVIRONMENT = os.getenv("ENVIRONMENT", "staging").strip().lower()
 
 LOCAL_PDFS_DIR = PIPELINE_DIR / "pdfs"
 LOCAL_ARTIFACTS_DIR = PIPELINE_DIR / "artifacts"
@@ -55,10 +54,6 @@ QUERIES_DIR = PIPELINE_DIR / "queries"
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
 VERTEX_LLM_MODEL = os.getenv("LLM_MODEL", "vertex/gemini-3.7-flash")
 VERSAO_PROMPT_PADRAO = os.getenv("VERSAO_PROMPT", "v4_baseline")
-GCS_PROMPT_URI = os.getenv(
-    "GCS_PROMPT_URI",
-    "gs://rj-agent-smtr-triagem-recurso/prompts/v4_baseline.txt",
-)
 
 # ==============================================================================
 # PARÂMETROS DE CORTE
@@ -118,7 +113,6 @@ class StatusProcessamento(str, Enum):
     PROCESSANDO_IA = "PROCESSANDO_IA"
     CONCLUIDO_IA = "CONCLUIDO_IA"
     ERRO_PROCESSAMENTO = "ERRO_PROCESSAMENTO"
-    IGNORADO = "IGNORADO"
 
 
 FEATURES_MODELO_PRODUCAO: list[str] = [
@@ -133,10 +127,16 @@ FEATURES_MODELO_PRODUCAO: list[str] = [
 ]
 
 
-def resolver_banco_url(is_local: bool) -> str:
+def resolver_banco_url(is_local: bool = False) -> str:
     """Retorna a URL do PostgreSQL local ou do Cloud SQL conforme o modo.
 
-    :param is_local: Se True, retorna DB_URL_LOCAL; caso contrário, DB_URL_CLOUD.
+    :param is_local: Se True, retorna DB_URL_LOCAL; caso contrário, exige URL do Cloud SQL.
     :returns: String de conexão com o banco de dados PostgreSQL.
+    :raises RuntimeError: Quando em modo cloud/staging sem DATABASE_URL ou DB_URL_CLOUD configurada.
     """
-    return DB_URL_LOCAL if is_local else DB_URL_CLOUD
+    if is_local:
+        return os.getenv("DB_URL_LOCAL") or DB_URL_LOCAL
+    cloud_url = os.getenv("DATABASE_URL") or os.getenv("DB_URL_CLOUD")
+    if not cloud_url:
+        raise RuntimeError("URL do Cloud SQL ausente (defina DATABASE_URL ou DB_URL_CLOUD no ambiente/Infisical).")
+    return cloud_url

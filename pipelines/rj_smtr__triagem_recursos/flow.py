@@ -22,6 +22,7 @@ from typing import Any
 
 from prefect import flow, get_run_logger, unmapped
 from prefect.task_runners import ThreadPoolTaskRunner
+from toolkit.telemetry import logger as telemetry_logger
 
 from .constants import (
     LIMIAR_ALTA,
@@ -43,13 +44,13 @@ from .utils.sei_client import ModWsseiClient
 
 @flow(
     name="rj_smtr__triagem_recursos",
-    task_runner=ThreadPoolTaskRunner(max_workers=8),
+    task_runner=ThreadPoolTaskRunner(max_workers=4),
     log_prints=True,
     description="Pipeline de triagem e classificação seletiva de recursos da SMTR-RJ.",
 )
 def rj_smtr__triagem_recursos(
-    is_local: bool = True,
-    fonte_pdf: str = "local",
+    is_local: bool = False,
+    fonte_pdf: str = "sei",
     cliente_sei: Any | None = None,
     modo_execucao: str = "INCREMENTAL",
     limite_lote: int = 300,
@@ -61,13 +62,14 @@ def rj_smtr__triagem_recursos(
     arquivo_prompt: str = f"{VERSAO_PROMPT_PADRAO}.txt",
     data_inicio: str | None = None,
     data_fim: str | None = None,
-    infisical_secret_path: str | None = None,
+    infisical_secret_path: str | None = "/rj_smtr__triagem_recursos",
     reasoning_effort: str = "medium",
     arquivos_especificos: list[Any] | None = None,
     executar_n2: bool = True,
 ) -> dict[str, Any]:
     """Orchestrate automated triage and selective classification of SMTR appeals."""
     logger = get_run_logger()
+    telemetry_logger.debug("Telemetria ativa para rj_smtr__triagem_recursos (local=%s).", is_local)
     logger.info(
         "Iniciando pipeline | Local=%s | Fonte=%s | Modo=%s | Limite=%d",
         is_local,
@@ -76,16 +78,19 @@ def rj_smtr__triagem_recursos(
         limite_lote,
     )
 
-    # 1. Carrega artefatos da baseline (PostgreSQL com fallback para joblib congelado)
+    # 1. Carrega artefatos da baseline (PostgreSQL em Cloud SQL; fallback local apenas se is_local=True)
     artefatos = task_carregar_artefatos_referencia(
         is_local=is_local,
         arquivo_prompt=arquivo_prompt,
         infisical_secret_path=infisical_secret_path,
     )
 
-    # Inicializa cliente SEI automaticamente se a fonte for 'sei' e não tiver sido injetado
-    if fonte_pdf == "sei" and cliente_sei is None:
-        cliente_sei = ModWsseiClient()
+    # Inicializa e autentica cliente SEI se a fonte for 'sei'
+    if fonte_pdf == "sei":
+        if cliente_sei is None:
+            cliente_sei = ModWsseiClient(is_local=is_local)
+        if not getattr(cliente_sei, "token", None):
+            cliente_sei.autenticar()
 
     # 2. Busca processos na fila ou na caixa da JARI no SEI
     processos = task_buscar_processos_pendentes(
@@ -119,11 +124,19 @@ def rj_smtr__triagem_recursos(
         executar_n2=unmapped(executar_n2),
     )
 
-    # Resolve os futuros concorrentes dos workers
-    resultados = [f.result() for f in resultados_futuros]
+    # Resolve os futuros concorrentes dos workers protegendo contra interrupções globais
+    resultados = []
+    for f in resultados_futuros:
+        try:
+            r = f.result(raise_on_failure=False)
+            if isinstance(r, dict) and "processo_id" in r:
+                resultados.append(r)
+        except Exception as exc:
+            logger.error("Falha irrecuperável em worker individual: %s", exc)
 
     # 4. Persiste o lote de predições
-    task_persistir_lote_resultados(resultados, is_local=is_local)
+    if resultados:
+        task_persistir_lote_resultados(resultados, is_local=is_local)
 
     # 5. Consolida sumário operacional
     return task_gerar_sumario_lote(resultados)

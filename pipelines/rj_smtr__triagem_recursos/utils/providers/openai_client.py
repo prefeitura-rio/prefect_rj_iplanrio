@@ -21,8 +21,9 @@ Fluxo de Dependências:
 
 import base64
 import os
-from openai import OpenAI
+
 import pymupdf as fitz
+from openai import OpenAI
 
 from ...constants import VERTEX_LLM_MODEL
 from ..schemas import EsquemaDecisao
@@ -33,12 +34,17 @@ class OpenAILLMClient(BaseLLMClient):
     """Cliente para OpenAI e proxies compatíveis como Bifrost."""
 
     def __init__(self, default_model: str | None = None) -> None:
-        api_key = os.getenv("BIFROST_VIRTUAL_KEY") or os.getenv("OPENAI_API_KEY")
-        base_url = os.getenv("BIFROST_BASE_URL")
+        api_key = os.getenv("BIFROST_VIRTUAL_KEY") or os.getenv("BIFROST_API_KEY") or os.getenv("OPENAI_API_KEY")
+        raw_base_url = (os.getenv("BIFROST_BASE_URL") or "https://bifrost.iplan.dados.rio/openai/v1").strip()
+        base_url = (
+            "https://bifrost.iplan.dados.rio/openai/v1"
+            if raw_base_url.rstrip("/") == "https://bifrost.iplan.dados.rio"
+            else raw_base_url
+        )
         modelo_padrao = default_model or os.getenv("LLM_MODEL") or VERTEX_LLM_MODEL
 
         if not api_key:
-            raise ValueError("Chave de API ausente (defina BIFROST_VIRTUAL_KEY ou OPENAI_API_KEY no .env).")
+            raise ValueError("Chave de API ausente (defina BIFROST_VIRTUAL_KEY, BIFROST_API_KEY ou OPENAI_API_KEY).")
 
         super().__init__(api_key=api_key, base_url=base_url, default_model=modelo_padrao)
 
