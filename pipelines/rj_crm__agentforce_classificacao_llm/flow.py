@@ -6,8 +6,8 @@ Extrai sessões dos últimos LOOKBACK_DAYS dias ainda não classificadas (dois f
 pré-filtro barato por llm.classificacao_datahora na fonte, mais o anti-join de sempre
 contra a tabela destino como garantia final — ver queries/extract_sessoes.sql), classifica
 via Bifrost/Gemini (ou por regra, quando é resposta atrasada a botão) — prompt principal
-e, nas sessões relevantes, os prompts de macrotema e secretaria (taxonomias em
-taxonomias/*.json) —, aplica o catálogo
+e, nas sessões relevantes, os prompts de macrotema e secretaria (taxonomias nas
+tabelas taxonomia_macrotemas e taxonomia_secretarias) —, aplica o catálogo
 de regras de tema e grava em rj-crm-registry.brutos_salesforce.ai_agent_session_classificacao
 via tmp + MERGE (idempotente, upsert por id_sessao).
 
@@ -45,6 +45,7 @@ from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import (
     ensure_destino_table,
 )
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.notify import notify_falha_flow, notify_resumo
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.roteamento import carrega_taxonomia_roteamento
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import (
     aplica_regras_causa,
     aplica_regras_tema,
@@ -62,6 +63,8 @@ def rj_crm__agentforce_classificacao_llm(
     dest_table_id: str = C.DEST_TABLE_ID.value,
     dest_tmp_table_id: str = C.DEST_TMP_TABLE_ID.value,
     taxonomia_regras_table_id: str = C.TAXONOMIA_REGRAS_TABLE_ID.value,
+    taxonomia_macrotemas_table_id: str = C.TAXONOMIA_MACROTEMAS_TABLE_ID.value,
+    taxonomia_secretarias_table_id: str = C.TAXONOMIA_SECRETARIAS_TABLE_ID.value,
     taxonomia_agrupamento_tipo: str = C.TAXONOMIA_AGRUPAMENTO_TIPO.value,
     source_table: str = C.SOURCE_TABLE.value,
     lookback_days: int = C.LOOKBACK_DAYS.value,
@@ -146,6 +149,15 @@ def rj_crm__agentforce_classificacao_llm(
         tmp_table_id=dest_tmp_table_id,
     )
 
+    #    Taxonomias dos prompts de roteamento, lidas logo no começo: tabela vazia ou com
+    #    versões misturadas falha o flow antes de qualquer chamada paga à LLM.
+    taxonomia_roteamento = carrega_taxonomia_roteamento(
+        project_id=project_id,
+        dataset_id=dest_dataset_id,
+        macrotemas_table_id=taxonomia_macrotemas_table_id,
+        secretarias_table_id=taxonomia_secretarias_table_id,
+    )
+
     # 2. Extrai sessões pendentes (janela fixa + pré-filtro por llm.classificacao_datahora
     #    + anti-join final contra o destino), já com o HSM ligado pelo dbt
     df_sessoes = extrai_sessoes_nao_classificadas(
@@ -222,8 +234,7 @@ def rj_crm__agentforce_classificacao_llm(
         classificacao_resposta_atrasada=C.CLASSIFICACAO_RESPOSTA_ATRASADA_BTN.value,
         justificativa_resposta_atrasada=C.JUSTIFICATIVA_RESPOSTA_ATRASADA_BTN.value,
         prompt_versao=C.PROMPT_VERSAO.value,
-        prompt_versao_macrotema=C.PROMPT_VERSAO_MACROTEMA.value,
-        prompt_versao_secretaria=C.PROMPT_VERSAO_SECRETARIA.value,
+        taxonomia=taxonomia_roteamento,
         project_id=project_id,
         dataset_id=dest_dataset_id,
         table_id=dest_table_id,

@@ -35,6 +35,9 @@ class ClassificacaoConstants(Enum):
     # pipeline: promovido manualmente do repo clustering depois de validado (ver
     # tasks/taxonomia.py). Mesmo dataset da tabela destino.
     TAXONOMIA_REGRAS_TABLE_ID = "taxonomia_regras"
+    # Taxonomias dos prompts de roteamento, editadas à mão (ver tasks/roteamento.py)
+    TAXONOMIA_MACROTEMAS_TABLE_ID = "taxonomia_macrotemas"
+    TAXONOMIA_SECRETARIAS_TABLE_ID = "taxonomia_secretarias"
     # Nível de agregação das regras (coluna agrupamento_tipo do catálogo): hierarquia
     # agrupamento > tema > motivo. Trocar o nível = promover regras com outro tipo e
     # mapear a coluna da sessão em tasks/taxonomia.py::COLUNA_SESSAO_POR_AGRUPAMENTO.
@@ -123,27 +126,8 @@ class ClassificacaoConstants(Enum):
     # a ser o item 7 do com_hsm.
     PROMPT_VERSAO = "v4"
 
-    # Prompts de roteamento — rodam só em sessão com conteudo_relevante=true, depois do
-    # prompt principal, cada um com sua versão (coluna própria na tabela destino) pra
-    # poder reprocessar só ele quando a taxonomia mudar. A taxonomia em si (nomes +
-    # descrições) fica em ./taxonomias/*.json e é renderizada no prompt em runtime — a
-    # mesma lista é usada pra validar o rótulo que a LLM devolve. Subir a versão quando
-    # o JSON ou o .txt mudar de forma que altera o significado da classificação.
-    # v1 (2026-10-21): macrotemas da planilha de taxonomia (aba Macrotemas) + "Outros";
-    # secretarias da aba Núcleo, mantendo a grafia do catálogo taxonomia_regras pras 7
-    # secretarias originais (Comlurb, RioLuz, Seconserva...) — senão as regras de tema
-    # param de bater (match por string exata em tasks/taxonomia.py::_aplica_regras).
-    # v2 secretaria (2026-11-03): SUBGGC (Fazenda e Planejamento) entra pra remuneração e
-    # vida funcional do servidor ativo, e a PREVI-RIO fica só com previdência e os auxílios
-    # do instituto — na v1, salário/bônus de servidor ativo caía na PREVI-RIO por causa do
-    # "calendário de pagamento" na descrição dela. As sessões já classificadas na v1 foram
-    # migradas por UPDATE (PREVI-RIO → SUBGGC, menos as de aposentadoria/pensão/auxílios).
-    # v2 macrotema (2026-11-03): nomes sem vírgula nem " e " (viraram " / ", ex.:
-    # "Trabalho / renda / qualificação"). Os relacionados são separados por vírgula, e
-    # nome com vírgula era quebrado na validação e descartado. As sessões da v1 foram
-    # renomeadas por UPDATE; o secundário que já tinha sido descartado não volta.
-    PROMPT_VERSAO_MACROTEMA = "v2"
-    # v3 secretaria (2026-11-03): o prompt lista só as secretarias candidatas dos
-    # macrotemas da sessão (campo "secretarias" do macrotemas.json), com "OUTRA" refazendo
-    # a pergunta com a lista completa — a lista inteira era metade dos tokens da sessão.
-    PROMPT_VERSAO_SECRETARIA = "v3"
+    # Prompts de roteamento (macrotema, secretaria) — rodam só em sessão com
+    # conteudo_relevante=true, depois do prompt principal. As listas e as versões dos dois
+    # prompts vêm das tabelas abaixo (mesmo dataset da destino), não daqui: subir a versão
+    # na tabela quando a edição mudar o significado da classificação, ou quando o .txt do
+    # prompt mudar. Histórico das versões em tasks/roteamento.py.
