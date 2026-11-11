@@ -52,6 +52,7 @@
     "rj_smfp__nota_carioca_oracle_to_bq",
     "rj_smfp__sigma",
     "rj_smi__siscob",
+    "rj_smtr__triagem_recursos",
     "rj_ssm__run_dbt"
   ],
   "prod": [

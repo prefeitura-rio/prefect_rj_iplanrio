@@ -55,6 +55,7 @@ pipelines/**/*.egg-info/
 # Allow SMTR triage pipeline tests
 !pipelines/rj_smtr__triagem_recursos/tests/
 !pipelines/rj_smtr__triagem_recursos/tests/**
+pipelines/rj_smtr__triagem_recursos/tests/__pycache__/
 
 # scripts/run_local.py artifacts (local-only test runs, real fiscal PDFs +
 # their extracted/cached data — never meant to be committed):
