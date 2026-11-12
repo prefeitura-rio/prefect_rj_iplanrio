@@ -187,6 +187,8 @@ deployments:
           filter_duplicated_cpfs: false
           filter_failed_phones: true
           query_file: queries/sme/sme_prova_avalia.sql
+          batch_size: 10000
+          batch_sleep_minutes: 2
 
       - cron: "0 15 * * *"
         timezone: America/Sao_Paulo
