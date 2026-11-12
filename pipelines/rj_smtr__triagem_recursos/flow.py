@@ -23,7 +23,9 @@ from typing import Any
 from prefect import flow, get_run_logger
 from prefect.futures import as_completed
 from prefect.task_runners import ThreadPoolTaskRunner
-from toolkit.telemetry import logger as telemetry_logger
+from prefect_rj_iplanrio.logging import get_logger
+
+logger = get_logger(__name__)
 
 from pipelines.rj_smtr__triagem_recursos.constants import (
     LIMIAR_ALTA,
@@ -75,7 +77,7 @@ def rj_smtr__triagem_recursos(
 ) -> dict[str, Any]:
     """Orchestrate automated triage and selective classification of SMTR appeals."""
     logger = get_run_logger()
-    telemetry_logger.debug("Telemetria ativa para rj_smtr__triagem_recursos (local=%s).", is_local)
+    logger.debug("Telemetria ativa para rj_smtr__triagem_recursos (local=%s).", is_local)
     logger.info(
         "Iniciando pipeline | Local=%s | Fonte=%s | Modo=%s | Limite=%d | Workers=%d | DownloadsSEI=%d",
         is_local,

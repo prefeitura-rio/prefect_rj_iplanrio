@@ -44,7 +44,9 @@ from datetime import datetime
 from typing import Any, Protocol
 
 import polars as pl
-from toolkit.telemetry import logger
+from prefect_rj_iplanrio.logging import get_logger
+
+logger = get_logger(__name__)
 
 from pipelines.rj_smtr__triagem_recursos.constants import (
     BETA_CONSENSO,

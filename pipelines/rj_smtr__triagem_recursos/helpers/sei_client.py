@@ -14,7 +14,9 @@ from typing import Any, Self
 
 import httpx
 import pymupdf as fitz
-from toolkit.telemetry import logger
+from prefect_rj_iplanrio.logging import get_logger
+
+logger = get_logger(__name__)
 
 MAX_DOCUMENT_BYTES = 30 * 1024 * 1024  # 30 MB teto de memoria por documento
 CHUNK_SIZE = 64 * 1024  # 64 KB por chunk de streaming

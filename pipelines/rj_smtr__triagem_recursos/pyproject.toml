@@ -2,7 +2,6 @@
 name = "rj-smtr-triagem-recursos"
 version = "1.0.0"
 description = "Automated triage and selective classification of traffic citation appeals for SMTR-RJ using LLM reasoning and tabular meta-calibration."
-requires-python = ">=3.14,<3.15"
 dependencies = [
     "prefect_rj_iplanrio",
     "pydantic",
