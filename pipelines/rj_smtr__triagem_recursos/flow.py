@@ -50,7 +50,6 @@ from pipelines.rj_smtr__triagem_recursos.tasks import (
 
 
 @flow(
-    name="rj_smtr__triagem_recursos",
     task_runner=ThreadPoolTaskRunner(max_workers=MAX_WORKERS_PIPELINE),
     log_prints=True,
     description="Pipeline de triagem e classificação seletiva de recursos da SMTR-RJ.",
