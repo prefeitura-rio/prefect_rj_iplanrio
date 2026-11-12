@@ -46,6 +46,7 @@ deployments:
         command: uv run --package rj_iplanrio__run_dbt -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
+
     schedules:
       # Daily schedules (86400 seconds = 24 hours)
       # Schedule 1: Daily source freshness check
@@ -119,6 +120,38 @@ deployments:
         parameters:
           command: "source freshness"
           select: "+tag:hourly"
+          send_discord_report: false
+          github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
+          bigquery_project: "rj-iplanrio"
+          target: "prod"
+          gcs_buckets:
+            prod: "rj-iplanrio_dbt"
+            dev: "rj-iplanrio-dev_dbt"
+
+      # Quarter Hourly (300 = 15 minutos)
+      - interval: 900
+        anchor_date: "2024-03-17T09:15:00"
+        timezone: America/Sao_Paulo
+        slug: dbt_quarter_hourly_build
+        parameters:
+          command: "build"
+          select: "+tag:quarter_hourly"
+          send_discord_report: false
+          github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
+          bigquery_project: "rj-iplanrio"
+          target: "prod"
+          gcs_buckets:
+            prod: "rj-iplanrio_dbt"
+            dev: "rj-iplanrio-dev_dbt"
+
+      # Quarter Hourly (300 = 15 minutos)
+      - interval: 900
+        anchor_date: "2023-01-01T09:30:00"
+        timezone: America/Sao_Paulo
+        slug: dbt_hourly_freshness
+        parameters:
+          command: "source freshness"
+          select: "+tag:quarter_hourly"
           send_discord_report: false
           github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
           bigquery_project: "rj-iplanrio"
