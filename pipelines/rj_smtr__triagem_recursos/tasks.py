@@ -72,7 +72,7 @@ def task_buscar_processos_pendentes(
     data_fim: str | None = None,
     arquivos_especificos: list[Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Consulta ou filtra os processos elegiveis para triagem."""
+    """Consulta ou filtra os processos elegiveis para triagem"""
     db_url = resolver_banco_url(is_local)
     return buscar_processos_para_triagem_ou_fallback(
         db_url=db_url,
