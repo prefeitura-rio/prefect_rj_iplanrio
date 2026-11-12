@@ -167,4 +167,7 @@ class OpenAILLMClient(BaseLLMClient):
                 "cached_tokens": cached or 0,
             }
 
-        return response.choices[0].message.parsed, usage
+        parsed = response.choices[0].message.parsed
+        if parsed is None:
+            raise ValueError("OpenAI client returned empty parsed response")
+        return parsed, usage

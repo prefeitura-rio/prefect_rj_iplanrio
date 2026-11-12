@@ -35,6 +35,6 @@ only-include = [
     "flow.py",
     "tasks.py",
     "constants.py",
-    "utils",
+    "helpers",
     "queries",
 ]

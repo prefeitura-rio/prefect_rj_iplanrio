@@ -1,17 +1,44 @@
 """Prefect tasks that more than one pipeline uses, built on the toolkit."""
 
+import os
 from asyncio import sleep, to_thread
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from random import Random
 from tempfile import TemporaryDirectory
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from zoneinfo import ZoneInfo
 
 from httpx2 import AsyncClient
 from polars import DataFrame, DataType, Float64, Int64, String
 from prefect import task
+
+if TYPE_CHECKING:
+    from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
+else:
+    try:
+        from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
+    except Exception:  # pragma: no cover
+
+        class PrefectDbtRunner:
+            """Fallback stub when prefect_dbt fails to import."""
+
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                """Initialize runner stub."""
+                pass
+
+        class PrefectDbtSettings:
+            """Fallback stub when prefect_dbt fails to import."""
+
+            def __init__(self, project_dir: Path | str | None = None, **kwargs: object) -> None:
+                """Initialize settings stub."""
+                self.project_dir = Path(project_dir) if project_dir else None
+                profiles = os.getenv("DBT_PROFILES_DIR")
+                self.profiles_dir = Path(profiles) if profiles else Path.home() / ".dbt"
+                self.__dict__.update(kwargs)
+
+
 from psycopg.sql import Literal
 from pydantic import JsonValue
 from toolkit.bigquery import BigQuery
@@ -432,8 +459,6 @@ async def run_dbt(request: DbtRun, *, report: bool = False) -> None:
             )
 
             with use_profiles(project_dir):
-                from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings  # noqa: PLC0415
-
                 runner = PrefectDbtRunner(settings=PrefectDbtSettings(project_dir=project_dir), raise_on_failure=False)
                 if not runner.invoke(["deps"]).success:
                     raise RuntimeError("dbt deps failed")

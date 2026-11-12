@@ -85,6 +85,16 @@ typeCheckingMode = "all"
 venvPath = "."
 venv = ".venv"
 include = ["src", "tests", "pipelines"]
+exclude = [
+  "**/mod-wssei",
+  "**/mcp-*",
+  "**/artifacts",
+  "**/outputs",
+  "**/pdfs",
+  "**/prompts",
+  "**/scripts",
+  "**/docs",
+]
 reportUnusedCallResult = false # side-effect calls (an upload, a delete) return handles that nobody needs
 
 [[tool.basedpyright.executionEnvironments]]
@@ -128,6 +138,37 @@ reportUnannotatedClassAttribute = false # small fake classes
 reportUnusedParameter = false # a fake follows the signature of the real API
 reportUnknownLambdaType = false # lambdas passed to fakes
 reportAny = false # values from untyped fakes
+
+[[tool.basedpyright.executionEnvironments]]
+root = "pipelines/rj_smtr__triagem_recursos"
+extraPaths = ["src", ".", "pipelines/rj_smtr__triagem_recursos"]
+reportMissingTypeStubs = false # scikit-learn, psycopg2, joblib, fitz ship incomplete types
+reportUnknownMemberType = false # members of those clients
+reportUnknownVariableType = false # values from those clients
+reportUnknownArgumentType = false # values from those clients
+reportUnknownLambdaType = false
+reportUnknownParameterType = false
+reportMissingParameterType = false
+reportAny = false # dynamic ML models, database rows and joblib artifacts
+reportExplicitAny = false # dynamic ML models and psycopg2 RealDictCursor rows
+reportUnnecessaryComparison = false # runtime guards against unexpected model outputs
+reportUnnecessaryIsInstance = false # runtime guards against unexpected model outputs
+reportCallIssue = false # Prefect 3.x ThreadPoolTaskRunner decorator variance
+reportUntypedFunctionDecorator = false # Prefect flow decorator
+reportArgumentType = false # Prefect task runner invariance
+reportConstantRedefinition = false # cached model singletons
+reportImplicitStringConcatenation = false # multiline SQL queries
+reportUnusedParameter = false # interface hooks with fixed signatures
+reportUnusedVariable = false # unpacked metrics
+reportAttributeAccessIssue = false # enum and string union resolution
+reportOptionalMemberAccess = false # guarded model booster members
+reportOperatorIssue = false # polars literal arithmetic
+reportMissingImports = false # optional dev/benchmark dependencies
+reportMissingModuleSource = false # optional dev/benchmark dependencies
+reportCallInDefaultInitializer = false # mock server defaults
+reportUnreachable = false # defensive branches in guardrails
+reportUnannotatedClassAttribute = false
+reportImplicitOverride = false
 
 [[tool.basedpyright.executionEnvironments]]
 root = "pipelines"
