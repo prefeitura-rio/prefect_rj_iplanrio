@@ -5,10 +5,12 @@ retries with backoff on 502/503/504, and process listing for JARI triage.
 """
 
 import os
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Any
+from typing import Any, Self
 
 import httpx
 from prefect.logging import get_logger
@@ -74,12 +76,14 @@ class ModWsseiClient:
         config: SeiConfig | None = None,
         base_url: str | None = None,
         is_local: bool = False,
+        http_client: httpx.Client | None = None,
+        max_connections: int = 16,
     ) -> None:
         """Initialize the SEI client with config or custom base URL."""
         if config is not None:
             self.config = config
         elif base_url is not None:
-            cfg_env = SeiConfig.from_env(is_local=True if is_local or os.getenv("SEI_SERVICE_USER") is None else False)
+            cfg_env = SeiConfig.from_env(is_local=bool(is_local or os.getenv("SEI_SERVICE_USER") is None))
             self.config = SeiConfig(
                 base_url=base_url,
                 usuario=cfg_env.usuario,
@@ -95,6 +99,53 @@ class ModWsseiClient:
         self.token: str | None = None
         self.sigla_usuario: str | None = None
         self.nome_usuario: str | None = None
+        self._auth_lock = threading.Lock()
+        self._client_lock = threading.Lock()
+        self._max_connections = max(4, max_connections)
+        self._owns_http_client = http_client is None
+        self._http_client: httpx.Client | None = http_client
+
+    @property
+    def http_client(self) -> httpx.Client:
+        """Expõe o pool HTTP persistente compartilhado pelo cliente."""
+        return self._get_http_client()
+
+    def _get_http_client(self) -> httpx.Client:
+        """Retorna o pool httpx.Client compartilhado e thread-safe."""
+        with self._client_lock:
+            if self._http_client is None:
+                keepalive = max(4, min(self._max_connections, 12))
+                self._http_client = httpx.Client(
+                    limits=httpx.Limits(
+                        max_connections=self._max_connections,
+                        max_keepalive_connections=keepalive,
+                        keepalive_expiry=30.0,
+                    ),
+                    timeout=httpx.Timeout(float(self.config.timeout), connect=5.0),
+                )
+            return self._http_client
+
+    def close(self) -> None:
+        """Fecha o pool HTTP compartilhado quando pertencente a esta instância."""
+        with self._client_lock:
+            if self._http_client is not None and self._owns_http_client:
+                self._http_client.close()
+                self._http_client = None
+
+    def __enter__(self) -> Self:
+        """Suporta uso com gerenciador de contexto."""
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Garante liberação do pool HTTP ao sair do contexto."""
+        self.close()
+
+    def _reautenticar_se_necessario(self, token_usado: str | None) -> str:
+        """Renova JWT sob lock para evitar tempestade de logins paralelos."""
+        with self._auth_lock:
+            if self.token and self.token != token_usado:
+                return self.token
+            return self.autenticar()
 
     def autenticar(
         self,
@@ -115,8 +166,8 @@ class ModWsseiClient:
         }
 
         logger.info("Autenticando no mod-wssei em: %s (usuario: %s)", url, user)
-        with httpx.Client(timeout=self.config.timeout) as client:
-            response = client.post(url, data=payload)
+        client = self._get_http_client()
+        response = client.post(url, data=payload, timeout=httpx.Timeout(float(self.config.timeout), connect=5.0))
 
         if response.status_code != HTTPStatus.OK:
             raise RuntimeError(f"Falha na autenticacao do SEI ({response.status_code}): {response.text}")
@@ -141,7 +192,9 @@ class ModWsseiClient:
     def obter_headers(self) -> dict[str, str]:
         """Return default headers with auth token and active JARI unit."""
         if not self.token:
-            self.autenticar()
+            with self._auth_lock:
+                if not self.token:
+                    self.autenticar()
 
         headers = {"token": str(self.token)}
         if self.config.id_unidade:
@@ -158,32 +211,33 @@ class ModWsseiClient:
     ) -> httpx.Response:
         """Execute HTTP request with retry on 502/503/504 and re-auth on 401/403."""
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
-        req_timeout = timeout or self.config.timeout
+        req_timeout = httpx.Timeout(float(timeout or self.config.timeout), connect=5.0)
+        client = self._get_http_client()
 
         for tentativa, atraso in enumerate((*ATRASOS_RETENTATIVA, None)):
             headers = self.obter_headers()
             try:
-                with httpx.Client(timeout=req_timeout) as client:
+                response = client.request(
+                    method=metodo,
+                    url=url,
+                    headers=headers,
+                    params=params,
+                    json=json_data,
+                    timeout=req_timeout,
+                )
+
+                if response.status_code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
+                    logger.warning("Token expirado (HTTP %d). Reautenticando...", response.status_code)
+                    self._reautenticar_se_necessario(headers.get("token"))
+                    headers = self.obter_headers()
                     response = client.request(
                         method=metodo,
                         url=url,
                         headers=headers,
                         params=params,
                         json=json_data,
+                        timeout=req_timeout,
                     )
-
-                if response.status_code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
-                    logger.warning("Token expirado (HTTP %d). Reautenticando...", response.status_code)
-                    self.autenticar()
-                    headers = self.obter_headers()
-                    with httpx.Client(timeout=req_timeout) as client:
-                        response = client.request(
-                            method=metodo,
-                            url=url,
-                            headers=headers,
-                            params=params,
-                            json=json_data,
-                        )
 
                 if response.status_code not in STATUS_RETENTAVEIS or atraso is None:
                     return response
@@ -304,6 +358,54 @@ class ModWsseiClient:
 
         return lista_docs
 
+    def _stream_anexo_unico(
+        self,
+        client: httpx.Client,
+        url: str,
+        id_documento: int | str,
+        headers: dict[str, str],
+        max_bytes: int,
+        req_timeout: httpx.Timeout,
+    ) -> tuple[int, bytes | None]:
+        """Executa uma tentativa de streaming de anexo dentro do contexto aberto."""
+        chunks: list[bytes] = []
+        total_bytes = 0
+
+        with client.stream("GET", url, headers=headers, timeout=req_timeout) as response:
+            if response.status_code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
+                return response.status_code, None
+
+            if response.status_code in STATUS_RETENTAVEIS:
+                return response.status_code, None
+
+            if response.status_code != HTTPStatus.OK:
+                raise RuntimeError(
+                    f"Falha ao baixar anexo {id_documento} no mod-wssei ({response.status_code})"
+                )
+
+            primeiro_chunk = True
+            for chunk in response.iter_bytes(chunk_size=CHUNK_SIZE):
+                if not chunk:
+                    continue
+
+                if primeiro_chunk:
+                    primeiro_chunk = False
+                    if b'"sucesso":false' in chunk or (b"{" in chunk and b'"mensagem"' in chunk):
+                        raise RuntimeError(
+                            f"O SEI retornou erro ao baixar anexo {id_documento}: "
+                            f"{chunk.decode('utf-8', errors='ignore')}"
+                        )
+
+                total_bytes += len(chunk)
+                if total_bytes > max_bytes:
+                    raise ValueError(
+                        f"Documento {id_documento} excede o limite maximo permitido "
+                        f"({total_bytes} > {max_bytes} bytes / {max_bytes / (1024 * 1024):.1f} MB)."
+                    )
+                chunks.append(chunk)
+
+        return HTTPStatus.OK, b"".join(chunks)
+
     def baixar_documento(
         self,
         id_documento: int | str,
@@ -316,68 +418,53 @@ class ModWsseiClient:
         """
         endpoint = f"/documento/baixar/anexo/{id_documento}"
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
-        req_timeout = timeout or self.config.timeout
+        req_timeout = httpx.Timeout(float(timeout or self.config.timeout), connect=5.0)
+        client = self._get_http_client()
         logger.info("Baixando documento %s via mod-wssei em streaming chunked...", id_documento)
 
         for tentativa, atraso in enumerate((*ATRASOS_RETENTATIVA, None)):
             headers = self.obter_headers()
-            chunks: list[bytes] = []
-            total_bytes = 0
 
             try:
-                with httpx.Client(timeout=req_timeout) as client:
-                    with client.stream("GET", url, headers=headers) as response:
-                        # Se expirado, tenta renovar token
-                        if response.status_code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
-                            logger.warning("Token expirado ao baixar anexo %s. Reautenticando...", id_documento)
-                            self.autenticar()
-                            headers = self.obter_headers()
-                            with client.stream("GET", url, headers=headers) as retry_response:
-                                response = retry_response
+                status_code, conteudo_bytes = self._stream_anexo_unico(
+                    client=client,
+                    url=url,
+                    id_documento=id_documento,
+                    headers=headers,
+                    max_bytes=max_bytes,
+                    req_timeout=req_timeout,
+                )
 
-                        if response.status_code in STATUS_RETENTAVEIS and atraso is not None:
-                            logger.warning(
-                                "SEI respondeu HTTP %d ao baixar anexo %s; retentativa %d/%d em %.1fs",
-                                response.status_code,
-                                id_documento,
-                                tentativa + 1,
-                                len(ATRASOS_RETENTATIVA),
-                                atraso,
-                            )
-                            time.sleep(atraso)
-                            continue
+                if status_code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
+                    logger.warning("Token expirado ao baixar anexo %s. Reautenticando...", id_documento)
+                    self._reautenticar_se_necessario(headers.get("token"))
+                    headers = self.obter_headers()
+                    status_code, conteudo_bytes = self._stream_anexo_unico(
+                        client=client,
+                        url=url,
+                        id_documento=id_documento,
+                        headers=headers,
+                        max_bytes=max_bytes,
+                        req_timeout=req_timeout,
+                    )
 
-                        if response.status_code != HTTPStatus.OK:
-                            raise RuntimeError(
-                                f"Falha ao baixar anexo {id_documento} no mod-wssei ({response.status_code})"
-                            )
+                if status_code in STATUS_RETENTAVEIS and atraso is not None:
+                    logger.warning(
+                        "SEI respondeu HTTP %d ao baixar anexo %s; retentativa %d/%d em %.1fs",
+                        status_code,
+                        id_documento,
+                        tentativa + 1,
+                        len(ATRASOS_RETENTATIVA),
+                        atraso,
+                    )
+                    time.sleep(atraso)
+                    continue
 
-                        primeiro_chunk = True
-                        for chunk in response.iter_bytes(chunk_size=CHUNK_SIZE):
-                            if not chunk:
-                                continue
+                if conteudo_bytes is None:
+                    raise RuntimeError(
+                        f"Falha ao baixar anexo {id_documento} no mod-wssei ({status_code})"
+                    )
 
-                            if primeiro_chunk:
-                                primeiro_chunk = False
-                                # Valida se a resposta e um JSON de erro disfarcado
-                                if b'"sucesso":false' in chunk or (b"{" in chunk and b'"mensagem"' in chunk):
-                                    response.close()
-                                    raise RuntimeError(
-                                        f"O SEI retornou erro ao baixar anexo {id_documento}: {chunk.decode('utf-8', errors='ignore')}"
-                                    )
-
-                            total_bytes += len(chunk)
-                            if total_bytes > max_bytes:
-                                response.close()
-                                raise ValueError(
-                                    f"Documento {id_documento} excede o limite maximo permitido "
-                                    f"({total_bytes} > {max_bytes} bytes / {max_bytes / (1024 * 1024):.1f} MB)."
-                                )
-                            chunks.append(chunk)
-
-                conteudo_bytes = b"".join(chunks)
-
-                # Valida cabecalho minimo do arquivo binario
                 if not conteudo_bytes.startswith(b"%PDF-"):
                     logger.warning(
                         "Anexo %s baixado (%d bytes) nao inicia com magic bytes %%PDF-.",
@@ -411,6 +498,19 @@ class ModWsseiClient:
 
         raise RuntimeError(f"Falha ao baixar anexo {id_documento} apos esgotar retentativas.")
 
+    def _baixar_anexo_seguro(self, id_documento: str, id_procedimento: int | str) -> tuple[str, bytes | None]:
+        """Baixa anexo individual registrando aviso sem interromper os demais anexos."""
+        try:
+            return id_documento, self.baixar_documento(id_documento)
+        except Exception as exc:
+            logger.warning(
+                "Falha ao unir anexo %s do processo %s: %s",
+                id_documento,
+                id_procedimento,
+                exc,
+            )
+            return id_documento, None
+
     def obter_pdf_recurso_processo(self, id_procedimento: int | str) -> tuple[str, bytes]:
         """Locate citizen appeal documents and return consolidated binary PDF bytes in RAM."""
         documentos = self.listar_documentos_processo(id_procedimento)
@@ -443,7 +543,7 @@ class ModWsseiClient:
             pdf_bytes = self.baixar_documento(id_doc)
             return id_doc, pdf_bytes
 
-        # Multiplos anexos: baixa em streaming na RAM e une via PyMuPDF
+        # Multiplos anexos: baixa em streaming paralelo (pool limitado) e une na ordem via PyMuPDF
         import fitz
 
         logger.info(
@@ -451,14 +551,20 @@ class ModWsseiClient:
             id_procedimento,
             len(candidatos),
         )
+        ids_candidatos = [str(d["id_documento_sei"]) for d in candidatos]
+        with ThreadPoolExecutor(max_workers=min(3, len(ids_candidatos))) as executor:
+            anexos_baixados = list(
+                executor.map(lambda id_d: self._baixar_anexo_seguro(id_d, id_procedimento), ids_candidatos)
+            )
+
         doc_consolidado = fitz.open()
         ids_docs_baixados: list[str] = []
 
-        for d in candidatos:
-            id_d = str(d["id_documento_sei"])
+        for id_d, conteudo in anexos_baixados:
+            if conteudo is None:
+                continue
             try:
-                b = self.baixar_documento(id_d)
-                doc_parte = fitz.open(stream=b, filetype="pdf")
+                doc_parte = fitz.open(stream=conteudo, filetype="pdf")
                 doc_consolidado.insert_pdf(doc_parte)
                 doc_parte.close()
                 ids_docs_baixados.append(id_d)

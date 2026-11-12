@@ -77,7 +77,7 @@ def converter_valor_para_sql_null(valor: Any) -> float | None:
     try:
         val = float(valor)
         return None if np.isnan(val) else val
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         return None
 
 

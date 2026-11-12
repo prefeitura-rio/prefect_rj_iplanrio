@@ -35,12 +35,18 @@ Fluxo de Dependências:
   * `utils/cost_analyzer.py`: apura o custo de tokens em dólares e o valor economizado com cache.
 """
 
+import os
+import threading
 import time
+from collections import deque
+from collections.abc import Callable, Iterable
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 
 import polars as pl
 from prefect.logging import get_logger
+
+from .providers.base import BaseLLMClient
 
 logger = get_logger("toolkit")
 
@@ -71,56 +77,115 @@ from .storage import carregar_bytes_pdf
 from .windowing import extrair_smart_window_pdf
 
 
-def obter_cliente_llm(modelo: str | None = None) -> Any:
-    """Instantiate the LLM client according to LLM_PROVIDER configuration."""
+_LLM_CLIENT_LOCK = threading.Lock()
+_LLM_CLIENT_CACHE: dict[tuple[str, str, str], BaseLLMClient] = {}
+
+
+def limpar_cache_cliente_llm() -> None:
+    """Limpa e fecha instâncias em cache de clientes LLM (uso em testes/shutdown)."""
+    with _LLM_CLIENT_LOCK:
+        clientes = list(_LLM_CLIENT_CACHE.values())
+        _LLM_CLIENT_CACHE.clear()
+    for cliente in clientes:
+        close_fn = getattr(cliente, "close", None)
+        if callable(close_fn):
+            close_fn()
+
+
+def obter_cliente_llm(modelo: str | None = None) -> BaseLLMClient:
+    """Return a thread-safe cached LLM client reusing persistent HTTP connections."""
     from ..constants import LLM_PROVIDER
 
     p = (LLM_PROVIDER or "openai").strip().lower()
-    if p in ("google", "vertex", "gemini"):
-        from .providers.google_client import GoogleLLMClient
+    target_model = modelo or os.getenv("LLM_MODEL") or VERTEX_LLM_MODEL
+    base_url = (os.getenv("BIFROST_BASE_URL") or "").strip() if p not in ("google", "vertex", "gemini") else "google"
+    chave = (p, target_model, base_url)
 
-        return GoogleLLMClient(default_model=modelo)
-    from .providers.openai_client import OpenAILLMClient
+    with _LLM_CLIENT_LOCK:
+        cached = _LLM_CLIENT_CACHE.get(chave)
+        if cached is not None:
+            return cached
 
-    return OpenAILLMClient(default_model=modelo)
+        if p in ("google", "vertex", "gemini"):
+            from .providers.google_client import GoogleLLMClient
+
+            cliente: BaseLLMClient = GoogleLLMClient(default_model=target_model)
+        else:
+            from .providers.openai_client import OpenAILLMClient
+
+            cliente = OpenAILLMClient(default_model=target_model)
+
+        _LLM_CLIENT_CACHE[chave] = cliente
+        return cliente
 
 
-def triar_processo(
+def _montar_resultado_erro_arquivo(
+    processo_id: str,
+    id_doc_sei: Any,
+    numero_sei: str,
+    calibracao_id: Any,
+    modelo_llm: str,
+    versao_prompt: str,
+    exc: Exception,
+    t_inicio: float,
+) -> dict[str, Any]:
+    """Constrói payload canônico HITL_ERRO_ARQUIVO para falhas de obtenção/leitura de PDF."""
+    return {
+        "processo_id": processo_id,
+        "id_documento_sei": id_doc_sei,
+        "numero_processo_sei": numero_sei,
+        "calibracao_id": calibracao_id,
+        "modelo_llm": modelo_llm,
+        "versao_prompt": versao_prompt,
+        "n1_classe_predita": "OUTROS",
+        "n1_encaminhamento": "REVISAO_HUMANA",
+        "n1_cot_justificativa": f"Falha de integridade do documento ou download no SEI: {exc}",
+        "n1_lauda_evidencia": 1,
+        "n1_frase_citada": "",
+        "n1_tipo_citacao": "DOCUMENTO_ILEGIVEL",
+        "sinais_epistemicos": {},
+        "probabilidade_calibrada": 0.0,
+        "probabilidade_final": 0.0,
+        "conjunto_conformal": ["OUTROS"],
+        "tamanho_conjunto_conformal": 1,
+        "rota_execucao": "HITL_ERRO_ARQUIVO",
+        "faixa_operacional": "VERMELHA",
+        "estagio2_executado": False,
+        "n2_classe_predita": None,
+        "n2_cot_justificativa": None,
+        "n2_delta_cot_dispersao": None,
+        "n2_log_odds_atualizado": None,
+        "status_fila": StatusProcessamento.ERRO_PROCESSAMENTO.value,
+        "status_triagem": "ERRO_PDF_CORROMPIDO",
+        "tokens_prompt_total": 0,
+        "tokens_completion": 0,
+        "tokens_cached": 0,
+        "custo_real_usd": 0.0,
+        "custo_sem_cache_usd": 0.0,
+        "economia_cache_usd": 0.0,
+        "tempo_execucao_s": round(time.time() - t_inicio, 3),
+        "auditoria_sistema": {
+            "erro_detalhado": str(exc),
+            "status": "ERRO_PDF_CORROMPIDO",
+        },
+    }
+
+
+def preparar_documento_processo(
     processo: dict[str, Any],
     artefatos: dict[str, Any],
-    is_local: bool = False,
     fonte_pdf: str = "sei",
     cliente_sei: Any | None = None,
-    limiar_alta: float = LIMIAR_ALTA,
-    limiar_baixa: float = LIMIAR_BAIXA,
-    limiar_dispersao_max: float = LIMIAR_DISPERSAO_COT_MAX,
     max_paginas: int = MAX_PAGINAS_PDF,
     modelo_llm: str = VERTEX_LLM_MODEL,
-    reasoning_effort: str = "medium",
-    executar_n2: bool = True,
 ) -> dict[str, Any]:
-    """Executa a triagem individual com inferência determinística e calibração tabular.
-
-    :param processo: Registro do processo com metadados e identificadores SEI / arquivo.
-    :param artefatos: Estrutura com modelo calibrador e quantis conformais.
-    :param is_local: Flag para resolução de infraestrutura.
-    :param fonte_pdf: "local" para PDFs em disco ou "sei" para download em memória.
-    :param cliente_sei: Cliente do SEI com baixar_documento().
-    :param limiar_alta: Ponto de corte para aprovação na Faixa Verde.
-    :param limiar_baixa: Ponto de corte inferior para envio direto ao HITL.
-    :param limiar_dispersao_max: Limite máximo tolerável de dispersão textual de CoT.
-    :param max_paginas: Quantidade máxima de páginas a enviar para o LLM.
-    :param modelo_llm: Identificador do modelo na Vertex AI / Gateway.
-    :param reasoning_effort: Nível de esforço de raciocínio da LLM.
-    :param executar_n2: Habilita segundo estágio na faixa de incerteza.
-    :returns: Dicionário detalhado contendo a predição e o vetor epistêmico.
-    :raises ValueError: Se a resposta da LLM for nula.
-    """
-    nome_arquivo = processo.get("nome_arquivo_origem") or f"{processo.get('numero_processo_sei', 'doc')}.pdf"
+    """Executa o estágio 1: download em RAM e recorte Smart Window do PDF."""
     id_procedimento_sei = processo.get("id_procedimento_sei")
     id_doc_sei = processo.get("id_documento_sei")
     processo_id = str(processo.get("processo_id", ""))
     numero_sei = str(processo.get("numero_processo_sei", "SEI_SEM_NUMERO"))
+    calibracao_id = artefatos.get("calibracao_id")
+    versao_prompt = artefatos.get("versao_prompt", "v4_baseline")
 
     t_inicio = time.time()
     logger.info(
@@ -129,16 +194,6 @@ def triar_processo(
         fonte_pdf,
     )
 
-    calibrador = artefatos["calibrador"]
-    conformal = artefatos["conformal"]
-    prompt_sistema = artefatos["prompt_sistema"]
-    calibracao_id = artefatos.get("calibracao_id")
-    versao_prompt = artefatos.get("versao_prompt", "v4_baseline")
-    stats_classes = getattr(calibrador, "estatisticas_classes", None)
-
-    cliente_llm = obter_cliente_llm(modelo=modelo_llm)
-
-    # 1. Download em memória RAM (sem salvar em disco ou GCS) e Smart Windowing
     t0_download = time.perf_counter()
     try:
         if fonte_pdf == "sei" and cliente_sei is not None:
@@ -162,13 +217,11 @@ def triar_processo(
             raise ValueError(f"Arquivo de recurso vazio ou nulo para o processo {numero_sei}.")
 
         t_download = time.perf_counter() - t0_download
-
         t0_window = time.perf_counter()
         pdf_window_bytes = extrair_smart_window_pdf(pdf_bytes, max_paginas=max_paginas)
         t_window = time.perf_counter() - t0_window
     except Exception as exc:
         t_download = time.perf_counter() - t0_download
-        t_window = 0.0
         logger.error(
             "Falha na obtenção/validação do PDF para o processo %s (%.2fs): %s",
             numero_sei,
@@ -176,44 +229,66 @@ def triar_processo(
             exc,
         )
         return {
-            "processo_id": processo_id,
-            "id_documento_sei": id_doc_sei,
-            "numero_processo_sei": numero_sei,
-            "calibracao_id": calibracao_id,
-            "modelo_llm": modelo_llm,
-            "versao_prompt": versao_prompt,
-            "n1_classe_predita": "OUTROS",
-            "n1_encaminhamento": "REVISAO_HUMANA",
-            "n1_cot_justificativa": f"Falha de integridade do documento ou download no SEI: {exc}",
-            "n1_lauda_evidencia": 1,
-            "n1_frase_citada": "",
-            "n1_tipo_citacao": "DOCUMENTO_ILEGIVEL",
-            "sinais_epistemicos": {},
-            "probabilidade_calibrada": 0.0,
-            "probabilidade_final": 0.0,
-            "conjunto_conformal": ["OUTROS"],
-            "tamanho_conjunto_conformal": 1,
-            "rota_execucao": "HITL_ERRO_ARQUIVO",
-            "faixa_operacional": "VERMELHA",
-            "estagio2_executado": False,
-            "n2_classe_predita": None,
-            "n2_cot_justificativa": None,
-            "n2_delta_cot_dispersao": None,
-            "n2_log_odds_atualizado": None,
-            "status_fila": StatusProcessamento.ERRO_PROCESSAMENTO.value,
-            "status_triagem": "ERRO_PDF_CORROMPIDO",
-            "tokens_prompt_total": 0,
-            "tokens_completion": 0,
-            "tokens_cached": 0,
-            "custo_real_usd": 0.0,
-            "custo_sem_cache_usd": 0.0,
-            "economia_cache_usd": 0.0,
-            "tempo_execucao_s": round(time.time() - t_inicio, 3),
-            "auditoria_sistema": {
-                "erro_detalhado": str(exc),
-                "status": "ERRO_PDF_CORROMPIDO",
-            },
+            "ok": False,
+            "processo": processo,
+            "resultado_erro": _montar_resultado_erro_arquivo(
+                processo_id=processo_id,
+                id_doc_sei=id_doc_sei,
+                numero_sei=numero_sei,
+                calibracao_id=calibracao_id,
+                modelo_llm=modelo_llm,
+                versao_prompt=versao_prompt,
+                exc=exc,
+                t_inicio=t_inicio,
+            ),
         }
+
+    return {
+        "ok": True,
+        "processo": processo,
+        "id_documento_sei": id_doc_sei,
+        "pdf_bytes": pdf_bytes,
+        "pdf_window_bytes": pdf_window_bytes,
+        "t_download": t_download,
+        "t_window": t_window,
+        "t_inicio": t_inicio,
+    }
+
+
+def classificar_documento_preparado(
+    documento_preparado: dict[str, Any],
+    artefatos: dict[str, Any],
+    limiar_alta: float = LIMIAR_ALTA,
+    limiar_baixa: float = LIMIAR_BAIXA,
+    limiar_dispersao_max: float = LIMIAR_DISPERSAO_COT_MAX,
+    modelo_llm: str = VERTEX_LLM_MODEL,
+    reasoning_effort: str = "medium",
+    executar_n2: bool = True,
+) -> dict[str, Any]:
+    """Executa o estágio 2: inferência multimodal, OCR, calibração e roteamento N=2."""
+    if not documento_preparado.get("ok"):
+        return dict(documento_preparado["resultado_erro"])
+
+    processo: dict[str, Any] = documento_preparado["processo"]
+    id_doc_sei = documento_preparado.get("id_documento_sei")
+    pdf_bytes: bytes = documento_preparado["pdf_bytes"]
+    pdf_window_bytes: bytes = documento_preparado["pdf_window_bytes"]
+    t_download = float(documento_preparado.get("t_download", 0.0))
+    t_window = float(documento_preparado.get("t_window", 0.0))
+    t_inicio = float(documento_preparado.get("t_inicio", time.time()))
+
+    nome_arquivo = processo.get("nome_arquivo_origem") or f"{processo.get('numero_processo_sei', 'doc')}.pdf"
+    processo_id = str(processo.get("processo_id", ""))
+    numero_sei = str(processo.get("numero_processo_sei", "SEI_SEM_NUMERO"))
+
+    calibrador = artefatos["calibrador"]
+    conformal = artefatos["conformal"]
+    prompt_sistema = artefatos["prompt_sistema"]
+    calibracao_id = artefatos.get("calibracao_id")
+    versao_prompt = artefatos.get("versao_prompt", "v4_baseline")
+    stats_classes = getattr(calibrador, "estatisticas_classes", None)
+
+    cliente_llm = obter_cliente_llm(modelo=modelo_llm)
 
     # 2. Inferência Primária N=1 (T=0.0)
     t0_gemini_n1 = time.perf_counter()
@@ -460,6 +535,128 @@ def triar_processo(
         "tempo_execucao_s": tempo_total,
         "tempos_etapas": tempos_etapas,
     }
+
+
+def triar_processo(
+    processo: dict[str, Any],
+    artefatos: dict[str, Any],
+    is_local: bool = False,
+    fonte_pdf: str = "sei",
+    cliente_sei: Any | None = None,
+    limiar_alta: float = LIMIAR_ALTA,
+    limiar_baixa: float = LIMIAR_BAIXA,
+    limiar_dispersao_max: float = LIMIAR_DISPERSAO_COT_MAX,
+    max_paginas: int = MAX_PAGINAS_PDF,
+    modelo_llm: str = VERTEX_LLM_MODEL,
+    reasoning_effort: str = "medium",
+    executar_n2: bool = True,
+) -> dict[str, Any]:
+    """Executa estágio 1 (download) e estágio 2 (classificação) em sequência."""
+    _ = is_local
+    documento = preparar_documento_processo(
+        processo=processo,
+        artefatos=artefatos,
+        fonte_pdf=fonte_pdf,
+        cliente_sei=cliente_sei,
+        max_paginas=max_paginas,
+        modelo_llm=modelo_llm,
+    )
+    return classificar_documento_preparado(
+        documento_preparado=documento,
+        artefatos=artefatos,
+        limiar_alta=limiar_alta,
+        limiar_baixa=limiar_baixa,
+        limiar_dispersao_max=limiar_dispersao_max,
+        modelo_llm=modelo_llm,
+        reasoning_effort=reasoning_effort,
+        executar_n2=executar_n2,
+    )
+
+
+class FutureProtocol(Protocol):
+    """Contrato mínimo de futuros compatível com Prefect e ThreadPoolExecutor."""
+
+    def result(self, timeout: float | None = None) -> Any:
+        """Obtém o resultado do futuro."""
+        ...
+
+
+def _resolver_futuro_seguro(futuro: Any, etapa: str) -> Any | None:
+    """Resolve futuro Prefect ou padrão registrando falha sem interromper o lote."""
+    try:
+        return futuro.result(raise_on_failure=False)
+    except TypeError:
+        try:
+            return futuro.result()
+        except Exception as exc:
+            logger.error("Falha irrecuperável na etapa %s: %s", etapa, exc)
+            return None
+    except Exception as exc:
+        logger.error("Falha irrecuperável na etapa %s: %s", etapa, exc)
+        return None
+
+
+def executar_lote_em_janelas(
+    processos: list[dict[str, Any]],
+    submeter_download: Callable[[dict[str, Any]], FutureProtocol],
+    submeter_classificacao: Callable[[dict[str, Any]], FutureProtocol],
+    aguardar_concluidos: Callable[[list[Any]], Iterable[Any]],
+    max_downloads_simultaneos: int = 4,
+    aquecer_primeiro: bool = True,
+) -> list[dict[str, Any]]:
+    """Orquestra downloads SEI limitados em paralelo com inferências LLM sem ociosidade."""
+    if not processos:
+        return []
+
+    pendentes: deque[dict[str, Any]] = deque(processos)
+    resultados: list[dict[str, Any]] = []
+
+    # Aquece o cache de prompt com o primeiro processo válido antes da rajada concorrente.
+    if aquecer_primeiro and len(pendentes) > 1:
+        while pendentes:
+            proc_warmup = pendentes.popleft()
+            doc_warmup = _resolver_futuro_seguro(submeter_download(proc_warmup), "warmup_download")
+            if isinstance(doc_warmup, dict) and doc_warmup.get("ok"):
+                res_warmup = _resolver_futuro_seguro(submeter_classificacao(doc_warmup), "warmup_classificacao")
+                if isinstance(res_warmup, dict) and "processo_id" in res_warmup:
+                    resultados.append(res_warmup)
+                break
+            if isinstance(doc_warmup, dict) and "resultado_erro" in doc_warmup:
+                erro_warmup = doc_warmup["resultado_erro"]
+                if isinstance(erro_warmup, dict) and "processo_id" in erro_warmup:
+                    resultados.append(erro_warmup)
+
+    limite_janela = max(1, max_downloads_simultaneos)
+    downloads_ativos: list[Any] = []
+    inferencias_ativas: list[Any] = []
+
+    while pendentes and len(downloads_ativos) < limite_janela:
+        downloads_ativos.append(submeter_download(pendentes.popleft()))
+
+    while downloads_ativos:
+        done_dl = next(iter(aguardar_concluidos(list(downloads_ativos))), None)
+        if done_dl is None:
+            break
+        downloads_ativos.remove(done_dl)
+
+        if pendentes:
+            downloads_ativos.append(submeter_download(pendentes.popleft()))
+
+        doc_prep = _resolver_futuro_seguro(done_dl, "download")
+        if isinstance(doc_prep, dict) and doc_prep.get("ok"):
+            inferencias_ativas.append(submeter_classificacao(doc_prep))
+        elif isinstance(doc_prep, dict) and "resultado_erro" in doc_prep:
+            erro_doc = doc_prep["resultado_erro"]
+            if isinstance(erro_doc, dict) and "processo_id" in erro_doc:
+                resultados.append(erro_doc)
+
+    if inferencias_ativas:
+        for done_inf in aguardar_concluidos(list(inferencias_ativas)):
+            res_inf = _resolver_futuro_seguro(done_inf, "classificacao")
+            if isinstance(res_inf, dict) and "processo_id" in res_inf:
+                resultados.append(res_inf)
+
+    return resultados
 
 
 def gerar_sumario_lote(resultados: list[dict[str, Any]]) -> dict[str, Any]:

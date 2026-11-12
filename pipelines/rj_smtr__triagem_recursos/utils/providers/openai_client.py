@@ -22,6 +22,7 @@ Fluxo de Dependências:
 import base64
 import os
 
+import httpx
 import pymupdf as fitz
 from openai import OpenAI
 
@@ -33,7 +34,12 @@ from .base import BaseLLMClient
 class OpenAILLMClient(BaseLLMClient):
     """Cliente para OpenAI e proxies compatíveis como Bifrost."""
 
-    def __init__(self, default_model: str | None = None) -> None:
+    def __init__(
+        self,
+        default_model: str | None = None,
+        http_client: httpx.Client | None = None,
+    ) -> None:
+        """Inicializa cliente OpenAI/Bifrost com pool HTTP persistente."""
         api_key = os.getenv("BIFROST_VIRTUAL_KEY") or os.getenv("BIFROST_API_KEY") or os.getenv("OPENAI_API_KEY")
         raw_base_url = (os.getenv("BIFROST_BASE_URL") or "https://bifrost.iplan.dados.rio/openai/v1").strip()
         base_url = (
@@ -48,12 +54,32 @@ class OpenAILLMClient(BaseLLMClient):
 
         super().__init__(api_key=api_key, base_url=base_url, default_model=modelo_padrao)
 
+        self._owns_http_client = http_client is None
+        self._http_client = http_client or httpx.Client(
+            limits=httpx.Limits(
+                max_connections=32,
+                max_keepalive_connections=16,
+                keepalive_expiry=30.0,
+            ),
+            timeout=httpx.Timeout(180.0, connect=5.0),
+        )
         self.client = OpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
             timeout=180.0,
             max_retries=2,
+            http_client=self._http_client,
         )
+
+    @property
+    def http_client(self) -> httpx.Client:
+        """Expõe o pool HTTP persistente utilizado pelas chamadas OpenAI/Bifrost."""
+        return self._http_client
+
+    def close(self) -> None:
+        """Fecha o pool HTTP compartilhado se criado por esta instância."""
+        if self._owns_http_client:
+            self._http_client.close()
 
     def converter_pdf_para_imagens_base64(self, pdf_bytes: bytes, dpi: int = 150) -> list[str]:
         """Converte páginas de PDF em imagens JPEG serializadas em Base64.

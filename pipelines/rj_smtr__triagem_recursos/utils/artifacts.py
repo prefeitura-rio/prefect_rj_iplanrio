@@ -164,6 +164,16 @@ def carregar_baseline_referencia(
     return BASELINE_CACHE
 
 
+def _preaquecer_modelo_embedding() -> None:
+    """Pre-aquece o SentenceTransformer antes do pool de workers."""
+    from .feature_extractor import obter_modelo_embedding
+
+    try:
+        obter_modelo_embedding()
+    except Exception as exc:
+        logger.debug("Pre-aquecimento de embeddings ignorado nesta inicializacao: %s", exc)
+
+
 def carregar_artefatos_pipeline(
     is_local: bool = False,
     arquivo_prompt: str = f"{VERSAO_PROMPT_PADRAO}.txt",
@@ -212,6 +222,7 @@ def carregar_artefatos_pipeline(
         is_local=is_local,
     )
     versao_prompt = Path(arquivo_prompt).stem or VERSAO_PROMPT_PADRAO
+    _preaquecer_modelo_embedding()
 
     return {
         "calibrador": calibrador,

@@ -23,6 +23,7 @@ Fluxo de Dependências:
 from typing import Any
 
 from prefect import get_run_logger, task
+from prefect.cache_policies import NO_CACHE
 
 from .constants import (
     LIMIAR_ALTA,
@@ -38,10 +39,15 @@ from .utils.db_repository import (
     buscar_processos_para_triagem_ou_fallback,
     persistir_lote_resultados_ia,
 )
-from .utils.triage import gerar_sumario_lote, triar_processo
+from .utils.triage import (
+    classificar_documento_preparado,
+    gerar_sumario_lote,
+    preparar_documento_processo,
+    triar_processo,
+)
 
 
-@task(name="carregar_artefatos_referencia", retries=2, retry_delay_seconds=5)
+@task(name="carregar_artefatos_referencia", cache_policy=NO_CACHE, retries=2, retry_delay_seconds=5)
 def task_carregar_artefatos_referencia(
     is_local: bool = False,
     arquivo_prompt: str = f"{VERSAO_PROMPT_PADRAO}.txt",
@@ -55,7 +61,7 @@ def task_carregar_artefatos_referencia(
     )
 
 
-@task(name="buscar_processos_pendentes", retries=2, retry_delay_seconds=5)
+@task(name="buscar_processos_pendentes", cache_policy=NO_CACHE, retries=2, retry_delay_seconds=5)
 def task_buscar_processos_pendentes(
     is_local: bool = False,
     fonte_pdf: str = "sei",
@@ -82,7 +88,64 @@ def task_buscar_processos_pendentes(
 
 
 @task(
+    name="baixar_e_preparar_pdf",
+    cache_policy=NO_CACHE,
+    retries=1,
+    retry_delay_seconds=3,
+    timeout_seconds=180,
+)
+def task_baixar_e_preparar_pdf(
+    processo: dict[str, Any],
+    artefatos: dict[str, Any],
+    fonte_pdf: str = "sei",
+    cliente_sei: Any | None = None,
+    max_paginas: int = MAX_PAGINAS_PDF,
+    modelo_llm: str = VERTEX_LLM_MODEL,
+) -> dict[str, Any]:
+    """Executa estágio 1 de download em RAM e recorte Smart Window do PDF."""
+    return preparar_documento_processo(
+        processo=processo,
+        artefatos=artefatos,
+        fonte_pdf=fonte_pdf,
+        cliente_sei=cliente_sei,
+        max_paginas=max_paginas,
+        modelo_llm=modelo_llm,
+    )
+
+
+@task(
+    name="triar_pdf_preparado",
+    cache_policy=NO_CACHE,
+    retries=2,
+    retry_delay_seconds=5,
+    timeout_seconds=240,
+)
+def task_triar_pdf_preparado(
+    documento_preparado: dict[str, Any],
+    artefatos: dict[str, Any],
+    limiar_alta: float = LIMIAR_ALTA,
+    limiar_baixa: float = LIMIAR_BAIXA,
+    limiar_dispersao_max: float = LIMIAR_DISPERSAO_COT_MAX,
+    modelo_llm: str = VERTEX_LLM_MODEL,
+    reasoning_effort: str = "medium",
+    executar_n2: bool = True,
+) -> dict[str, Any]:
+    """Executa estágio 2 de inferência LLM, OCR e calibração em documento preparado."""
+    return classificar_documento_preparado(
+        documento_preparado=documento_preparado,
+        artefatos=artefatos,
+        limiar_alta=limiar_alta,
+        limiar_baixa=limiar_baixa,
+        limiar_dispersao_max=limiar_dispersao_max,
+        modelo_llm=modelo_llm,
+        reasoning_effort=reasoning_effort,
+        executar_n2=executar_n2,
+    )
+
+
+@task(
     name="triar_processo_individual",
+    cache_policy=NO_CACHE,
     retries=2,
     retry_delay_seconds=5,
     timeout_seconds=240,
@@ -118,7 +181,7 @@ def task_triar_processo_individual(
     )
 
 
-@task(name="persistir_lote_resultados", retries=2, retry_delay_seconds=5)
+@task(name="persistir_lote_resultados", cache_policy=NO_CACHE, retries=2, retry_delay_seconds=5)
 def task_persistir_lote_resultados(resultados: list[dict[str, Any]], is_local: bool = False) -> None:
     """Persiste as predicoes e atualiza a fila de trabalho no banco de dados."""
     try:
@@ -138,7 +201,7 @@ def task_persistir_lote_resultados(resultados: list[dict[str, Any]], is_local: b
         raise
 
 
-@task(name="gerar_sumario_lote")
+@task(name="gerar_sumario_lote", cache_policy=NO_CACHE)
 def task_gerar_sumario_lote(resultados: list[dict[str, Any]]) -> dict[str, Any]:
     """Consolida as metricas operacionais e financeiras da execucao do lote."""
     return gerar_sumario_lote(resultados)
