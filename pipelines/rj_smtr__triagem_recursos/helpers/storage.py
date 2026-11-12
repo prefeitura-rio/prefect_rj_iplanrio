@@ -19,7 +19,7 @@ Fluxo de Dependências:
 from pathlib import Path
 from typing import Any
 
-from ..constants import LOCAL_ARTIFACTS_DIR, LOCAL_PDFS_DIR
+from pipelines.rj_smtr__triagem_recursos.constants import LOCAL_ARTIFACTS_DIR, LOCAL_PDFS_DIR
 
 
 def carregar_bytes_pdf(

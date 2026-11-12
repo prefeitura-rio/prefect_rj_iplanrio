@@ -18,7 +18,7 @@ Fluxo de Dependências:
 
 from abc import ABC, abstractmethod
 
-from ..schemas import EsquemaDecisao
+from pipelines.rj_smtr__triagem_recursos.helpers.schemas import EsquemaDecisao
 
 
 class BaseLLMClient(ABC):

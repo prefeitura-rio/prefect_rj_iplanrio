@@ -25,7 +25,7 @@ from prefect.futures import as_completed
 from prefect.task_runners import ThreadPoolTaskRunner
 from toolkit.telemetry import logger as telemetry_logger
 
-from .constants import (
+from pipelines.rj_smtr__triagem_recursos.constants import (
     LIMIAR_ALTA,
     LIMIAR_BAIXA,
     LIMIAR_DISPERSAO_COT_MAX,
@@ -35,7 +35,9 @@ from .constants import (
     VERSAO_PROMPT_PADRAO,
     VERTEX_LLM_MODEL,
 )
-from .tasks import (
+from pipelines.rj_smtr__triagem_recursos.helpers.sei_client import ModWsseiClient
+from pipelines.rj_smtr__triagem_recursos.helpers.triage import executar_lote_em_janelas
+from pipelines.rj_smtr__triagem_recursos.tasks import (
     task_baixar_e_preparar_pdf,
     task_buscar_processos_pendentes,
     task_carregar_artefatos_referencia,
@@ -43,8 +45,6 @@ from .tasks import (
     task_persistir_lote_resultados,
     task_triar_pdf_preparado,
 )
-from .utils.sei_client import ModWsseiClient
-from .utils.triage import executar_lote_em_janelas
 
 
 @flow(

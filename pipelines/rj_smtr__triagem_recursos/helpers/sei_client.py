@@ -13,9 +13,8 @@ from http import HTTPStatus
 from typing import Any, Self
 
 import httpx
-from prefect.logging import get_logger
-
-logger = get_logger("toolkit")
+import pymupdf as fitz
+from toolkit.telemetry import logger
 
 MAX_DOCUMENT_BYTES = 30 * 1024 * 1024  # 30 MB teto de memoria por documento
 CHUNK_SIZE = 64 * 1024  # 64 KB por chunk de streaming
@@ -108,9 +107,9 @@ class ModWsseiClient:
     @property
     def http_client(self) -> httpx.Client:
         """Expõe o pool HTTP persistente compartilhado pelo cliente."""
-        return self._get_http_client()
+        return self.get_http_client()
 
-    def _get_http_client(self) -> httpx.Client:
+    def get_http_client(self) -> httpx.Client:
         """Retorna o pool httpx.Client compartilhado e thread-safe."""
         with self._client_lock:
             if self._http_client is None:
@@ -140,7 +139,7 @@ class ModWsseiClient:
         """Garante liberação do pool HTTP ao sair do contexto."""
         self.close()
 
-    def _reautenticar_se_necessario(self, token_usado: str | None) -> str:
+    def reautenticar_se_necessario(self, token_usado: str | None) -> str:
         """Renova JWT sob lock para evitar tempestade de logins paralelos."""
         with self._auth_lock:
             if self.token and self.token != token_usado:
@@ -166,7 +165,7 @@ class ModWsseiClient:
         }
 
         logger.info("Autenticando no mod-wssei em: %s (usuario: %s)", url, user)
-        client = self._get_http_client()
+        client = self.get_http_client()
         response = client.post(url, data=payload, timeout=httpx.Timeout(float(self.config.timeout), connect=5.0))
 
         if response.status_code != HTTPStatus.OK:
@@ -212,7 +211,7 @@ class ModWsseiClient:
         """Execute HTTP request with retry on 502/503/504 and re-auth on 401/403."""
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         req_timeout = httpx.Timeout(float(timeout or self.config.timeout), connect=5.0)
-        client = self._get_http_client()
+        client = self.get_http_client()
 
         for tentativa, atraso in enumerate((*ATRASOS_RETENTATIVA, None)):
             headers = self.obter_headers()
@@ -228,7 +227,7 @@ class ModWsseiClient:
 
                 if response.status_code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
                     logger.warning("Token expirado (HTTP %d). Reautenticando...", response.status_code)
-                    self._reautenticar_se_necessario(headers.get("token"))
+                    self.reautenticar_se_necessario(headers.get("token"))
                     headers = self.obter_headers()
                     response = client.request(
                         method=metodo,
@@ -358,7 +357,7 @@ class ModWsseiClient:
 
         return lista_docs
 
-    def _stream_anexo_unico(
+    def stream_anexo_unico(
         self,
         client: httpx.Client,
         url: str,
@@ -379,9 +378,7 @@ class ModWsseiClient:
                 return response.status_code, None
 
             if response.status_code != HTTPStatus.OK:
-                raise RuntimeError(
-                    f"Falha ao baixar anexo {id_documento} no mod-wssei ({response.status_code})"
-                )
+                raise RuntimeError(f"Falha ao baixar anexo {id_documento} no mod-wssei ({response.status_code})")
 
             primeiro_chunk = True
             for chunk in response.iter_bytes(chunk_size=CHUNK_SIZE):
@@ -419,14 +416,14 @@ class ModWsseiClient:
         endpoint = f"/documento/baixar/anexo/{id_documento}"
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         req_timeout = httpx.Timeout(float(timeout or self.config.timeout), connect=5.0)
-        client = self._get_http_client()
+        client = self.get_http_client()
         logger.info("Baixando documento %s via mod-wssei em streaming chunked...", id_documento)
 
         for tentativa, atraso in enumerate((*ATRASOS_RETENTATIVA, None)):
             headers = self.obter_headers()
 
             try:
-                status_code, conteudo_bytes = self._stream_anexo_unico(
+                status_code, conteudo_bytes = self.stream_anexo_unico(
                     client=client,
                     url=url,
                     id_documento=id_documento,
@@ -437,9 +434,9 @@ class ModWsseiClient:
 
                 if status_code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
                     logger.warning("Token expirado ao baixar anexo %s. Reautenticando...", id_documento)
-                    self._reautenticar_se_necessario(headers.get("token"))
+                    self.reautenticar_se_necessario(headers.get("token"))
                     headers = self.obter_headers()
-                    status_code, conteudo_bytes = self._stream_anexo_unico(
+                    status_code, conteudo_bytes = self.stream_anexo_unico(
                         client=client,
                         url=url,
                         id_documento=id_documento,
@@ -461,9 +458,7 @@ class ModWsseiClient:
                     continue
 
                 if conteudo_bytes is None:
-                    raise RuntimeError(
-                        f"Falha ao baixar anexo {id_documento} no mod-wssei ({status_code})"
-                    )
+                    raise RuntimeError(f"Falha ao baixar anexo {id_documento} no mod-wssei ({status_code})")
 
                 if not conteudo_bytes.startswith(b"%PDF-"):
                     logger.warning(
@@ -498,7 +493,7 @@ class ModWsseiClient:
 
         raise RuntimeError(f"Falha ao baixar anexo {id_documento} apos esgotar retentativas.")
 
-    def _baixar_anexo_seguro(self, id_documento: str, id_procedimento: int | str) -> tuple[str, bytes | None]:
+    def baixar_anexo_seguro(self, id_documento: str, id_procedimento: int | str) -> tuple[str, bytes | None]:
         """Baixa anexo individual registrando aviso sem interromper os demais anexos."""
         try:
             return id_documento, self.baixar_documento(id_documento)
@@ -544,8 +539,6 @@ class ModWsseiClient:
             return id_doc, pdf_bytes
 
         # Multiplos anexos: baixa em streaming paralelo (pool limitado) e une na ordem via PyMuPDF
-        import fitz
-
         logger.info(
             "Processo %s possui %d anexos. Consolidando em fluxo unico em RAM...",
             id_procedimento,
@@ -554,7 +547,7 @@ class ModWsseiClient:
         ids_candidatos = [str(d["id_documento_sei"]) for d in candidatos]
         with ThreadPoolExecutor(max_workers=min(3, len(ids_candidatos))) as executor:
             anexos_baixados = list(
-                executor.map(lambda id_d: self._baixar_anexo_seguro(id_d, id_procedimento), ids_candidatos)
+                executor.map(lambda id_d: self.baixar_anexo_seguro(id_d, id_procedimento), ids_candidatos)
             )
 
         doc_consolidado = fitz.open()

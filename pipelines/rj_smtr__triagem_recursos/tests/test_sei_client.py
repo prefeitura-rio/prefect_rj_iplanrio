@@ -1,12 +1,12 @@
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 
-from httpx import Client, MockTransport, Request, Response
 import pymupdf as fitz
 import pytest
+from httpx import Client, MockTransport, Request, Response
 
+from pipelines.rj_smtr__triagem_recursos.helpers.sei_client import ModWsseiClient, SeiConfig
 from pipelines.rj_smtr__triagem_recursos.tests.conftest import build_pdf_bytes, json_response
-from pipelines.rj_smtr__triagem_recursos.utils.sei_client import ModWsseiClient, SeiConfig
 
 
 def _make_config(timeout: int = 15) -> SeiConfig:
@@ -133,7 +133,11 @@ def test_obter_pdf_recurso_processo_merges_attachments(
             docs = [
                 {
                     "idProtocolo": f"doc-{i + 1}",
-                    "atributos": {"tipoDocumento": "E", "mimeType": "application/pdf", "nomeComposto": f"Anexo {i + 1}"},
+                    "atributos": {
+                        "tipoDocumento": "E",
+                        "mimeType": "application/pdf",
+                        "nomeComposto": f"Anexo {i + 1}",
+                    },
                 }
                 for i in range(num_attachments)
             ]

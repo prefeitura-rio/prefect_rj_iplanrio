@@ -4,11 +4,11 @@ from pathlib import Path
 from sys import path as sys_path
 from typing import final
 
-from httpx import Response
 import pymupdf as fitz
 import pytest
+from httpx import Response
 
-from pipelines.rj_smtr__triagem_recursos.utils.triage import limpar_cache_cliente_llm
+from pipelines.rj_smtr__triagem_recursos.helpers.triage import limpar_cache_cliente_llm
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys_path:
@@ -51,6 +51,7 @@ class DummyCalibrator:
     """Calibrador determinístico mínimo para testes unitários sem modelo em disco."""
 
     def __init__(self, prob: float = 0.96) -> None:
+        """Inicializa calibrador simulado com probabilidade fixa."""
         self.prob = prob
         self.estatisticas_classes = None
         self.feature_names = ["fuzz_ratio"]
@@ -65,6 +66,7 @@ class DummyConformal:
     """Estrutura conformal mínima compatível com a etapa de triagem."""
 
     def __init__(self, alpha: float = 0.05) -> None:
+        """Inicializa predição conformal com nível de significância alpha."""
         self.alpha = alpha
 
 

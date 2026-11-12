@@ -26,9 +26,9 @@ import httpx
 import pymupdf as fitz
 from openai import OpenAI
 
-from ...constants import VERTEX_LLM_MODEL
-from ..schemas import EsquemaDecisao
-from .base import BaseLLMClient
+from pipelines.rj_smtr__triagem_recursos.constants import VERTEX_LLM_MODEL
+from pipelines.rj_smtr__triagem_recursos.helpers.providers.base import BaseLLMClient
+from pipelines.rj_smtr__triagem_recursos.helpers.schemas import EsquemaDecisao
 
 
 class OpenAILLMClient(BaseLLMClient):

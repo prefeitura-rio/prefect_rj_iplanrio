@@ -23,7 +23,12 @@ Fluxo de Dependências:
 
 from difflib import SequenceMatcher
 
-from .schemas import Encaminhamento, EsquemaDecisao, HipoteseLegal, TipoCitacao
+from pipelines.rj_smtr__triagem_recursos.helpers.schemas import (
+    Encaminhamento,
+    EsquemaDecisao,
+    HipoteseLegal,
+    TipoCitacao,
+)
 
 
 def verificar_grounding_fuzzy(
