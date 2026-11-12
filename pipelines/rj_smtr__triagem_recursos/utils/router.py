@@ -1,0 +1,428 @@
+"""Módulo de roteamento adaptativo, controle de incerteza e inferência sequencial em dois estágios.
+
+Descrição Técnica & Arquitetura:
+Implementa a máquina de estados e as regras de bifurcação adaptativa que governam
+a esteira decisória de IA. Seu objetivo é garantir que apenas casos de alta
+confiabilidade empírica e com fundamentação factual comprovada sejam automatizados
+(Faixa Verde), enquanto casos duvidosos ou frágeis são submetidos a um segundo
+estágio adaptativo (N=2) ou enviados diretamente para revisão humana (HITL).
+
+Lógica Operacional dos Estágios de Inferência:
+1. Estágio 1 (N=1 - Inferência Primária Gulosa):
+   - Executa a inferência primária com temperatura T=0.0.
+   - Extrai o vetor de 8 características epistêmicas e calcula a probabilidade calibrada P_cal(N=1).
+   - Se P_cal >= LIMIAR_ALTA (0.85) e o conjunto conformal CCCP for unitário (|C(X)| = 1):
+     O processo é admitido diretamente na Faixa Verde (Rota: N1_DIRETO), dispensando novas chamadas à LLM.
+   - Se P_cal < LIMIAR_BAIXA (0.50):
+     O processo possui incerteza severa e é encaminhado imediatamente ao revisor humano HITL
+     (Rota: HITL_BAIXA_CONFIANCA / Faixa Vermelha), sem desperdício de tokens em novas tentativas.
+
+2. Estágio 2 (N=2 - Incerteza Moderada / Faixa Amarela):
+   - O segundo estágio é obrigatoriamente acionado sempre que a confiança de N=1 reside
+     no intervalo de incerteza moderada: LIMIAR_BAIXA <= P_cal < LIMIAR_ALTA (0.50 <= P_cal < 0.85).
+   - Realiza uma segunda chamada independente à LLM com temperatura T=0.70 para testar a
+     estabilidade do raciocínio sob amostragem estocástica.
+   - Calcula a Dispersão Semântica da Cadeia de Pensamento (Delta_CoT), medindo a distância
+     angular entre as justificativas de N=1 e N=2.
+   - Atualiza a probabilidade a posteriori via combinação Bayesiana em escala de log-odds:
+     * Consenso de classes (N1 == N2): reforça a confiança através do ganho beta_consenso (+1.2).
+     * Divergência de classes (N1 != N2): penaliza severamente através de beta_divergencia (-1.5).
+   - Se a probabilidade final atualizada atingir P_final >= LIMIAR_ALTA (0.85):
+     O caso é promovido para a Faixa Verde sob a rota N2_CONSENSO.
+   - Caso contrário (divergência ou dispersão excessiva Delta_CoT > 0.50):
+     O caso é roteado para a Faixa Vermelha / HITL (Rotas: N2_DIVERGENCIA ou HITL_DISPERSAO_COT).
+
+Fluxo de Dependências:
+- Consumidores Diretos:
+  * `utils/triage.py`: consome as funções `atualizar_probabilidade_bayesiana_log_odds`,
+    `calcular_dispersao_cot`, `construir_prediction_set_aps` e a classe `DecisaoProcessualFinal`
+    para executar a triagem processo a processo.
+- Dependências Diretas:
+  * `utils/schemas.py`: utiliza `EsquemaDecisao` para estruturação de dados de entrada/saída,
+    garantindo formato comum para respostas e decisões.
+  * `utils/conformal.py`: utiliza `ArtefatosConforme` para conferir limites de cobertura
+    estatística e tamanho de conjuntos conformais CCCP.
+  * `utils/meta_calibrator.py`: consome `ModeloCalibrador` e `predizer_probabilidade_calibrada`.
+  * `utils/feature_extractor.py`: consome rotinas de vetorização semântica e cálculo de embeddings.
+  * `utils/guardrails.py`: validações estruturais de integridade das decisões.
+"""
+
+import math
+from collections import Counter
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+from .conformal import ArtefatosConforme
+from .feature_extractor import (
+    EstatisticasSemanticasClasses,
+    VetorSinaisEpistemicos,
+    extrair_sinais_epistemicos,
+    gerar_embedding_texto,
+)
+from .guardrails import aplicar_guardrail_epistemico
+from .meta_calibrator import ModeloCalibrador, predizer_probabilidade_calibrada
+from .ocr_engine import extrair_ocr_pagina_especifica
+from .providers.base import BaseLLMClient
+from .schemas import EsquemaDecisao
+
+TODAS_HIPOTESES_LEGAIS = [
+    "citran",
+    "roubo_furto_clonagem",
+    "erro_captura_imagem",
+    "veiculo_especial",
+    "nao_indicacao_condutor",
+    "prescricao",
+    "hipotese_esgotada",
+]
+
+
+@dataclass
+class DecisaoProcessualFinal:
+    """Estrutura consolidada contendo a decisão final e os metadados de auditoria."""
+
+    decisao: EsquemaDecisao
+    rota: str
+    probabilidade_calibrada: float
+    prediction_set_conformal: set[str]
+    total_chamadas: int
+    entropia_semantica: float
+    dispersao_cot: float
+    sinais_epistemicos: VetorSinaisEpistemicos
+    amostras_brutas: list[EsquemaDecisao] = field(default_factory=list)
+    metadados_execucao: dict[str, Any] = field(default_factory=dict)
+
+
+def normalizar_para_string(valor: Any) -> str:
+    """Extrai a string canônica a partir de Enums ou strings brutas.
+
+    :param valor: Enum ou string a normalizar.
+    :returns: String em minúsculas sem espaços.
+    """
+    if valor is None:
+        return ""
+    if hasattr(valor, "value"):
+        return str(valor.value).strip().lower()
+    return str(valor).strip().lower()
+
+
+def calcular_dispersao_cot(cot_1: str, cot_2: str) -> float:
+    """Calcula a dispersão semântica angular Delta_CoT = 1 - cos(e1, e2) entre duas justificativas.
+
+    :param cot_1: Primeira cadeia de raciocínio explicativo.
+    :param cot_2: Segunda cadeia de raciocínio gerada independentemente.
+    :returns: Valor de dispersão angular (entre 0.0 e 1.0).
+    """
+    if not cot_1 or not cot_2:
+        return 1.0
+
+    e1 = gerar_embedding_texto(cot_1)
+    e2 = gerar_embedding_texto(cot_2)
+
+    norm_1 = float(np.linalg.norm(e1))
+    norm_2 = float(np.linalg.norm(e2))
+
+    if norm_1 == 0 or norm_2 == 0:
+        return 1.0
+
+    cos_sim = float(np.dot(e1, e2) / (norm_1 * norm_2))
+    cos_sim = max(-1.0, min(1.0, cos_sim))
+
+    return round(float(1.0 - cos_sim), 4)
+
+
+def construir_prediction_set_aps(
+    decisao: EsquemaDecisao,
+    p_cal: float,
+    estatisticas_classes: (EstatisticasSemanticasClasses | dict[str, Any] | None),
+    alpha: float = 0.05,
+    temperatura_softmax: float = 0.12,
+    razao_minima_competitiva: float = 0.20,
+) -> set[str]:
+    """Constrói o Prediction Set C(X) incluindo apenas classes com plausibilidade relativa mínima.
+
+    :param decisao: Decisão inferida pela LLM.
+    :param p_cal: Probabilidade calibrada associada.
+    :param estatisticas_classes: Centróides médios de referência das classes.
+    :param alpha: Nível de significância estatística.
+    :param temperatura_softmax: Fator de temperatura para a distribuição softmax.
+    :param razao_minima_competitiva: Limiar de corte relativo frente à classe principal.
+    :returns: Conjunto de hipóteses legais admissíveis.
+    """
+    classe_predita = normalizar_para_string(decisao.hipotese_legal)
+
+    p_top = float(max(0.01, min(1.0, p_cal)))
+    if p_top >= 0.90:
+        return {classe_predita}
+
+    centroides: dict[str, np.ndarray] = {}
+    if isinstance(estatisticas_classes, dict):
+        raw_c = estatisticas_classes.get("centroides")
+        if isinstance(raw_c, dict):
+            centroides = raw_c
+    elif estatisticas_classes is not None:
+        centroides = getattr(estatisticas_classes, "centroides", {}) or {}
+
+    emb_cot = gerar_embedding_texto(decisao.justificativa_analise_previa)
+    norm_e = float(np.linalg.norm(emb_cot))
+    similaridades: dict[str, float] = {}
+
+    for hip in TODAS_HIPOTESES_LEGAIS:
+        c_vec = centroides.get(hip)
+        if c_vec is not None and norm_e > 0:
+            arr_c = np.asarray(c_vec, dtype=np.float64)
+            norm_c = float(np.linalg.norm(arr_c))
+            cos_sim = float(np.dot(emb_cot, arr_c)) / (norm_c * norm_e) if norm_c > 0 else 0.0
+            similaridades[hip] = max(0.0, min(1.0, cos_sim))
+        else:
+            similaridades[hip] = 0.0
+
+    massa_residual = max(0.0, 1.0 - p_top)
+    classes_outras = [h for h in TODAS_HIPOTESES_LEGAIS if h != classe_predita]
+
+    prediction_set: set[str] = {classe_predita}
+
+    if classes_outras and massa_residual > 0.05:
+        exp_sims = np.array([np.exp(similaridades.get(h, 0.0) / temperatura_softmax) for h in classes_outras])
+        soma_exp = float(np.sum(exp_sims))
+        pesos_softmax = (exp_sims / soma_exp) if soma_exp > 0 else np.ones(len(classes_outras)) / len(classes_outras)
+
+        for h, peso in zip(classes_outras, pesos_softmax):
+            p_k = massa_residual * peso
+            if p_k >= 0.10 and (p_k / p_top) >= razao_minima_competitiva:
+                prediction_set.add(h)
+
+    return prediction_set
+
+
+def calcular_entropia_discreta(classes: list[str]) -> float:
+    """Calcula a Entropia de Shannon no espaço discreto de predições amostradas.
+
+    :param classes: Lista de rótulos de classes preditas nas repetições.
+    :returns: Entropia em bits arredondada a 4 casas decimais.
+    """
+    if not classes:
+        return 0.0
+
+    total = len(classes)
+    contagem = Counter(classes)
+    entropia = 0.0
+
+    for qtd in contagem.values():
+        p = qtd / total
+        if p > 0:
+            entropia -= p * math.log2(p)
+
+    return round(float(entropia), 4)
+
+
+def atualizar_probabilidade_bayesiana_log_odds(
+    p_1: float,
+    hip_1: str,
+    hip_2: str,
+    delta_cot: float,
+    beta_consenso: float = 1.35,
+    beta_divergencia: float = 2.20,
+) -> tuple[float, str]:
+    """Atualiza a probabilidade a priori p_1 com a evidência de N=2 no espaço logit.
+
+    :param p_1: Probabilidade calibrada da primeira chamada.
+    :param hip_1: Hipótese predita na primeira chamada.
+    :param hip_2: Hipótese predita na segunda chamada.
+    :param delta_cot: Dispersão semântica observada entre as justificativas.
+    :param beta_consenso: Coeficiente multiplicador de ganho por consenso.
+    :param beta_divergencia: Coeficiente de penalidade por divergência.
+    :returns: Tupla contendo probabilidade posterior atualizada e rota de execução.
+    """
+    p_clipped = max(1e-4, min(1.0 - 1e-4, p_1))
+    logit_prior = math.log(p_clipped / (1.0 - p_clipped))
+
+    if hip_1 == hip_2:
+        fator_qualidade = max(0.0, 1.0 - (delta_cot / 0.50))
+        delta_l = beta_consenso * (0.50 + 0.50 * fator_qualidade)
+        rota = "N2_CONSENSO"
+    else:
+        delta_l = -beta_divergencia * (1.0 + delta_cot)
+        rota = "HITL_DIVERGENCIA_DUPLA"
+
+    logit_post = logit_prior + delta_l
+    p_post = 1.0 / (1.0 + math.exp(-logit_post))
+
+    return round(float(p_post), 4), rota
+
+
+class RoteadorInferenciaAdaptativa:
+    """Roteador adaptativo com validação conformal, meta-calibração GBDT e auditoria multi-estágio."""
+
+    def __init__(
+        self,
+        modelo_calibrador: ModeloCalibrador,
+        artefatos_conforme: ArtefatosConforme,
+        limiar_alta_confianca: float = 0.85,
+        limiar_baixa_confianca: float = 0.50,
+        limiar_dispersao_cot_max: float = 0.50,
+    ) -> None:
+        self.calibrador = modelo_calibrador
+        self.conformal = artefatos_conforme
+        self.limiar_alta = limiar_alta_confianca
+        self.limiar_baixa = limiar_baixa_confianca
+        self.limiar_dispersao_max = limiar_dispersao_cot_max
+
+    def avaliar_criterio_parada(
+        self,
+        p_cal: float,
+        set_conformal: set[str],
+    ) -> str:
+        """Determina a rota de execução inicial em N=1 com base na certeza estatística e conformal.
+
+        :param p_cal: Probabilidade calibrada estimada.
+        :param set_conformal: Conjunto de predição conformal construído.
+        :returns: Identificador de rota ("HITL_BAIXA_CONFIANCA", "N1_DIRETO" ou "N2_CONSENSO").
+        """
+        if p_cal < self.limiar_baixa or len(set_conformal) == 0:
+            return "HITL_BAIXA_CONFIANCA"
+
+        if p_cal >= self.limiar_alta and len(set_conformal) <= 1:
+            return "N1_DIRETO"
+
+        return "N2_CONSENSO"
+
+    def processar_processo(
+        self,
+        pdf_bytes: bytes,
+        pdf_path_original: Path,
+        cliente_llm: BaseLLMClient,
+        prompt_sistema: str,
+        modelo_especifico: str | None = None,
+    ) -> DecisaoProcessualFinal:
+        """Executa a esteira adaptativa de inferência com roteamento conformal e controle de dispersão.
+
+        :param pdf_bytes: Binário em memória RAM do processo recursal.
+        :param pdf_path_original: Caminho do arquivo original caso leitura em disco seja requerida.
+        :param cliente_llm: Cliente de inferência instanciado.
+        :param prompt_sistema: Texto do prompt instrucional de sistema.
+        :param modelo_especifico: Identificador opcional do modelo na API.
+        :returns: Instância consolidada de DecisaoProcessualFinal.
+        """
+        amostras: list[EsquemaDecisao] = []
+
+        decisao_1, _ = cliente_llm.classificar(pdf_bytes, prompt_sistema, modelo=modelo_especifico)
+        decisao_1 = aplicar_guardrail_epistemico(decisao_1)
+        amostras.append(decisao_1)
+
+        if decisao_1.pagina_evidencia > 0:
+            texto_ocr, ocr_conf = extrair_ocr_pagina_especifica(
+                pdf_origem=pdf_bytes,
+                num_pagina=decisao_1.pagina_evidencia,
+            )
+        else:
+            texto_ocr, ocr_conf = "", 0.0
+
+        stats = getattr(self.calibrador, "estatisticas_classes", None)
+        sinais_1 = extrair_sinais_epistemicos(
+            decisao=decisao_1,
+            texto_ocr_pagina=texto_ocr,
+            tesseract_mean_conf=ocr_conf,
+            estatisticas_classes=stats,
+        )
+
+        p_cal = predizer_probabilidade_calibrada(sinais_1, self.calibrador)
+
+        alpha_val = getattr(self.conformal, "alpha", 0.05)
+        set_conformal = construir_prediction_set_aps(
+            decisao=decisao_1,
+            p_cal=p_cal,
+            estatisticas_classes=stats,
+            alpha=alpha_val,
+        )
+
+        decisao_rota = self.avaliar_criterio_parada(
+            p_cal=p_cal,
+            set_conformal=set_conformal,
+        )
+
+        if decisao_rota == "N1_DIRETO":
+            return DecisaoProcessualFinal(
+                decisao=decisao_1,
+                rota="N1_DIRETO",
+                probabilidade_calibrada=p_cal,
+                prediction_set_conformal=set_conformal,
+                total_chamadas=1,
+                entropia_semantica=0.0,
+                dispersao_cot=0.0,
+                sinais_epistemicos=sinais_1,
+                amostras_brutas=amostras,
+                metadados_execucao={"status_triagem": "AUTOMATIZADO_ALTA_CONFIANCA"},
+            )
+
+        if decisao_rota.startswith("HITL_"):
+            return DecisaoProcessualFinal(
+                decisao=decisao_1,
+                rota=decisao_rota,
+                probabilidade_calibrada=p_cal,
+                prediction_set_conformal=set_conformal,
+                total_chamadas=1,
+                entropia_semantica=0.0,
+                dispersao_cot=0.0,
+                sinais_epistemicos=sinais_1,
+                amostras_brutas=amostras,
+                metadados_execucao={"status_triagem": "AUDITORIA_INSEGURANCA_EXTREMA"},
+            )
+
+        decisao_2, _ = cliente_llm.classificar(
+            pdf_bytes,
+            prompt_sistema,
+            modelo=modelo_especifico,
+            temperature=0.7,
+        )
+        decisao_2 = aplicar_guardrail_epistemico(decisao_2)
+        amostras.append(decisao_2)
+
+        hip_1 = normalizar_para_string(decisao_1.hipotese_legal)
+        hip_2 = normalizar_para_string(decisao_2.hipotese_legal)
+
+        delta_cot = calcular_dispersao_cot(
+            decisao_1.justificativa_analise_previa,
+            decisao_2.justificativa_analise_previa,
+        )
+
+        p_post, rota_final = atualizar_probabilidade_bayesiana_log_odds(
+            p_1=p_cal,
+            hip_1=hip_1,
+            hip_2=hip_2,
+            delta_cot=delta_cot,
+        )
+
+        if rota_final == "N2_CONSENSO":
+            return DecisaoProcessualFinal(
+                decisao=decisao_1,
+                rota="N2_CONSENSO",
+                probabilidade_calibrada=p_post,
+                prediction_set_conformal={hip_1},
+                total_chamadas=2,
+                entropia_semantica=0.0,
+                dispersao_cot=delta_cot,
+                sinais_epistemicos=sinais_1,
+                amostras_brutas=amostras,
+                metadados_execucao={"status_triagem": "VALIDADO_POR_CONSENSO_N2"},
+            )
+
+        entropia = calcular_entropia_discreta([hip_1, hip_2])
+        return DecisaoProcessualFinal(
+            decisao=decisao_1,
+            rota="HITL_DIVERGENCIA_DUPLA",
+            probabilidade_calibrada=p_post,
+            prediction_set_conformal={hip_1, hip_2},
+            total_chamadas=2,
+            entropia_semantica=entropia,
+            dispersao_cot=delta_cot,
+            sinais_epistemicos=sinais_1,
+            amostras_brutas=amostras,
+            metadados_execucao={
+                "status_triagem": "AUDITORIA_DIVERGENCIA_DUPLA",
+                "hipotese_opcao_1": hip_1,
+                "hipotese_opcao_2": hip_2,
+            },
+        )

@@ -1,14 +1,9 @@
 **/**/test*
-!packages/toolkit/tests/
-!packages/toolkit/tests/**
-!pipelines/*/tests/
-!pipelines/*/tests/**
-!tests/
-!tests/**
 **/**/api.pdf
 /data/
 test.py
 prefect_rj_iplanrio.egg-info/
+.vscode
 # Cursor files
 # .cursor/
 
@@ -16,6 +11,9 @@ prefect_rj_iplanrio.egg-info/
 __pycache__/
 *.py[cod]
 *$py.class
+
+# direnv
+.direnv/
 
 # Sphinx documentation
 docs/_build/
@@ -48,8 +46,40 @@ pipelines/**/.python-version
 
 # Egg-info dirs generated inside pipeline packages
 pipelines/**/*.egg-info/
-packages/toolkit/.coverage
 
-# devenv
-.devenv/
-devenv.local.nix
+# Allow the rj_iplanrio__nf_agent pytest suite (PR 1 regression-test baseline)
+# despite the blanket "**/**/test*" ignore rule at the top of this file.
+!pipelines/rj_iplanrio__nf_agent/tests/
+!pipelines/rj_iplanrio__nf_agent/tests/**
+
+# Allow SMTR triage pipeline tests
+!pipelines/rj_smtr__triagem_recursos/tests/
+!pipelines/rj_smtr__triagem_recursos/tests/**
+pipelines/rj_smtr__triagem_recursos/tests/__pycache__/
+
+# scripts/run_local.py artifacts (local-only test runs, real fiscal PDFs +
+# their extracted/cached data — never meant to be committed):
+pipelines/rj_iplanrio__nf_agent/pdfs/
+pipelines/rj_iplanrio__nf_agent/__pypackages__/
+local_run_cache*.db
+local_run_output*.ndjson
+
+# The tests/ allowlist above re-includes everything under tests/, __pycache__
+# included — re-ignore it specifically.
+pipelines/rj_iplanrio__nf_agent/tests/__pycache__/
+
+
+# SMTR
+pipelines/rj_smtr__triagem_recursos/pdfs/
+pipelines/rj_smtr__triagem_recursos/artifacts/
+pipelines/rj_smtr__triagem_recursos/prompts/
+pipelines/rj_smtr__triagem_recursos/docs/*.png
+pipelines/rj_smtr__triagem_recursos/outputs/
+pipelines/rj_smtr__triagem_recursos/mod-wssei/
+pipelines/rj_smtr__triagem_recursos/mcp-seipro/
+pipelines/rj_smtr__triagem_recursos/mcp-triagem-smtr/
+pipelines/rj_smtr__triagem_recursos/AGENTS.md
+pipelines/rj_iplanrio__nf_agent/__pypackages__/
+
+.postman/
+postman/

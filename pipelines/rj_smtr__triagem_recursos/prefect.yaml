@@ -1,0 +1,120 @@
+name: rj_smtr__triagem_recursos
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_smtr__triagem_recursos-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_smtr__triagem_recursos/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-smtr--triagem-recursos--staging
+    tags:
+      - environment:staging
+      - severity:high
+      - code_owner:unassigned
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_smtr__triagem_recursos/flow.py:rj_smtr__triagem_recursos
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --no-sync --package rj_smtr__triagem_recursos -- python -m utils.secrets -- prefect flow-run execute
+        image_pull_policy: Always
+        service_account_name: pipelines
+        finished_job_ttl: 600
+        resources:
+          requests:
+            memory: 2Gi
+            ephemeral-storage: 1Gi
+          limits:
+            memory: 4Gi
+            ephemeral-storage: 4Gi
+        env:
+          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: staging
+          INFISICAL_PATHS: /smtr-triagem,/rj_smtr__triagem_recursos,/shared
+    parameters:
+      is_local: false
+      fonte_pdf: "sei"
+      executar_n2: true
+      modo_execucao: "INCREMENTAL"
+      limite_lote: 50
+      limiar_alta: 0.85
+      limiar_baixa: 0.50
+      limiar_dispersao: 0.50
+      infisical_secret_path: "/smtr-triagem"
+
+  - name: rj-smtr--triagem-recursos--prod
+    tags:
+      - environment:prod
+      - severity:high
+      - code_owner:unassigned
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_smtr__triagem_recursos/flow.py:rj_smtr__triagem_recursos
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --no-sync --package rj_smtr__triagem_recursos -- python -m utils.secrets -- prefect flow-run execute
+        image_pull_policy: Always
+        service_account_name: pipelines
+        finished_job_ttl: 600
+        resources:
+          requests:
+            memory: 2Gi
+            ephemeral-storage: 1Gi
+          limits:
+            memory: 4Gi
+            ephemeral-storage: 4Gi
+        env:
+          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
+          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_ENVIRONMENT: prod
+          INFISICAL_PATHS: /smtr-triagem,/rj_smtr__triagem_recursos,/shared
+    parameters:
+      is_local: false
+      fonte_pdf: "sei"
+      executar_n2: true
+      modo_execucao: "INCREMENTAL"
+      limite_lote: 300
+      limiar_alta: 0.85
+      limiar_baixa: 0.50
+      limiar_dispersao: 0.50
+      infisical_secret_path: "/smtr-triagem"
+    schedules:
+      - interval: 86400
+        anchor_date: "2026-01-01T03:00:00"
+        timezone: America/Sao_Paulo
+        slug: triagem_recursos_smtr_diario
+        parameters:
+          is_local: false
+          fonte_pdf: "sei"
+          executar_n2: true
+          modo_execucao: "INCREMENTAL"
+          limite_lote: 300
+          limiar_alta: 0.85
+          limiar_baixa: 0.50
+          limiar_dispersao: 0.50
+          infisical_secret_path: "/rj_smtr__triagem_recursos"

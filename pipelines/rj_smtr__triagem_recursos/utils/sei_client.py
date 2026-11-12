@@ -1,0 +1,585 @@
+"""HTTP client for SEI-Rio integration via the mod-wssei REST API.
+
+Provides streaming downloads with strict memory limits, token auto-renewal,
+retries with backoff on 502/503/504, and process listing for JARI triage.
+"""
+
+import os
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from http import HTTPStatus
+from typing import Any, Self
+
+import httpx
+from prefect.logging import get_logger
+
+logger = get_logger("toolkit")
+
+MAX_DOCUMENT_BYTES = 30 * 1024 * 1024  # 30 MB teto de memoria por documento
+CHUNK_SIZE = 64 * 1024  # 64 KB por chunk de streaming
+STATUS_RETENTAVEIS = frozenset({HTTPStatus.BAD_GATEWAY, HTTPStatus.SERVICE_UNAVAILABLE, HTTPStatus.GATEWAY_TIMEOUT})
+ATRASOS_RETENTATIVA = (0.5, 1.0, 2.0)
+
+
+@dataclass(frozen=True)
+class SeiConfig:
+    """Connection and authentication configuration for mod-wssei REST API."""
+
+    base_url: str = "http://localhost:8000"
+    usuario: str = "usuario_servico"
+    senha: str = "senha_servico"
+    id_unidade: str = "110000001"
+    orgao: int = 12
+    timeout: int = 60
+
+    @classmethod
+    def from_env(cls, is_local: bool = False) -> "SeiConfig":
+        """Carrega configuração SEI das variáveis de ambiente, exigindo credenciais em cloud/staging."""
+        env_base_url = (os.getenv("SEI_API_BASE_URL") or "").strip()
+        env_usuario = (os.getenv("SEI_SERVICE_USER") or "").strip()
+        env_senha = (os.getenv("SEI_SERVICE_PASSWORD") or "").strip()
+        env_unidade = (os.getenv("SEI_ID_UNIDADE") or "").strip()
+
+        if not is_local:
+            ausentes = [
+                nome
+                for nome, val in (
+                    ("SEI_API_BASE_URL", env_base_url),
+                    ("SEI_SERVICE_USER", env_usuario),
+                    ("SEI_SERVICE_PASSWORD", env_senha),
+                    ("SEI_ID_UNIDADE", env_unidade),
+                )
+                if not val
+            ]
+            if ausentes:
+                raise RuntimeError(
+                    f"Variáveis obrigatórias do SEI ausentes no ambiente staging/cloud: {', '.join(ausentes)}"
+                )
+
+        return cls(
+            base_url=env_base_url or "http://localhost:8000",
+            usuario=env_usuario or "usuario_servico",
+            senha=env_senha or "senha_servico",
+            id_unidade=env_unidade or "110000001",
+            orgao=int(os.getenv("SEI_ORGAO", "12")),
+            timeout=int(os.getenv("SEI_TIMEOUT", "60")),
+        )
+
+
+class ModWsseiClient:
+    """HTTP client communicating with the SEI-Rio REST API (mod-wssei)."""
+
+    def __init__(
+        self,
+        config: SeiConfig | None = None,
+        base_url: str | None = None,
+        is_local: bool = False,
+        http_client: httpx.Client | None = None,
+        max_connections: int = 16,
+    ) -> None:
+        """Initialize the SEI client with config or custom base URL."""
+        if config is not None:
+            self.config = config
+        elif base_url is not None:
+            cfg_env = SeiConfig.from_env(is_local=bool(is_local or os.getenv("SEI_SERVICE_USER") is None))
+            self.config = SeiConfig(
+                base_url=base_url,
+                usuario=cfg_env.usuario,
+                senha=cfg_env.senha,
+                id_unidade=cfg_env.id_unidade,
+                orgao=cfg_env.orgao,
+                timeout=cfg_env.timeout,
+            )
+        else:
+            self.config = SeiConfig.from_env(is_local=is_local)
+
+        self.base_url = self.config.base_url.rstrip("/")
+        self.token: str | None = None
+        self.sigla_usuario: str | None = None
+        self.nome_usuario: str | None = None
+        self._auth_lock = threading.Lock()
+        self._client_lock = threading.Lock()
+        self._max_connections = max(4, max_connections)
+        self._owns_http_client = http_client is None
+        self._http_client: httpx.Client | None = http_client
+
+    @property
+    def http_client(self) -> httpx.Client:
+        """Expõe o pool HTTP persistente compartilhado pelo cliente."""
+        return self._get_http_client()
+
+    def _get_http_client(self) -> httpx.Client:
+        """Retorna o pool httpx.Client compartilhado e thread-safe."""
+        with self._client_lock:
+            if self._http_client is None:
+                keepalive = max(4, min(self._max_connections, 12))
+                self._http_client = httpx.Client(
+                    limits=httpx.Limits(
+                        max_connections=self._max_connections,
+                        max_keepalive_connections=keepalive,
+                        keepalive_expiry=30.0,
+                    ),
+                    timeout=httpx.Timeout(float(self.config.timeout), connect=5.0),
+                )
+            return self._http_client
+
+    def close(self) -> None:
+        """Fecha o pool HTTP compartilhado quando pertencente a esta instância."""
+        with self._client_lock:
+            if self._http_client is not None and self._owns_http_client:
+                self._http_client.close()
+                self._http_client = None
+
+    def __enter__(self) -> Self:
+        """Suporta uso com gerenciador de contexto."""
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Garante liberação do pool HTTP ao sair do contexto."""
+        self.close()
+
+    def _reautenticar_se_necessario(self, token_usado: str | None) -> str:
+        """Renova JWT sob lock para evitar tempestade de logins paralelos."""
+        with self._auth_lock:
+            if self.token and self.token != token_usado:
+                return self.token
+            return self.autenticar()
+
+    def autenticar(
+        self,
+        usuario: str | None = None,
+        senha: str | None = None,
+        orgao: int | None = None,
+    ) -> str:
+        """Authenticate via POST /autenticar and store JWT token."""
+        user = usuario or self.config.usuario
+        pwd = senha or self.config.senha
+        org = self.config.orgao if orgao is None else orgao
+
+        url = f"{self.base_url}/autenticar"
+        payload = {
+            "usuario": user,
+            "senha": pwd,
+            "orgao": org,
+        }
+
+        logger.info("Autenticando no mod-wssei em: %s (usuario: %s)", url, user)
+        client = self._get_http_client()
+        response = client.post(url, data=payload, timeout=httpx.Timeout(float(self.config.timeout), connect=5.0))
+
+        if response.status_code != HTTPStatus.OK:
+            raise RuntimeError(f"Falha na autenticacao do SEI ({response.status_code}): {response.text}")
+
+        data = response.json()
+        if not data.get("sucesso"):
+            raise RuntimeError(f"O SEI recusou a autenticacao: {data.get('mensagem', data)}")
+
+        payload_data = data.get("data", {})
+        token = payload_data.get("token")
+        if not token:
+            raise RuntimeError("Resposta do SEI nao continha o campo 'token'.")
+
+        login_data = payload_data.get("loginData") or {}
+        self.sigla_usuario = (login_data.get("sigla") or "").strip() or None
+        self.nome_usuario = (login_data.get("nome") or "").strip() or None
+
+        self.token = token
+        logger.info("Autenticacao no mod-wssei concluida com sucesso (sigla: %s).", self.sigla_usuario)
+        return token
+
+    def obter_headers(self) -> dict[str, str]:
+        """Return default headers with auth token and active JARI unit."""
+        if not self.token:
+            with self._auth_lock:
+                if not self.token:
+                    self.autenticar()
+
+        headers = {"token": str(self.token)}
+        if self.config.id_unidade:
+            headers["unidade"] = str(self.config.id_unidade)
+        return headers
+
+    def executar_requisicao(
+        self,
+        metodo: str,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+        json_data: dict[str, Any] | None = None,
+        timeout: int | float | None = None,
+    ) -> httpx.Response:
+        """Execute HTTP request with retry on 502/503/504 and re-auth on 401/403."""
+        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        req_timeout = httpx.Timeout(float(timeout or self.config.timeout), connect=5.0)
+        client = self._get_http_client()
+
+        for tentativa, atraso in enumerate((*ATRASOS_RETENTATIVA, None)):
+            headers = self.obter_headers()
+            try:
+                response = client.request(
+                    method=metodo,
+                    url=url,
+                    headers=headers,
+                    params=params,
+                    json=json_data,
+                    timeout=req_timeout,
+                )
+
+                if response.status_code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
+                    logger.warning("Token expirado (HTTP %d). Reautenticando...", response.status_code)
+                    self._reautenticar_se_necessario(headers.get("token"))
+                    headers = self.obter_headers()
+                    response = client.request(
+                        method=metodo,
+                        url=url,
+                        headers=headers,
+                        params=params,
+                        json=json_data,
+                        timeout=req_timeout,
+                    )
+
+                if response.status_code not in STATUS_RETENTAVEIS or atraso is None:
+                    return response
+
+                logger.warning(
+                    "SEI respondeu HTTP %d; retentativa %d/%d em %.1fs",
+                    response.status_code,
+                    tentativa + 1,
+                    len(ATRASOS_RETENTATIVA),
+                    atraso,
+                )
+                time.sleep(atraso)
+            except httpx.TransportError as exc:
+                if atraso is None:
+                    raise RuntimeError(f"Erro de transporte HTTP no SEI apos retentativas: {exc}") from exc
+                logger.warning("Erro de conexao no SEI (%s); retentando em %.1fs", exc, atraso)
+                time.sleep(atraso)
+
+        raise RuntimeError("Inalcancavel")
+
+    def listar_processos_caixa(
+        self,
+        apenas_meus: bool = False,
+        usuario_id: int | str | None = None,
+        limit: int = 100,
+        start: int = 0,
+    ) -> list[dict[str, Any]]:
+        """List processes currently present in the unit inbox with pagination."""
+        endpoint = "/processo/listar"
+        params: dict[str, Any] = {
+            "limit": limit,
+            "start": start,
+            "apenasMeus": "S" if apenas_meus else "",
+        }
+        if usuario_id is not None:
+            params["idUsuarioAtribuido"] = str(usuario_id)
+
+        response = self.executar_requisicao("GET", endpoint, params=params)
+        if response.status_code != HTTPStatus.OK:
+            raise RuntimeError(f"Falha ao listar processos ({response.status_code}): {response.text}")
+
+        data = response.json()
+        if not data.get("sucesso"):
+            raise RuntimeError(f"Erro retornado pelo SEI ao listar processos: {data.get('mensagem')}")
+
+        processos_brutos = data.get("data", {}).get("processos", [])
+        lista_processos = []
+
+        for p in processos_brutos:
+            proc_formatado = {
+                "processo_id": p.get("idProcedimento"),
+                "id_procedimento_sei": str(p.get("idProcedimento", "")),
+                "numero_processo_sei": p.get("protocoloFormatado", ""),
+                "numero_processo": p.get("protocoloFormatado", ""),
+                "id_documento_sei": p.get("idDocumento"),
+                "id_documento": p.get("idDocumento"),
+                "sigla_unidade": p.get("siglaUnidade", "10_JARI"),
+                "usuario_atribuido_sigla": p.get("usuarioAtribuido", {}).get("sigla")
+                if isinstance(p.get("usuarioAtribuido"), dict)
+                else None,
+                "data_autuacao": p.get("dataGeracao"),
+                "dados_brutos": p,
+            }
+            lista_processos.append(proc_formatado)
+
+        return lista_processos
+
+    def consultar_processo_completo(self, protocolo_ou_id: str) -> dict[str, Any]:
+        """Query full process details and document tree from SEI."""
+        endpoint = f"/processo/consultar/{protocolo_ou_id.strip()}"
+        response = self.executar_requisicao("GET", endpoint)
+
+        if response.status_code != HTTPStatus.OK:
+            raise RuntimeError(
+                f"Falha ao consultar processo {protocolo_ou_id} ({response.status_code}): {response.text}"
+            )
+
+        data = response.json()
+        if not data.get("sucesso"):
+            raise RuntimeError(f"Erro ao consultar processo {protocolo_ou_id}: {data.get('mensagem')}")
+
+        return data.get("data", {})
+
+    def listar_documentos_processo(self, id_procedimento: int | str) -> list[dict[str, Any]]:
+        """List all documents attached to a process."""
+        endpoint = f"/documento/listar/{id_procedimento}"
+        response = self.executar_requisicao("GET", endpoint)
+
+        if response.status_code != HTTPStatus.OK:
+            raise RuntimeError(
+                f"Falha ao listar documentos do processo {id_procedimento} ({response.status_code}): {response.text}"
+            )
+
+        data = response.json()
+        if not data.get("sucesso"):
+            raise RuntimeError(f"Erro ao listar documentos do processo {id_procedimento}: {data.get('mensagem')}")
+
+        documentos_brutos = data.get("data", [])
+        if isinstance(documentos_brutos, dict):
+            documentos_brutos = documentos_brutos.get("documentos", [])
+
+        lista_docs = []
+        for d in documentos_brutos:
+            atributos = d.get("atributos", {})
+            id_doc = str(d.get("idProtocolo") or d.get("id") or atributos.get("idProtocolo") or "")
+            lista_docs.append(
+                {
+                    "id_documento_sei": id_doc,
+                    "id_procedimento_sei": str(id_procedimento),
+                    "protocolo_formatado": str(atributos.get("protocoloFormatado", "")),
+                    "tipo_documento": str(atributos.get("tipoDocumento", "")),
+                    "mime_type": str(atributos.get("mimeType", "")),
+                    "nome_composto": str(atributos.get("nomeComposto", "")),
+                    "tipo": str(atributos.get("tipo", "")),
+                    "dados_brutos": d,
+                }
+            )
+
+        return lista_docs
+
+    def _stream_anexo_unico(
+        self,
+        client: httpx.Client,
+        url: str,
+        id_documento: int | str,
+        headers: dict[str, str],
+        max_bytes: int,
+        req_timeout: httpx.Timeout,
+    ) -> tuple[int, bytes | None]:
+        """Executa uma tentativa de streaming de anexo dentro do contexto aberto."""
+        chunks: list[bytes] = []
+        total_bytes = 0
+
+        with client.stream("GET", url, headers=headers, timeout=req_timeout) as response:
+            if response.status_code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
+                return response.status_code, None
+
+            if response.status_code in STATUS_RETENTAVEIS:
+                return response.status_code, None
+
+            if response.status_code != HTTPStatus.OK:
+                raise RuntimeError(
+                    f"Falha ao baixar anexo {id_documento} no mod-wssei ({response.status_code})"
+                )
+
+            primeiro_chunk = True
+            for chunk in response.iter_bytes(chunk_size=CHUNK_SIZE):
+                if not chunk:
+                    continue
+
+                if primeiro_chunk:
+                    primeiro_chunk = False
+                    if b'"sucesso":false' in chunk or (b"{" in chunk and b'"mensagem"' in chunk):
+                        raise RuntimeError(
+                            f"O SEI retornou erro ao baixar anexo {id_documento}: "
+                            f"{chunk.decode('utf-8', errors='ignore')}"
+                        )
+
+                total_bytes += len(chunk)
+                if total_bytes > max_bytes:
+                    raise ValueError(
+                        f"Documento {id_documento} excede o limite maximo permitido "
+                        f"({total_bytes} > {max_bytes} bytes / {max_bytes / (1024 * 1024):.1f} MB)."
+                    )
+                chunks.append(chunk)
+
+        return HTTPStatus.OK, b"".join(chunks)
+
+    def baixar_documento(
+        self,
+        id_documento: int | str,
+        max_bytes: int = MAX_DOCUMENT_BYTES,
+        timeout: int | float | None = None,
+    ) -> bytes:
+        """Download document bytes using chunked streaming with memory cap and validation.
+
+        Enforces streaming chunk iteration, checks PDF magic bytes and bounds memory.
+        """
+        endpoint = f"/documento/baixar/anexo/{id_documento}"
+        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        req_timeout = httpx.Timeout(float(timeout or self.config.timeout), connect=5.0)
+        client = self._get_http_client()
+        logger.info("Baixando documento %s via mod-wssei em streaming chunked...", id_documento)
+
+        for tentativa, atraso in enumerate((*ATRASOS_RETENTATIVA, None)):
+            headers = self.obter_headers()
+
+            try:
+                status_code, conteudo_bytes = self._stream_anexo_unico(
+                    client=client,
+                    url=url,
+                    id_documento=id_documento,
+                    headers=headers,
+                    max_bytes=max_bytes,
+                    req_timeout=req_timeout,
+                )
+
+                if status_code in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
+                    logger.warning("Token expirado ao baixar anexo %s. Reautenticando...", id_documento)
+                    self._reautenticar_se_necessario(headers.get("token"))
+                    headers = self.obter_headers()
+                    status_code, conteudo_bytes = self._stream_anexo_unico(
+                        client=client,
+                        url=url,
+                        id_documento=id_documento,
+                        headers=headers,
+                        max_bytes=max_bytes,
+                        req_timeout=req_timeout,
+                    )
+
+                if status_code in STATUS_RETENTAVEIS and atraso is not None:
+                    logger.warning(
+                        "SEI respondeu HTTP %d ao baixar anexo %s; retentativa %d/%d em %.1fs",
+                        status_code,
+                        id_documento,
+                        tentativa + 1,
+                        len(ATRASOS_RETENTATIVA),
+                        atraso,
+                    )
+                    time.sleep(atraso)
+                    continue
+
+                if conteudo_bytes is None:
+                    raise RuntimeError(
+                        f"Falha ao baixar anexo {id_documento} no mod-wssei ({status_code})"
+                    )
+
+                if not conteudo_bytes.startswith(b"%PDF-"):
+                    logger.warning(
+                        "Anexo %s baixado (%d bytes) nao inicia com magic bytes %%PDF-.",
+                        id_documento,
+                        len(conteudo_bytes),
+                    )
+
+                logger.info(
+                    "Documento %s baixado com sucesso: %d bytes (%.1f KB).",
+                    id_documento,
+                    len(conteudo_bytes),
+                    len(conteudo_bytes) / 1024.0,
+                )
+                return conteudo_bytes
+            except httpx.TransportError as exc:
+                if atraso is None:
+                    raise RuntimeError(f"Erro de transporte HTTP ao baixar anexo {id_documento}: {exc}") from exc
+                logger.warning(
+                    "Erro de transporte ao baixar anexo %s (%s); retentando em %.1fs", id_documento, exc, atraso
+                )
+                time.sleep(atraso)
+            except Exception as exc:
+                if atraso is not None and "504" in str(exc):
+                    logger.warning(
+                        "Falha temporária ao baixar anexo %s (%s); retentando em %.1fs", id_documento, exc, atraso
+                    )
+                    time.sleep(atraso)
+                    continue
+                logger.error("Erro durante o download em streaming do anexo %s: %s", id_documento, exc)
+                raise
+
+        raise RuntimeError(f"Falha ao baixar anexo {id_documento} apos esgotar retentativas.")
+
+    def _baixar_anexo_seguro(self, id_documento: str, id_procedimento: int | str) -> tuple[str, bytes | None]:
+        """Baixa anexo individual registrando aviso sem interromper os demais anexos."""
+        try:
+            return id_documento, self.baixar_documento(id_documento)
+        except Exception as exc:
+            logger.warning(
+                "Falha ao unir anexo %s do processo %s: %s",
+                id_documento,
+                id_procedimento,
+                exc,
+            )
+            return id_documento, None
+
+    def obter_pdf_recurso_processo(self, id_procedimento: int | str) -> tuple[str, bytes]:
+        """Locate citizen appeal documents and return consolidated binary PDF bytes in RAM."""
+        documentos = self.listar_documentos_processo(id_procedimento)
+
+        candidatos: list[dict[str, Any]] = []
+        for d in documentos:
+            tipo_doc = str(d.get("tipo_documento", "")).upper()
+            mime = str(d.get("mime_type", "")).lower()
+            nome = str(d.get("nome_composto", "")).lower()
+            tipo = str(d.get("tipo", "")).lower()
+
+            if (
+                tipo_doc in ("E", "X")
+                or "pdf" in mime
+                or "recurso" in nome
+                or "recurso" in tipo
+                or "anexo" in nome
+                or "requerimento" in nome
+            ):
+                candidatos.append(d)
+
+        if not candidatos and documentos:
+            candidatos = [documentos[0]]
+
+        if not candidatos:
+            raise FileNotFoundError(f"Nenhum documento anexado localizado para o processo {id_procedimento}.")
+
+        if len(candidatos) == 1:
+            id_doc = str(candidatos[0]["id_documento_sei"])
+            pdf_bytes = self.baixar_documento(id_doc)
+            return id_doc, pdf_bytes
+
+        # Multiplos anexos: baixa em streaming paralelo (pool limitado) e une na ordem via PyMuPDF
+        import fitz
+
+        logger.info(
+            "Processo %s possui %d anexos. Consolidando em fluxo unico em RAM...",
+            id_procedimento,
+            len(candidatos),
+        )
+        ids_candidatos = [str(d["id_documento_sei"]) for d in candidatos]
+        with ThreadPoolExecutor(max_workers=min(3, len(ids_candidatos))) as executor:
+            anexos_baixados = list(
+                executor.map(lambda id_d: self._baixar_anexo_seguro(id_d, id_procedimento), ids_candidatos)
+            )
+
+        doc_consolidado = fitz.open()
+        ids_docs_baixados: list[str] = []
+
+        for id_d, conteudo in anexos_baixados:
+            if conteudo is None:
+                continue
+            try:
+                doc_parte = fitz.open(stream=conteudo, filetype="pdf")
+                doc_consolidado.insert_pdf(doc_parte)
+                doc_parte.close()
+                ids_docs_baixados.append(id_d)
+            except Exception as exc:
+                logger.warning(
+                    "Falha ao unir anexo %s do processo %s: %s",
+                    id_d,
+                    id_procedimento,
+                    exc,
+                )
+
+        if len(doc_consolidado) == 0:
+            doc_consolidado.close()
+            raise RuntimeError(f"Nenhum PDF valido pode ser baixado para o processo {id_procedimento}.")
+
+        pdf_bytes = doc_consolidado.tobytes(garbage=4, deflate=True)
+        doc_consolidado.close()
+        return ",".join(ids_docs_baixados), pdf_bytes
