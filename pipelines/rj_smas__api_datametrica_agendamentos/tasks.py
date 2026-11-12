@@ -1,44 +1,241 @@
-"""Tasks of rj_smas__api_datametrica_agendamentos."""
+# -*- coding: utf-8 -*-
+"""
+Tasks migradas do Prefect 1.4 para 3.0 - SMAS API Datametrica Agendamentos
+"""
 
-from datetime import date
+# pylint: disable=invalid-name
+# flake8: noqa: E501
+from datetime import datetime, timedelta
+from typing import Any, Dict, List
+from zoneinfo import ZoneInfo
 
-from prefect import task
-from prefect.deployments import arun_deployment
-from pydantic import JsonValue
-from toolkit.telemetry import logger
+import json
 
-from pipelines.rj_smas__api_datametrica_agendamentos.constants import DISPATCH_DEPLOYMENT
-from pipelines.rj_smas__api_datametrica_agendamentos.helpers import build_headers, build_rows, read_records
-from pipelines.rj_smas__api_datametrica_agendamentos.settings import Settings
-from utils.tasks import request_json
+import pandas as pd
+import requests
+import urllib3
+from prefect import task  # pylint: disable=E0611, E0401
 
-
-@task(retries=2, retry_delay_seconds=120)
-async def fetch_appointments_task(target_date: date) -> list[dict[str, JsonValue]]:
-    """Fetch the appointments of a date from the Datametrica API, via a Brazil proxy.
-
-    An answer that is not a list fails the task, and the task tries again twice.
-    """
-    settings = Settings()
-    url = (
-        settings.DATAMETRICA_URL
-        if settings.DATAMETRICA_URL.startswith("http")
-        else f"http://{settings.DATAMETRICA_URL}"
-    )
-    target = f"{url.rstrip('/')}/{target_date}"
-    data = await request_json(
-        f"{settings.PROXY_URL.rstrip('/')}/",
-        params={"url": target},
-        headers=build_headers(settings.DATAMETRICA_TOKEN.get_secret_value(), settings.PROXY_TOKEN.get_secret_value()),
-        timeout=30,
-    )
-    rows = build_rows(read_records(data))
-    logger.info("Appointments fetched: date=%s count=%d", target_date, len(rows))
-
-    return rows
+# Disable SSL warnings for internal APIs
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from iplanrio.pipelines_utils.env import getenv_or_action
+from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
 
 @task
-async def trigger_dispatch_task(parameters: dict[str, JsonValue]) -> None:
-    """Start the dispatch flow of the Cadastro Único reminders, without waiting."""
-    await arun_deployment(name=DISPATCH_DEPLOYMENT, parameters=parameters, timeout=0)
+def calculate_target_date() -> str | None:
+    """
+    Calcula a data target baseada na regra de negócio:
+    - Sábado (5) ou Domingo (6): retorna None (flow deve ser encerrado)
+    - Dias normais: 2 dias à frente
+    - Quinta-feira (3) e Sexta-feira (4): 4 dias à frente
+
+    Returns:
+        str: Data no formato YYYY-MM-DD, ou None se for sábado ou domingo
+    """
+    today = datetime.now(ZoneInfo("America/Sao_Paulo"))
+    weekday = today.weekday()  # 0=Monday, 1=Tuesday, ..., 6=Sunday
+
+    if weekday in [5, 6]:  # Saturday or Sunday
+        log(f"(calculate_target_date) - Fim de semana detectado (weekday={weekday}) - encerrando flow")
+        return None
+
+    # Quinta-feira (3) e Sexta-feira (4) em Python weekday (0-indexed, Monday=0)
+    if weekday in [3, 4]:  # Thursday and Friday
+        days_ahead = 4
+        log("(calculate_target_date) - Quinta/sexta detectada - carregando dados para 4 dias à frente")
+    else:
+        days_ahead = 2
+        log("(calculate_target_date) - Dia normal (S/T/Q) detectado - carregando dados para 2 dias à frente")
+
+    target_date = today + timedelta(days=days_ahead)
+    target_date_str = target_date.strftime("%Y-%m-%d")
+
+    log(f"Data target calculada: {target_date_str} (hoje: {today.strftime('%Y-%m-%d')}, {days_ahead} dias à frente)")
+    return target_date_str
+
+
+@task
+def get_datametrica_credentials(
+    infisical_secret_path: str | None = None,
+) -> Dict[str, str]:
+    """
+    Recupera as credenciais da API da Datametrica e do proxy brasileiro usando iplanrio.
+
+    Args:
+        infisical_secret_path: Caminho dos secrets no Infisical (usado pelo sidecar)
+
+    Returns:
+        Dict com 'url', 'token', 'proxy_url' e 'proxy_token'
+    """
+
+    log("Recuperando credenciais da Datametrica e do proxy brasileiro")
+
+    # Use getenv_or_action to get secrets from environment
+    url = getenv_or_action("dm_url")
+    if not url.startswith("http"):
+        url = f"http://{url}"
+
+    token = getenv_or_action("dm_token")
+    proxy_url = getenv_or_action("proxy_url")
+    proxy_token = getenv_or_action("proxy_token")
+
+    log("Credenciais recuperadas com sucesso")
+
+    return {
+        "url": url,
+        "token": token,
+        "proxy_url": proxy_url,
+        "proxy_token": proxy_token,
+    }
+
+
+@task
+def fetch_agendamentos_from_api(credentials: Dict[str, str], date: str) -> List[Dict[str, Any]]:
+    """
+    Busca os agendamentos da API da Datametrica usando proxy brasileiro.
+
+    Args:
+        credentials: Dict com 'url', 'token', 'proxy_url' e 'proxy_token'
+        date: Data no formato YYYY-MM-DD. Sempre obrigatória — use calculate_target_date() para obter a data correta.
+
+    Returns:
+        Lista de dicionários com os dados dos agendamentos
+    """
+    # Build Datametrica URL
+    base_url = credentials["url"].rstrip("/")
+    datametrica_url = f"{base_url}/{date}"
+
+    # Build proxy URL
+    proxy_url = f"{credentials['proxy_url'].rstrip('/')}/?url={datametrica_url}"
+
+    log("Buscando agendamentos via proxy brasileiro")
+
+    # Headers incluindo o token do proxy e os headers originais da Datametrica
+    headers = {
+        "X-Proxy-Api-Token": credentials["proxy_token"],
+        "Authorization": f"Bearer {credentials['token']}",
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "application/json",
+    }
+
+    try:
+        response = requests.get(proxy_url, headers=headers, timeout=30)
+
+        # Log response details for debugging
+        log(f"Status code: {response.status_code}")
+        if response.status_code == 403:
+            log(f"Response headers: {dict(response.headers)}")
+            log(f"Response body: {response.text[:500]}")  # First 500 chars
+
+        response.raise_for_status()
+
+        if not response.text or not response.text.strip():
+            log(f"Aviso: API retornou body vazio. Retornando lista vazia.")
+            return []
+
+        agendamentos_data = response.json()
+        log(f"Recuperados {len(agendamentos_data)} agendamentos")
+
+        return agendamentos_data
+
+    except requests.exceptions.RequestException as e:
+        log(f"Erro ao buscar agendamentos via proxy: {e}")
+        if hasattr(e, "response") and e.response is not None:
+            log(f"Response status: {e.response.status_code}")
+            log(f"Response text: {e.response.text[:500]}")
+        raise
+    except Exception as e:
+        log(f"Erro inesperado: {e}")
+        raise
+
+
+@task
+def transform_agendamentos_data(
+    agendamentos_data: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Transforma e valida os dados brutos dos agendamentos.
+    """
+    log(f"Transformando {len(agendamentos_data)} registros")
+
+    agendamentos = []
+    for data in agendamentos_data:
+        if len(agendamentos_data) < 10:
+            log(f"Poucos registros recebidos como string: {data}")
+        try:
+            if isinstance(data, str):
+                if not data.strip():
+                    log("Registro ignorado: string vazia recebida da API")
+                    continue
+                data = json.loads(data)
+            agendamento = {
+                "id": data["id"],
+                "id_capacidade": data["id_capacidade"],
+                "nome_completo": data["nome_completo"],
+                "primeiro_nome": data["primeiro_nome"],
+                "cpf": data["cpf"],
+                "telefone": data["telefone"],
+                "tipo": data["tipo"],
+                "data_hora": data["data_hora"],
+                "unidade_nome": data["nome"],
+                "unidade_endereco": data["endereco"],
+                "unidade_bairro": data["bairro"],
+            }
+            agendamentos.append(agendamento)
+        except KeyError as e:
+            log(f"Erro ao processar registro: campo {e} não encontrado")
+            raise
+        except Exception as e:
+            log(f"Erro inesperado ao processar registro: {e}")
+            raise
+
+    log(f"Transformação concluída: {len(agendamentos)} registros processados")
+    return agendamentos
+
+
+@task
+def get_bigquery_config(
+    infisical_secret_path: str | None = None,
+) -> Dict[str, str]:
+    """
+    Recupera dataset_id e table_id do BigQuery usando iplanrio.
+
+    Args:
+        infisical_secret_path: Caminho dos secrets no Infisical (usado pelo sidecar)
+
+    Returns:
+        Dict com 'dataset_id' e 'table_id'
+    """
+    log("Recuperando configuração do BigQuery do Infisical")
+
+    # Use getenv_or_action to get secrets from environment
+    dataset_id = getenv_or_action("dataset_id")
+    table_id = getenv_or_action("table_id")
+
+    log("Configuração do BigQuery recuperada com sucesso")
+
+    return {
+        "dataset_id": dataset_id,
+        "table_id": table_id,
+    }
+
+
+@task
+def convert_agendamentos_to_dataframe(
+    agendamentos: List[Dict[str, Any]],
+) -> pd.DataFrame:
+    """
+    Converte a lista de agendamentos para um DataFrame pandas.
+
+    Returns:
+        DataFrame com os dados dos agendamentos
+    """
+    log(f"Convertendo {len(agendamentos)} agendamentos para DataFrame")
+
+    df = pd.DataFrame(agendamentos)
+    log(f"DataFrame criado com {len(df)} registros e {len(df.columns)} colunas")
+
+    return df
+

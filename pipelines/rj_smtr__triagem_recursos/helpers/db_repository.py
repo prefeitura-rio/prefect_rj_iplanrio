@@ -34,7 +34,9 @@ from typing import Any
 import numpy as np
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
-from toolkit.telemetry import logger
+from prefect_rj_iplanrio.logging import get_logger
+
+logger = get_logger(__name__)
 
 from pipelines.rj_smtr__triagem_recursos.constants import (
     LOCAL_PDFS_DIR,

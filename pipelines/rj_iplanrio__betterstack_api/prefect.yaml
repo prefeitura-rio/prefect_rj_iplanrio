@@ -25,10 +25,6 @@ pull:
 
 deployments:
   - name: rj-iplanrio--betterstack-api--staging
-    tags:
-      - environment:staging
-      - severity:medium
-      - code_owner:unassigned
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_iplanrio__betterstack_api/flow.py:rj_iplanrio__betterstack_api
     work_pool:
@@ -36,46 +32,16 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --no-sync --package rj_iplanrio__betterstack_api -- python -m utils.secrets -- prefect flow-run execute
+        command: uv run --package rj_iplanrio__betterstack_api -- prefect flow-run execute
+        secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
-        service_account_name: pipelines
-        finished_job_ttl: 600
-        pod_annotations:
-          gke-gcsfuse/volumes: 'true'
-        resources:
-          requests:
-            ephemeral-storage: 1Gi
-          limits:
-            ephemeral-storage: 4Gi
-        volume_mounts:
-          - name: tmp
-            mountPath: /tmp
-        volumes:
-          - name: tmp
-            csi:
-              driver: gcsfuse.csi.storage.gke.io
-              volumeAttributes:
-                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
-                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
-        env:
-          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
-          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
-          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
-          INFISICAL_ENVIRONMENT: staging
-          INFISICAL_PATHS: /rj_iplanrio__betterstack_api,/shared
-          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     parameters:
-      from_date:
-      to_date:
-      table:
-        dataset_id: brutos_betterstack
-        table_id: eai_gateway_incidents
-      dump_mode: merge
+      from_date: null
+      to_date: null
+      dataset_id: brutos_betterstack
+      billing_project_id: rj-iplanrio
+
   - name: rj-iplanrio--betterstack-api--prod
-    tags:
-      - environment:prod
-      - severity:medium
-      - code_owner:unassigned
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__betterstack_api/flow.py:rj_iplanrio__betterstack_api
     work_pool:
@@ -83,42 +49,14 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --no-sync --package rj_iplanrio__betterstack_api -- python -m utils.secrets -- prefect flow-run execute
+        command: uv run --package rj_iplanrio__betterstack_api -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
         image_pull_policy: Always
-        service_account_name: pipelines
-        finished_job_ttl: 600
-        pod_annotations:
-          gke-gcsfuse/volumes: 'true'
-        resources:
-          requests:
-            ephemeral-storage: 1Gi
-          limits:
-            ephemeral-storage: 4Gi
-        volume_mounts:
-          - name: tmp
-            mountPath: /tmp
-        volumes:
-          - name: tmp
-            csi:
-              driver: gcsfuse.csi.storage.gke.io
-              volumeAttributes:
-                bucketName: rj-iplanrio-dia-pipelines-tmp-gke
-                mountOptions: implicit-dirs,file-mode=666,dir-mode=777,enable-buffered-read
-        env:
-          INFISICAL_URL: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
-          INFISICAL_IDENTITY_ID: ae19371c-5d95-47e2-a00b-b92a394becb8
-          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
-          INFISICAL_ENVIRONMENT: prod
-          INFISICAL_PATHS: /rj_iplanrio__betterstack_api,/shared
-          GCS_TMP_BUCKET: rj-iplanrio-dia-pipelines-tmp-gke
     parameters:
-      from_date:
-      to_date:
-      table:
-        dataset_id: brutos_betterstack
-        table_id: eai_gateway_incidents
-      dump_mode: merge
+      from_date: null
+      to_date: null
+      dataset_id: brutos_betterstack
+      billing_project_id: rj-iplanrio
     schedules:
       - cron: "0 3 * * *"
         timezone: America/Sao_Paulo
-        slug: daily

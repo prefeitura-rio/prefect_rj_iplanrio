@@ -29,7 +29,9 @@ from pathlib import Path
 from typing import Any
 
 import joblib
-from toolkit.telemetry import logger
+from prefect_rj_iplanrio.logging import get_logger
+
+logger = get_logger(__name__)
 
 from pipelines.rj_smtr__triagem_recursos.constants import (
     LOCAL_ARTIFACTS_DIR,

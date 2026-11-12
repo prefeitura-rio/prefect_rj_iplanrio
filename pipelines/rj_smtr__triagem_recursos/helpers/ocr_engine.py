@@ -29,7 +29,7 @@ from pathlib import Path
 import pymupdf
 from prefect.logging import get_logger
 
-logger = get_logger("toolkit")
+logger = get_logger(__name__)
 
 TESSERACT_CONFIGURADO = False
 

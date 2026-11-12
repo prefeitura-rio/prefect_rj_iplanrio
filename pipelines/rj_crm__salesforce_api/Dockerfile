@@ -1,4 +1,4 @@
-FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:shared
+FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:latest
 
 LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_rj_iplanrio
 
@@ -6,9 +6,9 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 COPY ./src ./src/
-COPY ./packages ./packages/
 
+# A pipeline rj_crm__salesforce_api importa create_date_partitions de rj_crm__disparo_template
 COPY ./pipelines/rj_crm__disparo_template ./pipelines/rj_crm__disparo_template/
 COPY ./pipelines/rj_crm__salesforce_api ./pipelines/rj_crm__salesforce_api/
 
-RUN uv sync --frozen --package rj_crm__salesforce_api --inexact --no-dev --no-cache
+RUN uv sync --package rj_crm__salesforce_api
