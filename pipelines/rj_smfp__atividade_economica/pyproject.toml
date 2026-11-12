@@ -1,0 +1,10 @@
+[project]
+name = "rj_smfp__atividade_economica"
+version = "0.1.0"
+description = "Pipeline de Atividade Econômica da SMFP - Dump de tabelas de Alvarás do DW_BI_ALVARAS"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

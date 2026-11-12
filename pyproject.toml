@@ -3,217 +3,42 @@ name = "prefect_rj_iplanrio"
 version = "0.1.0"
 description = "Prefect pipelines for the Rio de Janeiro City Hall."
 readme = "README.md"
-requires-python = ">=3.14,<3.15"
+requires-python = ">=3.13,<3.14"
 dependencies = [
-  "toolkit",
-  "prefect==3.8.8",
-  "prefect-docker>=0.7.4",
+  "idna>=3.10",
+  "iplanrio",
+  "pandas>=2.2.3",
+  "pre-commit>=4.5.1",
+  "prefect==3.4.9",
+  "prefect-docker>=0.7.1",
   "unidecode>=1.3.8",
-  "aiomysql>=0.3.2",
 ]
 
 [tool.uv]
 link-mode = "copy"
-constraint-dependencies = [
-  "asyncssh>=2.20.0",
-  "beautifulsoup4>=4.12.0",
-  "dbt-bigquery==1.12.1",
-  "dbt-core>=1.12.6",
-  "defusedxml>=0.7.1",
-  "fastapi<0.144", # Prefect 3.8 calls Body(min_items), which later fastapi releases removed
-  "gitpython==3.1.44",
-  "google-api-python-client>=2.100.0",
-  "google-cloud-bigquery>=3.41.0",
-  "google-cloud-storage==2.10.0",
-  "gspread>=6.0.0",
-  "jinja2>=3.1.2",
-  "numpy>=2.0",
-  "openlocationcode==1.0.1",
-  "openpyxl>=3.1.5",
-  "oracledb>=4.0.1",
-  "prefect-dbt>=0.7.5",
-  "pyarrow>=24.0.0",
-  "pydantic>=2.0.0",
-  "requests>=2.32.4",
-  "ruamel.yaml==0.18.6",
-  "unidecode==1.3.8",
-]
-override-dependencies = [
-  "grpcio==1.84.0",
-  "grpcio-status==1.84.0",
-  "click>=8.3.0,<9.0",
-]
+override-dependencies = ["grpcio==1.78.0", "grpcio-status==1.78.0", "click>=8.3.0,<9.0"]
 
 [tool.uv.sources]
-toolkit = { workspace = true }
+iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git" }
 
 [tool.uv.workspace]
-members = ["pipelines/*", "packages/*"]
+members = ["pipelines/*"]
 
 [dependency-groups]
-dev = [
-  "basedpyright>=1.30.0",
-  "pytest>=8.0.0",
-  "pytest-asyncio>=0.24.0",
-  "pytest-xdist>=3.8.0",
-]
-
-[tool.vulture]
-ignore_names = [
-  "error_type", # Prefect and the retry hooks call with a fixed signature
-  "trace", # same cause
-  "task_run", # same cause
-  "requested_schema", # a fake follows the signature of the real API
-  "Worksheet", # used in a `cast` string
-  "oracle_Connection", # used in a `cast` string
-]
-min_confidence = 80
-
-[tool.pytest.ini_options]
-testpaths = ["tests", "pipelines/*/tests"]
-asyncio_mode = "auto"
-addopts = ["--import-mode=importlib", "-m", "not parity and not cloud"]
-pythonpath = ["tests", "tests/parity"]
-markers = [
-  "cloud: needs a working Google Cloud credential, because deltalake asks for a token even with the fake GCS",
-  "extensions: needs a DuckDB extension that is downloaded the first time",
-  "parity: needs the real engines that `tests/parity/engines.nu` starts",
-]
-
-[tool.basedpyright]
-typeCheckingMode = "all"
-venvPath = "."
-venv = ".venv"
-include = ["src", "tests", "pipelines"]
-exclude = [
-  "**/mod-wssei",
-  "**/mcp-*",
-  "**/artifacts",
-  "**/outputs",
-  "**/pdfs",
-  "**/prompts",
-  "**/scripts",
-  "**/docs",
-]
-reportUnusedCallResult = false # side-effect calls (an upload, a delete) return handles that nobody needs
-
-[[tool.basedpyright.executionEnvironments]]
-root = "tests/test_drive.py"
-extraPaths = ["src"]
-reportMissingTypeStubs = false # the Google API client ships no types
-reportUnknownVariableType = false # the error of that client
-reportUnknownArgumentType = false # the error of that client
-reportUnannotatedClassAttribute = false # small fake classes
-reportUnusedParameter = false # a fake follows the signature of the real API
-
-[[tool.basedpyright.executionEnvironments]]
-root = "tests/parity"
-extraPaths = ["src", "tests/parity"]
-reportMissingTypeStubs = false # pymongoarrow ships no stubs
-reportImplicitRelativeImport = false # the folder is on `pythonpath`, so the tests import the lab by name
-reportMissingParameterType = false # pytest fixtures and parametrized arguments arrive untyped
-reportUnknownParameterType = false # same cause as above
-reportUnknownArgumentType = false # values from untyped fixtures
-reportUnknownMemberType = false # members of untyped fixtures
-reportUnknownVariableType = false # variables built from untyped fixtures
-reportUnknownLambdaType = false # lambdas passed to the lab
-reportAny = false # rows of the lab come from several drivers
-reportArgumentType = false # rows of the lab hold values of several drivers
-reportIndexIssue = false # rows of the lab hold values of several drivers
-reportOperatorIssue = false # rows of the lab hold values of several drivers
-reportImplicitStringConcatenation = false # the SQL of the lab is written in lines
-reportPrivateImportUsage = false # the tests patch a name that the engine imports
-
-[[tool.basedpyright.executionEnvironments]]
-root = "tests"
-extraPaths = [
-  "src",
-] # resolve `import utils` from the tests folder
-reportMissingParameterType = false # pytest fixtures and parametrized arguments arrive untyped
-reportUnknownParameterType = false # same cause as above
-reportUnknownArgumentType = false # values from untyped fixtures
-reportUnknownMemberType = false # members of untyped fixtures
-reportUnknownVariableType = false # variables built from untyped fixtures
-reportUnannotatedClassAttribute = false # small fake classes
-reportUnusedParameter = false # a fake follows the signature of the real API
-reportUnknownLambdaType = false # lambdas passed to fakes
-reportAny = false # values from untyped fakes
-
-[[tool.basedpyright.executionEnvironments]]
-root = "pipelines/rj_smtr__triagem_recursos"
-extraPaths = ["src", ".", "pipelines/rj_smtr__triagem_recursos"]
-reportMissingTypeStubs = false # scikit-learn, psycopg2, joblib, fitz ship incomplete types
-reportUnknownMemberType = false # members of those clients
-reportUnknownVariableType = false # values from those clients
-reportUnknownArgumentType = false # values from those clients
-reportUnknownLambdaType = false
-reportUnknownParameterType = false
-reportMissingParameterType = false
-reportAny = false # dynamic ML models, database rows and joblib artifacts
-reportExplicitAny = false # dynamic ML models and psycopg2 RealDictCursor rows
-reportUnnecessaryComparison = false # runtime guards against unexpected model outputs
-reportUnnecessaryIsInstance = false # runtime guards against unexpected model outputs
-reportCallIssue = false # Prefect 3.x ThreadPoolTaskRunner decorator variance
-reportUntypedFunctionDecorator = false # Prefect flow decorator
-reportArgumentType = false # Prefect task runner invariance
-reportConstantRedefinition = false # cached model singletons
-reportImplicitStringConcatenation = false # multiline SQL queries
-reportUnusedParameter = false # interface hooks with fixed signatures
-reportUnusedVariable = false # unpacked metrics
-reportAttributeAccessIssue = false # enum and string union resolution
-reportOptionalMemberAccess = false # guarded model booster members
-reportOperatorIssue = false # polars literal arithmetic
-reportMissingImports = false # optional dev/benchmark dependencies
-reportMissingModuleSource = false # optional dev/benchmark dependencies
-reportCallInDefaultInitializer = false # mock server defaults
-reportUnreachable = false # defensive branches in guardrails
-reportUnannotatedClassAttribute = false
-reportImplicitOverride = false
-
-[[tool.basedpyright.executionEnvironments]]
-root = "pipelines"
-extraPaths = ["src", "."]
-reportMissingTypeStubs = false # Google, gspread and other clients ship no types
-reportUnknownMemberType = false # members of those clients
-reportUnknownVariableType = false # values from those clients
-reportUnknownArgumentType = false # values from those clients
-
-[[tool.basedpyright.executionEnvironments]]
-root = "src/utils/drive.py"
-reportMissingTypeStubs = false # the Google API client ships no types
-reportUnknownMemberType = false # members of that client
-reportUnknownVariableType = false # values from that client
-reportUnknownArgumentType = false # values from that client
-reportAny = false # the answers of the API
-
-[[tool.basedpyright.executionEnvironments]]
-root = "src/utils/utils.py"
-reportUnknownVariableType = false # google.auth types the request of `default` loosely
-
-[[tool.basedpyright.executionEnvironments]]
-root = "src/utils/tasks.py"
-reportMissingTypeStubs = false # prefect_dbt ships no stubs
-
-[[tool.basedpyright.executionEnvironments]]
-root = "src/utils/hooks.py"
-reportUnusedParameter = false # Prefect calls a retry check and a hook with a fixed signature
+dev = ["prefect-docker>=0.6.5"]
 
 [tool.ruff]
-target-version = "py314"
+target-version = "py313"
 line-length = 120
 indent-width = 4
-extend-exclude = ["templates"] # cookiecutter files with Jinja inside the Python syntax
 
 [tool.ruff.lint]
 fixable = ["ALL"]
 select = [
   "A",
-  "ANN",
   "ARG",
   "B",
   "C4",
-  "C90",
-  "D",
   "DTZ",
   "E",
   "F",
@@ -223,121 +48,8 @@ select = [
   "PT",
   "PTH",
   "RUF",
-  "T20",
-  "TID",
   "W",
 ]
-ignore = [
-  "D104", # an __init__.py is always empty
-  "D203", # blank line before the class docstring: conflicts with D211
-  "D213", # summary on the second line: conflicts with D212
-  "ANN401", # basedpyright reports every use of Any
-]
-
-[tool.ruff.lint.pycodestyle]
-max-doc-length = 88 # a docstring or a comment line holds up to 88 columns, as the guide says
-
-[tool.ruff.lint.flake8-tidy-imports.banned-api]
-"prefect_rj_iplanrio".msg = "The package is gone: use `utils` and `toolkit`."
-"iplanrio".msg = "The package is gone: use `utils` and `toolkit`."
-"toolkit.pipelines_utils".msg = "The legacy modules are gone: use `utils.tasks` and `toolkit`."
-"toolkit.pipelines_templates".msg = "The templates are gone: use `utils.flows.dump_database`."
-"toolkit.dump".msg = "The module is gone: use `utils.flows`."
-"toolkit.tasks".msg = "The module is gone: use `utils.tasks`."
-"toolkit.prefect".msg = "The module is gone: write schedules in the `prefect.yaml`."
-"pandas".msg = "Use Polars."
-"requests".msg = "Use httpx2."
-"geopandas".msg = "Use DuckDB spatial."
-"basedosdados".msg = "Use toolkit.bigquery and toolkit.gcs."
-"google.cloud.storage".msg = "Use toolkit.gcs (obstore)."
-"boto3".msg = "Use toolkit.gcs (obstore)."
-"psycopg2".msg = "Read databases through toolkit.executor.sources."
-"pymysql".msg = "Read databases through toolkit.executor.sources."
-"pyodbc".msg = "Read databases through toolkit.executor.sources."
-"aiobotocore".msg = "Use toolkit.gcs (obstore)."
-"obstore".msg = "Import obstore only in toolkit/gcs.py."
-"deltalake".msg = "Import deltalake only in toolkit/delta.py."
-
-[tool.ruff.lint.per-file-ignores]
-"src/utils/tasks.py" = [
-  "PLR0913",
-] # a task takes flat keyword parameters, so a deployment can set each one
-"src/utils/flows.py" = ["PLR0913"] # same cause, for a flow
-"pipelines/rj_smfp__nota_carioca_oracle_to_bq/flow.py" = ["PLR0913"] # same cause: it wraps `dump_database`
-"pipelines/rj_smas__api_datametrica_agendamentos/flow.py" = ["PLR0913"] # same cause, for a flow
-"src/utils/hooks.py" = [
-  "ARG001",
-] # Prefect calls a retry check and a hook with a fixed signature, and these use some of the arguments only
-"tests/**" = [
-  "ANN001",
-  "ANN002",
-  "ANN003",
-  "ANN202",
-  "ANN204",
-  "C901",
-  "D100",
-  "D101",
-  "D106",
-  "PLR2004",
-  "TID251",
-] # fixtures arrive untyped, a fake returns what the test sets, a test module and its fake classes have no docstring, a test imports the drivers to set up or check a fake, the expected values of an assertion are the point of a test, and a fake server has one branch for each route
-"pipelines/*/tests/**" = [
-  "ANN001",
-  "ANN002",
-  "ANN003",
-  "ANN202",
-  "ANN204",
-  "D100",
-  "D101",
-  "D106",
-  "DTZ001",
-  "PLR0913",
-  "PLR0917",
-  "PLR2004",
-  "TID251",
-] # fixtures arrive untyped, a fake returns what the test sets, a test module and its fake classes have no docstring, a test imports the drivers to set up or check a fake, the expected values of an assertion are the point of a test (some are naive, as the source gives them), and a factory of test data takes many options
-"tests/fixtures.py" = [
-  "A002",
-  "ANN201",
-  "ARG002",
-  "ARG003",
-  "ARG005",
-  "N802",
-  "N815",
-] # a fake follows the names and the signatures of the real API (`http.server`, the BigQuery client), and a fixture returns a factory whose type the tests infer
-"tests/conftest.py" = [
-  "ARG002",
-  "ARG005",
-] # a fake follows the signature of the real API, and ignores some arguments
-"src/utils/delta.py" = [
-  "TID251",
-] # it types the store that toolkit.gcs creates
-"pipelines/rj_crm__modelo_qualidade_telefone/**" = [
-  "TID251",
-] # the bucket of the models is in rj-crm-registry, which the HMAC key of toolkit.gcs cannot read
-"pipelines/rj_smtr__triagem_recursos/**" = [
-  "ARG001",
-  "ARG002",
-  "C901",
-  "D107",
-  "D401",
-  "E501",
-  "PLC0415",
-  "PLR0911",
-  "PLR0912",
-  "PLR0913",
-  "PLR0915",
-  "PLR0917",
-  "PLR2004",
-  "PLW0603",
-  "PLW1508",
-  "PTH123",
-  "TID251",
-  "W505",
-] # Cloud SQL queue, ML calibrator and multimodal triage heuristics
-"**/conftest.py" = [
-  "ANN201",
-] # a fixture returns a factory or a fake whose type the tests infer
 
 [tool.ruff.format]
 quote-style = "double"

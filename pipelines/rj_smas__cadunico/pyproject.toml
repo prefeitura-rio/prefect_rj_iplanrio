@@ -1,14 +1,12 @@
 [project]
 name = "rj_smas__cadunico"
-version = "1.0.0"
-description = "Load the records of CadÚnico, and build their dbt models and tables."
+version = "0.1.0"
+description = "Pipeline cadunico da secretaria smas"
 dependencies = [
     "prefect_rj_iplanrio",
-    "openpyxl",
+    "openpyxl>=3.1.5",
     "xlrd>=2.0.2",
-    "unidecode",
-    "ruamel.yaml",
-    "google-cloud-bigquery",
+    "setuptools>=82.0.1",
 ]
 
 [tool.uv.sources]

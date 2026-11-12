@@ -1,135 +1,253 @@
-"""Flow for rj_crm__agentforce_classificacao_llm."""
+# -*- coding: utf-8 -*-
+"""
+Flow diário — Classificação inicial por LLM das sessões do Agentforce (WhatsApp).
 
-from datetime import UTC, datetime
+Extrai sessões dos últimos LOOKBACK_DAYS dias ainda não classificadas (dois filtros: um
+pré-filtro barato por llm.classificacao_datahora na fonte, mais o anti-join de sempre
+contra a tabela destino como garantia final — ver queries/extract_sessoes.sql), classifica
+via Bifrost/Gemini (ou por regra, quando é resposta atrasada a botão) — prompt principal
+e, nas sessões relevantes, os prompts de macrotema e secretaria (taxonomias nas
+tabelas taxonomia_macrotemas e taxonomia_secretarias) —, aplica o catálogo
+de regras de tema e grava em rj-crm-registry.brutos_salesforce.ai_agent_session_classificacao
+via tmp + MERGE (idempotente, upsert por id_sessao).
 
-from prefect import Flow, flow
-from prefect.client.schemas.objects import FlowRun, State
-from toolkit.telemetry import logger
+Portado de clustering/classificacao_inicial.ipynb — ver constants.py para os parâmetros
+e docstrings dos módulos em tasks/ para o detalhe de cada etapa.
 
-from pipelines.rj_crm__agentforce_classificacao_llm.constants import (
-    DEFAULT_LOAD_BATCH,
-    DEFAULT_PROJECT_ID,
-    PROMPT_VERSION,
-    REASON_STAGE,
-    THEME_STAGE,
+Consumo: outras pipelines/dashboards fazem LEFT JOIN nessa tabela filtrando o último mês
+(margem de segurança bem acima da janela de 14 dias desta extração).
+
+Parâmetro recalcula_taxonomia=True: modo alternativo, não roda a classificação normal
+acima — reavalia só tema_nome/causa_nome contra o catálogo de regras atual (sem LLM,
+sem tocar em nenhuma outra coluna) via MERGE parcial na tabela destino, e dispara o full
+refresh do ramo Salesforce da chatbot no dbt pra chegar ao struct `llm` de todas as
+sessões. Usar quando a taxonomia mudar e as sessões já classificadas precisarem refletir
+isso — ver tasks/taxonomia.py.
+"""
+
+from __future__ import annotations
+
+import os
+
+import pandas as pd
+from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from prefect import flow
+
+from pipelines.rj_crm__agentforce_classificacao_llm.constants import ClassificacaoConstants as C
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.classify import (
+    classifica_sessoes,
+    monta_dataframe_final,
+    monta_prompts,
 )
-from pipelines.rj_crm__agentforce_classificacao_llm.helpers.labels import build_rule_row, finish_rows
-from pipelines.rj_crm__agentforce_classificacao_llm.helpers.names import resolve_names
-from pipelines.rj_crm__agentforce_classificacao_llm.helpers.prompts import split_sessions
-from pipelines.rj_crm__agentforce_classificacao_llm.helpers.taxonomy import apply_rules, compile_catalog
-from pipelines.rj_crm__agentforce_classificacao_llm.tasks import (
-    classify_task,
-    enrich_task,
-    ensure_tables_task,
-    extract_task,
-    load_task,
-    notify_task,
-    propagate_task,
-    read_relevant_task,
-    read_rules_task,
-    update_themes_task,
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.extract import extrai_sessoes_nao_classificadas
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import (
+    carrega_classificacoes,
+    ensure_destino_table,
 )
-from pipelines.rj_crm__agentforce_classificacao_llm.types import Llm, Names, Row, Rule, Tables, Window
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.notify import notify_falha_flow, notify_resumo
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.roteamento import carrega_taxonomia_roteamento
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import (
+    aplica_regras_causa,
+    aplica_regras_tema,
+    atualiza_tema_causa,
+    carrega_catalogo_regras,
+    dispara_full_refresh_chatbot,
+    extrai_sessoes_para_recalculo_taxonomia,
+)
 
 
-async def notify_failure(flow: Flow[..., object], flow_run: FlowRun, state: State[object]) -> None:
-    """Post a failed run to the channel of the errors."""
-    lines = ["🚨 **agentforce-classificacao-llm: FALHOU**", f"Flow: {flow.name}", f"Flow Run: {flow_run.name}"]
-    await notify_task("\n".join([*lines, f"Mensagem: {state.message}"]), errors=True)
-
-
-async def apply_catalog(names: Names, rows: list[Row], themes: list[Rule], causes: list[Rule]) -> list[Row]:
-    """Fill the theme of the rows by the theme rules, then the cause.
-
-    The cause rules need the theme.
-    """
-    del names
-
-    return apply_rules(apply_rules(rows, compile_catalog(themes), "tema_nome"), compile_catalog(causes), "causa_nome")
-
-
-@flow(log_prints=True, on_failure=[notify_failure], flow_run_name="classificacao-llm")
-async def rj_crm__agentforce_classificacao_llm(
-    *,
-    project_id: str = DEFAULT_PROJECT_ID,
-    tables: Tables | None = None,
-    window: Window | None = None,
-    llm: Llm | None = None,
-    recalculate_taxonomy: bool = False,
+@flow(log_prints=True, on_failure=[notify_falha_flow])
+def rj_crm__agentforce_classificacao_llm(
+    project_id: str = C.BQ_PROJECT_ID.value,
+    dest_dataset_id: str = C.DEST_DATASET_ID.value,
+    dest_table_id: str = C.DEST_TABLE_ID.value,
+    dest_tmp_table_id: str = C.DEST_TMP_TABLE_ID.value,
+    taxonomia_regras_table_id: str = C.TAXONOMIA_REGRAS_TABLE_ID.value,
+    taxonomia_macrotemas_table_id: str = C.TAXONOMIA_MACROTEMAS_TABLE_ID.value,
+    taxonomia_secretarias_table_id: str = C.TAXONOMIA_SECRETARIAS_TABLE_ID.value,
+    taxonomia_agrupamento_tipo: str = C.TAXONOMIA_AGRUPAMENTO_TIPO.value,
+    source_table: str = C.SOURCE_TABLE.value,
+    lookback_days: int = C.LOOKBACK_DAYS.value,
+    bifrost_base_url: str = C.BIFROST_BASE_URL.value,
+    bifrost_model: str = C.BIFROST_MODEL.value,
+    max_workers: int = C.MAX_WORKERS.value,
+    max_tentativas_llm: int = C.MAX_TENTATIVAS_LLM.value,
+    espera_inicial_segundos: int = C.ESPERA_INICIAL_SEGUNDOS.value,
+    tamanho_lote_carga: int = C.TAMANHO_LOTE_CARGA.value,
+    dbt_deployment_name: str = C.DBT_DEPLOYMENT_NAME.value,
+    dbt_full_refresh_select: str = C.DBT_FULL_REFRESH_SELECT.value,
+    recalcula_taxonomia: bool = False,
 ) -> None:
-    """Classify the Agentforce sessions that have no class, and load them.
+    destino_full_table_id = f"{project_id}.{dest_dataset_id}.{dest_table_id}"
 
-    A model classifies each session.
+    # Modo alternativo do flow: a taxonomia (catálogo de regras) mudou e as sessões já
+    # classificadas precisam refletir isso em tema_nome/causa_nome — sem rechamar a LLM
+    # (custo zero) e sem sobrescrever nenhuma outra coluna (classificacao, resumo, motivo
+    # etc. ficam intactos). Não usa BF_KEY, não faz extração/classificação — é só reler o
+    # que já está na tabela destino, reavaliar as regras, gravar via MERGE parcial e
+    # disparar o full refresh do dbt (ver docstrings em tasks/taxonomia.py).
+    if recalcula_taxonomia:
+        rename_current_flow_run_task(new_name=f"recalcula_taxonomia_{dest_dataset_id}_{dest_table_id}")
 
-    The flow reads the sessions of the last days (7 by default) with the HSM that came
-    before each. A late reply to a button is decided by rule, and any other session goes
-    to the model through Bifrost, `max_workers` at one time. After each batch of
-    `load_batch` sessions (500) the flow fills the theme and the cause with the rules of
-    the catalog and loads them with a MERGE by `id_sessao`, so a crash loses at most one
-    batch. A session that fails stays out and is tried again at the next run. Discord
-    gets a summary.
-
-    With `recalculate_taxonomy` the flow classifies nothing: it applies the current
-    rules to the summaries that are already in the table, updates only `tema_nome` and
-    `causa_nome`, and copies them to the marts of dbt.
-    """
-    names = resolve_names(project_id, tables or {})
-    themes = await read_rules_task(names, THEME_STAGE)
-    causes = await read_rules_task(names, REASON_STAGE)
-
-    if recalculate_taxonomy:
-        relevant = await read_relevant_task(names)
-        updated = await apply_catalog(names, relevant, themes, causes)
-        in_table = await update_themes_task(names, updated)
-        in_marts = await propagate_task(names)
-        logger.info("Taxonomy recalculated: table=%d marts=%d", in_table, in_marts)
+        df_sessoes_relevantes = extrai_sessoes_para_recalculo_taxonomia(
+            project_id=project_id, dataset_id=dest_dataset_id, table_id=dest_table_id
+        )
+        df_regras_tema = carrega_catalogo_regras(
+            project_id=project_id,
+            dataset_id=dest_dataset_id,
+            table_id=taxonomia_regras_table_id,
+            etapa=C.TAXONOMIA_ETAPA_TEMA.value,
+            agrupamento_tipo=taxonomia_agrupamento_tipo,
+        )
+        df_regras_causa = carrega_catalogo_regras(
+            project_id=project_id,
+            dataset_id=dest_dataset_id,
+            table_id=taxonomia_regras_table_id,
+            etapa=C.TAXONOMIA_ETAPA_MOTIVO.value,
+            agrupamento_tipo=taxonomia_agrupamento_tipo,
+        )
+        df_tema = aplica_regras_tema(df_final=df_sessoes_relevantes, df_regras=df_regras_tema)
+        df_tema = aplica_regras_causa(df_final=df_tema, df_regras=df_regras_causa)
+        linhas_aux = atualiza_tema_causa(
+            df_tema=df_tema,
+            project_id=project_id,
+            dataset_id=dest_dataset_id,
+            table_id=dest_table_id,
+            tmp_table_id=dest_tmp_table_id,
+        )
+        dispara_full_refresh_chatbot(
+            deployment_name=dbt_deployment_name,
+            select=dbt_full_refresh_select,
+            github_repo=C.DBT_GITHUB_REPO.value,
+            bigquery_project=C.DBT_BIGQUERY_PROJECT.value,
+        )
+        print(
+            f"[FLOW] Recálculo de taxonomia concluído: {linhas_aux} linha(s) na tabela de classificação, "
+            f"full refresh do dbt ('{dbt_full_refresh_select}') completo."
+        )
         return
 
-    await ensure_tables_task(names)
-    sessions = await extract_task(names, window or {})
+    rename_current_flow_run_task(new_name=f"classificacao_llm_{dest_dataset_id}_{dest_table_id}")
 
-    if not sessions:
-        logger.info("No pending session")
-        await notify_task(summary(0, 0, 0, 0, 0), errors=False)
-        return
-
-    split = split_sessions(await enrich_task(names, sessions))
-    logger.info("Split: model=%d rule=%d dropped=%d", len(split.prompted), len(split.by_rule), split.dropped)
-    loaded = await load_task(
-        names,
-        await apply_catalog(
-            names,
-            finish_rows([build_rule_row(session) for session in split.by_rule], PROMPT_VERSION, datetime.now(UTC)),
-            themes,
-            causes,
-        ),
-    )
-    size = (llm or {}).get("load_batch", DEFAULT_LOAD_BATCH)
-    classified = 0
-
-    for start in range(0, len(split.prompted), size):
-        rows = await classify_task(split.prompted[start : start + size], llm or {})
-        classified += len(rows)
-        loaded += await load_task(
-            names, await apply_catalog(names, finish_rows(rows, PROMPT_VERSION, datetime.now(UTC)), themes, causes)
+    bf_key = os.environ.get("BF_KEY")
+    if not bf_key:
+        raise ValueError(
+            "BF_KEY não encontrada nas variáveis de ambiente — adicionar ao secret do work pool "
+            "(mesmo secretName usado por rj_crm__salesforce_datacloud)."
         )
 
-    failed = len(split.prompted) - classified
-    await notify_task(summary(len(sessions), len(split.by_rule), classified, failed, loaded), errors=False)
-    logger.info("Done: classified=%d failed=%d loaded=%d", classified, failed, loaded)
+    # Não precisa de try/except aqui: on_failure=[notify_falha_flow] no decorator acima já
+    # notifica o Discord em qualquer exceção não tratada, e o flow run continua marcado
+    # como falho no Prefect (mesmo padrão de rj_crm__disparo_template/flow.py).
 
-
-def summary(extracted: int, by_rule: int, classified: int, failed: int, loaded: int) -> str:
-    """Return the message of the end of a run."""
-    icon = "✅" if failed == 0 else "⚠️"
-
-    return "\n".join(
-        [
-            f"{icon} **agentforce-classificacao-llm: concluído**",
-            f"📥 **Extraídas (pendentes):** {extracted}",
-            f"📏 **Pré-classificadas por regra:** {by_rule}",
-            f"🤖 **Classificadas por LLM:** {classified}",
-            f"❌ **Falhas (retry automático amanhã):** {failed}",
-            f"📊 **Linhas carregadas no BQ:** {loaded}",
-        ]
+    # 1. Garante que a tabela destino existe (idempotente) — precisa rodar antes da
+    #    extração (etapa 2 faz anti-join contra ela) e da carga (etapa 7).
+    ensure_destino_table(
+        project_id=project_id,
+        dataset_id=dest_dataset_id,
+        table_id=dest_table_id,
+        tmp_table_id=dest_tmp_table_id,
     )
+
+    #    Taxonomias dos prompts de roteamento, lidas logo no começo: tabela vazia ou com
+    #    versões misturadas falha o flow antes de qualquer chamada paga à LLM.
+    taxonomia_roteamento = carrega_taxonomia_roteamento(
+        project_id=project_id,
+        dataset_id=dest_dataset_id,
+        macrotemas_table_id=taxonomia_macrotemas_table_id,
+        secretarias_table_id=taxonomia_secretarias_table_id,
+    )
+
+    # 2. Extrai sessões pendentes (janela fixa + pré-filtro por llm.classificacao_datahora
+    #    + anti-join final contra o destino), já com o HSM ligado pelo dbt
+    df_sessoes = extrai_sessoes_nao_classificadas(
+        project_id=project_id,
+        source_table=source_table,
+        destino_full_table_id=destino_full_table_id,
+        lookback_days=lookback_days,
+    )
+    n_extraidas = len(df_sessoes)
+
+    if n_extraidas == 0:
+        print("[FLOW] Nenhuma sessão pendente — nada a classificar hoje.")
+        notify_resumo(n_extraidas=0, n_pre_classificadas=0, n_classificadas_llm=0, n_falhas=0, linhas_carregadas=0)
+        return
+
+    # 3. Monta os prompts (com_hsm / sem_hsm) e separa as pré-classificadas por regra
+    df_prompts, df_pre_classificadas = monta_prompts(df_sessoes)
+
+    # 4. Catálogo de regras de tema/motivo — carregado antes da classificação porque
+    #    tanto o passo 5 (pré-classificadas) quanto o passo 6 (LLM, lote a lote)
+    #    precisam dele. Catálogo ausente ou sem regra pra secretaria/tema da sessão:
+    #    tema_nome/causa_nome ficam vazios, não bloqueia nada — ver aplica_regras_causa
+    #    (motivo só é aplicado dentro do tema ao qual pertence, via categoria_pai).
+    df_regras_tema = carrega_catalogo_regras(
+        project_id=project_id,
+        dataset_id=dest_dataset_id,
+        table_id=taxonomia_regras_table_id,
+        etapa=C.TAXONOMIA_ETAPA_TEMA.value,
+        agrupamento_tipo=taxonomia_agrupamento_tipo,
+    )
+    df_regras_causa = carrega_catalogo_regras(
+        project_id=project_id,
+        dataset_id=dest_dataset_id,
+        table_id=taxonomia_regras_table_id,
+        etapa=C.TAXONOMIA_ETAPA_MOTIVO.value,
+        agrupamento_tipo=taxonomia_agrupamento_tipo,
+    )
+
+    # 5. Sessões decididas por regra (resposta_atrasada_btn) já são conhecidas sem
+    #    nenhuma chamada de LLM — carrega elas de uma vez, imediatamente, sem esperar a
+    #    classificação (que pode levar dezenas de minutos) terminar.
+    df_pre_final = monta_dataframe_final(
+        df_classificadas=pd.DataFrame(),
+        df_pre_classificadas=df_pre_classificadas,
+        classificacao_resposta_atrasada=C.CLASSIFICACAO_RESPOSTA_ATRASADA_BTN.value,
+        justificativa_resposta_atrasada=C.JUSTIFICATIVA_RESPOSTA_ATRASADA_BTN.value,
+        prompt_versao=C.PROMPT_VERSAO.value,
+    )
+    df_pre_final = aplica_regras_tema(df_final=df_pre_final, df_regras=df_regras_tema)
+    df_pre_final = aplica_regras_causa(df_final=df_pre_final, df_regras=df_regras_causa)
+    linhas_pre = carrega_classificacoes(
+        df_final=df_pre_final,
+        project_id=project_id,
+        dataset_id=dest_dataset_id,
+        table_id=dest_table_id,
+        tmp_table_id=dest_tmp_table_id,
+    )
+
+    # 6. Classifica via LLM e já carrega no BigQuery em lotes de tamanho_lote_carga
+    #    sessões (tmp + MERGE por lote, dentro da própria task — ver docstring de
+    #    classifica_sessoes) — não espera as ~6mil sessões todas terminarem pra
+    #    escrever: um crash no meio perde só o lote parcial, não o run inteiro.
+    n_classificadas_llm, n_falhas, linhas_llm = classifica_sessoes(
+        df_prompts=df_prompts,
+        bf_key=bf_key,
+        base_url=bifrost_base_url,
+        model=bifrost_model,
+        max_workers=max_workers,
+        max_tentativas=max_tentativas_llm,
+        espera_inicial=espera_inicial_segundos,
+        classificacao_sem_hsm=C.CLASSIFICACAO_SEM_HSM_ASSOCIADO.value,
+        df_regras_tema=df_regras_tema,
+        df_regras_causa=df_regras_causa,
+        classificacao_resposta_atrasada=C.CLASSIFICACAO_RESPOSTA_ATRASADA_BTN.value,
+        justificativa_resposta_atrasada=C.JUSTIFICATIVA_RESPOSTA_ATRASADA_BTN.value,
+        prompt_versao=C.PROMPT_VERSAO.value,
+        taxonomia=taxonomia_roteamento,
+        project_id=project_id,
+        dataset_id=dest_dataset_id,
+        table_id=dest_table_id,
+        tmp_table_id=dest_tmp_table_id,
+        tamanho_lote=tamanho_lote_carga,
+    )
+
+    notify_resumo(
+        n_extraidas=n_extraidas,
+        n_pre_classificadas=len(df_pre_classificadas),
+        n_classificadas_llm=n_classificadas_llm,
+        n_falhas=n_falhas,
+        linhas_carregadas=linhas_pre + linhas_llm,
+    )
+
+    print("[FLOW] Concluído.")

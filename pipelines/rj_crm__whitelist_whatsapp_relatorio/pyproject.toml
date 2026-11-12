@@ -1,0 +1,13 @@
+[project]
+name = "rj_crm__whitelist_whatsapp_relatorio"
+version = "1.0.0"
+description = "Relata diariamente, por Discord e e-mail, as URLs que o agente de IA do Salesforce redigiu nas conversas, para que sejam avaliadas e liberadas na whitelist do WhatsApp."
+dependencies = [
+    "prefect_rj_iplanrio",
+    "google-cloud-bigquery>=3.25.0",
+    "jinja2>=3.1.2",
+    "requests>=2.31.0",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
