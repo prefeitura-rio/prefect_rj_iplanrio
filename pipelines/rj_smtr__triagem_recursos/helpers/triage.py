@@ -44,13 +44,9 @@ from datetime import datetime
 from typing import Any, Protocol
 
 import polars as pl
-from prefect.logging import get_logger
+from toolkit.telemetry import logger
 
-from .providers.base import BaseLLMClient
-
-logger = get_logger("toolkit")
-
-from ..constants import (
+from pipelines.rj_smtr__triagem_recursos.constants import (
     BETA_CONSENSO,
     BETA_DIVERGENCIA,
     LIMIAR_ALTA,
@@ -63,19 +59,31 @@ from ..constants import (
     RotaExecucao,
     StatusProcessamento,
 )
-from .cost_analyzer import calcular_custo_chamada
-from .feature_extractor import extrair_sinais_epistemicos
-from .guardrails import aplicar_guardrail_epistemico
-from .meta_calibrator import predizer_probabilidade_calibrada
-from .ocr_engine import extrair_ocr_pagina_especifica
-from .router import (
+from pipelines.rj_smtr__triagem_recursos.helpers.cost_analyzer import (
+    calcular_custo_chamada,
+)
+from pipelines.rj_smtr__triagem_recursos.helpers.feature_extractor import (
+    extrair_sinais_epistemicos,
+)
+from pipelines.rj_smtr__triagem_recursos.helpers.guardrails import (
+    aplicar_guardrail_epistemico,
+)
+from pipelines.rj_smtr__triagem_recursos.helpers.meta_calibrator import (
+    predizer_probabilidade_calibrada,
+)
+from pipelines.rj_smtr__triagem_recursos.helpers.ocr_engine import (
+    extrair_ocr_pagina_especifica,
+)
+from pipelines.rj_smtr__triagem_recursos.helpers.providers.base import BaseLLMClient
+from pipelines.rj_smtr__triagem_recursos.helpers.router import (
     atualizar_probabilidade_bayesiana_log_odds,
     calcular_dispersao_cot,
     construir_prediction_set_aps,
 )
-from .storage import carregar_bytes_pdf
-from .windowing import extrair_smart_window_pdf
-
+from pipelines.rj_smtr__triagem_recursos.helpers.storage import carregar_bytes_pdf
+from pipelines.rj_smtr__triagem_recursos.helpers.windowing import (
+    extrair_smart_window_pdf,
+)
 
 _LLM_CLIENT_LOCK = threading.Lock()
 _LLM_CLIENT_CACHE: dict[tuple[str, str, str], BaseLLMClient] = {}
@@ -94,7 +102,7 @@ def limpar_cache_cliente_llm() -> None:
 
 def obter_cliente_llm(modelo: str | None = None) -> BaseLLMClient:
     """Return a thread-safe cached LLM client reusing persistent HTTP connections."""
-    from ..constants import LLM_PROVIDER
+    from pipelines.rj_smtr__triagem_recursos.constants import LLM_PROVIDER
 
     p = (LLM_PROVIDER or "openai").strip().lower()
     target_model = modelo or os.getenv("LLM_MODEL") or VERTEX_LLM_MODEL
@@ -107,11 +115,11 @@ def obter_cliente_llm(modelo: str | None = None) -> BaseLLMClient:
             return cached
 
         if p in ("google", "vertex", "gemini"):
-            from .providers.google_client import GoogleLLMClient
+            from pipelines.rj_smtr__triagem_recursos.helpers.providers.google_client import GoogleLLMClient
 
             cliente: BaseLLMClient = GoogleLLMClient(default_model=target_model)
         else:
-            from .providers.openai_client import OpenAILLMClient
+            from pipelines.rj_smtr__triagem_recursos.helpers.providers.openai_client import OpenAILLMClient
 
             cliente = OpenAILLMClient(default_model=target_model)
 
@@ -119,7 +127,7 @@ def obter_cliente_llm(modelo: str | None = None) -> BaseLLMClient:
         return cliente
 
 
-def _montar_resultado_erro_arquivo(
+def montar_resultado_erro_arquivo(
     processo_id: str,
     id_doc_sei: Any,
     numero_sei: str,
@@ -231,7 +239,7 @@ def preparar_documento_processo(
         return {
             "ok": False,
             "processo": processo,
-            "resultado_erro": _montar_resultado_erro_arquivo(
+            "resultado_erro": montar_resultado_erro_arquivo(
                 processo_id=processo_id,
                 id_doc_sei=id_doc_sei,
                 numero_sei=numero_sei,
@@ -581,7 +589,7 @@ class FutureProtocol(Protocol):
         ...
 
 
-def _resolver_futuro_seguro(futuro: Any, etapa: str) -> Any | None:
+def resolver_futuro_seguro(futuro: Any, etapa: str) -> Any | None:
     """Resolve futuro Prefect ou padrão registrando falha sem interromper o lote."""
     try:
         return futuro.result(raise_on_failure=False)
@@ -615,9 +623,9 @@ def executar_lote_em_janelas(
     if aquecer_primeiro and len(pendentes) > 1:
         while pendentes:
             proc_warmup = pendentes.popleft()
-            doc_warmup = _resolver_futuro_seguro(submeter_download(proc_warmup), "warmup_download")
+            doc_warmup = resolver_futuro_seguro(submeter_download(proc_warmup), "warmup_download")
             if isinstance(doc_warmup, dict) and doc_warmup.get("ok"):
-                res_warmup = _resolver_futuro_seguro(submeter_classificacao(doc_warmup), "warmup_classificacao")
+                res_warmup = resolver_futuro_seguro(submeter_classificacao(doc_warmup), "warmup_classificacao")
                 if isinstance(res_warmup, dict) and "processo_id" in res_warmup:
                     resultados.append(res_warmup)
                 break
@@ -642,7 +650,7 @@ def executar_lote_em_janelas(
         if pendentes:
             downloads_ativos.append(submeter_download(pendentes.popleft()))
 
-        doc_prep = _resolver_futuro_seguro(done_dl, "download")
+        doc_prep = resolver_futuro_seguro(done_dl, "download")
         if isinstance(doc_prep, dict) and doc_prep.get("ok"):
             inferencias_ativas.append(submeter_classificacao(doc_prep))
         elif isinstance(doc_prep, dict) and "resultado_erro" in doc_prep:
@@ -652,7 +660,7 @@ def executar_lote_em_janelas(
 
     if inferencias_ativas:
         for done_inf in aguardar_concluidos(list(inferencias_ativas)):
-            res_inf = _resolver_futuro_seguro(done_inf, "classificacao")
+            res_inf = resolver_futuro_seguro(done_inf, "classificacao")
             if isinstance(res_inf, dict) and "processo_id" in res_inf:
                 resultados.append(res_inf)
 

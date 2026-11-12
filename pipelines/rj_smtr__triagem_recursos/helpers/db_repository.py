@@ -33,10 +33,10 @@ from typing import Any
 
 import numpy as np
 import psycopg2
-from prefect.logging import get_logger
 from psycopg2.extras import RealDictCursor, execute_values
+from toolkit.telemetry import logger
 
-from ..constants import (
+from pipelines.rj_smtr__triagem_recursos.constants import (
     LOCAL_PDFS_DIR,
     PIPELINE_DIR,
     TABELA_CALIBRACAO,
@@ -45,8 +45,6 @@ from ..constants import (
     TABELA_PROCESSOS,
     StatusProcessamento,
 )
-
-logger = get_logger("toolkit")
 
 
 def load_query(anchor: str, name: str, **kwargs: Any) -> str:
@@ -77,7 +75,7 @@ def converter_valor_para_sql_null(valor: Any) -> float | None:
     try:
         val = float(valor)
         return None if np.isnan(val) else val
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 

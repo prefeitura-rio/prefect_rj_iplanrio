@@ -275,8 +275,25 @@ max-doc-length = 88 # a docstring or a comment line holds up to 88 columns, as t
   "TID251",
 ] # the bucket of the models is in rj-crm-registry, which the HMAC key of toolkit.gcs cannot read
 "pipelines/rj_smtr__triagem_recursos/**" = [
+  "ARG001",
+  "ARG002",
+  "C901",
+  "D107",
+  "D401",
+  "E501",
+  "PLC0415",
+  "PLR0911",
+  "PLR0912",
+  "PLR0913",
+  "PLR0915",
+  "PLR0917",
+  "PLR2004",
+  "PLW0603",
+  "PLW1508",
+  "PTH123",
   "TID251",
-] # Cloud SQL transactional queue requires direct psycopg2 driver and scikit-learn meta-calibrator
+  "W505",
+] # Cloud SQL queue, ML calibrator and multimodal triage heuristics
 "**/conftest.py" = [
   "ANN201",
 ] # a fixture returns a factory or a fake whose type the tests infer

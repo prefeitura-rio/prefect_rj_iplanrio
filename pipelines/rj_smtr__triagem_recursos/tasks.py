@@ -25,7 +25,7 @@ from typing import Any
 from prefect import get_run_logger, task
 from prefect.cache_policies import NO_CACHE
 
-from .constants import (
+from pipelines.rj_smtr__triagem_recursos.constants import (
     LIMIAR_ALTA,
     LIMIAR_BAIXA,
     LIMIAR_DISPERSAO_COT_MAX,
@@ -34,12 +34,12 @@ from .constants import (
     VERTEX_LLM_MODEL,
     resolver_banco_url,
 )
-from .utils.artifacts import carregar_artefatos_pipeline
-from .utils.db_repository import (
+from pipelines.rj_smtr__triagem_recursos.helpers.artifacts import carregar_artefatos_pipeline
+from pipelines.rj_smtr__triagem_recursos.helpers.db_repository import (
     buscar_processos_para_triagem_ou_fallback,
     persistir_lote_resultados_ia,
 )
-from .utils.triage import (
+from pipelines.rj_smtr__triagem_recursos.helpers.triage import (
     classificar_documento_preparado,
     gerar_sumario_lote,
     preparar_documento_processo,

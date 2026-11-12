@@ -31,12 +31,9 @@ from difflib import SequenceMatcher
 from typing import Any
 
 import numpy as np
-from prefect.logging import get_logger
 from scipy.spatial.distance import mahalanobis
 
-from ..utils.schemas import EsquemaDecisao
-
-logger = get_logger("toolkit")
+from pipelines.rj_smtr__triagem_recursos.helpers.schemas import EsquemaDecisao
 
 SENTENCE_MODEL: Any | None = None
 MODELO_EMBEDDING_NOME = "paraphrase-multilingual-MiniLM-L12-v2"

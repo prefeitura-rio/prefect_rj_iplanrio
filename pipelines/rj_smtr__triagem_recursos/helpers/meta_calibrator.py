@@ -30,7 +30,7 @@ import joblib
 import lightgbm as lgb
 import numpy as np
 
-from .feature_extractor import (
+from pipelines.rj_smtr__triagem_recursos.helpers.feature_extractor import (
     EstatisticasSemanticasClasses,
     VetorSinaisEpistemicos,
 )

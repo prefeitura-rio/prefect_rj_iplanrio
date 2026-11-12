@@ -21,8 +21,8 @@ import os
 from google import genai
 from google.genai import types
 
-from ..schemas import EsquemaDecisao
-from .base import BaseLLMClient
+from pipelines.rj_smtr__triagem_recursos.helpers.providers.base import BaseLLMClient
+from pipelines.rj_smtr__triagem_recursos.helpers.schemas import EsquemaDecisao
 
 
 class GoogleLLMClient(BaseLLMClient):

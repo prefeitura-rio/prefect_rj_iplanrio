@@ -55,18 +55,25 @@ from typing import Any
 
 import numpy as np
 
-from .conformal import ArtefatosConforme
-from .feature_extractor import (
+from pipelines.rj_smtr__triagem_recursos.helpers.conformal import ArtefatosConforme
+from pipelines.rj_smtr__triagem_recursos.helpers.feature_extractor import (
     EstatisticasSemanticasClasses,
     VetorSinaisEpistemicos,
     extrair_sinais_epistemicos,
     gerar_embedding_texto,
 )
-from .guardrails import aplicar_guardrail_epistemico
-from .meta_calibrator import ModeloCalibrador, predizer_probabilidade_calibrada
-from .ocr_engine import extrair_ocr_pagina_especifica
-from .providers.base import BaseLLMClient
-from .schemas import EsquemaDecisao
+from pipelines.rj_smtr__triagem_recursos.helpers.guardrails import (
+    aplicar_guardrail_epistemico,
+)
+from pipelines.rj_smtr__triagem_recursos.helpers.meta_calibrator import (
+    ModeloCalibrador,
+    predizer_probabilidade_calibrada,
+)
+from pipelines.rj_smtr__triagem_recursos.helpers.ocr_engine import (
+    extrair_ocr_pagina_especifica,
+)
+from pipelines.rj_smtr__triagem_recursos.helpers.providers.base import BaseLLMClient
+from pipelines.rj_smtr__triagem_recursos.helpers.schemas import EsquemaDecisao
 
 TODAS_HIPOTESES_LEGAIS = [
     "citran",
@@ -189,7 +196,7 @@ def construir_prediction_set_aps(
         soma_exp = float(np.sum(exp_sims))
         pesos_softmax = (exp_sims / soma_exp) if soma_exp > 0 else np.ones(len(classes_outras)) / len(classes_outras)
 
-        for h, peso in zip(classes_outras, pesos_softmax):
+        for h, peso in zip(classes_outras, pesos_softmax, strict=False):
             p_k = massa_residual * peso
             if p_k >= 0.10 and (p_k / p_top) >= razao_minima_competitiva:
                 prediction_set.add(h)

@@ -12,7 +12,6 @@ from zoneinfo import ZoneInfo
 from httpx2 import AsyncClient
 from polars import DataFrame, DataType, Float64, Int64, String
 from prefect import task
-from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
 from psycopg.sql import Literal
 from pydantic import JsonValue
 from toolkit.bigquery import BigQuery
@@ -433,6 +432,8 @@ async def run_dbt(request: DbtRun, *, report: bool = False) -> None:
             )
 
             with use_profiles(project_dir):
+                from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings  # noqa: PLC0415
+
                 runner = PrefectDbtRunner(settings=PrefectDbtSettings(project_dir=project_dir), raise_on_failure=False)
                 if not runner.invoke(["deps"]).success:
                     raise RuntimeError("dbt deps failed")

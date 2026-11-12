@@ -6,23 +6,23 @@ from typing import final
 import pymupdf as fitz
 import pytest
 
-from pipelines.rj_smtr__triagem_recursos.tests.conftest import (
-    DummyCalibrator,
-    DummyConformal,
-    build_pdf_bytes,
-)
-from pipelines.rj_smtr__triagem_recursos.utils.feature_extractor import VetorSinaisEpistemicos
-from pipelines.rj_smtr__triagem_recursos.utils.schemas import (
+from pipelines.rj_smtr__triagem_recursos.helpers.feature_extractor import VetorSinaisEpistemicos
+from pipelines.rj_smtr__triagem_recursos.helpers.schemas import (
     AuditoriaSistema,
     Encaminhamento,
     EsquemaDecisao,
     HipoteseLegal,
     TipoCitacao,
 )
-from pipelines.rj_smtr__triagem_recursos.utils.triage import (
+from pipelines.rj_smtr__triagem_recursos.helpers.triage import (
     classificar_documento_preparado,
     executar_lote_em_janelas,
     preparar_documento_processo,
+)
+from pipelines.rj_smtr__triagem_recursos.tests.conftest import (
+    DummyCalibrator,
+    DummyConformal,
+    build_pdf_bytes,
 )
 
 
@@ -31,6 +31,7 @@ class FakeLLMClient:
     """Cliente LLM simulado que registra chamadas sem acesso externo."""
 
     def __init__(self) -> None:
+        """Inicializa lista de chamadas registradas."""
         self.calls: list[dict[str, object]] = []
 
     def classificar(
@@ -187,9 +188,9 @@ def test_two_stage_pipeline_truncates_and_classifies(
             tesseract_mean_conf=0.92,
         )
 
-    monkeypatch.setattr("pipelines.rj_smtr__triagem_recursos.utils.triage.obter_cliente_llm", fake_get_llm)
-    monkeypatch.setattr("pipelines.rj_smtr__triagem_recursos.utils.triage.extrair_ocr_pagina_especifica", fake_ocr)
-    monkeypatch.setattr("pipelines.rj_smtr__triagem_recursos.utils.triage.extrair_sinais_epistemicos", fake_signals)
+    monkeypatch.setattr("pipelines.rj_smtr__triagem_recursos.helpers.triage.obter_cliente_llm", fake_get_llm)
+    monkeypatch.setattr("pipelines.rj_smtr__triagem_recursos.helpers.triage.extrair_ocr_pagina_especifica", fake_ocr)
+    monkeypatch.setattr("pipelines.rj_smtr__triagem_recursos.helpers.triage.extrair_sinais_epistemicos", fake_signals)
 
     artefatos: dict[str, object] = {
         "calibrador": DummyCalibrator(prob=0.96),

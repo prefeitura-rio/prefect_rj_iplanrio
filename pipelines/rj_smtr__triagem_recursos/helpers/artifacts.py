@@ -29,26 +29,31 @@ from pathlib import Path
 from typing import Any
 
 import joblib
-from prefect.logging import get_logger
+from toolkit.telemetry import logger
 
-from ..constants import (
+from pipelines.rj_smtr__triagem_recursos.constants import (
     LOCAL_ARTIFACTS_DIR,
     PROMPTS_DIR,
     VERSAO_PROMPT_PADRAO,
     resolver_banco_url,
 )
-from .conformal import ArtefatosConforme, criar_artefatos_conforme_do_banco
-from .meta_calibrator import (
+from pipelines.rj_smtr__triagem_recursos.helpers.conformal import (
+    ArtefatosConforme,
+    criar_artefatos_conforme_do_banco,
+)
+from pipelines.rj_smtr__triagem_recursos.helpers.meta_calibrator import (
     ModeloCalibrador,
     criar_calibrador_dos_parametros_banco,
 )
 
-logger = get_logger("toolkit")
-
 
 def registrar_aliases_legados() -> None:
     """Registra aliases em sys.modules para desserialização transparente de joblib."""
-    from . import conformal, feature_extractor, meta_calibrator
+    from pipelines.rj_smtr__triagem_recursos.helpers import (
+        conformal,
+        feature_extractor,
+        meta_calibrator,
+    )
 
     if "src" not in sys.modules:
         sys.modules["src"] = types.ModuleType("src")
@@ -164,9 +169,9 @@ def carregar_baseline_referencia(
     return BASELINE_CACHE
 
 
-def _preaquecer_modelo_embedding() -> None:
+def preaquecer_modelo_embedding() -> None:
     """Pre-aquece o SentenceTransformer antes do pool de workers."""
-    from .feature_extractor import obter_modelo_embedding
+    from pipelines.rj_smtr__triagem_recursos.helpers.feature_extractor import obter_modelo_embedding
 
     try:
         obter_modelo_embedding()
@@ -180,7 +185,7 @@ def carregar_artefatos_pipeline(
     infisical_secret_path: str | None = "/rj_smtr__triagem_recursos",
 ) -> dict[str, Any]:
     """Carrega calibracao ativa do PostgreSQL (fallback local apenas se is_local=True) e prompt do sistema."""
-    from .db_repository import buscar_configuracao_calibracao_ativa
+    from pipelines.rj_smtr__triagem_recursos.helpers.db_repository import buscar_configuracao_calibracao_ativa
 
     db_url = resolver_banco_url(is_local)
     calibrador = None
@@ -222,7 +227,7 @@ def carregar_artefatos_pipeline(
         is_local=is_local,
     )
     versao_prompt = Path(arquivo_prompt).stem or VERSAO_PROMPT_PADRAO
-    _preaquecer_modelo_embedding()
+    preaquecer_modelo_embedding()
 
     return {
         "calibrador": calibrador,

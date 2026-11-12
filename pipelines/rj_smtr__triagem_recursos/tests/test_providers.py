@@ -2,8 +2,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from pipelines.rj_smtr__triagem_recursos.utils.providers.openai_client import OpenAILLMClient
-from pipelines.rj_smtr__triagem_recursos.utils.triage import limpar_cache_cliente_llm, obter_cliente_llm
+from pipelines.rj_smtr__triagem_recursos.helpers.providers.openai_client import OpenAILLMClient
+from pipelines.rj_smtr__triagem_recursos.helpers.triage import limpar_cache_cliente_llm, obter_cliente_llm
 
 
 @pytest.mark.parametrize(
