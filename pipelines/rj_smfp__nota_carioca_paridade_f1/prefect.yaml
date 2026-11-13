@@ -1,0 +1,87 @@
+name: rj_smfp__nota_carioca_paridade_f1
+prefect-version: 3.4.3
+
+build:
+- prefect.deployments.steps.run_shell_script:
+    id: get-commit-hash
+    script: git rev-parse --short HEAD
+    stream_output: false
+- prefect_docker.deployments.steps.build_docker_image:
+    id: build-image
+    requires: prefect-docker>=0.6.5
+    image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+    tag: "rj_smfp__nota_carioca_paridade_f1-{{ get-commit-hash.stdout }}"
+    dockerfile: pipelines/rj_smfp__nota_carioca_paridade_f1/Dockerfile
+
+push:
+- prefect_docker.deployments.steps.push_docker_image:
+    requires: prefect-docker>=0.6.5
+    image_name: "{{ build-image.image_name }}"
+    tag: "{{ build-image.tag }}"
+
+pull:
+- prefect.deployments.steps.set_working_directory:
+    directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+# As agendas ficam INATIVAS nos dois deployments até a decisão do dono (gate da tarefa 39): o flow roda a paridade F1
+# contra dados reais do Oracle e só deve ser disparado (manual ou por agenda) quando a trilha do dbt e o gate liberarem.
+# Staging: mesmo dbt compartilhado e mesma tabela de resumo do contrato; o Discord posta no canal de staging, com o
+# marcador 🧪 STAGING (o ambiente vem do nome do deployment, terminado em --staging).
+- name: rj-smfp--nota-carioca-paridade-f1--staging
+  tags:
+  - environment:staging
+  - severity:low
+  - code_owner:fredzolio
+  version: "{{ build-image.tag }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_paridade_f1/flow.py:rj_smfp__nota_carioca_paridade_f1
+  # Dois dbt build de paridade simultâneos escreveriam o mesmo resumo.
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_paridade_f1 -- prefect flow-run execute
+      secretName: prefect-jobs-secrets-staging
+      image_pull_policy: Always
+      # O pod só espera o run de dbt (consulta a API do Prefect) e lê um resumo pequeno do BigQuery.
+      cpu_request: "100m"
+      cpu_limit: "500m"
+      memory_request: 256Mi
+      memory_limit: 1Gi
+  schedules:
+  - cron: "0 7 * * *"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: nota-carioca-paridade-f1-staging-7h
+- name: rj-smfp--nota-carioca-paridade-f1--prod
+  tags:
+  - environment:prod
+  - severity:medium
+  - code_owner:fredzolio
+  version: "{{ get-commit-hash.stdout }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_paridade_f1/flow.py:rj_smfp__nota_carioca_paridade_f1
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_paridade_f1 -- prefect flow-run execute
+      secretName: prefect-jobs-secrets
+      image_pull_policy: Always
+      cpu_request: "100m"
+      cpu_limit: "500m"
+      memory_request: 256Mi
+      memory_limit: 1Gi
+  schedules:
+  - cron: "0 7 * * *"
+    timezone: America/Sao_Paulo
+    # Inativa até a decisão do dono (gate da tarefa 39); o deploy não religa a agenda.
+    active: false
+    slug: nota-carioca-paridade-f1-7h
