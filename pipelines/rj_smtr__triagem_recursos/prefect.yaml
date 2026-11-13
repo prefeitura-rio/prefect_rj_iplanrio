@@ -45,7 +45,7 @@ deployments:
         cpu_limit: "2"
         env:
           PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_smtr__triagem_recursos
-          INFISICAL_ENVIRONMENT: staging
+          INFISICAL_ENVIRONMENT: stg
           INFISICAL_SECRET_PATH: /smtr-triagem
     parameters:
       is_local: false

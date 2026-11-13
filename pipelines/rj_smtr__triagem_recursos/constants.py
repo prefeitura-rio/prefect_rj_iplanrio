@@ -25,10 +25,22 @@ PIPELINE_DIR = Path(__file__).resolve().parent
 
 
 def obter_env(chave: str, default: str | None = None) -> str | None:
-    """Resolve variável de ambiente priorizando prefixo SMTR_TRIAGEM__ (evita colisão no cluster)."""
-    nomes = [chave]
+    """Resolve variável de ambiente com ou sem prefixo SMTR_TRIAGEM__ (evita colisão no cluster)."""
     if not chave.startswith("SMTR_TRIAGEM__"):
-        nomes = [f"SMTR_TRIAGEM__{chave}", f"SMTR_TRIAGEM_{chave}", chave]
+        nomes = [
+            f"SMTR_TRIAGEM__{chave}",
+            f"SMTR_TRIAGEM_{chave}",
+            chave,
+            f"SMTR_TRIAGEM__SMTR_TRIAGEM__{chave}",
+        ]
+    else:
+        sem_prefixo = chave.replace("SMTR_TRIAGEM__", "")
+        nomes = [
+            chave,
+            f"SMTR_TRIAGEM__{chave}",
+            sem_prefixo,
+            f"SMTR_TRIAGEM_{sem_prefixo}",
+        ]
     for nome in nomes:
         bruto = os.environ.get(nome)
         if bruto is None:
