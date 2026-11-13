@@ -81,7 +81,7 @@ class CadunicoConstants(Enum):
         SELECT
             DISTINCT s.*
         FROM filtra_celulares_disparados AS s
-        LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+        LEFT JOIN `rj-rmi.intermediario_rmi_telefones.int_telefone` AS tel
         ON s.celular_disparo = tel.telefone_numero_completo
         LEFT JOIN
             UNNEST(tel.consentimento) AS c

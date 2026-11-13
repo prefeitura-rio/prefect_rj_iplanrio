@@ -16,14 +16,14 @@
 alvo AS (
   SELECT DISTINCT LPAD(ap.proprietario_id, 11, '0') AS cpf, ap.telefone
   FROM aparicoes ap
-  JOIN `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf
+  JOIN `rj-rmi.rmi_dados_mestres.pessoa_fisica` pf
     ON pf.cpf = LPAD(ap.proprietario_id, 11, '0')
   WHERE ap.proprietario_tipo = 'CPF'
     AND ap.proprietario_id IS NOT NULL
     AND pf.obito.indicador IS FALSE
     AND ap.telefone IN (
       SELECT telefone_numero_completo
-      FROM `rj-crm-registry.intermediario_rmi_telefones.int_telefone`
+      FROM `rj-rmi.intermediario_rmi_telefones.int_telefone`
       WHERE estrategia_envio IS NOT NULL AND estrategia_envio != 'NÃO ENVIAR'
     )
 ),
