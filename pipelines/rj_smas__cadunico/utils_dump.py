@@ -2,6 +2,7 @@
 # ruff: noqa
 
 import asyncio
+import os
 import shutil
 from datetime import datetime
 from os import system
@@ -21,7 +22,11 @@ from pipelines.rj_smas__cadunico.utils_logging import (
     log_partition_comparison,
     log_ingestion_summary,
 )
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
+from iplanrio.pipelines_utils.bd import (
+    create_table_and_upload_to_gcs,
+    get_base64_bd_config,
+    get_project_id,
+)
 from iplanrio.pipelines_utils.gcs import get_gcs_client
 from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.gcs import (
@@ -40,13 +45,17 @@ def parse_partition_from_filename(blob_name: str) -> str:
     for name_part in name_parts:
         if name_part.startswith("A") and len(name_part) == 7:
             partition_info = name_part.replace("A", "")
-            parsed_date = datetime.strptime(partition_info, "%y%m%d").strftime("%Y-%m-%d")
+            parsed_date = datetime.strptime(partition_info, "%y%m%d").strftime(
+                "%Y-%m-%d"
+            )
             return str(parsed_date)
         elif len(name_part) == 8 and name_part.isdigit():
             parsed_date = datetime.strptime(name_part, "%Y%m%d").strftime("%Y-%m-%d")
             return str(parsed_date)
         elif len(name_part) == 6 and name_part.isdigit():
-            parsed_date = datetime.strptime(name_part + "01", "%Y%m%d").strftime("%Y-%m-%d")
+            parsed_date = datetime.strptime(name_part + "01", "%Y%m%d").strftime(
+                "%Y-%m-%d"
+            )
             return str(parsed_date)
     raise ValueError(f"No partition info found in blob name: {blob_name}")
 
@@ -63,17 +72,23 @@ def parse_txt_first_line(filepath):
 def create_table_if_not_exists(
     dataset_id: str,
     table_id: str,
+    bucket_name: str,
     biglake_table: bool = True,
 ) -> bool:
     """
     Create table using BD+ .
 
     Args:
-        data_path (str | Path): The path to the data.
         dataset_id (str): The dataset ID.
         table_id (str): The table ID.
+        bucket_name (str): GCS bucket where the staging data is stored.
         biglake_table (bool): Whether to create a BigLake table.
     """
+    os.environ["BASEDOSDADOS_CONFIG"] = get_base64_bd_config(
+        project_id=get_project_id(mode="prod"),
+        project_id_staging=get_project_id(mode="staging"),
+        bucket_name=bucket_name,
+    )
 
     tb = bd.Table(dataset_id=dataset_id, table_id=table_id)
     st = bd.Storage(dataset_id=dataset_id, table_id=table_id)
@@ -121,6 +136,7 @@ def append_data_to_storage(
     dataset_id: str,
     table_id: str,
     dump_mode: str,
+    bucket_name: str,
     biglake_table: bool = True,
 ) -> str:
     """
@@ -131,6 +147,7 @@ def append_data_to_storage(
         dataset_id (str): The dataset ID.
         table_id (str): The table ID.
         dump_mode (str): The dump mode.
+        bucket_name (str): GCS bucket where the staging data is stored.
         biglake_table (bool): Whether to create a BigLake table.
     """
     create_table_and_upload_to_gcs(
@@ -139,12 +156,19 @@ def append_data_to_storage(
         table_id=table_id,
         dump_mode=dump_mode,
         biglake_table=biglake_table,
+        bucket_name=bucket_name,
     )
 
     return dataset_id
 
 
-def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id: str) -> None:
+def ingest_file_sync(
+    blob_name: str,
+    bucket_name: str,
+    dataset_id: str,
+    table_id: str,
+    staging_bucket: str,
+) -> None:
     """
     Processa um arquivo ZIP: baixa, extrai, divide em chunks, converte para CSV e faz upload.
 
@@ -153,6 +177,7 @@ def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id
         bucket_name (str): Nome do bucket GCS.
         dataset_id (str): ID do dataset de destino.
         table_id (str): ID da tabela de destino.
+        staging_bucket (str): Bucket GCS onde os dados de staging são gravados.
     """
     # Inicializar logger estruturado para este arquivo
     partition = parse_partition_from_filename(blob_name)
@@ -193,7 +218,9 @@ def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id
 
         # ETAPA 3: Análise de arquivos TXT
         file_logger.start_step("Análise e divisão de arquivos TXT", 3, 8)
-        txt_files = list(unzip_output_directory.glob("*.txt")) + list(unzip_output_directory.glob("*.TXT"))
+        txt_files = list(unzip_output_directory.glob("*.txt")) + list(
+            unzip_output_directory.glob("*.TXT")
+        )
 
         # Processar arquivos TXT e coletar informações
         txt_files_info = []
@@ -263,7 +290,11 @@ def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id
         partition_directory.mkdir(parents=True, exist_ok=True)
         file_logger.complete_step(
             True,
-            {"partição": partition, "data_consistente": not partition_warning, "layout_version": txt_layout_version},
+            {
+                "partição": partition,
+                "data_consistente": not partition_warning,
+                "layout_version": txt_layout_version,
+            },
         )
 
         # ETAPA 6: Movimentação de arquivos
@@ -277,7 +308,11 @@ def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id
 
         # ETAPA 7: Criação de tabela
         file_logger.start_step("Criação de tabela se necessário", 7, 8)
-        create_table_if_not_exists(dataset_id=dataset_id, table_id=table_id)
+        create_table_if_not_exists(
+            dataset_id=dataset_id,
+            table_id=table_id,
+            bucket_name=staging_bucket,
+        )
         file_logger.complete_step(True)
 
         # ETAPA 8: Upload para BigQuery/GCS
@@ -287,6 +322,7 @@ def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id
             dataset_id=dataset_id,
             table_id=table_id,
             dump_mode="append",
+            bucket_name=staging_bucket,
         )
         file_logger.complete_step(True)
 
@@ -311,7 +347,9 @@ def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id
         shutil.rmtree(output_directory_path, ignore_errors=True)
 
 
-def get_existing_partitions(prefix: str, bucket_name: str, dataset_id: str, table_id: str) -> List[str]:
+def get_existing_partitions(
+    prefix: str, bucket_name: str, dataset_id: str, table_id: str
+) -> List[str]:
     """
     Lista as partições já processadas na área de staging.
 
@@ -333,11 +371,16 @@ def get_existing_partitions(prefix: str, bucket_name: str, dataset_id: str, tabl
     staging_partitions = parse_blobs_to_partition_list(staging_blobs)
     staging_partitions = list(set(staging_partitions))
 
-    log(f"   📊 Resultado: {len(staging_blobs)} blobs → {len(staging_partitions)} partições únicas", level="info")
+    log(
+        f"   📊 Resultado: {len(staging_blobs)} blobs → {len(staging_partitions)} partições únicas",
+        level="info",
+    )
     return staging_partitions
 
 
-def get_files_to_ingest(prefix: str, partitions: List[str], bucket_name: str) -> List[str]:
+def get_files_to_ingest(
+    prefix: str, partitions: List[str], bucket_name: str
+) -> List[str]:
     """
     Identifica arquivos ZIP novos na área raw que ainda não foram processados.
 
@@ -351,10 +394,15 @@ def get_files_to_ingest(prefix: str, partitions: List[str], bucket_name: str) ->
     """
     # Log consolidado da verificação de raw
     log(f"🔍 VERIFICANDO RAW: {bucket_name}/{prefix}", level="info")
-    log(f"   🔗 Console: https://console.cloud.google.com/storage/browser/{bucket_name}/{prefix}", level="info")
+    log(
+        f"   🔗 Console: https://console.cloud.google.com/storage/browser/{bucket_name}/{prefix}",
+        level="info",
+    )
 
     raw_blobs = list_blobs_with_prefix(bucket_name=bucket_name, prefix=prefix)
-    raw_blobs = [blob for blob in raw_blobs if blob.name and blob.name.lower().endswith(".zip")]
+    raw_blobs = [
+        blob for blob in raw_blobs if blob.name and blob.name.lower().endswith(".zip")
+    ]
 
     # Extract partition information from blobs
     raw_partitions = []
@@ -383,7 +431,10 @@ def get_files_to_ingest(prefix: str, partitions: List[str], bucket_name: str) ->
     )
 
     if parsing_errors:
-        log(f"   ⚠️  Erros de parsing ({len(parsing_errors)}): {parsing_errors[:3]}", level="warning")
+        log(
+            f"   ⚠️  Erros de parsing ({len(parsing_errors)}): {parsing_errors[:3]}",
+            level="warning",
+        )
 
     # Usar função de comparação consolidada se há arquivos para ingerir
     if files_to_ingest:
@@ -397,7 +448,10 @@ def need_to_ingest(files_to_ingest: list) -> bool:
     """Verifica se existem arquivos para ingerir com log consolidado"""
     need_ingest = len(files_to_ingest) > 0
     status = "✅ SIM" if need_ingest else "❌ NÃO"
-    log(f"{status} - Necessário ingerir: {len(files_to_ingest)} arquivo(s)", level="info")
+    log(
+        f"{status} - Necessário ingerir: {len(files_to_ingest)} arquivo(s)",
+        level="info",
+    )
     return need_ingest
 
 
@@ -406,6 +460,7 @@ def ingest_files(
     bucket_name: str,
     dataset_id: str,
     table_id: str,
+    staging_bucket: str,
     max_concurrent: int = 3,
 ) -> None:
     """
@@ -416,6 +471,7 @@ def ingest_files(
         bucket_name (str): Nome do bucket GCS.
         dataset_id (str): ID do dataset de destino.
         table_id (str): ID da tabela de destino.
+        staging_bucket (str): Bucket GCS onde os dados de staging são gravados.
         max_concurrent (int): Número máximo de downloads/processamentos simultâneos.
     """
     if not files_to_ingest:
@@ -445,6 +501,7 @@ def ingest_files(
                         bucket_name,
                         dataset_id,
                         table_id,
+                        staging_bucket,
                     )
                 except Exception as e:
                     success = False
@@ -458,7 +515,9 @@ def ingest_files(
                     "success": success,
                     "duration_seconds": duration,
                     "error": error_msg,
-                    "partition": parse_partition_from_filename(blob_name) if success else None,
+                    "partition": (
+                        parse_partition_from_filename(blob_name) if success else None
+                    ),
                     "size_mb": 0,  # Placeholder - seria ideal capturar do processo
                 }
             )
