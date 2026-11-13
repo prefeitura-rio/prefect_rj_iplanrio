@@ -1,0 +1,179 @@
+"""Cliente de inferência multimodal compatível com OpenAI e Gateways Corporativos (Bifrost).
+
+Descrição Técnica & Arquitetura:
+Implementa a comunicação com modelos de linguagem e visão (Gemini 3.7 Flash, Claude, OpenAI)
+através da interface compatível com OpenAI do Gateway Bifrost do IPLANRIO.
+Executa a rasterização em memória das laudas do sub-PDF em imagens JPEG (Base64) utilizando
+PyMuPDF (`fitz`), constrói a mensagem multimodal combinando imagens das laudas e o prompt
+estruturado do sistema, e impõe a validação determinística via JSON Schema com `EsquemaDecisao`.
+Captura a telemetria integral de tokens retornada por `response.usage` (incluindo tokens cacheados).
+
+Fluxo de Dependências:
+- Consumidores Diretos:
+  * `utils/triage.py`: instancia `OpenAILLMClient` para executar as inferências N=1 e N=2.
+- Dependências Diretas:
+  * `utils/providers/base.py`: herda da interface abstrata `BaseLLMClient`.
+  * `utils/schemas.py`: utiliza `EsquemaDecisao` para validação e tipagem da resposta JSON.
+  * `constants.py`: importa o identificador padrão do modelo (`VERTEX_LLM_MODEL`).
+  * PyMuPDF (`fitz`): renderização in-memory das laudas em imagens JPEG.
+  * SDK `openai.OpenAI`: cliente de transporte HTTP com suporte a chamadas multimodais.
+"""
+
+import base64
+
+import httpx
+import pymupdf as fitz
+from openai import OpenAI
+
+from pipelines.rj_smtr__triagem_recursos.constants import VERTEX_LLM_MODEL, obter_env
+from pipelines.rj_smtr__triagem_recursos.helpers.providers.base import BaseLLMClient
+from pipelines.rj_smtr__triagem_recursos.helpers.schemas import EsquemaDecisao
+from pipelines.rj_smtr__triagem_recursos.helpers.windowing import FITZ_LOCK
+
+
+class OpenAILLMClient(BaseLLMClient):
+    """Cliente para OpenAI e proxies compatíveis como Bifrost."""
+
+    def __init__(
+        self,
+        default_model: str | None = None,
+        http_client: httpx.Client | None = None,
+    ) -> None:
+        """Inicializa cliente OpenAI/Bifrost com pool HTTP persistente."""
+        api_key = obter_env("BIFROST_VIRTUAL_KEY") or obter_env("BIFROST_API_KEY") or obter_env("OPENAI_API_KEY")
+        raw_base_url = (
+            obter_env("BIFROST_BASE_URL", "https://bifrost.iplan.dados.rio/openai/v1")
+            or "https://bifrost.iplan.dados.rio/openai/v1"
+        )
+        base_url = (
+            "https://bifrost.iplan.dados.rio/openai/v1"
+            if raw_base_url.rstrip("/") == "https://bifrost.iplan.dados.rio"
+            else raw_base_url
+        )
+        modelo_padrao = default_model or obter_env("LLM_MODEL") or VERTEX_LLM_MODEL
+
+        if not api_key:
+            raise ValueError("Chave de API ausente (defina BIFROST_VIRTUAL_KEY, BIFROST_API_KEY ou OPENAI_API_KEY).")
+
+        super().__init__(api_key=api_key, base_url=base_url, default_model=modelo_padrao)
+
+        self._owns_http_client = http_client is None
+        self._http_client = http_client or httpx.Client(
+            limits=httpx.Limits(
+                max_connections=32,
+                max_keepalive_connections=16,
+                keepalive_expiry=30.0,
+            ),
+            timeout=httpx.Timeout(180.0, connect=5.0),
+        )
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=180.0,
+            max_retries=2,
+            http_client=self._http_client,
+        )
+
+    @property
+    def http_client(self) -> httpx.Client:
+        """Expõe o pool HTTP persistente utilizado pelas chamadas OpenAI/Bifrost."""
+        return self._http_client
+
+    def close(self) -> None:
+        """Fecha o pool HTTP compartilhado se criado por esta instância."""
+        if self._owns_http_client:
+            self._http_client.close()
+
+    def converter_pdf_para_imagens_base64(self, pdf_bytes: bytes, dpi: int = 150) -> list[str]:
+        """Converte páginas de PDF em imagens JPEG serializadas em Base64.
+
+        :param pdf_bytes: Stream de bytes do PDF de entrada.
+        :param dpi: Resolução de rasterização.
+        :returns: Lista de strings em Base64 correspondentes a cada página.
+        """
+        imagens_b64: list[str] = []
+        zoom = dpi / 72.0
+
+        with FITZ_LOCK:
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            try:
+                matriz = fitz.Matrix(zoom, zoom)
+                for pagina in doc:
+                    pix = pagina.get_pixmap(matrix=matriz, alpha=False)
+                    b64_str = base64.b64encode(pix.tobytes("jpeg")).decode("utf-8")
+                    imagens_b64.append(b64_str)
+            finally:
+                doc.close()
+
+        return imagens_b64
+
+    def classificar(
+        self,
+        pdf_bytes: bytes,
+        prompt_sistema: str,
+        modelo: str | None = None,
+        temperature: float = 0.0,
+        reasoning_effort: str = "medium",
+    ) -> tuple[EsquemaDecisao, dict[str, int]]:
+        """Executa a inferência multimodal no gateway OpenAI/Bifrost.
+
+        :param pdf_bytes: Binário do sub-PDF truncado.
+        :param prompt_sistema: Instruções de diretrizes e regras de negócio.
+        :param modelo: Identificador específico do modelo (opcional).
+        :param temperature: Temperatura de amostragem.
+        :param reasoning_effort: Nível de esforço de raciocínio.
+        :returns: Tupla contendo EsquemaDecisao validado e dicionário de uso de tokens.
+        """
+        target_model = modelo or self.default_model
+
+        imagens_b64 = self.converter_pdf_para_imagens_base64(pdf_bytes, dpi=150)
+
+        conteudo_usuario = [
+            {
+                "type": "text",
+                "text": "Analise as páginas do processo de recurso de trânsito em anexo e execute a triagem estrita conforme as instruções.",
+            }
+        ]
+
+        for img_b64 in imagens_b64:
+            conteudo_usuario.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{img_b64}",
+                        "detail": "high",
+                    },
+                }
+            )
+
+        extra_body = {}
+        if reasoning_effort and reasoning_effort != "none":
+            extra_body["reasoning_effort"] = reasoning_effort
+
+        response = self.client.beta.chat.completions.parse(
+            model=target_model,
+            messages=[
+                {"role": "system", "content": prompt_sistema},
+                {"role": "user", "content": conteudo_usuario},
+            ],
+            response_format=EsquemaDecisao,
+            temperature=temperature,
+            extra_body=extra_body if extra_body else None,
+        )
+
+        usage = {"prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0}
+        if response.usage:
+            cached = 0
+            if hasattr(response.usage, "prompt_tokens_details") and response.usage.prompt_tokens_details:
+                cached = getattr(response.usage.prompt_tokens_details, "cached_tokens", 0)
+
+            usage = {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "cached_tokens": cached or 0,
+            }
+
+        parsed = response.choices[0].message.parsed
+        if parsed is None:
+            raise ValueError("OpenAI client returned empty parsed response")
+        return parsed, usage

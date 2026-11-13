@@ -1,0 +1,89 @@
+"""Cliente de inferência multimodal nativo para Google GenAI / Vertex AI SDK.
+
+Descrição Técnica & Arquitetura:
+Implementa a comunicação direta com a API do Google Gemini através do SDK oficial `google-genai`.
+Envia o stream de bytes do PDF como anexo multimodal inline (`application/pdf`), aplica a
+configuração de decodificação estruturada (`response_mime_type="application/json"` com
+`response_schema=EsquemaDecisao`) e extrai a contagem precisa de tokens a partir de
+`response.usage_metadata` (prompt_token_count, candidates_token_count e cached_content_token_count).
+
+Fluxo de Dependências:
+- Consumidores Diretos:
+  * `utils/triage.py`: alternativa nativa ao `OpenAILLMClient` quando `LLM_PROVIDER="google"`.
+- Dependências Diretas:
+  * `utils/providers/base.py`: herda da interface abstrata `BaseLLMClient`.
+  * `utils/schemas.py`: impõe `EsquemaDecisao` como schema Pydantic de resposta do modelo.
+  * SDK `google.genai`: cliente de comunicação nativo do Google Gemini.
+"""
+
+from google import genai
+from google.genai import types
+
+from pipelines.rj_smtr__triagem_recursos.constants import obter_env
+from pipelines.rj_smtr__triagem_recursos.helpers.providers.base import BaseLLMClient
+from pipelines.rj_smtr__triagem_recursos.helpers.schemas import EsquemaDecisao
+
+
+class GoogleLLMClient(BaseLLMClient):
+    """Implementação do cliente para a API do Google Gemini."""
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        default_model: str | None = None,
+    ) -> None:
+        key = api_key or obter_env("GEMINI_API_KEY")
+        if not key:
+            raise ValueError("Chave GEMINI_API_KEY não informada ou ausente no .env.")
+
+        model = default_model or obter_env("LLM_MODEL", "gemini-3.7-flash") or "gemini-3.7-flash"
+        super().__init__(api_key=key, base_url=base_url, default_model=model)
+
+        self.client = genai.Client(api_key=self.api_key)
+
+    def classificar(
+        self,
+        pdf_bytes: bytes,
+        prompt_sistema: str,
+        modelo: str | None = None,
+        temperature: float = 0.0,
+        reasoning_effort: str = "medium",
+    ) -> tuple[EsquemaDecisao, dict[str, int]]:
+        """Envia os bytes do PDF diretamente ao Gemini e valida a saída estruturada.
+
+        :param pdf_bytes: Binário do sub-PDF truncado.
+        :param prompt_sistema: Instruções de diretrizes e regras de negócio.
+        :param modelo: Identificador específico do modelo (opcional).
+        :param temperature: Temperatura de amostragem.
+        :param reasoning_effort: Nível de esforço de raciocínio.
+        :returns: Tupla contendo EsquemaDecisao validado e dicionário de uso de tokens.
+        """
+        model_name = modelo or self.default_model
+
+        response = self.client.models.generate_content(
+            model=model_name,
+            contents=[
+                types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+                "Analise as páginas do processo de recurso de trânsito em anexo e execute a triagem estrita conforme as instruções.",
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=prompt_sistema,
+                response_mime_type="application/json",
+                response_schema=EsquemaDecisao,
+                temperature=temperature,
+            ),
+        )
+
+        prompt_tokens = getattr(response.usage_metadata, "prompt_token_count", 0)
+        completion_tokens = getattr(response.usage_metadata, "candidates_token_count", 0)
+        cached_tokens = getattr(response.usage_metadata, "cached_content_token_count", 0)
+
+        usage = {
+            "prompt_tokens": int(prompt_tokens or 0),
+            "completion_tokens": int(completion_tokens or 0),
+            "cached_tokens": int(cached_tokens or 0),
+        }
+
+        decisao = EsquemaDecisao.model_validate_json(response.text)
+        return decisao, usage
