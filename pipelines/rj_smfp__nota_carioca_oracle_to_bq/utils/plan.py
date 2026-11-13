@@ -6,6 +6,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import (
     AIRBYTE_EXTRACTED_AT,
     CHECKSUM_COLUMNS,
     CLUSTER_KEYS,
+    SOURCE_SCHEMAS,
     TEMP_TABLE_SUFFIX,
 )
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import bigquery
@@ -77,6 +78,20 @@ def default_layout(table_id: str) -> TableLayout:
     :returns: Partição ``DAY`` em ``_airbyte_extracted_at`` e cluster de :func:`cluster_fields_for`.
     """
     return TableLayout("DAY", AIRBYTE_EXTRACTED_AT, cluster_fields_for(table_id))
+
+
+def resolve_source_schema(table_id: str, override: str | None, default: str) -> str:
+    """Escolhe o dono da tabela no Oracle.
+
+    As réplicas de ``SOURCE_SCHEMAS`` têm dono fixo; as demais usam ``override`` (``source_schema``) e, sem ele, o
+    schema do segredo.
+
+    :param table_id: Nome da tabela.
+    :param override: Parâmetro ``source_schema`` da execução, ou ``None``.
+    :param default: Schema do segredo do Oracle.
+    :returns: O dono da tabela.
+    """
+    return SOURCE_SCHEMAS.get(table_id) or override or default
 
 
 def plan_table(config: OracleConfig, source_schema: str, table_id: str, snapshot: Snapshot) -> TablePlan:

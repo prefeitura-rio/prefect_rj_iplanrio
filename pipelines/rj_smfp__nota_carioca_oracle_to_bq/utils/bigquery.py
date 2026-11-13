@@ -183,9 +183,11 @@ def read_checksums(project: str, dataset_id: str, table_id: str, names: tuple[st
     :param project: Projeto da tabela.
     :param dataset_id: Dataset da tabela.
     :param table_id: Tabela temporária.
-    :param names: Colunas de checksum.
-    :returns: Checksum de cada coluna.
+    :param names: Colunas de checksum; vazio nas tabelas sem coluna ``NUMBER``, que só conferem a contagem de linhas.
+    :returns: Checksum de cada coluna; vazio se ``names`` for vazio, sem consultar o BigQuery.
     """
+    if not names:
+        return {}
     sql = render_checksum_select(project, dataset_id, table_id, names)
     (row,) = bigquery.Client(project=project).query(sql).result()
     return parse_checksum_row(dict(row.items()), names)
