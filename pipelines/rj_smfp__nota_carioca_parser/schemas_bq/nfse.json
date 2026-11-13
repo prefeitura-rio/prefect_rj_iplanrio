@@ -1,0 +1,185 @@
+[
+  {
+    "name": "NOTA_NACIONAL",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Id de infNFSe (NFS + chave de 50 dígitos)."
+  },
+  {
+    "name": "CHAVE_ACESSO",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Chave de acesso de 50 dígitos (Id sem o prefixo NFS)."
+  },
+  {
+    "name": "NOTA_FISCAL",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "INSCRICAO_EMITENTE",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "PESSOA_EMITENTE",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "HASH_ID (hex maiúsculo, 64) da pessoa emitente em raw.pessoas; no Oracle é o GUID PESSOA_NACIONAL."
+  },
+  {
+    "name": "DESC_MUNICIPIO_EMISSOR",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "DESC_LOCAL_PRESTACAO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "COD_LOCAL_INCIDENCIA",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "DESC_LOCAL_INCIDENCIA",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "DESC_TRIB_NACIONAL_ISSQN",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "DESC_TRIB_MUNICIPAL_ISSQN",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "DESC_NBS",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "TIPO_EMISSAO_DPS",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "MODO_EMISSAO_DPS",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "COD_STATUS_MSG",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "DATA_VALIDACAO",
+    "type": "DATETIME",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "DPS",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Id da DPS sem o prefixo DPS."
+  },
+  {
+    "name": "VALOR_DED_RED",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "BENEFICIO_NACIONAL",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "CALC_BM",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_BASE_CALCULO",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "ALIQUOTA",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_ISSQN",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_TOTAL_RETENCOES",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VALOR_LIQUIDO",
+    "type": "NUMERIC",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "DESCRICAO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "CHAVE_ACESSO_SUBSTITUIDA",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "DFSE_SEQ",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VERSAO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "VERSAO_APLICACAO",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "AMBIENTE_GERADOR",
+    "type": "INT64",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "NSU",
+    "type": "INT64",
+    "mode": "REQUIRED",
+    "description": "NSU do ADN do documento de origem."
+  },
+  {
+    "name": "DATA_HORA_GERACAO",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE",
+    "description": "DataHoraGeracao do ADN (índice documentos); coluna de partição."
+  },
+  {
+    "name": "VERSAO_PARSER",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Versão do parser que gerou a linha."
+  },
+  {
+    "name": "INGERIDO_EM",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Instante em que o parser gerou a linha."
+  }
+]
