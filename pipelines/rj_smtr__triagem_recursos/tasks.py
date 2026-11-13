@@ -47,7 +47,14 @@ from pipelines.rj_smtr__triagem_recursos.helpers.triage import (
 )
 
 
-@task(name="carregar_artefatos_referencia", cache_policy=NO_CACHE, retries=2, retry_delay_seconds=5)
+@task(
+    name="carregar_artefatos_referencia",
+    cache_policy=NO_CACHE,
+    cache_result_in_memory=False,
+    persist_result=False,
+    retries=2,
+    retry_delay_seconds=5,
+)
 def task_carregar_artefatos_referencia(
     is_local: bool = False,
     arquivo_prompt: str = f"{VERSAO_PROMPT_PADRAO}.txt",
@@ -61,7 +68,14 @@ def task_carregar_artefatos_referencia(
     )
 
 
-@task(name="buscar_processos_pendentes", cache_policy=NO_CACHE, retries=2, retry_delay_seconds=5)
+@task(
+    name="buscar_processos_pendentes",
+    cache_policy=NO_CACHE,
+    cache_result_in_memory=False,
+    persist_result=False,
+    retries=2,
+    retry_delay_seconds=5,
+)
 def task_buscar_processos_pendentes(
     is_local: bool = False,
     fonte_pdf: str = "sei",
@@ -90,6 +104,8 @@ def task_buscar_processos_pendentes(
 @task(
     name="baixar_e_preparar_pdf",
     cache_policy=NO_CACHE,
+    cache_result_in_memory=False,
+    persist_result=False,
     retries=1,
     retry_delay_seconds=3,
     timeout_seconds=180,
@@ -116,6 +132,8 @@ def task_baixar_e_preparar_pdf(
 @task(
     name="triar_pdf_preparado",
     cache_policy=NO_CACHE,
+    cache_result_in_memory=False,
+    persist_result=False,
     retries=2,
     retry_delay_seconds=5,
     timeout_seconds=240,
@@ -146,6 +164,8 @@ def task_triar_pdf_preparado(
 @task(
     name="triar_processo_individual",
     cache_policy=NO_CACHE,
+    cache_result_in_memory=False,
+    persist_result=False,
     retries=2,
     retry_delay_seconds=5,
     timeout_seconds=240,
@@ -181,15 +201,22 @@ def task_triar_processo_individual(
     )
 
 
-@task(name="persistir_lote_resultados", cache_policy=NO_CACHE, retries=2, retry_delay_seconds=5)
+@task(
+    name="persistir_lote_resultados",
+    cache_policy=NO_CACHE,
+    cache_result_in_memory=False,
+    persist_result=False,
+    retries=2,
+    retry_delay_seconds=5,
+)
 def task_persistir_lote_resultados(resultados: list[dict[str, Any]], is_local: bool = False) -> None:
     """Persiste as predicoes e atualiza a fila de trabalho no banco de dados."""
     try:
         logger = get_run_logger()
     except Exception:
-        from prefect.logging import get_logger
+        from prefect_rj_iplanrio.logging import get_logger
 
-        logger = get_logger("toolkit")
+        logger = get_logger(__name__)
     db_url = resolver_banco_url(is_local)
 
     logger.info("Gravando %d resultado(s) no banco de dados...", len(resultados))
@@ -201,7 +228,12 @@ def task_persistir_lote_resultados(resultados: list[dict[str, Any]], is_local: b
         raise
 
 
-@task(name="gerar_sumario_lote", cache_policy=NO_CACHE)
+@task(
+    name="gerar_sumario_lote",
+    cache_policy=NO_CACHE,
+    cache_result_in_memory=False,
+    persist_result=False,
+)
 def task_gerar_sumario_lote(resultados: list[dict[str, Any]]) -> dict[str, Any]:
     """Consolida as metricas operacionais e financeiras da execucao do lote."""
     return gerar_sumario_lote(resultados)

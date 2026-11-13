@@ -28,12 +28,14 @@ Fluxo de Dependências:
 import json
 import re
 import string
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
+
 from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
@@ -119,6 +121,45 @@ def buscar_configuracao_calibracao_ativa(db_url: str) -> dict[str, Any]:
         conn.close()
 
 
+def _parse_data_autuacao(valor: Any) -> date | None:
+    """Converte data textual vinda do SEI (ex.: DD/MM/AAAA ou YYYY-MM-DD) para `date`."""
+    if isinstance(valor, datetime):
+        return valor.date()
+    if isinstance(valor, date):
+        return valor
+    if not valor:
+        return None
+    bruto = str(valor).strip()
+    if not bruto:
+        return None
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d/%m/%Y %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(bruto[:19], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _possui_coluna_protocolo_documento(cursor: Any) -> bool:
+    """Verifica se `processos_administrativos.protocolo_documento_sei` ja existe no schema atual."""
+    cursor.execute(
+        "SELECT 1 FROM information_schema.columns "
+        "WHERE table_schema = current_schema() "
+        "  AND table_name = %s "
+        "  AND column_name = %s",
+        (TABELA_PROCESSOS, "protocolo_documento_sei"),
+    )
+    return cursor.fetchone() is not None
+
+
+def _filtrar_ja_triados_cursor(cursor: Any, query: str, numeros_processos_sei: list[str]) -> set[str]:
+    """Consulta no cursor atual quais numeros SEI ja constam como CONCLUIDO_IA."""
+    if not numeros_processos_sei:
+        return set()
+    cursor.execute(query, (numeros_processos_sei, StatusProcessamento.CONCLUIDO_IA.value))
+    return {str(row[0]) for row in cursor.fetchall()}
+
+
 def filtrar_processos_ja_triados(db_url: str, numeros_processos_sei: list[str]) -> list[str]:
     """Retorna a lista de números SEI que já foram triados (status CONCLUIDO_IA).
 
@@ -138,11 +179,7 @@ def filtrar_processos_ja_triados(db_url: str, numeros_processos_sei: list[str]) 
     conn = psycopg2.connect(db_url)
     try:
         with conn.cursor() as cursor:
-            cursor.execute(
-                query,
-                (numeros_processos_sei, StatusProcessamento.CONCLUIDO_IA.value),
-            )
-            return [row[0] for row in cursor.fetchall()]
+            return list(_filtrar_ja_triados_cursor(cursor, query, numeros_processos_sei))
     finally:
         conn.close()
 
@@ -206,80 +243,95 @@ def buscar_processos_para_triagem(
         conn.close()
 
 
+def _montar_tupla_predicao(r: dict[str, Any]) -> tuple[Any, ...]:
+    """Extrai a tupla ordenada de inserção em `predicoes_pipeline` para um resultado válido."""
+    sinais = r.get("sinais_epistemicos", {})
+    auditoria = r.get("auditoria_sistema", {})
+    return (
+        r["processo_id"],
+        r.get("calibracao_id"),
+        r.get("modelo_llm", "vertex/gemini-3.7-flash"),
+        r.get("versao_prompt", "v4_baseline"),
+        r.get("id_documento_sei"),
+        r["n1_classe_predita"],
+        r["n1_encaminhamento"],
+        r["n1_cot_justificativa"],
+        r["n1_lauda_evidencia"],
+        r.get("n1_frase_citada", ""),
+        r.get("n1_tipo_citacao", "FATO_DECLARADO"),
+        float(sinais.get("fuzz_ratio", 0.0)),
+        float(sinais.get("token_containment", 0.0)),
+        float(sinais.get("exact_match", 0.0)),
+        float(sinais.get("adversarial_density", 0.0)),
+        float(sinais.get("sim_centroid_pred", 0.0)),
+        converter_valor_para_sql_null(sinais.get("mahalanobis_dist")),
+        float(sinais.get("is_manuscrito", 0.0)),
+        float(sinais.get("tesseract_mean_conf", 0.0)),
+        auditoria.get("prefixo_auto"),
+        auditoria.get("codigo_status"),
+        auditoria.get("fase_descricao"),
+        bool(auditoria.get("possui_espelho_nada_consta", True)),
+        float(r["probabilidade_calibrada"]),
+        r["conjunto_conformal"],
+        int(r["tamanho_conjunto_conformal"]),
+        bool(r["estagio2_executado"]),
+        r.get("n2_classe_predita"),
+        r.get("n2_cot_justificativa"),
+        converter_valor_para_sql_null(r.get("n2_delta_cot_dispersao")),
+        converter_valor_para_sql_null(r.get("n2_log_odds_atualizado")),
+        float(r["probabilidade_final"]),
+        r["rota_execucao"],
+        r["faixa_operacional"],
+        int(r.get("tokens_prompt_total", 0)),
+        int(r.get("tokens_completion", 0)),
+        int(r.get("tokens_cached", 0)),
+        float(r.get("custo_real_usd", r.get("custo_estimado_usd", 0.0))),
+        float(r.get("custo_sem_cache_usd", 0.0)),
+        float(r.get("economia_cache_usd", 0.0)),
+        float(r.get("custo_real_usd", r.get("custo_estimado_usd", 0.0))),
+        float(r.get("tempo_execucao_s", 0.0)),
+    )
+
+
+def _extrair_mensagem_erro(resultado: dict[str, Any]) -> str:
+    """Obtém mensagem resumida de erro para gravação em `fila_trabalho.ultima_mensagem_erro`."""
+    auditoria = resultado.get("auditoria_sistema") or {}
+    bruto = str(auditoria.get("erro_detalhado") or resultado.get("n1_cot_justificativa") or "").strip()
+    return bruto[:1000]
+
+
 def persistir_lote_resultados_ia(db_url: str, resultados: list[dict[str, Any]]) -> None:
-    """Persiste as predições, sinais epistêmicos e auditoria de sistema no PostgreSQL.
+    """Persiste predições válidas e atualiza documentos/fila (sem predição falsa em ERRO_PROCESSAMENTO).
 
     :param db_url: URL de conexão do PostgreSQL.
-    :param resultados: Lista de predições consolidadas pelo pipeline.
+    :param resultados: Lista de predições e erros consolidados pelo pipeline.
     :raises Exception: Propaga exceções de persistência com rollback atômico.
     """
     if not resultados:
         return
+
+    resultados_sucesso = [
+        r for r in resultados if r.get("status_fila") != StatusProcessamento.ERRO_PROCESSAMENTO.value
+    ]
+    resultados_erro = [
+        r for r in resultados if r.get("status_fila") == StatusProcessamento.ERRO_PROCESSAMENTO.value
+    ]
+
+    valores_predicoes = [_montar_tupla_predicao(r) for r in resultados_sucesso]
 
     query_predicoes = load_query(
         str(PIPELINE_DIR / "flow.py"),
         "insert_predicoes",
         tabela_predicoes=TABELA_PREDICOES,
     )
-
-    valores = []
-    processos_ids = []
-
-    for r in resultados:
-        processos_ids.append(r["processo_id"])
-        sinais = r.get("sinais_epistemicos", {})
-        auditoria = r.get("auditoria_sistema", {})
-
-        valores.append(
-            (
-                r["processo_id"],
-                r.get("calibracao_id"),
-                r.get("modelo_llm", "vertex/gemini-3.7-flash"),
-                r.get("versao_prompt", "v4_baseline"),
-                r.get("id_documento_sei"),
-                r["n1_classe_predita"],
-                r["n1_encaminhamento"],
-                r["n1_cot_justificativa"],
-                r["n1_lauda_evidencia"],
-                r.get("n1_frase_citada", ""),
-                r.get("n1_tipo_citacao", "FATO_DECLARADO"),
-                float(sinais.get("fuzz_ratio", 0.0)),
-                float(sinais.get("token_containment", 0.0)),
-                float(sinais.get("exact_match", 0.0)),
-                float(sinais.get("adversarial_density", 0.0)),
-                float(sinais.get("sim_centroid_pred", 0.0)),
-                converter_valor_para_sql_null(sinais.get("mahalanobis_dist")),
-                float(sinais.get("is_manuscrito", 0.0)),
-                float(sinais.get("tesseract_mean_conf", 0.0)),
-                auditoria.get("prefixo_auto"),
-                auditoria.get("codigo_status"),
-                auditoria.get("fase_descricao"),
-                bool(auditoria.get("possui_espelho_nada_consta", True)),
-                float(r["probabilidade_calibrada"]),
-                r["conjunto_conformal"],
-                int(r["tamanho_conjunto_conformal"]),
-                bool(r["estagio2_executado"]),
-                r.get("n2_classe_predita"),
-                r.get("n2_cot_justificativa"),
-                converter_valor_para_sql_null(r.get("n2_delta_cot_dispersao")),
-                converter_valor_para_sql_null(r.get("n2_log_odds_atualizado")),
-                float(r["probabilidade_final"]),
-                r["rota_execucao"],
-                r["faixa_operacional"],
-                int(r.get("tokens_prompt_total", 0)),
-                int(r.get("tokens_completion", 0)),
-                int(r.get("tokens_cached", 0)),
-                float(r.get("custo_real_usd", r.get("custo_estimado_usd", 0.0))),
-                float(r.get("custo_sem_cache_usd", 0.0)),
-                float(r.get("economia_cache_usd", 0.0)),
-                float(r.get("custo_real_usd", r.get("custo_estimado_usd", 0.0))),
-                float(r.get("tempo_execucao_s", 0.0)),
-            )
-        )
-
     query_update_fila = load_query(
         str(PIPELINE_DIR / "flow.py"),
         "update_status_fila",
+        tabela_fila=TABELA_FILA,
+    )
+    query_update_erro_fila = load_query(
+        str(PIPELINE_DIR / "flow.py"),
+        "update_erro_fila",
         tabela_fila=TABELA_FILA,
     )
     query_update_doc = load_query(
@@ -287,44 +339,64 @@ def persistir_lote_resultados_ia(db_url: str, resultados: list[dict[str, Any]]) 
         "update_processo_documento",
         tabela_processos=TABELA_PROCESSOS,
     )
+    query_update_proto = load_query(
+        str(PIPELINE_DIR / "flow.py"),
+        "update_processo_protocolo_documento",
+        tabela_processos=TABELA_PROCESSOS,
+    )
+
+    docs_por_proc: dict[str, str] = {}
+    protos_por_proc: dict[str, str] = {}
+    for r in resultados:
+        proc_id = r.get("processo_id")
+        if not proc_id:
+            continue
+        pid_str = str(proc_id)
+        doc_raw = str(r.get("id_documento_sei") or "").strip()
+        if doc_raw:
+            primeiro_doc = doc_raw.split(",")[0].strip()[:64]
+            if primeiro_doc:
+                docs_por_proc.setdefault(pid_str, primeiro_doc)
+        proto_raw = str(r.get("protocolo_documento_sei") or "").strip()[:64]
+        if proto_raw:
+            protos_por_proc.setdefault(pid_str, proto_raw)
+
+    docs_para_atualizar = list(docs_por_proc.items())
+    protos_para_atualizar = list(protos_por_proc.items())
+
+    ids_sucesso = list({str(r["processo_id"]) for r in resultados_sucesso if r.get("processo_id")})
+    erros_por_proc: dict[str, str] = {}
+    for r in resultados_erro:
+        if r.get("processo_id"):
+            erros_por_proc[str(r["processo_id"])] = _extrair_mensagem_erro(r)
+    erros_fila = [
+        (pid, StatusProcessamento.ERRO_PROCESSAMENTO.value, msg) for pid, msg in erros_por_proc.items()
+    ]
 
     conn = psycopg2.connect(db_url)
     try:
         with conn.cursor() as cursor:
-            execute_values(cursor, query_predicoes, valores)
+            if valores_predicoes:
+                execute_values(cursor, query_predicoes, valores_predicoes)
 
-            for r in resultados:
-                doc_raw = str(r.get("id_documento_sei") or "").strip()
-                if doc_raw and r.get("processo_id"):
-                    primeiro_doc = doc_raw.split(",")[0].strip()
-                    if primeiro_doc:
-                        cursor.execute(query_update_doc, (primeiro_doc, str(r["processo_id"])))
+            if docs_para_atualizar:
+                execute_values(cursor, query_update_doc, docs_para_atualizar)
 
-            ids_sucesso = [
-                r["processo_id"]
-                for r in resultados
-                if r.get("status_fila") != StatusProcessamento.ERRO_PROCESSAMENTO.value
-            ]
-            ids_erro = [
-                r["processo_id"]
-                for r in resultados
-                if r.get("status_fila") == StatusProcessamento.ERRO_PROCESSAMENTO.value
-            ]
+            if protos_para_atualizar and _possui_coluna_protocolo_documento(cursor):
+                execute_values(cursor, query_update_proto, protos_para_atualizar)
 
             if ids_sucesso:
                 cursor.execute(
                     query_update_fila,
                     (StatusProcessamento.CONCLUIDO_IA.value, ids_sucesso),
                 )
-            if ids_erro:
-                cursor.execute(
-                    query_update_fila,
-                    (StatusProcessamento.ERRO_PROCESSAMENTO.value, ids_erro),
-                )
+            if erros_fila:
+                execute_values(cursor, query_update_erro_fila, erros_fila)
         conn.commit()
         logger.info(
-            "Gravados %d resultados no banco de triagem com sucesso.",
-            len(resultados),
+            "Lote persistido no banco: %d sucesso(s), %d erro(s) de processamento.",
+            len(resultados_sucesso),
+            len(resultados_erro),
         )
     except Exception as exc:
         conn.rollback()
@@ -343,6 +415,7 @@ def registrar_processo_e_enfileirar(
     id_documento_sei: str | None,
     numero_auto_infracao: str,
     origem_lote: str,
+    data_autuacao: date | None = None,
 ) -> str:
     """Insere ou atualiza processo em `processos_administrativos` e garante entrada na fila."""
     doc_principal = id_documento_sei.split(",")[0].strip() if id_documento_sei else None
@@ -354,6 +427,7 @@ def registrar_processo_e_enfileirar(
             str(doc_principal)[:64] if doc_principal else None,
             str(numero_auto_infracao or "AUTO_SEI")[:20],
             origem_lote,
+            data_autuacao,
         ),
     )
     row = cursor.fetchone()
@@ -458,6 +532,7 @@ def buscar_processos_para_triagem_ou_fallback(
                         id_documento_sei=str(id_doc) if id_doc else None,
                         numero_auto_infracao=auto,
                         origem_lote=origem_lote_val,
+                        data_autuacao=_parse_data_autuacao(extra.get("data_autuacao")),
                     )
 
                 if not p_id:
@@ -490,70 +565,109 @@ def buscar_processos_para_triagem_ou_fallback(
     if fonte_pdf == "sei":
         if cliente_sei is None:
             raise RuntimeError("cliente_sei obrigatório quando fonte_pdf='sei'.")
-        logger.info("Listando processos diretamente da caixa da JARI no SEI...")
-        processos_caixa = cliente_sei.listar_processos_caixa()
-        if not processos_caixa:
-            logger.info("Caixa da JARI no SEI vazia.")
-            return []
+        logger.info("Listando processos da caixa da JARI no SEI com paginação (limite=%d)...", limite)
 
-        numeros_sei = [str(p.get("numero_processo_sei") or p.get("numero_processo")) for p in processos_caixa]
-        ja_triados = set(filtrar_processos_ja_triados(db_url, numeros_sei))
+        if hasattr(cliente_sei, "iterar_paginas_caixa"):
+            paginas_sei = cliente_sei.iterar_paginas_caixa(limit=min(100, max(20, limite)))
+        else:
+            paginas_sei = [cliente_sei.listar_processos_caixa()]
 
-        processos_pendentes = [
-            p
-            for p in processos_caixa
-            if str(p.get("numero_processo_sei") or p.get("numero_processo")) not in ja_triados
-        ]
-        logger.info(
-            "SEI: %d processo(s) na caixa | %d já triado(s) | %d a triar.",
-            len(processos_caixa),
-            len(ja_triados),
-            len(processos_pendentes),
+        query_ja_triados = load_query(
+            str(PIPELINE_DIR / "flow.py"),
+            "filtrar_processos_ja_triados",
+            tabela_processos=TABELA_PROCESSOS,
+            tabela_fila=TABELA_FILA,
+        )
+        query_upsert_proc = load_query(
+            str(PIPELINE_DIR / "flow.py"),
+            "upsert_processo_sei",
+            tabela_processos=TABELA_PROCESSOS,
+        )
+        query_enfileirar = load_query(
+            str(PIPELINE_DIR / "flow.py"),
+            "enfileirar_processo",
+            tabela_fila=TABELA_FILA,
         )
 
+        total_lidos = 0
+        total_ja_triados = 0
+        vistos_sei: set[str] = set()
         processos_sincronizados: list[dict[str, Any]] = []
+
         conn = psycopg2.connect(db_url)
         try:
-            query_upsert_proc = load_query(
-                str(PIPELINE_DIR / "flow.py"),
-                "upsert_processo_sei",
-                tabela_processos=TABELA_PROCESSOS,
-            )
-            query_enfileirar = load_query(
-                str(PIPELINE_DIR / "flow.py"),
-                "enfileirar_processo",
-                tabela_fila=TABELA_FILA,
-            )
-
             with conn.cursor() as cursor:
-                for p in processos_pendentes[:limite]:
-                    num_sei = str(p.get("numero_processo_sei") or p.get("numero_processo"))
-                    id_proc = str(p.get("id_procedimento_sei") or "")
-                    id_doc = str(p.get("id_documento_sei") or "")
-
-                    proc_id = registrar_processo_e_enfileirar(
-                        cursor=cursor,
-                        query_upsert_proc=query_upsert_proc,
-                        query_enfileirar=query_enfileirar,
-                        numero_sei=num_sei,
-                        id_procedimento_sei=id_proc or None,
-                        id_documento_sei=id_doc or None,
-                        numero_auto_infracao="AUTO_SEI",
-                        origem_lote=origem_lote_val,
+                for num_pagina, pagina_processos in enumerate(paginas_sei, start=1):
+                    if not pagina_processos:
+                        break
+                    total_lidos += len(pagina_processos)
+                    numeros_pagina = [
+                        str(p.get("numero_processo_sei") or p.get("numero_processo") or "").strip()
+                        for p in pagina_processos
+                    ]
+                    ja_triados = _filtrar_ja_triados_cursor(
+                        cursor,
+                        query_ja_triados,
+                        [n for n in numeros_pagina if n],
                     )
+                    total_ja_triados += len(ja_triados)
 
-                    p_item = dict(p)
-                    p_item["processo_id"] = proc_id
-                    p_item["id_documento_sei"] = id_doc or None
-                    p_item["numero_auto_infracao"] = "AUTO_SEI"
-                    p_item["nome_arquivo_origem"] = f"{num_sei.replace('/', '_')}.pdf"
-                    processos_sincronizados.append(p_item)
+                    for p in pagina_processos:
+                        num_sei = str(p.get("numero_processo_sei") or p.get("numero_processo") or "").strip()
+                        if not num_sei or num_sei in ja_triados or num_sei in vistos_sei:
+                            continue
+                        vistos_sei.add(num_sei)
+
+                        id_proc = str(p.get("id_procedimento_sei") or "")
+                        id_doc = str(p.get("id_documento_sei") or "")
+                        data_aut = _parse_data_autuacao(p.get("data_autuacao"))
+
+                        proc_id = registrar_processo_e_enfileirar(
+                            cursor=cursor,
+                            query_upsert_proc=query_upsert_proc,
+                            query_enfileirar=query_enfileirar,
+                            numero_sei=num_sei,
+                            id_procedimento_sei=id_proc or None,
+                            id_documento_sei=id_doc or None,
+                            numero_auto_infracao="AUTO_SEI",
+                            origem_lote=origem_lote_val,
+                            data_autuacao=data_aut,
+                        )
+
+                        p_item = dict(p)
+                        p_item["processo_id"] = proc_id
+                        p_item["id_documento_sei"] = id_doc or None
+                        p_item["numero_auto_infracao"] = "AUTO_SEI"
+                        p_item["nome_arquivo_origem"] = f"{num_sei.replace('/', '_')}.pdf"
+                        processos_sincronizados.append(p_item)
+
+                        if len(processos_sincronizados) >= limite:
+                            break
+
+                    logger.info(
+                        "SEI página %d: %d lido(s) | %d já triado(s) | %d selecionado(s)/%d.",
+                        num_pagina,
+                        len(pagina_processos),
+                        len(ja_triados),
+                        len(processos_sincronizados),
+                        limite,
+                    )
+                    if len(processos_sincronizados) >= limite:
+                        break
             conn.commit()
         except Exception:
             conn.rollback()
             raise
         finally:
             conn.close()
+
+        if not processos_sincronizados:
+            logger.info(
+                "SEI: %d processo(s) inspecionado(s) (%d já triado(s)); nenhum novo pendente.",
+                total_lidos,
+                total_ja_triados,
+            )
+            return []
 
         return processos_sincronizados
 

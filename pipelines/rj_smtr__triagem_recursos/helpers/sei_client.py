@@ -4,9 +4,9 @@ Provides streaming downloads with strict memory limits, token auto-renewal,
 retries with backoff on 502/503/504, and process listing for JARI triage.
 """
 
-import os
 import threading
 import time
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -14,6 +14,9 @@ from typing import Any, Self
 
 import httpx
 import pymupdf as fitz
+
+from pipelines.rj_smtr__triagem_recursos.constants import obter_env
+from pipelines.rj_smtr__triagem_recursos.helpers.windowing import FITZ_LOCK
 from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
@@ -34,14 +37,17 @@ class SeiConfig:
     id_unidade: str = "110000001"
     orgao: int = 12
     timeout: int = 60
+    verify_ssl: bool = True
 
     @classmethod
     def from_env(cls, is_local: bool = False) -> "SeiConfig":
         """Carrega configuração SEI das variáveis de ambiente, exigindo credenciais em cloud/staging."""
-        env_base_url = (os.getenv("SEI_API_BASE_URL") or "").strip()
-        env_usuario = (os.getenv("SEI_SERVICE_USER") or "").strip()
-        env_senha = (os.getenv("SEI_SERVICE_PASSWORD") or "").strip()
-        env_unidade = (os.getenv("SEI_ID_UNIDADE") or "").strip()
+        env_base_url = obter_env("SEI_API_BASE_URL") or ""
+        env_usuario = obter_env("SEI_SERVICE_USER") or ""
+        env_senha = obter_env("SEI_SERVICE_PASSWORD") or ""
+        env_unidade = obter_env("SEI_ID_UNIDADE") or ""
+        env_verify_raw = (obter_env("SEI_VERIFY_SSL", "true") or "true").lower()
+        env_verify_ssl = env_verify_raw not in ("false", "0", "no", "disabled")
 
         if not is_local:
             ausentes = [
@@ -64,8 +70,9 @@ class SeiConfig:
             usuario=env_usuario or "usuario_servico",
             senha=env_senha or "senha_servico",
             id_unidade=env_unidade or "110000001",
-            orgao=int(os.getenv("SEI_ORGAO", "12")),
-            timeout=int(os.getenv("SEI_TIMEOUT", "60")),
+            orgao=int(obter_env("SEI_ORGAO", "12") or "12"),
+            timeout=int(obter_env("SEI_TIMEOUT", "60") or "60"),
+            verify_ssl=env_verify_ssl,
         )
 
 
@@ -84,7 +91,7 @@ class ModWsseiClient:
         if config is not None:
             self.config = config
         elif base_url is not None:
-            cfg_env = SeiConfig.from_env(is_local=bool(is_local or os.getenv("SEI_SERVICE_USER") is None))
+            cfg_env = SeiConfig.from_env(is_local=bool(is_local or obter_env("SEI_SERVICE_USER") is None))
             self.config = SeiConfig(
                 base_url=base_url,
                 usuario=cfg_env.usuario,
@@ -92,6 +99,7 @@ class ModWsseiClient:
                 id_unidade=cfg_env.id_unidade,
                 orgao=cfg_env.orgao,
                 timeout=cfg_env.timeout,
+                verify_ssl=cfg_env.verify_ssl,
             )
         else:
             self.config = SeiConfig.from_env(is_local=is_local)
@@ -123,6 +131,7 @@ class ModWsseiClient:
                         keepalive_expiry=30.0,
                     ),
                     timeout=httpx.Timeout(float(self.config.timeout), connect=5.0),
+                    verify=self.config.verify_ssl,
                 )
             return self._http_client
 
@@ -259,20 +268,21 @@ class ModWsseiClient:
 
         raise RuntimeError("Inalcancavel")
 
-    def listar_processos_caixa(
+    def _buscar_pagina_caixa(
         self,
         apenas_meus: bool = False,
         usuario_id: int | str | None = None,
         limit: int = 100,
         start: int = 0,
-    ) -> list[dict[str, Any]]:
-        """List processes currently present in the unit inbox with pagination."""
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Fetch a single inbox page from mod-wssei and return (processes, reported_total)."""
         endpoint = "/processo/listar"
         params: dict[str, Any] = {
             "limit": limit,
             "start": start,
-            "apenasMeus": "S" if apenas_meus else "",
         }
+        if apenas_meus:
+            params["apenasMeus"] = "S"
         if usuario_id is not None:
             params["idUsuarioAtribuido"] = str(usuario_id)
 
@@ -284,27 +294,109 @@ class ModWsseiClient:
         if not data.get("sucesso"):
             raise RuntimeError(f"Erro retornado pelo SEI ao listar processos: {data.get('mensagem')}")
 
-        processos_brutos = data.get("data", {}).get("processos", [])
-        lista_processos = []
+        raw_data = data.get("data")
+        if isinstance(raw_data, dict):
+            processos_brutos = raw_data.get("processos", []) or []
+            total_raw = (
+                data.get("total")
+                or data.get("total_itens")
+                or raw_data.get("total")
+                or raw_data.get("total_itens")
+            )
+        elif isinstance(raw_data, list):
+            processos_brutos = raw_data
+            total_raw = data.get("total") or data.get("total_itens")
+        else:
+            processos_brutos = []
+            total_raw = 0
 
+        try:
+            total_itens = int(total_raw or 0)
+        except (TypeError, ValueError):
+            total_itens = 0
+
+        lista_processos: list[dict[str, Any]] = []
         for p in processos_brutos:
+            atributos = p.get("atributos") if isinstance(p.get("atributos"), dict) else {}
+            id_proc = p.get("idProcedimento") or p.get("id") or atributos.get("idProcedimento")
+            proto_fmt = str(p.get("protocoloFormatado") or atributos.get("protocoloFormatado") or "").strip()
+            usuario_atrib = p.get("usuarioAtribuido") or atributos.get("usuarioAtribuido")
+            id_doc = p.get("idDocumento") or atributos.get("idDocumento")
+
             proc_formatado = {
-                "processo_id": p.get("idProcedimento"),
-                "id_procedimento_sei": str(p.get("idProcedimento", "")),
-                "numero_processo_sei": p.get("protocoloFormatado", ""),
-                "numero_processo": p.get("protocoloFormatado", ""),
-                "id_documento_sei": p.get("idDocumento"),
-                "id_documento": p.get("idDocumento"),
-                "sigla_unidade": p.get("siglaUnidade", "10_JARI"),
-                "usuario_atribuido_sigla": p.get("usuarioAtribuido", {}).get("sigla")
-                if isinstance(p.get("usuarioAtribuido"), dict)
+                "processo_id": id_proc,
+                "id_procedimento_sei": str(id_proc or ""),
+                "numero_processo_sei": proto_fmt,
+                "numero_processo": proto_fmt,
+                "id_documento_sei": id_doc,
+                "id_documento": id_doc,
+                "sigla_unidade": p.get("siglaUnidade") or atributos.get("siglaUnidade") or "10_JARI",
+                "usuario_atribuido_sigla": usuario_atrib.get("sigla")
+                if isinstance(usuario_atrib, dict)
                 else None,
-                "data_autuacao": p.get("dataGeracao"),
+                "data_autuacao": p.get("dataGeracao") or atributos.get("dataGeracao"),
                 "dados_brutos": p,
             }
             lista_processos.append(proc_formatado)
 
-        return lista_processos
+        return lista_processos, total_itens
+
+    def listar_processos_caixa(
+        self,
+        apenas_meus: bool = False,
+        usuario_id: int | str | None = None,
+        limit: int = 100,
+        start: int = 0,
+    ) -> list[dict[str, Any]]:
+        """List processes from a single page of the unit inbox."""
+        processos, _ = self._buscar_pagina_caixa(
+            apenas_meus=apenas_meus,
+            usuario_id=usuario_id,
+            limit=limit,
+            start=start,
+        )
+        return processos
+
+    def iterar_paginas_caixa(
+        self,
+        apenas_meus: bool = False,
+        usuario_id: int | str | None = None,
+        limit: int = 100,
+        start: int = 0,
+        max_paginas: int = 500,
+    ) -> Iterator[list[dict[str, Any]]]:
+        """Yield deduplicated inbox pages cleanly until exhausted or max_paginas is reached."""
+        vistos: set[str] = set()
+        tam_pagina = max(1, limit)
+
+        for pagina in range(start, start + max_paginas):
+            itens_pagina, total_itens = self._buscar_pagina_caixa(
+                apenas_meus=apenas_meus,
+                usuario_id=usuario_id,
+                limit=tam_pagina,
+                start=pagina,
+            )
+            if not itens_pagina:
+                break
+
+            novos: list[dict[str, Any]] = []
+            for item in itens_pagina:
+                chave = str(item.get("id_procedimento_sei") or item.get("numero_processo_sei") or "")
+                if chave and chave in vistos:
+                    continue
+                if chave:
+                    vistos.add(chave)
+                novos.append(item)
+
+            if not novos:
+                break
+
+            yield novos
+
+            if total_itens > 0 and len(vistos) >= total_itens:
+                break
+            if total_itens == 0 and len(itens_pagina) < tam_pagina:
+                break
 
     def consultar_processo_completo(self, protocolo_ou_id: str) -> dict[str, Any]:
         """Query full process details and document tree from SEI."""
@@ -342,17 +434,25 @@ class ModWsseiClient:
 
         lista_docs = []
         for d in documentos_brutos:
-            atributos = d.get("atributos", {})
+            atributos = d.get("atributos", {}) or {}
+            status_doc = atributos.get("status", {}) if isinstance(atributos.get("status"), dict) else {}
             id_doc = str(d.get("idProtocolo") or d.get("id") or atributos.get("idProtocolo") or "")
+            proto_doc = str(
+                atributos.get("protocoloFormatado")
+                or d.get("protocoloFormatado")
+                or d.get("documentoFormatado")
+                or ""
+            ).strip()
             lista_docs.append(
                 {
                     "id_documento_sei": id_doc,
                     "id_procedimento_sei": str(id_procedimento),
-                    "protocolo_formatado": str(atributos.get("protocoloFormatado", "")),
+                    "protocolo_formatado": proto_doc,
                     "tipo_documento": str(atributos.get("tipoDocumento", "")),
                     "mime_type": str(atributos.get("mimeType", "")),
                     "nome_composto": str(atributos.get("nomeComposto", "")),
                     "tipo": str(atributos.get("tipo", "")),
+                    "cancelado": str(status_doc.get("documentoCancelado", "")).upper() == "S",
                     "dados_brutos": d,
                 }
             )
@@ -508,8 +608,8 @@ class ModWsseiClient:
             )
             return id_documento, None
 
-    def obter_pdf_recurso_processo(self, id_procedimento: int | str) -> tuple[str, bytes]:
-        """Locate citizen appeal documents and return consolidated binary PDF bytes in RAM."""
+    def obter_pdf_recurso_com_metadados(self, id_procedimento: int | str) -> tuple[str, str | None, bytes]:
+        """Locate citizen appeal documents and return (ids_csv, protocolo_documento_sei, pdf_bytes)."""
         documentos = self.listar_documentos_processo(id_procedimento)
 
         candidatos: list[dict[str, Any]] = []
@@ -529,16 +629,25 @@ class ModWsseiClient:
             ):
                 candidatos.append(d)
 
+        nao_cancelados = [d for d in candidatos if not d.get("cancelado")]
+        if nao_cancelados:
+            candidatos = nao_cancelados
+
         if not candidatos and documentos:
-            candidatos = [documentos[0]]
+            candidatos = [d for d in documentos if not d.get("cancelado")] or [documentos[0]]
 
         if not candidatos:
             raise FileNotFoundError(f"Nenhum documento anexado localizado para o processo {id_procedimento}.")
 
+        proto_por_id = {
+            str(d["id_documento_sei"]): str(d.get("protocolo_formatado") or "").strip() or None
+            for d in candidatos
+        }
+
         if len(candidatos) == 1:
             id_doc = str(candidatos[0]["id_documento_sei"])
             pdf_bytes = self.baixar_documento(id_doc)
-            return id_doc, pdf_bytes
+            return id_doc, proto_por_id.get(id_doc), pdf_bytes
 
         # Multiplos anexos: baixa em streaming paralelo (pool limitado) e une na ordem via PyMuPDF
         logger.info(
@@ -552,29 +661,42 @@ class ModWsseiClient:
                 executor.map(lambda id_d: self.baixar_anexo_seguro(id_d, id_procedimento), ids_candidatos)
             )
 
-        doc_consolidado = fitz.open()
         ids_docs_baixados: list[str] = []
-
-        for id_d, conteudo in anexos_baixados:
-            if conteudo is None:
-                continue
+        with FITZ_LOCK:
+            doc_consolidado = fitz.open()
             try:
-                doc_parte = fitz.open(stream=conteudo, filetype="pdf")
-                doc_consolidado.insert_pdf(doc_parte)
-                doc_parte.close()
-                ids_docs_baixados.append(id_d)
-            except Exception as exc:
-                logger.warning(
-                    "Falha ao unir anexo %s do processo %s: %s",
-                    id_d,
-                    id_procedimento,
-                    exc,
-                )
+                for id_d, conteudo in anexos_baixados:
+                    if conteudo is None:
+                        continue
+                    try:
+                        doc_parte = fitz.open(stream=conteudo, filetype="pdf")
+                        try:
+                            doc_consolidado.insert_pdf(doc_parte)
+                        finally:
+                            doc_parte.close()
+                        ids_docs_baixados.append(id_d)
+                    except Exception as exc:
+                        logger.warning(
+                            "Falha ao unir anexo %s do processo %s: %s",
+                            id_d,
+                            id_procedimento,
+                            exc,
+                        )
 
-        if len(doc_consolidado) == 0:
-            doc_consolidado.close()
-            raise RuntimeError(f"Nenhum PDF valido pode ser baixado para o processo {id_procedimento}.")
+                if len(doc_consolidado) == 0:
+                    raise RuntimeError(f"Nenhum PDF valido pode ser baixado para o processo {id_procedimento}.")
 
-        pdf_bytes = doc_consolidado.tobytes(garbage=4, deflate=True)
-        doc_consolidado.close()
-        return ",".join(ids_docs_baixados), pdf_bytes
+                pdf_bytes = doc_consolidado.tobytes(garbage=4, deflate=True)
+            finally:
+                doc_consolidado.close()
+
+        proto_principal = next(
+            (proto_por_id.get(id_d) for id_d in ids_docs_baixados if proto_por_id.get(id_d)),
+            None,
+        )
+        return ",".join(ids_docs_baixados), proto_principal, pdf_bytes
+
+    def obter_pdf_recurso_processo(self, id_procedimento: int | str) -> tuple[str, bytes]:
+        """Locate citizen appeal documents and return consolidated binary PDF bytes in RAM."""
+        ids_csv, _, pdf_bytes = self.obter_pdf_recurso_com_metadados(id_procedimento)
+        return ids_csv, pdf_bytes

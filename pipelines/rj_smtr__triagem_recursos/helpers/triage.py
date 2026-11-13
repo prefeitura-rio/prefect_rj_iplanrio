@@ -35,15 +35,16 @@ Fluxo de Dependências:
   * `utils/cost_analyzer.py`: apura o custo de tokens em dólares e o valor economizado com cache.
 """
 
-import os
 import threading
 import time
 from collections import deque
 from collections.abc import Callable, Iterable
-from datetime import datetime
+from contextlib import nullcontext
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 import polars as pl
+
 from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
@@ -60,6 +61,7 @@ from pipelines.rj_smtr__triagem_recursos.constants import (
     FaixaOperacional,
     RotaExecucao,
     StatusProcessamento,
+    obter_env,
 )
 from pipelines.rj_smtr__triagem_recursos.helpers.cost_analyzer import (
     calcular_custo_chamada,
@@ -89,6 +91,21 @@ from pipelines.rj_smtr__triagem_recursos.helpers.windowing import (
 
 _LLM_CLIENT_LOCK = threading.Lock()
 _LLM_CLIENT_CACHE: dict[tuple[str, str, str], BaseLLMClient] = {}
+_SEI_SEMAPHORE_LOCK = threading.Lock()
+_SEI_DOWNLOAD_SEMAPHORE: threading.Semaphore | None = None
+
+
+def configurar_semaforo_sei(max_downloads: int | None) -> None:
+    """Define ou remove o semáforo compartilhado de downloads simultâneos no SEI."""
+    global _SEI_DOWNLOAD_SEMAPHORE
+    with _SEI_SEMAPHORE_LOCK:
+        _SEI_DOWNLOAD_SEMAPHORE = threading.Semaphore(max(1, max_downloads)) if max_downloads else None
+
+
+def obter_semaforo_sei() -> threading.Semaphore | None:
+    """Retorna o semáforo ativo de controle de downloads no SEI (ou None se ilimitado)."""
+    with _SEI_SEMAPHORE_LOCK:
+        return _SEI_DOWNLOAD_SEMAPHORE
 
 
 def limpar_cache_cliente_llm() -> None:
@@ -106,9 +123,9 @@ def obter_cliente_llm(modelo: str | None = None) -> BaseLLMClient:
     """Return a thread-safe cached LLM client reusing persistent HTTP connections."""
     from pipelines.rj_smtr__triagem_recursos.constants import LLM_PROVIDER
 
-    p = (LLM_PROVIDER or "openai").strip().lower()
-    target_model = modelo or os.getenv("LLM_MODEL") or VERTEX_LLM_MODEL
-    base_url = (os.getenv("BIFROST_BASE_URL") or "").strip() if p not in ("google", "vertex", "gemini") else "google"
+    p = (obter_env("LLM_PROVIDER") or LLM_PROVIDER or "openai").strip().lower()
+    target_model = modelo or obter_env("LLM_MODEL") or VERTEX_LLM_MODEL
+    base_url = (obter_env("BIFROST_BASE_URL") or "") if p not in ("google", "vertex", "gemini") else "google"
     chave = (p, target_model, base_url)
 
     with _LLM_CLIENT_LOCK:
@@ -138,11 +155,13 @@ def montar_resultado_erro_arquivo(
     versao_prompt: str,
     exc: Exception,
     t_inicio: float,
+    protocolo_documento_sei: str | None = None,
 ) -> dict[str, Any]:
     """Constrói payload canônico HITL_ERRO_ARQUIVO para falhas de obtenção/leitura de PDF."""
     return {
         "processo_id": processo_id,
         "id_documento_sei": id_doc_sei,
+        "protocolo_documento_sei": protocolo_documento_sei,
         "numero_processo_sei": numero_sei,
         "calibracao_id": calibracao_id,
         "modelo_llm": modelo_llm,
@@ -189,9 +208,10 @@ def preparar_documento_processo(
     max_paginas: int = MAX_PAGINAS_PDF,
     modelo_llm: str = VERTEX_LLM_MODEL,
 ) -> dict[str, Any]:
-    """Executa o estágio 1: download em RAM e recorte Smart Window do PDF."""
+    """Executa o estágio 1: download em RAM e recorte Smart Window do PDF (descartando bruto)."""
     id_procedimento_sei = processo.get("id_procedimento_sei")
     id_doc_sei = processo.get("id_documento_sei")
+    protocolo_doc_sei: str | None = processo.get("protocolo_documento_sei")
     processo_id = str(processo.get("processo_id", ""))
     numero_sei = str(processo.get("numero_processo_sei", "SEI_SEM_NUMERO"))
     calibracao_id = artefatos.get("calibracao_id")
@@ -207,7 +227,15 @@ def preparar_documento_processo(
     t0_download = time.perf_counter()
     try:
         if fonte_pdf == "sei" and cliente_sei is not None:
-            if hasattr(cliente_sei, "obter_pdf_recurso_processo") and id_procedimento_sei:
+            if hasattr(cliente_sei, "obter_pdf_recurso_com_metadados") and id_procedimento_sei:
+                id_doc_sei, proto_obtido, pdf_bytes = cliente_sei.obter_pdf_recurso_com_metadados(
+                    id_procedimento_sei
+                )
+                protocolo_doc_sei = proto_obtido or protocolo_doc_sei
+                processo["id_documento_sei"] = id_doc_sei
+                if protocolo_doc_sei:
+                    processo["protocolo_documento_sei"] = protocolo_doc_sei
+            elif hasattr(cliente_sei, "obter_pdf_recurso_processo") and id_procedimento_sei:
                 id_doc_sei, pdf_bytes = cliente_sei.obter_pdf_recurso_processo(id_procedimento_sei)
                 processo["id_documento_sei"] = id_doc_sei
             else:
@@ -229,6 +257,7 @@ def preparar_documento_processo(
         t_download = time.perf_counter() - t0_download
         t0_window = time.perf_counter()
         pdf_window_bytes = extrair_smart_window_pdf(pdf_bytes, max_paginas=max_paginas)
+        del pdf_bytes
         t_window = time.perf_counter() - t0_window
     except Exception as exc:
         t_download = time.perf_counter() - t0_download
@@ -250,6 +279,7 @@ def preparar_documento_processo(
                 versao_prompt=versao_prompt,
                 exc=exc,
                 t_inicio=t_inicio,
+                protocolo_documento_sei=protocolo_doc_sei,
             ),
         }
 
@@ -257,7 +287,7 @@ def preparar_documento_processo(
         "ok": True,
         "processo": processo,
         "id_documento_sei": id_doc_sei,
-        "pdf_bytes": pdf_bytes,
+        "protocolo_documento_sei": protocolo_doc_sei,
         "pdf_window_bytes": pdf_window_bytes,
         "t_download": t_download,
         "t_window": t_window,
@@ -281,8 +311,10 @@ def classificar_documento_preparado(
 
     processo: dict[str, Any] = documento_preparado["processo"]
     id_doc_sei = documento_preparado.get("id_documento_sei")
-    pdf_bytes: bytes = documento_preparado["pdf_bytes"]
-    pdf_window_bytes: bytes = documento_preparado["pdf_window_bytes"]
+    protocolo_doc_sei = documento_preparado.get("protocolo_documento_sei") or processo.get("protocolo_documento_sei")
+    # Consome e descarta referencias binarias do payload assim que capturadas em variaveis locais
+    pdf_window_bytes: bytes = documento_preparado.pop("pdf_window_bytes")
+    pdf_ocr_bytes: bytes = documento_preparado.pop("pdf_bytes", None) or pdf_window_bytes
     t_download = float(documento_preparado.get("t_download", 0.0))
     t_window = float(documento_preparado.get("t_window", 0.0))
     t_inicio = float(documento_preparado.get("t_inicio", time.time()))
@@ -323,7 +355,7 @@ def classificar_documento_preparado(
     texto_ocr, ocr_conf = "", 0.0
     if decisao_1.pagina_evidencia and decisao_1.pagina_evidencia > 0:
         resultado_ocr = extrair_ocr_pagina_especifica(
-            pdf_origem=pdf_bytes,
+            pdf_origem=pdf_ocr_bytes,
             num_pagina=decisao_1.pagina_evidencia,
             dpi=150,
             idioma="por",
@@ -472,7 +504,8 @@ def classificar_documento_preparado(
         }
 
     logger.info(
-        "ETAPAS [%s]: SEI Download=%.2fs | Window=%.2fs | Gemini N=1=%.2fs | OCR=%.2fs | Sinais=%.2fs | Calibração=%.2fs | N=2=%.2fs | TOTAL=%.2fs",
+        "ETAPAS [%s]: SEI Download=%.2fs | Window=%.2fs | Gemini N=1=%.2fs "
+        "| OCR=%.2fs | Sinais=%.2fs | Calibração=%.2fs | N=2=%.2fs | TOTAL=%.2fs",
         numero_sei,
         t_download,
         t_window,
@@ -504,6 +537,7 @@ def classificar_documento_preparado(
         "modelo_llm": modelo_llm,
         "versao_prompt": versao_prompt,
         "id_documento_sei": id_doc_sei,
+        "protocolo_documento_sei": protocolo_doc_sei,
         "n1_classe_predita": hipotese_1_str,
         "n1_encaminhamento": str(
             decisao_1.encaminhamento.value if hasattr(decisao_1.encaminhamento, "value") else decisao_1.encaminhamento
@@ -561,26 +595,32 @@ def triar_processo(
     reasoning_effort: str = "medium",
     executar_n2: bool = True,
 ) -> dict[str, Any]:
-    """Executa estágio 1 (download) e estágio 2 (classificação) em sequência."""
+    """Executa estágio 1 (download sob semáforo SEI) e estágio 2 (classificação) em RAM."""
     _ = is_local
-    documento = preparar_documento_processo(
-        processo=processo,
-        artefatos=artefatos,
-        fonte_pdf=fonte_pdf,
-        cliente_sei=cliente_sei,
-        max_paginas=max_paginas,
-        modelo_llm=modelo_llm,
-    )
-    return classificar_documento_preparado(
-        documento_preparado=documento,
-        artefatos=artefatos,
-        limiar_alta=limiar_alta,
-        limiar_baixa=limiar_baixa,
-        limiar_dispersao_max=limiar_dispersao_max,
-        modelo_llm=modelo_llm,
-        reasoning_effort=reasoning_effort,
-        executar_n2=executar_n2,
-    )
+    semaforo = obter_semaforo_sei() if fonte_pdf == "sei" else None
+    with semaforo if semaforo is not None else nullcontext():
+        documento = preparar_documento_processo(
+            processo=processo,
+            artefatos=artefatos,
+            fonte_pdf=fonte_pdf,
+            cliente_sei=cliente_sei,
+            max_paginas=max_paginas,
+            modelo_llm=modelo_llm,
+        )
+    try:
+        return classificar_documento_preparado(
+            documento_preparado=documento,
+            artefatos=artefatos,
+            limiar_alta=limiar_alta,
+            limiar_baixa=limiar_baixa,
+            limiar_dispersao_max=limiar_dispersao_max,
+            modelo_llm=modelo_llm,
+            reasoning_effort=reasoning_effort,
+            executar_n2=executar_n2,
+        )
+    finally:
+        documento.pop("pdf_window_bytes", None)
+        documento.pop("pdf_bytes", None)
 
 
 class FutureProtocol(Protocol):
@@ -606,6 +646,67 @@ def resolver_futuro_seguro(futuro: Any, etapa: str) -> Any | None:
         return None
 
 
+def _registrar_resultado_e_flush(
+    res: dict[str, Any],
+    resultados: list[dict[str, Any]],
+    buffer_lote: list[dict[str, Any]],
+    ao_concluir_lote: Callable[[list[dict[str, Any]]], None] | None,
+    tamanho_lote_persistencia: int,
+) -> None:
+    """Acumula resultado valido e dispara checkpoint incremental quando atingir o tamanho do lote."""
+    resultados.append(res)
+    buffer_lote.append(res)
+    if ao_concluir_lote is not None and len(buffer_lote) >= tamanho_lote_persistencia:
+        ao_concluir_lote(list(buffer_lote))
+        buffer_lote.clear()
+
+
+def executar_lote_com_checkpoint(
+    processos: list[dict[str, Any]],
+    submeter_processo: Callable[[dict[str, Any]], FutureProtocol],
+    aguardar_concluidos: Callable[[list[Any]], Iterable[Any]],
+    ao_concluir_lote: Callable[[list[dict[str, Any]]], None] | None = None,
+    tamanho_lote_persistencia: int = 20,
+    tamanho_onda: int = 100,
+    aquecer_primeiro: bool = True,
+) -> list[dict[str, Any]]:
+    """Orquestra triagem por processo unico com warmup, ondas limitadas e checkpoint no banco."""
+    if not processos:
+        return []
+
+    pendentes: deque[dict[str, Any]] = deque(processos)
+    resultados: list[dict[str, Any]] = []
+    buffer_lote: list[dict[str, Any]] = []
+    lote_cap = max(1, tamanho_lote_persistencia)
+
+    if aquecer_primeiro and len(pendentes) > 1:
+        while pendentes:
+            proc_warmup = pendentes.popleft()
+            res_warmup = resolver_futuro_seguro(submeter_processo(proc_warmup), "warmup_triagem")
+            if isinstance(res_warmup, dict) and "processo_id" in res_warmup:
+                _registrar_resultado_e_flush(res_warmup, resultados, buffer_lote, ao_concluir_lote, lote_cap)
+                if res_warmup.get("status_fila") != StatusProcessamento.ERRO_PROCESSAMENTO.value:
+                    break
+
+    onda_cap = max(lote_cap, tamanho_onda)
+    while pendentes:
+        lote_atual: list[dict[str, Any]] = []
+        while pendentes and len(lote_atual) < onda_cap:
+            lote_atual.append(pendentes.popleft())
+
+        futuros = [submeter_processo(proc) for proc in lote_atual]
+        for done_fut in aguardar_concluidos(futuros):
+            res = resolver_futuro_seguro(done_fut, "triagem_individual")
+            if isinstance(res, dict) and "processo_id" in res:
+                _registrar_resultado_e_flush(res, resultados, buffer_lote, ao_concluir_lote, lote_cap)
+
+    if buffer_lote and ao_concluir_lote is not None:
+        ao_concluir_lote(list(buffer_lote))
+        buffer_lote.clear()
+
+    return resultados
+
+
 def executar_lote_em_janelas(
     processos: list[dict[str, Any]],
     submeter_download: Callable[[dict[str, Any]], FutureProtocol],
@@ -613,13 +714,17 @@ def executar_lote_em_janelas(
     aguardar_concluidos: Callable[[list[Any]], Iterable[Any]],
     max_downloads_simultaneos: int = 4,
     aquecer_primeiro: bool = True,
+    ao_concluir_lote: Callable[[list[dict[str, Any]]], None] | None = None,
+    tamanho_lote_persistencia: int = 20,
 ) -> list[dict[str, Any]]:
-    """Orquestra downloads SEI limitados em paralelo com inferências LLM sem ociosidade."""
+    """Orquestra downloads SEI limitados em paralelo com inferências LLM e checkpoint incremental."""
     if not processos:
         return []
 
     pendentes: deque[dict[str, Any]] = deque(processos)
     resultados: list[dict[str, Any]] = []
+    buffer_lote: list[dict[str, Any]] = []
+    lote_cap = max(1, tamanho_lote_persistencia)
 
     # Aquece o cache de prompt com o primeiro processo válido antes da rajada concorrente.
     if aquecer_primeiro and len(pendentes) > 1:
@@ -629,12 +734,12 @@ def executar_lote_em_janelas(
             if isinstance(doc_warmup, dict) and doc_warmup.get("ok"):
                 res_warmup = resolver_futuro_seguro(submeter_classificacao(doc_warmup), "warmup_classificacao")
                 if isinstance(res_warmup, dict) and "processo_id" in res_warmup:
-                    resultados.append(res_warmup)
+                    _registrar_resultado_e_flush(res_warmup, resultados, buffer_lote, ao_concluir_lote, lote_cap)
                 break
             if isinstance(doc_warmup, dict) and "resultado_erro" in doc_warmup:
                 erro_warmup = doc_warmup["resultado_erro"]
                 if isinstance(erro_warmup, dict) and "processo_id" in erro_warmup:
-                    resultados.append(erro_warmup)
+                    _registrar_resultado_e_flush(erro_warmup, resultados, buffer_lote, ao_concluir_lote, lote_cap)
 
     limite_janela = max(1, max_downloads_simultaneos)
     downloads_ativos: list[Any] = []
@@ -643,28 +748,33 @@ def executar_lote_em_janelas(
     while pendentes and len(downloads_ativos) < limite_janela:
         downloads_ativos.append(submeter_download(pendentes.popleft()))
 
-    while downloads_ativos:
-        done_dl = next(iter(aguardar_concluidos(list(downloads_ativos))), None)
-        if done_dl is None:
+    while downloads_ativos or inferencias_ativas:
+        em_andamento = [*downloads_ativos, *inferencias_ativas]
+        concluido = next(iter(aguardar_concluidos(em_andamento)), None)
+        if concluido is None:
             break
-        downloads_ativos.remove(done_dl)
 
-        if pendentes:
-            downloads_ativos.append(submeter_download(pendentes.popleft()))
+        if concluido in downloads_ativos:
+            downloads_ativos.remove(concluido)
+            if pendentes:
+                downloads_ativos.append(submeter_download(pendentes.popleft()))
 
-        doc_prep = resolver_futuro_seguro(done_dl, "download")
-        if isinstance(doc_prep, dict) and doc_prep.get("ok"):
-            inferencias_ativas.append(submeter_classificacao(doc_prep))
-        elif isinstance(doc_prep, dict) and "resultado_erro" in doc_prep:
-            erro_doc = doc_prep["resultado_erro"]
-            if isinstance(erro_doc, dict) and "processo_id" in erro_doc:
-                resultados.append(erro_doc)
-
-    if inferencias_ativas:
-        for done_inf in aguardar_concluidos(list(inferencias_ativas)):
-            res_inf = resolver_futuro_seguro(done_inf, "classificacao")
+            doc_prep = resolver_futuro_seguro(concluido, "download")
+            if isinstance(doc_prep, dict) and doc_prep.get("ok"):
+                inferencias_ativas.append(submeter_classificacao(doc_prep))
+            elif isinstance(doc_prep, dict) and "resultado_erro" in doc_prep:
+                erro_doc = doc_prep["resultado_erro"]
+                if isinstance(erro_doc, dict) and "processo_id" in erro_doc:
+                    _registrar_resultado_e_flush(erro_doc, resultados, buffer_lote, ao_concluir_lote, lote_cap)
+        elif concluido in inferencias_ativas:
+            inferencias_ativas.remove(concluido)
+            res_inf = resolver_futuro_seguro(concluido, "classificacao")
             if isinstance(res_inf, dict) and "processo_id" in res_inf:
-                resultados.append(res_inf)
+                _registrar_resultado_e_flush(res_inf, resultados, buffer_lote, ao_concluir_lote, lote_cap)
+
+    if buffer_lote and ao_concluir_lote is not None:
+        ao_concluir_lote(list(buffer_lote))
+        buffer_lote.clear()
 
     return resultados
 
@@ -703,10 +813,8 @@ def gerar_sumario_lote(resultados: list[dict[str, Any]]) -> dict[str, Any]:
     total_tokens_cache = int(df["tokens_cached"].sum()) if "tokens_cached" in colunas else 0
     pct_cache = round((total_tokens_cache / total_tokens_in * 100), 1) if total_tokens_in > 0 else 0.0
 
-    from datetime import timezone
-
     sumario = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "total": total,
         "faixa_verde": qtd_verde,
         "faixa_amarela": qtd_amarela,

@@ -26,6 +26,7 @@ Fluxo de Dependências:
 """
 
 import re
+import threading
 from dataclasses import asdict, dataclass
 from difflib import SequenceMatcher
 from typing import Any
@@ -37,6 +38,8 @@ from pipelines.rj_smtr__triagem_recursos.helpers.schemas import EsquemaDecisao
 
 SENTENCE_MODEL: Any | None = None
 MODELO_EMBEDDING_NOME = "paraphrase-multilingual-MiniLM-L12-v2"
+_MODEL_INIT_LOCK = threading.Lock()
+_EMBEDDING_LOCK = threading.Lock()
 
 MARCADORES_ADVERSATIVOS = [
     r"\bcontudo\b",
@@ -109,23 +112,34 @@ class VetorSinaisEpistemicos:
 
 
 def obter_modelo_embedding() -> Any:
-    """Carrega o modelo sentence-transformers em memoria com padrao singleton.
+    """Carrega o modelo sentence-transformers em memoria com padrao singleton thread-safe.
 
     Levanta RuntimeError explicito se o pacote ou modelo nao puder ser carregado.
     """
     global SENTENCE_MODEL
     if SENTENCE_MODEL is None:
-        try:
-            from sentence_transformers import SentenceTransformer
+        with _MODEL_INIT_LOCK:
+            if SENTENCE_MODEL is None:
+                try:
+                    import torch
 
-            SENTENCE_MODEL = SentenceTransformer(MODELO_EMBEDDING_NOME)
-        except ImportError as exc:
-            raise RuntimeError(
-                "A biblioteca 'sentence-transformers' e obrigatoria para a extracao de sinais epistemicos, "
-                f"mas nao foi encontrada no ambiente ({exc}). Instale a dependencia no container."
-            ) from exc
-        except Exception as exc:
-            raise RuntimeError(f"Falha ao carregar o modelo de embedding '{MODELO_EMBEDDING_NOME}': {exc}") from exc
+                    torch.set_num_threads(1)
+                except Exception:
+                    pass
+                try:
+                    from sentence_transformers import SentenceTransformer
+
+                    SENTENCE_MODEL = SentenceTransformer(MODELO_EMBEDDING_NOME)
+                except ImportError as exc:
+                    raise RuntimeError(
+                        "A biblioteca 'sentence-transformers' e obrigatoria para a extracao de sinais "
+                        f"epistemicos, mas nao foi encontrada no ambiente ({exc}). "
+                        "Instale a dependencia no container."
+                    ) from exc
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"Falha ao carregar o modelo de embedding '{MODELO_EMBEDDING_NOME}': {exc}"
+                    ) from exc
     return SENTENCE_MODEL
 
 
@@ -215,7 +229,8 @@ def gerar_embedding_texto(texto: str) -> np.ndarray:
         return np.zeros(384, dtype=np.float64)
 
     modelo = obter_modelo_embedding()
-    emb = modelo.encode(texto, normalize_embeddings=True, show_progress_bar=False)
+    with _EMBEDDING_LOCK:
+        emb = modelo.encode(texto, normalize_embeddings=True, show_progress_bar=False)
     return np.asarray(emb, dtype=np.float64)
 
 

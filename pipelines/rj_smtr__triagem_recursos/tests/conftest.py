@@ -16,7 +16,7 @@ if str(REPO_ROOT) not in sys_path:
 
 
 @pytest.fixture(autouse=True)
-def reset_llm_cache() -> Generator[None, None, None]:
+def reset_llm_cache() -> Generator[None]:
     """Limpa o cache global de clientes LLM antes e depois de cada teste."""
     limpar_cache_cliente_llm()
     yield

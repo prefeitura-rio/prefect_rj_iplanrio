@@ -18,7 +18,11 @@ COPY ./pipelines/rj_smtr__triagem_recursos ./pipelines/rj_smtr__triagem_recursos
 RUN uv sync --package rj_smtr__triagem_recursos
 
 ENV HF_HOME=/opt/prefect/hf_cache \
-    SENTENCE_TRANSFORMERS_HOME=/opt/prefect/hf_cache
+    SENTENCE_TRANSFORMERS_HOME=/opt/prefect/hf_cache \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    TOKENIZERS_PARALLELISM=false
 
 RUN uv run --no-sync --package rj_smtr__triagem_recursos python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')" \
     && chmod -R a+rX /opt/prefect/hf_cache

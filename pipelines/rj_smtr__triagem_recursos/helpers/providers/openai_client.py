@@ -20,15 +20,15 @@ Fluxo de Dependências:
 """
 
 import base64
-import os
 
 import httpx
 import pymupdf as fitz
 from openai import OpenAI
 
-from pipelines.rj_smtr__triagem_recursos.constants import VERTEX_LLM_MODEL
+from pipelines.rj_smtr__triagem_recursos.constants import VERTEX_LLM_MODEL, obter_env
 from pipelines.rj_smtr__triagem_recursos.helpers.providers.base import BaseLLMClient
 from pipelines.rj_smtr__triagem_recursos.helpers.schemas import EsquemaDecisao
+from pipelines.rj_smtr__triagem_recursos.helpers.windowing import FITZ_LOCK
 
 
 class OpenAILLMClient(BaseLLMClient):
@@ -40,14 +40,17 @@ class OpenAILLMClient(BaseLLMClient):
         http_client: httpx.Client | None = None,
     ) -> None:
         """Inicializa cliente OpenAI/Bifrost com pool HTTP persistente."""
-        api_key = os.getenv("BIFROST_VIRTUAL_KEY") or os.getenv("BIFROST_API_KEY") or os.getenv("OPENAI_API_KEY")
-        raw_base_url = (os.getenv("BIFROST_BASE_URL") or "https://bifrost.iplan.dados.rio/openai/v1").strip()
+        api_key = obter_env("BIFROST_VIRTUAL_KEY") or obter_env("BIFROST_API_KEY") or obter_env("OPENAI_API_KEY")
+        raw_base_url = (
+            obter_env("BIFROST_BASE_URL", "https://bifrost.iplan.dados.rio/openai/v1")
+            or "https://bifrost.iplan.dados.rio/openai/v1"
+        )
         base_url = (
             "https://bifrost.iplan.dados.rio/openai/v1"
             if raw_base_url.rstrip("/") == "https://bifrost.iplan.dados.rio"
             else raw_base_url
         )
-        modelo_padrao = default_model or os.getenv("LLM_MODEL") or VERTEX_LLM_MODEL
+        modelo_padrao = default_model or obter_env("LLM_MODEL") or VERTEX_LLM_MODEL
 
         if not api_key:
             raise ValueError("Chave de API ausente (defina BIFROST_VIRTUAL_KEY, BIFROST_API_KEY ou OPENAI_API_KEY).")
@@ -88,17 +91,20 @@ class OpenAILLMClient(BaseLLMClient):
         :param dpi: Resolução de rasterização.
         :returns: Lista de strings em Base64 correspondentes a cada página.
         """
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        imagens_b64 = []
+        imagens_b64: list[str] = []
         zoom = dpi / 72.0
-        matriz = fitz.Matrix(zoom, zoom)
 
-        for pagina in doc:
-            pix = pagina.get_pixmap(matrix=matriz, alpha=False)
-            b64_str = base64.b64encode(pix.tobytes("jpeg")).decode("utf-8")
-            imagens_b64.append(b64_str)
+        with FITZ_LOCK:
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            try:
+                matriz = fitz.Matrix(zoom, zoom)
+                for pagina in doc:
+                    pix = pagina.get_pixmap(matrix=matriz, alpha=False)
+                    b64_str = base64.b64encode(pix.tobytes("jpeg")).decode("utf-8")
+                    imagens_b64.append(b64_str)
+            finally:
+                doc.close()
 
-        doc.close()
         return imagens_b64
 
     def classificar(

@@ -24,14 +24,19 @@ Fluxo de Dependências:
 import io
 import os
 import shutil
+import threading
 from pathlib import Path
 
 import pymupdf
 from prefect.logging import get_logger
 
+from pipelines.rj_smtr__triagem_recursos.constants import obter_env
+from pipelines.rj_smtr__triagem_recursos.helpers.windowing import FITZ_LOCK
+
 logger = get_logger(__name__)
 
 TESSERACT_CONFIGURADO = False
+_TESSERACT_LOCK = threading.Lock()
 
 
 def configurar_tesseract_se_necessario() -> bool:
@@ -43,49 +48,49 @@ def configurar_tesseract_se_necessario() -> bool:
     if TESSERACT_CONFIGURADO:
         return True
 
-    try:
-        import pytesseract
-    except ImportError:
-        logger.warning("pytesseract não está instalado no ambiente Python.")
+    with _TESSERACT_LOCK:
+        if TESSERACT_CONFIGURADO:
+            return True
+
+        try:
+            import pytesseract
+        except ImportError:
+            logger.warning("pytesseract não está instalado no ambiente Python.")
+            return False
+
+        tess_env = obter_env("TESSERACT_CMD")
+        if tess_env and Path(tess_env).exists():
+            pytesseract.pytesseract.tesseract_cmd = tess_env
+            TESSERACT_CONFIGURADO = True
+            return True
+
+        caminho_which = shutil.which("tesseract")
+        if caminho_which:
+            pytesseract.pytesseract.tesseract_cmd = caminho_which
+            TESSERACT_CONFIGURADO = True
+            return True
+
+        candidatos_windows = [
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Tesseract-OCR" / "tesseract.exe",
+        ]
+        for cand in candidatos_windows:
+            cand_path = Path(cand)
+            if cand_path.exists():
+                pytesseract.pytesseract.tesseract_cmd = str(cand_path)
+                TESSERACT_CONFIGURADO = True
+                logger.info("Tesseract localizado automaticamente em: %s", cand_path)
+                return True
+
+        for cand in ("/usr/bin/tesseract", "/usr/local/bin/tesseract"):
+            if Path(cand).exists():
+                pytesseract.pytesseract.tesseract_cmd = cand
+                TESSERACT_CONFIGURADO = True
+                return True
+
+        logger.warning("Binário do Tesseract OCR não foi localizado no sistema.")
         return False
-
-    tess_env = os.getenv("TESSERACT_CMD")
-    if tess_env and Path(tess_env).exists():
-        pytesseract.pytesseract.tesseract_cmd = tess_env
-        TESSERACT_CONFIGURADO = True
-        return True
-
-    caminho_which = shutil.which("tesseract")
-    if caminho_which:
-        pytesseract.pytesseract.tesseract_cmd = caminho_which
-        TESSERACT_CONFIGURADO = True
-        return True
-
-    candidatos_windows = [
-        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Tesseract-OCR" / "tesseract.exe",
-    ]
-    for cand in candidatos_windows:
-        cand_path = Path(cand)
-        if cand_path.exists():
-            pytesseract.pytesseract.tesseract_cmd = str(cand_path)
-            TESSERACT_CONFIGURADO = True
-            logger.info("Tesseract localizado automaticamente em: %s", cand_path)
-            return True
-
-    candidatos_linux = [
-        "/usr/bin/tesseract",
-        "/usr/local/bin/tesseract",
-    ]
-    for cand in candidatos_linux:
-        if Path(cand).exists():
-            pytesseract.pytesseract.tesseract_cmd = cand
-            TESSERACT_CONFIGURADO = True
-            return True
-
-    logger.warning("Binário do Tesseract OCR não foi localizado no sistema.")
-    return False
 
 
 def extrair_texto_pagina_fitz(pagina: pymupdf.Page) -> str:
@@ -140,55 +145,59 @@ def extrair_ocr_pagina_especifica(
         return "", 0.0
 
     try:
-        if isinstance(pdf_origem, (str, Path)):
-            doc = pymupdf.open(str(pdf_origem))
-        elif isinstance(pdf_origem, (bytes, io.BytesIO)):
-            doc = pymupdf.open(stream=pdf_origem, filetype="pdf")
-        else:
-            doc = pymupdf.open(stream=pdf_origem, filetype="pdf")
-        total_pags = len(doc)
-        if total_pags == 0 or num_pagina < 1:
-            return "", 0.0
+        png_bytes: bytes | None = None
+        texto_nativo = ""
 
-        idx_alvo = min(max(0, num_pagina - 1), total_pags - 1)
+        with FITZ_LOCK:
+            if isinstance(pdf_origem, (str, Path)):
+                doc = pymupdf.open(str(pdf_origem))
+            else:
+                doc = pymupdf.open(stream=pdf_origem, filetype="pdf")
+            try:
+                total_pags = len(doc)
+                if total_pags == 0 or num_pagina < 1:
+                    return "", 0.0
 
-        pagina = doc[idx_alvo]
-        texto_nativo = extrair_texto_pagina_fitz(pagina)
+                idx_alvo = min(max(0, num_pagina - 1), total_pags - 1)
+                pagina = doc[idx_alvo]
+                texto_nativo = extrair_texto_pagina_fitz(pagina)
 
-        if frase_procurada and len(frase_procurada.strip()) >= 5:
-            alvo_norm = " ".join(frase_procurada.lower().split())
-            texto_norm = " ".join(texto_nativo.lower().split())
+                if frase_procurada and len(frase_procurada.strip()) >= 5:
+                    alvo_norm = " ".join(frase_procurada.lower().split())
+                    texto_norm = " ".join(texto_nativo.lower().split())
 
-            if alvo_norm not in texto_norm:
-                for offset in [-1, 1]:
-                    cand_idx = idx_alvo + offset
-                    if 0 <= cand_idx < total_pags:
-                        pag_cand = doc[cand_idx]
-                        txt_cand = extrair_texto_pagina_fitz(pag_cand)
-                        if alvo_norm in " ".join(txt_cand.lower().split()):
-                            texto_nativo = txt_cand
-                            idx_alvo = cand_idx
-                            pagina = pag_cand
-                            break
+                    if alvo_norm not in texto_norm:
+                        for offset in (-1, 1):
+                            cand_idx = idx_alvo + offset
+                            if 0 <= cand_idx < total_pags:
+                                pag_cand = doc[cand_idx]
+                                txt_cand = extrair_texto_pagina_fitz(pag_cand)
+                                if alvo_norm in " ".join(txt_cand.lower().split()):
+                                    texto_nativo = txt_cand
+                                    pagina = pag_cand
+                                    break
 
-        if len(texto_nativo) >= 30:
-            doc.close()
-            return texto_nativo, 0.95
+                if len(texto_nativo) >= 30:
+                    return texto_nativo, 0.95
 
-        if not configurar_tesseract_se_necessario():
-            doc.close()
+                if not configurar_tesseract_se_necessario():
+                    return texto_nativo, 0.50
+
+                zoom = dpi / 72.0
+                matriz = pymupdf.Matrix(zoom, zoom)
+                pix = pagina.get_pixmap(matrix=matriz, alpha=False)
+                png_bytes = pix.tobytes("png")
+            finally:
+                doc.close()
+
+        if png_bytes is None:
             return texto_nativo, 0.50
 
         import pytesseract
         from PIL import Image
 
-        zoom = dpi / 72.0
-        matriz = pymupdf.Matrix(zoom, zoom)
-        pix = pagina.get_pixmap(matrix=matriz, alpha=False)
-        img = Image.open(io.BytesIO(pix.tobytes("png")))
-
+        img = Image.open(io.BytesIO(png_bytes))
         dados_ocr = pytesseract.image_to_data(img, lang=idioma, output_type=pytesseract.Output.DICT)
-        doc.close()
 
         confs = [float(c) for c in dados_ocr.get("conf", []) if c != "-1" and str(c).strip() != ""]
         conf_media = (sum(confs) / len(confs) / 100.0) if confs else 0.50

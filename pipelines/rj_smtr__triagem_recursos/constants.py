@@ -23,14 +23,35 @@ from pathlib import Path
 
 PIPELINE_DIR = Path(__file__).resolve().parent
 
+
+def obter_env(chave: str, default: str | None = None) -> str | None:
+    """Resolve variável de ambiente priorizando prefixo SMTR_TRIAGEM__ (evita colisão no cluster)."""
+    nomes = [chave]
+    if not chave.startswith("SMTR_TRIAGEM__"):
+        nomes = [f"SMTR_TRIAGEM__{chave}", f"SMTR_TRIAGEM_{chave}", chave]
+    for nome in nomes:
+        bruto = os.environ.get(nome)
+        if bruto is None:
+            continue
+        limpo = bruto.strip()
+        if len(limpo) >= 2 and limpo[0] == limpo[-1] and limpo[0] in ('"', "'"):
+            limpo = limpo[1:-1].strip()
+        if limpo:
+            return limpo
+    return default
+
+
 # ==============================================================================
 # BANCO DE DADOS
 # ==============================================================================
-DB_URL_LOCAL = os.getenv(
-    "DB_URL_LOCAL",
-    "postgresql://postgres:postgres@localhost:5432/smtr_triagem",
+DB_URL_LOCAL = (
+    obter_env(
+        "DB_URL_LOCAL",
+        "postgresql://postgres:postgres@localhost:5432/smtr_triagem",
+    )
+    or "postgresql://postgres:postgres@localhost:5432/smtr_triagem"
 )
-DB_URL_CLOUD = os.getenv("DATABASE_URL") or os.getenv("DB_URL_CLOUD")
+DB_URL_CLOUD = obter_env("DATABASE_URL") or obter_env("DB_URL_CLOUD")
 
 TABELA_PROCESSOS = "processos_administrativos"
 TABELA_PREDICOES = "predicoes_pipeline"
@@ -41,7 +62,7 @@ TABELA_CALIBRACAO = "configuracoes_calibracao"
 # ==============================================================================
 # STORAGE E CAMINHOS
 # ==============================================================================
-DEFAULT_ENVIRONMENT = os.getenv("ENVIRONMENT", "staging").strip().lower()
+DEFAULT_ENVIRONMENT = (obter_env("ENVIRONMENT", "staging") or "staging").lower()
 
 LOCAL_PDFS_DIR = PIPELINE_DIR / "pdfs"
 LOCAL_ARTIFACTS_DIR = PIPELINE_DIR / "artifacts"
@@ -51,20 +72,20 @@ QUERIES_DIR = PIPELINE_DIR / "queries"
 # ==============================================================================
 # MODELO E GATEWAY
 # ==============================================================================
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
-VERTEX_LLM_MODEL = os.getenv("LLM_MODEL", "vertex/gemini-3.7-flash")
-VERSAO_PROMPT_PADRAO = os.getenv("VERSAO_PROMPT", "v4_baseline")
+LLM_PROVIDER = (obter_env("LLM_PROVIDER", "openai") or "openai").lower()
+VERTEX_LLM_MODEL = obter_env("LLM_MODEL", "vertex/gemini-3.7-flash") or "vertex/gemini-3.7-flash"
+VERSAO_PROMPT_PADRAO = obter_env("VERSAO_PROMPT", "v4_baseline") or "v4_baseline"
 
 # ==============================================================================
 # PARÂMETROS DE CORTE
 # ==============================================================================
-LIMIAR_ALTA: float = float(os.getenv("LIMIAR_ALTA_CONFIANCA", "0.85"))
-LIMIAR_BAIXA: float = float(os.getenv("LIMIAR_BAIXA_CONFIANCA", "0.50"))
+LIMIAR_ALTA: float = float(obter_env("LIMIAR_ALTA_CONFIANCA", "0.85") or "0.85")
+LIMIAR_BAIXA: float = float(obter_env("LIMIAR_BAIXA_CONFIANCA", "0.50") or "0.50")
 LIMIAR_FAIXA_AMARELA_PISO: float = 0.50
-LIMIAR_DISPERSAO_COT_MAX: float = float(os.getenv("LIMIAR_DISPERSAO_COT_MAX", "0.50"))
-MAX_PAGINAS_PDF: int = int(os.getenv("MAX_PAGINAS_PDF_SMART_WINDOW", "20"))
-MAX_WORKERS_PIPELINE: int = int(os.getenv("MAX_WORKERS_PIPELINE", "10"))
-MAX_DOWNLOADS_SEI_SIMULTANEOS: int = int(os.getenv("MAX_DOWNLOADS_SEI_SIMULTANEOS", "4"))
+LIMIAR_DISPERSAO_COT_MAX: float = float(obter_env("LIMIAR_DISPERSAO_COT_MAX", "0.50") or "0.50")
+MAX_PAGINAS_PDF: int = int(obter_env("MAX_PAGINAS_PDF_SMART_WINDOW", "20") or "20")
+MAX_WORKERS_PIPELINE: int = int(obter_env("MAX_WORKERS_PIPELINE", "10") or "10")
+MAX_DOWNLOADS_SEI_SIMULTANEOS: int = int(obter_env("MAX_DOWNLOADS_SEI_SIMULTANEOS", "4") or "4")
 
 BETA_CONSENSO: float = 1.5
 BETA_DIVERGENCIA: float = 2.0
@@ -137,8 +158,10 @@ def resolver_banco_url(is_local: bool = False) -> str:
     :raises RuntimeError: Quando em modo cloud/staging sem DATABASE_URL ou DB_URL_CLOUD configurada.
     """
     if is_local:
-        return os.getenv("DB_URL_LOCAL") or DB_URL_LOCAL
-    cloud_url = os.getenv("DATABASE_URL") or os.getenv("DB_URL_CLOUD")
+        return obter_env("DB_URL_LOCAL") or DB_URL_LOCAL
+    cloud_url = obter_env("DATABASE_URL") or obter_env("DB_URL_CLOUD")
     if not cloud_url:
-        raise RuntimeError("URL do Cloud SQL ausente (defina DATABASE_URL ou DB_URL_CLOUD no ambiente/Infisical).")
+        raise RuntimeError(
+            "URL do Cloud SQL ausente (defina SMTR_TRIAGEM__DATABASE_URL, DATABASE_URL ou DB_URL_CLOUD)."
+        )
     return cloud_url

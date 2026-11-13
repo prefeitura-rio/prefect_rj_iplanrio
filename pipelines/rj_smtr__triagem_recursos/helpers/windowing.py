@@ -18,9 +18,13 @@ Fluxo de Dependências:
 """
 
 import io
+import threading
 from pathlib import Path
 
 import pymupdf as fitz
+
+# PyMuPDF/libmupdf mantem estado global em C nao thread-safe entre threads simultaneas.
+FITZ_LOCK = threading.Lock()
 
 
 def extrair_smart_window_pdf(
@@ -35,27 +39,34 @@ def extrair_smart_window_pdf(
     :raises FileNotFoundError: Se o caminho do PDF não existir em disco.
     :raises TypeError: Se o tipo do parâmetro pdf_origem for inválido.
     """
-    if isinstance(pdf_origem, bytes):
-        doc_origem = fitz.open(stream=pdf_origem, filetype="pdf")
-    elif isinstance(pdf_origem, io.BytesIO):
-        doc_origem = fitz.open(stream=pdf_origem.getvalue(), filetype="pdf")
-    elif isinstance(pdf_origem, (Path, str)):
+    if isinstance(pdf_origem, (Path, str)):
         caminho = Path(pdf_origem)
         if not caminho.exists():
             raise FileNotFoundError(f"Arquivo não encontrado: {caminho}")
-        doc_origem = fitz.open(str(caminho))
+        origem_tipo = ("path", str(caminho))
+    elif isinstance(pdf_origem, bytes):
+        origem_tipo = ("bytes", pdf_origem)
+    elif isinstance(pdf_origem, io.BytesIO):
+        origem_tipo = ("bytes", pdf_origem.getvalue())
     else:
         raise TypeError(f"Tipo de entrada não suportado: {type(pdf_origem)}")
 
-    doc_truncado = fitz.open()
+    with FITZ_LOCK:
+        doc_origem = None
+        doc_truncado = None
+        try:
+            if origem_tipo[0] == "path":
+                doc_origem = fitz.open(origem_tipo[1])
+            else:
+                doc_origem = fitz.open(stream=origem_tipo[1], filetype="pdf")
 
-    total_pags = min(len(doc_origem), max_paginas)
-    for i in range(total_pags):
-        doc_truncado.insert_pdf(doc_origem, from_page=i, to_page=i)
-
-    doc_origem.close()
-
-    pdf_bytes = doc_truncado.tobytes(garbage=4, deflate=True)
-    doc_truncado.close()
-
-    return pdf_bytes
+            doc_truncado = fitz.open()
+            total_pags = min(len(doc_origem), max_paginas)
+            if total_pags > 0:
+                doc_truncado.insert_pdf(doc_origem, from_page=0, to_page=total_pags - 1)
+            return doc_truncado.tobytes(garbage=4, deflate=True)
+        finally:
+            if doc_truncado is not None:
+                doc_truncado.close()
+            if doc_origem is not None:
+                doc_origem.close()

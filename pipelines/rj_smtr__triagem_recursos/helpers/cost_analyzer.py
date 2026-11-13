@@ -18,11 +18,12 @@ Fluxo de Dependências:
   * Módulo folha de tarifação orçamentária (sem dependências de outros submódulos da pipeline).
 """
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
 import polars as pl
+
+from pipelines.rj_smtr__triagem_recursos.constants import obter_env
 
 
 @dataclass
@@ -44,17 +45,17 @@ class TabelaPrecoModelo:
 TABELA_PRECOS_PADRAO: dict[str, TabelaPrecoModelo] = {
     "gemini-3.7-flash": TabelaPrecoModelo(
         nome_modelo="gemini-3.7-flash",
-        preco_in_1m=float(os.getenv("PRICE_GEMINI_3_7_FLASH_IN", 0.75)),
-        preco_out_1m=float(os.getenv("PRICE_GEMINI_3_7_FLASH_OUT", 3.75)),
-        desconto_cache=float(os.getenv("PRICE_GEMINI_3_7_FLASH_CACHE_DISCOUNT", 0.90)),
-        indice_inteligencia=int(os.getenv("INTEL_GEMINI_3_7_FLASH", 53)),
+        preco_in_1m=float(obter_env("PRICE_GEMINI_3_7_FLASH_IN", "0.75") or 0.75),
+        preco_out_1m=float(obter_env("PRICE_GEMINI_3_7_FLASH_OUT", "3.75") or 3.75),
+        desconto_cache=float(obter_env("PRICE_GEMINI_3_7_FLASH_CACHE_DISCOUNT", "0.90") or 0.90),
+        indice_inteligencia=int(obter_env("INTEL_GEMINI_3_7_FLASH", "53") or 53),
     ),
     "gemini-3.5-flash-lite": TabelaPrecoModelo(
         nome_modelo="gemini-3.5-flash-lite",
-        preco_in_1m=float(os.getenv("PRICE_GEMINI_3_5_FLASH_LITE_IN", 0.30)),
-        preco_out_1m=float(os.getenv("PRICE_GEMINI_3_5_FLASH_LITE_OUT", 2.50)),
-        desconto_cache=float(os.getenv("PRICE_GEMINI_3_5_FLASH_LITE_CACHE_DISCOUNT", 0.90)),
-        indice_inteligencia=int(os.getenv("INTEL_GEMINI_3_5_FLASH_LITE", 37)),
+        preco_in_1m=float(obter_env("PRICE_GEMINI_3_5_FLASH_LITE_IN", "0.30") or 0.30),
+        preco_out_1m=float(obter_env("PRICE_GEMINI_3_5_FLASH_LITE_OUT", "2.50") or 2.50),
+        desconto_cache=float(obter_env("PRICE_GEMINI_3_5_FLASH_LITE_CACHE_DISCOUNT", "0.90") or 0.90),
+        indice_inteligencia=int(obter_env("INTEL_GEMINI_3_5_FLASH_LITE", "37") or 37),
     ),
 }
 

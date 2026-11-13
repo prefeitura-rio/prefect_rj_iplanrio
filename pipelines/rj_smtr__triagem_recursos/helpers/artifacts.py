@@ -21,7 +21,6 @@ Fluxo de Dependências:
   * `prefect.logging`: logger com rastreabilidade OpenTelemetry.
 """
 
-import os
 import sys
 import types
 from dataclasses import dataclass
@@ -29,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 import joblib
+
 from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
@@ -37,6 +37,7 @@ from pipelines.rj_smtr__triagem_recursos.constants import (
     LOCAL_ARTIFACTS_DIR,
     PROMPTS_DIR,
     VERSAO_PROMPT_PADRAO,
+    obter_env,
     resolver_banco_url,
 )
 from pipelines.rj_smtr__triagem_recursos.helpers.conformal import (
@@ -84,37 +85,41 @@ def carregar_prompt_sistema(
     infisical_secret_path: str | None = None,
     is_local: bool = False,
 ) -> str:
-    """Carrega o texto das instrucoes operacionais via Infisical/ambiente (ou disco em modo local)."""
+    """Carrega o texto das instrucoes operacionais via ambiente (ou arquivo empacotado/local)."""
     for var_nome in ("PROMPT_SISTEMA_V4", "PROMPT_SISTEMA", "SMTR_TRIAGEM_PROMPT"):
-        valor_env = os.environ.get(var_nome)
-        if valor_env and len(valor_env.strip()) > 50:
+        valor_env = obter_env(var_nome)
+        if valor_env and len(valor_env) > 50:
+            texto = valor_env.replace(r"\n", "\n") if r"\n" in valor_env and "\n" not in valor_env else valor_env
             logger.info("Prompt carregado com sucesso a partir da variavel de ambiente (%s).", var_nome)
-            return valor_env.strip()
+            return texto
 
     if infisical_secret_path:
         chave_derivada = infisical_secret_path.strip("/").replace("-", "_").upper() + "_PROMPT"
-        valor_derivado = os.environ.get(chave_derivada)
-        if valor_derivado and len(valor_derivado.strip()) > 50:
+        valor_derivado = obter_env(chave_derivada)
+        if valor_derivado and len(valor_derivado) > 50:
+            texto = (
+                valor_derivado.replace(r"\n", "\n")
+                if r"\n" in valor_derivado and "\n" not in valor_derivado
+                else valor_derivado
+            )
             logger.info("Prompt carregado via chave derivada do Infisical (%s).", chave_derivada)
-            return valor_derivado.strip()
-
-    if not is_local:
-        raise RuntimeError(
-            "Variavel de ambiente PROMPT_SISTEMA_V4 nao localizada no Infisical para execucao em cloud/staging."
-        )
+            return texto
 
     if caminho_prompt and caminho_prompt.exists():
+        logger.info("Carregando prompt a partir do arquivo especificado: %s", caminho_prompt)
         return caminho_prompt.read_text(encoding="utf-8")
 
     padrao = PROMPTS_DIR / f"{VERSAO_PROMPT_PADRAO}.txt"
     if padrao.exists():
+        logger.info("Carregando prompt empacotado em disco (%s, local=%s).", padrao.name, is_local)
         return padrao.read_text(encoding="utf-8")
 
     arquivos = sorted(PROMPTS_DIR.glob("*.txt"))
     if arquivos:
+        logger.warning("Utilizando primeiro arquivo de prompt alternativo em disco: %s", arquivos[0].name)
         return arquivos[0].read_text(encoding="utf-8")
 
-    raise FileNotFoundError("Nenhum arquivo de prompt localizado em prompts/ ou no ambiente.")
+    raise FileNotFoundError("Nenhum arquivo de prompt localizado em prompts/ ou no ambiente/Infisical.")
 
 
 def carregar_baseline_referencia(
@@ -184,7 +189,7 @@ def preaquecer_modelo_embedding() -> None:
 def carregar_artefatos_pipeline(
     is_local: bool = False,
     arquivo_prompt: str = f"{VERSAO_PROMPT_PADRAO}.txt",
-    infisical_secret_path: str | None = "/rj_smtr__triagem_recursos",
+    infisical_secret_path: str | None = "/smtr-triagem",
 ) -> dict[str, Any]:
     """Carrega calibracao ativa do PostgreSQL (fallback local apenas se is_local=True) e prompt do sistema."""
     from pipelines.rj_smtr__triagem_recursos.helpers.db_repository import buscar_configuracao_calibracao_ativa
@@ -208,16 +213,22 @@ def carregar_artefatos_pipeline(
             calibracao_id,
         )
     except Exception as exc:
-        if not is_local:
-            logger.error("Configuracao de calibracao ativa indisponivel no Cloud SQL: %s", exc)
-            raise RuntimeError(f"Falha ao carregar configuracao de calibracao ativa no Cloud SQL: {exc}") from exc
         logger.warning(
-            "Configuracao no banco local indisponivel (%s). Usando baseline congelada...",
+            "Configuracao de calibracao ativa indisponivel no banco (%s). "
+            "Ativando fallback para baseline congelada (.joblib)...",
             exc,
         )
-        baseline = carregar_baseline_referencia()
-        calibrador = baseline.calibrador
-        conformal = baseline.conformal
+        try:
+            baseline = carregar_baseline_referencia()
+            calibrador = baseline.calibrador
+            conformal = baseline.conformal
+            versao_modelo = "baseline_congelada_joblib"
+            logger.info("Fallback concluido: baseline congelada carregada com sucesso do disco (.joblib).")
+        except Exception as fallback_exc:
+            logger.error("Falha ao carregar baseline de contingencia em disco: %s", fallback_exc)
+            raise RuntimeError(
+                f"Falha ao carregar calibracao do banco ({exc}) e fallback em disco ({fallback_exc})"
+            ) from fallback_exc
 
     caminho_prompt = PROMPTS_DIR / arquivo_prompt
     if not caminho_prompt.exists():

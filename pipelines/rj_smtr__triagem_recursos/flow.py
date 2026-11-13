@@ -23,6 +23,7 @@ from typing import Any
 from prefect import flow, get_run_logger
 from prefect.futures import as_completed
 from prefect.task_runners import ThreadPoolTaskRunner
+
 from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
@@ -38,14 +39,17 @@ from pipelines.rj_smtr__triagem_recursos.constants import (
     VERTEX_LLM_MODEL,
 )
 from pipelines.rj_smtr__triagem_recursos.helpers.sei_client import ModWsseiClient
-from pipelines.rj_smtr__triagem_recursos.helpers.triage import executar_lote_em_janelas
+from pipelines.rj_smtr__triagem_recursos.helpers.triage import (
+    configurar_semaforo_sei,
+    executar_lote_com_checkpoint,
+    limpar_cache_cliente_llm,
+)
 from pipelines.rj_smtr__triagem_recursos.tasks import (
-    task_baixar_e_preparar_pdf,
     task_buscar_processos_pendentes,
     task_carregar_artefatos_referencia,
     task_gerar_sumario_lote,
     task_persistir_lote_resultados,
-    task_triar_pdf_preparado,
+    task_triar_processo_individual,
 )
 
 
@@ -68,7 +72,7 @@ def rj_smtr__triagem_recursos(
     arquivo_prompt: str = f"{VERSAO_PROMPT_PADRAO}.txt",
     data_inicio: str | None = None,
     data_fim: str | None = None,
-    infisical_secret_path: str | None = "/rj_smtr__triagem_recursos",
+    infisical_secret_path: str | None = "/smtr-triagem",
     reasoning_effort: str = "medium",
     arquivos_especificos: list[Any] | None = None,
     executar_n2: bool = True,
@@ -87,6 +91,13 @@ def rj_smtr__triagem_recursos(
         max_downloads_sei,
     )
 
+    import os
+    vars_ambiente = [
+        k for k in os.environ
+        if any(t in k for t in ("SMTR", "DATABASE", "DB_URL", "BIFROST", "SEI_"))
+    ]
+    logger.info("Chaves de ambiente detectadas no container: %s", sorted(vars_ambiente))
+
     artefatos = task_carregar_artefatos_referencia(
         is_local=is_local,
         arquivo_prompt=arquivo_prompt,
@@ -101,6 +112,7 @@ def rj_smtr__triagem_recursos(
         if not getattr(cliente_sei, "token", None):
             cliente_sei.autenticar()
 
+    configurar_semaforo_sei(max_downloads_sei if fonte_pdf == "sei" else None)
     try:
         processos = task_buscar_processos_pendentes(
             is_local=is_local,
@@ -117,36 +129,32 @@ def rj_smtr__triagem_recursos(
             logger.info("Nenhum processo pendente para triagem. Encerrando execução.")
             return {"status": "SEM_DADOS", "total": 0}
 
-        resultados = executar_lote_em_janelas(
+        resultados = executar_lote_com_checkpoint(
             processos=processos,
-            submeter_download=lambda proc: task_baixar_e_preparar_pdf.submit(
+            submeter_processo=lambda proc: task_triar_processo_individual.submit(
                 processo=proc,
                 artefatos=artefatos,
+                is_local=is_local,
                 fonte_pdf=fonte_pdf,
                 cliente_sei=cliente_sei,
-                max_paginas=max_paginas,
-                modelo_llm=modelo_llm,
-            ),
-            submeter_classificacao=lambda doc: task_triar_pdf_preparado.submit(
-                documento_preparado=doc,
-                artefatos=artefatos,
                 limiar_alta=limiar_alta,
                 limiar_baixa=limiar_baixa,
                 limiar_dispersao_max=limiar_dispersao,
+                max_paginas=max_paginas,
                 modelo_llm=modelo_llm,
                 reasoning_effort=reasoning_effort,
                 executar_n2=executar_n2,
             ),
             aguardar_concluidos=as_completed,
-            max_downloads_simultaneos=max_downloads_sei,
+            ao_concluir_lote=lambda lote: task_persistir_lote_resultados(lote, is_local=is_local),
+            tamanho_lote_persistencia=20,
             aquecer_primeiro=True,
         )
 
-        if resultados:
-            task_persistir_lote_resultados(resultados, is_local=is_local)
-
         return task_gerar_sumario_lote(resultados)
     finally:
+        configurar_semaforo_sei(None)
+        limpar_cache_cliente_llm()
         if cliente_proprio and cliente_sei is not None:
             close_fn = getattr(cliente_sei, "close", None)
             if callable(close_fn):

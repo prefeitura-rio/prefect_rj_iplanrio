@@ -16,11 +16,10 @@ Fluxo de Dependências:
   * SDK `google.genai`: cliente de comunicação nativo do Google Gemini.
 """
 
-import os
-
 from google import genai
 from google.genai import types
 
+from pipelines.rj_smtr__triagem_recursos.constants import obter_env
 from pipelines.rj_smtr__triagem_recursos.helpers.providers.base import BaseLLMClient
 from pipelines.rj_smtr__triagem_recursos.helpers.schemas import EsquemaDecisao
 
@@ -34,11 +33,11 @@ class GoogleLLMClient(BaseLLMClient):
         base_url: str | None = None,
         default_model: str | None = None,
     ) -> None:
-        key = api_key or os.getenv("GEMINI_API_KEY")
+        key = api_key or obter_env("GEMINI_API_KEY")
         if not key:
             raise ValueError("Chave GEMINI_API_KEY não informada ou ausente no .env.")
 
-        model = default_model or os.getenv("LLM_MODEL", "gemini-3.7-flash")
+        model = default_model or obter_env("LLM_MODEL", "gemini-3.7-flash") or "gemini-3.7-flash"
         super().__init__(api_key=key, base_url=base_url, default_model=model)
 
         self.client = genai.Client(api_key=self.api_key)
