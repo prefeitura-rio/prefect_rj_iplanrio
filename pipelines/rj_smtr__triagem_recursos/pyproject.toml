@@ -1,5 +1,5 @@
 [project]
-name = "rj-smtr-triagem-recursos"
+name = "rj_smtr__triagem_recursos"
 version = "1.0.0"
 description = "Automated triage and selective classification of traffic citation appeals for SMTR-RJ using LLM reasoning and tabular meta-calibration."
 dependencies = [

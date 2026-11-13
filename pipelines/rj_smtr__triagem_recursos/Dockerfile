@@ -1,4 +1,4 @@
-FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:shared
+FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:latest
 
 LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_rj_iplanrio
 
@@ -13,13 +13,12 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 COPY ./src ./src/
-COPY ./packages ./packages/
 COPY ./pipelines/rj_smtr__triagem_recursos ./pipelines/rj_smtr__triagem_recursos/
 
-RUN uv sync --frozen --package rj-smtr-triagem-recursos --inexact --no-dev --no-cache
+RUN uv sync --package rj_smtr__triagem_recursos
 
 ENV HF_HOME=/opt/prefect/hf_cache \
     SENTENCE_TRANSFORMERS_HOME=/opt/prefect/hf_cache
 
-RUN uv run --no-sync --package rj-smtr-triagem-recursos python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')" \
+RUN uv run --no-sync --package rj_smtr__triagem_recursos python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')" \
     && chmod -R a+rX /opt/prefect/hf_cache
