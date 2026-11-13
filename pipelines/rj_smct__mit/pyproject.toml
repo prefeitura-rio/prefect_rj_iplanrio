@@ -1,0 +1,11 @@
+[project]
+name = "rj_smct__mit"
+version = "1.0.0"
+description = "Carrega dados do MIT (Octopus: edge analysis, matched, calibração e rotas) do GCS para o BigQuery."
+dependencies = [
+    "prefect_rj_iplanrio",
+    "polars>=1.41.2",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
