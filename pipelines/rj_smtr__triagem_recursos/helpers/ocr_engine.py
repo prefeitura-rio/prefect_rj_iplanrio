@@ -73,7 +73,7 @@ def configurar_tesseract_se_necessario() -> bool:
         candidatos_windows = [
             r"C:\Program Files\Tesseract-OCR\tesseract.exe",
             r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Tesseract-OCR" / "tesseract.exe",
+            Path(obter_env("LOCALAPPDATA", "") or "") / "Programs" / "Tesseract-OCR" / "tesseract.exe",
         ]
         for cand in candidatos_windows:
             cand_path = Path(cand)

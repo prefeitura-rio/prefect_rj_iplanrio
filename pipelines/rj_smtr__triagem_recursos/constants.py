@@ -17,15 +17,16 @@ Fluxo de Dependências:
   * Módulo folha de constantes de sistema (sem dependências de outros submódulos da pipeline).
 """
 
-import os
 from enum import Enum
 from pathlib import Path
+
+from iplanrio.pipelines_utils.env import getenv_or_action
 
 PIPELINE_DIR = Path(__file__).resolve().parent
 
 
 def obter_env(chave: str, default: str | None = None) -> str | None:
-    """Resolve variável de ambiente com ou sem prefixo SMTR_TRIAGEM__ (evita colisão no cluster)."""
+    """Resolve variável de ambiente via getenv_or_action com ou sem prefixo SMTR_TRIAGEM__."""
     if not chave.startswith("SMTR_TRIAGEM__"):
         nomes = [
             f"SMTR_TRIAGEM__{chave}",
@@ -42,7 +43,7 @@ def obter_env(chave: str, default: str | None = None) -> str | None:
             f"SMTR_TRIAGEM_{sem_prefixo}",
         ]
     for nome in nomes:
-        bruto = os.environ.get(nome)
+        bruto = getenv_or_action(nome, action="ignore")
         if bruto is None:
             continue
         limpo = bruto.strip()
