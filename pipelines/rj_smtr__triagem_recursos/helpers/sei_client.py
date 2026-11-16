@@ -24,7 +24,7 @@ logger = get_logger(__name__)
 MAX_DOCUMENT_BYTES = 30 * 1024 * 1024  # 30 MB teto de memoria por documento
 CHUNK_SIZE = 64 * 1024  # 64 KB por chunk de streaming
 STATUS_RETENTAVEIS = frozenset({HTTPStatus.BAD_GATEWAY, HTTPStatus.SERVICE_UNAVAILABLE, HTTPStatus.GATEWAY_TIMEOUT})
-ATRASOS_RETENTATIVA = (0.5, 1.0, 2.0)
+ATRASOS_RETENTATIVA = (1.0, 2.5, 5.0, 8.0)
 
 
 @dataclass(frozen=True)
