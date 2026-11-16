@@ -38,8 +38,8 @@
     "rj_sme__brutos_gestao_escolar",
     "rj_sme__educacao_basica",
     "rj_smfp__adm_instrumentos_firmados",
-    "rj_smfp__ergon",
     "rj_smfp__crf",
+    "rj_smfp__ergon",
     "rj_smfp__sigma",
     "rj_smi__siscob",
     "rj_ssm__run_dbt"
