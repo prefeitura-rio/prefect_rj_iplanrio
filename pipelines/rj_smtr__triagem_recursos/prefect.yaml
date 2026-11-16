@@ -32,22 +32,18 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_smtr__triagem_recursos/flow.py:rj_smtr__triagem_recursos
     work_pool:
-      name: default-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_smtr__triagem_recursos -- prefect flow-run execute
+        namespace: pipelines-staging
         secretName: pipelines-infisical-dados
-        service_account_name: pipelines
         image_pull_policy: Always
-        finished_job_ttl: 600
-        resources:
-          requests:
-            memory: 2Gi
-            ephemeral-storage: 1Gi
-          limits:
-            memory: 4Gi
-            ephemeral-storage: 4Gi
+        memory_request: 2Gi
+        memory_limit: 4Gi
+        cpu_request: "1"
+        cpu_limit: "2"
         env:
           PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_smtr__triagem_recursos
           INFISICAL_URL: https://secrets.dados.rio
@@ -73,22 +69,18 @@ deployments:
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smtr__triagem_recursos/flow.py:rj_smtr__triagem_recursos
     work_pool:
-      name: default-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_smtr__triagem_recursos -- prefect flow-run execute
+        namespace: pipelines-prod
         secretName: pipelines-infisical-dados
-        service_account_name: pipelines
         image_pull_policy: Always
-        finished_job_ttl: 600
-        resources:
-          requests:
-            memory: 2Gi
-            ephemeral-storage: 1Gi
-          limits:
-            memory: 4Gi
-            ephemeral-storage: 4Gi
+        memory_request: 2Gi
+        memory_limit: 4Gi
+        cpu_request: "1"
+        cpu_limit: "2"
         env:
           PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_smtr__triagem_recursos
           INFISICAL_URL: https://secrets.dados.rio
