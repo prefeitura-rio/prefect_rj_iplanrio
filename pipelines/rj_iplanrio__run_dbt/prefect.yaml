@@ -139,7 +139,7 @@ deployments:
           send_discord_report: false
           github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
           bigquery_project: "rj-iplanrio"
-          target: "run"
+          target: "prod"
           gcs_buckets:
             prod: "rj-iplanrio_dbt"
             dev: "rj-iplanrio-dev_dbt"
