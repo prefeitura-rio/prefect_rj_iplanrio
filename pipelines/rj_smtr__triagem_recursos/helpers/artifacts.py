@@ -189,7 +189,7 @@ def preaquecer_modelo_embedding() -> None:
 def carregar_artefatos_pipeline(
     is_local: bool = False,
     arquivo_prompt: str = f"{VERSAO_PROMPT_PADRAO}.txt",
-    infisical_secret_path: str | None = "/smtr-triagem",
+    infisical_secret_path: str | None = "/rj_smtr__triagem_recursos",
 ) -> dict[str, Any]:
     """Carrega calibracao ativa do PostgreSQL (fallback local apenas se is_local=True) e prompt do sistema."""
     from pipelines.rj_smtr__triagem_recursos.helpers.db_repository import buscar_configuracao_calibracao_ativa

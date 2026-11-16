@@ -38,6 +38,7 @@ from pipelines.rj_smtr__triagem_recursos.constants import (
     VERSAO_PROMPT_PADRAO,
     VERTEX_LLM_MODEL,
 )
+from pipelines.rj_smtr__triagem_recursos.helpers.infisical import carregar_secrets_infisical_se_necessario
 from pipelines.rj_smtr__triagem_recursos.helpers.sei_client import ModWsseiClient
 from pipelines.rj_smtr__triagem_recursos.helpers.triage import (
     configurar_semaforo_sei,
@@ -72,7 +73,7 @@ def rj_smtr__triagem_recursos(
     arquivo_prompt: str = f"{VERSAO_PROMPT_PADRAO}.txt",
     data_inicio: str | None = None,
     data_fim: str | None = None,
-    infisical_secret_path: str | None = "/smtr-triagem",
+    infisical_secret_path: str | None = "/rj_smtr__triagem_recursos",
     reasoning_effort: str = "medium",
     arquivos_especificos: list[Any] | None = None,
     executar_n2: bool = True,
@@ -91,10 +92,13 @@ def rj_smtr__triagem_recursos(
         max_downloads_sei,
     )
 
+    if not is_local:
+        carregar_secrets_infisical_se_necessario(secret_path_override=infisical_secret_path)
+
     import os
     vars_ambiente = [
         k for k in os.environ
-        if any(t in k for t in ("SMTR", "DATABASE", "DB_URL", "BIFROST", "SEI_"))
+        if any(t in k for t in ("SMTR", "DATABASE", "DB_URL", "BIFROST", "SEI_", "INFISICAL"))
     ]
     logger.info("Chaves de ambiente detectadas no container: %s", sorted(vars_ambiente))
 
