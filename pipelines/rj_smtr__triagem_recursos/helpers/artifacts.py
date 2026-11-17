@@ -15,9 +15,9 @@ Fluxo de Dependências:
   * `tasks.py`: invocado por `task_carregar_artefatos_referencia` no início da execução da pipeline.
 - Dependências Diretas:
   * `constants.py`: importa caminhos locais de prompts e artefatos, bem como a versão padrão de prompt.
-  * `utils/db_repository.py`: invoca `buscar_configuracao_calibracao_ativa` para consultar o banco.
-  * `utils/meta_calibrator.py`: utiliza `criar_calibrador_dos_parametros_banco` para compor o `ModeloCalibrador`.
-  * `utils/conformal.py`: utiliza `criar_artefatos_conforme_do_banco` para compor `ArtefatosConforme`.
+  * `helpers/db_repository.py`: invoca `buscar_configuracao_calibracao_ativa` para consultar o banco.
+  * `helpers/meta_calibrator.py`: utiliza `criar_calibrador_dos_parametros_banco` para compor o `ModeloCalibrador`.
+  * `helpers/conformal.py`: utiliza `criar_artefatos_conforme_do_banco` para compor `ArtefatosConforme`.
   * `prefect.logging`: logger com rastreabilidade OpenTelemetry.
 """
 

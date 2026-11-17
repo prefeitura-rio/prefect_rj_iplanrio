@@ -16,11 +16,11 @@ em fatos documentais ou se decorre de alucinação persuasiva. Os 8 sinais inclu
 
 Fluxo de Dependências:
 - Consumidores Diretos:
-  * `utils/triage.py`: extrai o vetor de sinais para alimentar o meta-calibrador e a auditoria.
-  * `utils/meta_calibrator.py`: consome a classe `VetorSinaisEpistemicos` como entrada das features.
-  * `utils/router.py`: utiliza rotinas de embedding textual para calcular a dispersão de CoT (N=2).
+  * `helpers/triage.py`: extrai o vetor de sinais para alimentar o meta-calibrador e a auditoria.
+  * `helpers/meta_calibrator.py`: consome a classe `VetorSinaisEpistemicos` como entrada das features.
+  * `helpers/router.py`: utiliza rotinas de embedding textual para calcular a dispersão de CoT (N=2).
 - Dependências Diretas:
-  * `utils/schemas.py`: recebe `EsquemaDecisao` para extração dos trechos de evidência e justificativa.
+  * `helpers/schemas.py`: recebe `EsquemaDecisao` para extração dos trechos de evidência e justificativa.
   * SciPy (`scipy.spatial.distance.mahalanobis`): cômputo da distância multivariada condicional.
   * SequenceMatcher e regex compiladas de marcadores linguísticos adversativos.
 """

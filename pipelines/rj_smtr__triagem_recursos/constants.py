@@ -9,10 +9,10 @@ de resolução dinâmica da URL de conexão do banco de dados (local vs. Cloud S
 Fluxo de Dependências:
 - Consumidores Diretos:
   * `flow.py`, `tasks.py`: importação de limiares operacionais e nomes de modelos.
-  * `utils/triage.py`, `utils/router.py`: importação de `LIMIAR_ALTA`, `LIMIAR_BAIXA`,
+  * `helpers/triage.py`, `helpers/router.py`: importação de `LIMIAR_ALTA`, `LIMIAR_BAIXA`,
     `FaixaOperacional`, `RotaExecucao` e ganhos Bayesianos.
-  * `utils/db_repository.py`: importação de nomes de tabelas e enums de status da fila.
-  * `utils/storage.py`, `utils/artifacts.py`: importação de caminhos locais do workspace.
+  * `helpers/db_repository.py`: importação de nomes de tabelas e enums de status da fila.
+  * `helpers/storage.py`, `helpers/artifacts.py`: importação de caminhos locais do workspace.
 - Dependências Diretas:
   * Módulo folha de constantes de sistema (sem dependências de outros submódulos da pipeline).
 """

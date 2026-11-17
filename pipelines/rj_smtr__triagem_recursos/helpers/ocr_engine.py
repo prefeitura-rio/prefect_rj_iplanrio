@@ -12,9 +12,9 @@ de evidências fáticas. Em vez de executar OCR custoso sobre todo o processo de
 
 Fluxo de Dependências:
 - Consumidores Diretos:
-  * `utils/triage.py`: invoca `extrair_ocr_pagina_especifica` para obter o texto factual
+  * `helpers/triage.py`: invoca `extrair_ocr_pagina_especifica` para obter o texto factual
     da lauda de evidência antes da extração dos sinais epistêmicos.
-  * `utils/router.py`: consome a função para verificação de grounding no roteamento.
+  * `helpers/router.py`: consome a função para verificação de grounding no roteamento.
 - Dependências Diretas:
   * PyMuPDF (`pymupdf`): extração de texto vetorial e renderização raster de laudas em memória.
   * Tesseract OCR (`pytesseract`): motor óptico de reconhecimento com detecção automática de binário.
@@ -28,7 +28,7 @@ import threading
 from pathlib import Path
 
 import pymupdf
-from prefect.logging import get_logger
+from prefect_rj_iplanrio.logging import get_logger
 
 from pipelines.rj_smtr__triagem_recursos.constants import obter_env
 from pipelines.rj_smtr__triagem_recursos.helpers.windowing import FITZ_LOCK

@@ -23,16 +23,16 @@ Fluxo de Dependências:
     e por `task_gerar_sumario_lote` para consolidar o sumário estatístico-financeiro.
 - Dependências Diretas:
   * `constants.py`: importa limiares de confiança (0.85 e 0.50), parâmetros e enums de rotas e faixas.
-  * `utils/storage.py`: carrega os bytes do PDF diretamente em buffer de memória RAM.
-  * `utils/windowing.py`: trunca o PDF para a janela de contexto configurada (máximo 20 laudas).
-  * `utils/providers/openai_client.py`: efetua a chamada multimodal estruturada no gateway Bifrost.
-  * `utils/guardrails.py`: valida e corrige alucinações epistêmicas na resposta da LLM.
-  * `utils/ocr_engine.py`: extrai o texto físico da página apontada como evidência pelo modelo.
-  * `utils/feature_extractor.py`: calcula os 8 sinais epistêmicos (similaridade, Mahalanobis, k-NN).
-  * `utils/meta_calibrator.py`: computa a probabilidade calibrada supervisionada P_cal.
-  * `utils/conformal.py`: constrói o prediction set conforme para mensurar ambiguidade de classes.
-  * `utils/router.py`: provê a lógica de N=2 sob incerteza moderada, cálculo de Delta_CoT e Bayes log-odds.
-  * `utils/cost_analyzer.py`: apura o custo de tokens em dólares e o valor economizado com cache.
+  * `helpers/storage.py`: carrega os bytes do PDF diretamente em buffer de memória RAM.
+  * `helpers/windowing.py`: trunca o PDF para a janela de contexto configurada (máximo 20 laudas).
+  * `helpers/providers/openai_client.py`: efetua a chamada multimodal estruturada no gateway Bifrost.
+  * `helpers/guardrails.py`: valida e corrige alucinações epistêmicas na resposta da LLM.
+  * `helpers/ocr_engine.py`: extrai o texto físico da página apontada como evidência pelo modelo.
+  * `helpers/feature_extractor.py`: calcula os 8 sinais epistêmicos (similaridade, Mahalanobis, k-NN).
+  * `helpers/meta_calibrator.py`: computa a probabilidade calibrada supervisionada P_cal.
+  * `helpers/conformal.py`: constrói o prediction set conforme para mensurar ambiguidade de classes.
+  * `helpers/router.py`: provê a lógica de N=2 sob incerteza moderada, cálculo de Delta_CoT e Bayes log-odds.
+  * `helpers/cost_analyzer.py`: apura o custo de tokens em dólares e o valor economizado com cache.
 """
 
 import threading
@@ -699,78 +699,6 @@ def executar_lote_com_checkpoint(
             res = resolver_futuro_seguro(done_fut, "triagem_individual")
             if isinstance(res, dict) and "processo_id" in res:
                 _registrar_resultado_e_flush(res, resultados, buffer_lote, ao_concluir_lote, lote_cap)
-
-    if buffer_lote and ao_concluir_lote is not None:
-        ao_concluir_lote(list(buffer_lote))
-        buffer_lote.clear()
-
-    return resultados
-
-
-def executar_lote_em_janelas(
-    processos: list[dict[str, Any]],
-    submeter_download: Callable[[dict[str, Any]], FutureProtocol],
-    submeter_classificacao: Callable[[dict[str, Any]], FutureProtocol],
-    aguardar_concluidos: Callable[[list[Any]], Iterable[Any]],
-    max_downloads_simultaneos: int = 4,
-    aquecer_primeiro: bool = True,
-    ao_concluir_lote: Callable[[list[dict[str, Any]]], None] | None = None,
-    tamanho_lote_persistencia: int = 20,
-) -> list[dict[str, Any]]:
-    """Orquestra downloads SEI limitados em paralelo com inferências LLM e checkpoint incremental."""
-    if not processos:
-        return []
-
-    pendentes: deque[dict[str, Any]] = deque(processos)
-    resultados: list[dict[str, Any]] = []
-    buffer_lote: list[dict[str, Any]] = []
-    lote_cap = max(1, tamanho_lote_persistencia)
-
-    # Aquece o cache de prompt com o primeiro processo válido antes da rajada concorrente.
-    if aquecer_primeiro and len(pendentes) > 1:
-        while pendentes:
-            proc_warmup = pendentes.popleft()
-            doc_warmup = resolver_futuro_seguro(submeter_download(proc_warmup), "warmup_download")
-            if isinstance(doc_warmup, dict) and doc_warmup.get("ok"):
-                res_warmup = resolver_futuro_seguro(submeter_classificacao(doc_warmup), "warmup_classificacao")
-                if isinstance(res_warmup, dict) and "processo_id" in res_warmup:
-                    _registrar_resultado_e_flush(res_warmup, resultados, buffer_lote, ao_concluir_lote, lote_cap)
-                break
-            if isinstance(doc_warmup, dict) and "resultado_erro" in doc_warmup:
-                erro_warmup = doc_warmup["resultado_erro"]
-                if isinstance(erro_warmup, dict) and "processo_id" in erro_warmup:
-                    _registrar_resultado_e_flush(erro_warmup, resultados, buffer_lote, ao_concluir_lote, lote_cap)
-
-    limite_janela = max(1, max_downloads_simultaneos)
-    downloads_ativos: list[Any] = []
-    inferencias_ativas: list[Any] = []
-
-    while pendentes and len(downloads_ativos) < limite_janela:
-        downloads_ativos.append(submeter_download(pendentes.popleft()))
-
-    while downloads_ativos or inferencias_ativas:
-        em_andamento = [*downloads_ativos, *inferencias_ativas]
-        concluido = next(iter(aguardar_concluidos(em_andamento)), None)
-        if concluido is None:
-            break
-
-        if concluido in downloads_ativos:
-            downloads_ativos.remove(concluido)
-            if pendentes:
-                downloads_ativos.append(submeter_download(pendentes.popleft()))
-
-            doc_prep = resolver_futuro_seguro(concluido, "download")
-            if isinstance(doc_prep, dict) and doc_prep.get("ok"):
-                inferencias_ativas.append(submeter_classificacao(doc_prep))
-            elif isinstance(doc_prep, dict) and "resultado_erro" in doc_prep:
-                erro_doc = doc_prep["resultado_erro"]
-                if isinstance(erro_doc, dict) and "processo_id" in erro_doc:
-                    _registrar_resultado_e_flush(erro_doc, resultados, buffer_lote, ao_concluir_lote, lote_cap)
-        elif concluido in inferencias_ativas:
-            inferencias_ativas.remove(concluido)
-            res_inf = resolver_futuro_seguro(concluido, "classificacao")
-            if isinstance(res_inf, dict) and "processo_id" in res_inf:
-                _registrar_resultado_e_flush(res_inf, resultados, buffer_lote, ao_concluir_lote, lote_cap)
 
     if buffer_lote and ao_concluir_lote is not None:
         ao_concluir_lote(list(buffer_lote))

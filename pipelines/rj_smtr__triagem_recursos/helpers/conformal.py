@@ -14,9 +14,9 @@ epistêmica:
 
 Fluxo de Dependências:
 - Consumidores Diretos:
-  * `utils/triage.py`: computa o conjunto conformal e seu tamanho para cada processo triado.
-  * `utils/router.py`: verifica se |C(X)| == 1 para validar a rota N1_DIRETO.
-  * `utils/artifacts.py`: instancia o container `ArtefatosConforme` a partir do banco de dados.
+  * `helpers/triage.py`: computa o conjunto conformal e seu tamanho para cada processo triado.
+  * `helpers/router.py`: verifica se |C(X)| == 1 para validar a rota N1_DIRETO.
+  * `helpers/artifacts.py`: instancia o container `ArtefatosConforme` a partir do banco de dados.
 - Dependências Diretas:
   * NumPy, Pandas e Math para cálculos de quantis conformais empíricos e funções de score.
 """

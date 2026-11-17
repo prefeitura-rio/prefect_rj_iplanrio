@@ -1,6 +1,3 @@
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from threading import Lock
-from time import sleep
 from typing import final
 
 import pymupdf as fitz
@@ -16,7 +13,6 @@ from pipelines.rj_smtr__triagem_recursos.helpers.schemas import (
 )
 from pipelines.rj_smtr__triagem_recursos.helpers.triage import (
     classificar_documento_preparado,
-    executar_lote_em_janelas,
     preparar_documento_processo,
 )
 from pipelines.rj_smtr__triagem_recursos.tests.conftest import (
@@ -70,91 +66,6 @@ class FakeLLMClient:
             ),
         )
         return decisao, {"prompt_tokens": 1000, "completion_tokens": 120, "cached_tokens": 700}
-
-
-def test_executar_lote_em_janelas_empty_returns_empty() -> None:
-    """Retorna lista vazia imediatamente quando não há processos pendentes."""
-
-    def submit_dl(proc: dict[str, object]) -> Future[dict[str, object]]:
-        fut: Future[dict[str, object]] = Future()
-        fut.set_result({"ok": True, "processo": proc})
-        return fut
-
-    def submit_cls(doc: dict[str, object]) -> Future[dict[str, object]]:
-        fut: Future[dict[str, object]] = Future()
-        fut.set_result({"processo_id": doc})
-        return fut
-
-    res = executar_lote_em_janelas(
-        processos=[],
-        submeter_download=submit_dl,
-        submeter_classificacao=submit_cls,
-        aguardar_concluidos=as_completed,
-    )
-    assert res == []
-
-
-def test_executar_lote_em_janelas_warms_first_valid_and_limits_downloads() -> None:
-    """Garante warmup do cache no 1o PDF válido, teto de downloads e sobreposição."""
-    lock = Lock()
-    timeline: list[str] = []
-    active_downloads = 0
-    max_observed_downloads = 0
-    max_parallel_overlap = 0
-    active_cls = 0
-
-    processos: list[dict[str, object]] = [{"processo_id": f"p-{i}"} for i in range(8)]
-
-    def fake_download(proc: dict[str, object]) -> dict[str, object]:
-        nonlocal active_downloads, max_observed_downloads
-        pid = str(proc["processo_id"])
-        with lock:
-            active_downloads += 1
-            max_observed_downloads = max(max_observed_downloads, active_downloads)
-            timeline.append(f"dl_start:{pid}")
-        sleep(0.03)
-        with lock:
-            active_downloads -= 1
-            timeline.append(f"dl_end:{pid}")
-        if pid == "p-0":
-            return {
-                "ok": False,
-                "processo": proc,
-                "resultado_erro": {"processo_id": pid, "rota_execucao": "HITL_ERRO_ARQUIVO"},
-            }
-        return {"ok": True, "processo": proc}
-
-    def fake_classify(doc: dict[str, object]) -> dict[str, object]:
-        nonlocal active_cls, max_parallel_overlap
-        proc_obj = doc["processo"]
-        assert isinstance(proc_obj, dict)
-        pid = str(proc_obj["processo_id"])
-        with lock:
-            active_cls += 1
-            max_parallel_overlap = max(max_parallel_overlap, active_cls + active_downloads)
-            timeline.append(f"cls_start:{pid}")
-        sleep(0.05)
-        with lock:
-            active_cls -= 1
-            timeline.append(f"cls_end:{pid}")
-        return {"processo_id": pid, "rota_execucao": "N1_DIRETO"}
-
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        resultados = executar_lote_em_janelas(
-            processos=processos,
-            submeter_download=lambda p: pool.submit(fake_download, p),
-            submeter_classificacao=lambda d: pool.submit(fake_classify, d),
-            aguardar_concluidos=as_completed,
-            max_downloads_simultaneos=3,
-            aquecer_primeiro=True,
-        )
-
-    assert len(resultados) == 8
-    assert any(item["processo_id"] == "p-0" and item["rota_execucao"] == "HITL_ERRO_ARQUIVO" for item in resultados)
-    assert any(item["processo_id"] == "p-1" and item["rota_execucao"] == "N1_DIRETO" for item in resultados)
-    assert timeline.index("cls_end:p-1") < timeline.index("dl_start:p-2")
-    assert max_observed_downloads <= 3
-    assert max_parallel_overlap > 3
 
 
 def test_two_stage_pipeline_truncates_and_classifies(

@@ -13,12 +13,12 @@ pela SMTR para predizer a probabilidade real de acerto da hipótese predita. Sup
 
 Fluxo de Dependências:
 - Consumidores Diretos:
-  * `utils/triage.py`: invoca `predizer_probabilidade_calibrada` para obter P_cal(N=1).
-  * `utils/artifacts.py`: instancia o objeto `ModeloCalibrador` a partir dos registros do banco ou joblib.
-  * `utils/router.py`: consome as probabilidades calibradas para bifurcação entre Faixa Verde,
+  * `helpers/triage.py`: invoca `predizer_probabilidade_calibrada` para obter P_cal(N=1).
+  * `helpers/artifacts.py`: instancia o objeto `ModeloCalibrador` a partir dos registros do banco ou joblib.
+  * `helpers/router.py`: consome as probabilidades calibradas para bifurcação entre Faixa Verde,
     Amarela (N=2) e Vermelha (HITL).
 - Dependências Diretas:
-  * `utils/feature_extractor.py`: utiliza `VetorSinaisEpistemicos` e `EstatisticasSemanticasClasses`.
+  * `helpers/feature_extractor.py`: utiliza `VetorSinaisEpistemicos` e `EstatisticasSemanticasClasses`.
   * LightGBM (`lightgbm.Booster`), NumPy e Pandas para inferência vetorial rápida.
 """
 

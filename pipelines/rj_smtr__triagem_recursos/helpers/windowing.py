@@ -11,7 +11,7 @@ pesados antes da conversão para imagens e envio aos modelos multimodais de ling
 
 Fluxo de Dependências:
 - Consumidores Diretos:
-  * `utils/triage.py`: consome `extrair_smart_window_pdf` imediatamente antes da chamada
+  * `helpers/triage.py`: consome `extrair_smart_window_pdf` imediatamente antes da chamada
     primária N=1 e da eventual chamada adaptativa N=2.
 - Dependências Diretas:
   * PyMuPDF (`fitz`): biblioteca de baixo nível em C para manipulação in-memory de PDFs.

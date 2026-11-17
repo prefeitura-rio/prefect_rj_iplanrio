@@ -9,11 +9,11 @@ documentos PDF para a pasta local de testes ou para o cliente HTTP do SEI-Rio
 
 Fluxo de Dependências:
 - Consumidores Diretos:
-  * `utils/triage.py`: invoca `carregar_bytes_pdf` para obter a petição recursal antes do Smart Windowing.
-  * `utils/artifacts.py`: invoca `carregar_bytes_artefato` para carregar binários congelados da baseline.
+  * `helpers/triage.py`: invoca `carregar_bytes_pdf` para obter a petição recursal antes do Smart Windowing.
+  * `helpers/artifacts.py`: invoca `carregar_bytes_artefato` para carregar binários congelados da baseline.
 - Dependências Diretas:
   * `constants.py`: importa caminhos dos diretórios de dados locais (`LOCAL_PDFS_DIR`, `LOCAL_ARTIFACTS_DIR`).
-  * `utils/sei_client.py`: interage com instâncias de `ModWsseiClient` quando `fonte_pdf="sei"`.
+  * `helpers/sei_client.py`: interage com instâncias de `ModWsseiClient` quando `fonte_pdf="sei"`.
 """
 
 from pathlib import Path
@@ -65,18 +65,3 @@ def carregar_bytes_pdf(
         return cliente_sei.baixar_documento(identificador)
 
     raise ValueError(f"Modo de fonte de PDF inválido: '{modo}'. Use 'local' ou 'sei'.")
-
-
-def carregar_bytes_artefato(nome_artefato: str, diretorio_local: Path | None = None) -> bytes:
-    """Lê bytes de um artefato estático localmente.
-
-    :param nome_artefato: Nome do arquivo do artefato.
-    :param diretorio_local: Diretório opcional onde o artefato reside.
-    :returns: Bytes do arquivo lido.
-    :raises FileNotFoundError: Se o arquivo do artefato não existir.
-    """
-    pasta = diretorio_local or LOCAL_ARTIFACTS_DIR
-    caminho = pasta / nome_artefato
-    if not caminho.exists():
-        raise FileNotFoundError(f"Artefato local ausente: {caminho.resolve()}")
-    return caminho.read_bytes()

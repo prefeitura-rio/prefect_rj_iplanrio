@@ -9,10 +9,10 @@ configuração de decodificação estruturada (`response_mime_type="application/
 
 Fluxo de Dependências:
 - Consumidores Diretos:
-  * `utils/triage.py`: alternativa nativa ao `OpenAILLMClient` quando `LLM_PROVIDER="google"`.
+  * `helpers/triage.py`: alternativa nativa ao `OpenAILLMClient` quando `LLM_PROVIDER="google"`.
 - Dependências Diretas:
-  * `utils/providers/base.py`: herda da interface abstrata `BaseLLMClient`.
-  * `utils/schemas.py`: impõe `EsquemaDecisao` como schema Pydantic de resposta do modelo.
+  * `helpers/providers/base.py`: herda da interface abstrata `BaseLLMClient`.
+  * `helpers/schemas.py`: impõe `EsquemaDecisao` como schema Pydantic de resposta do modelo.
   * SDK `google.genai`: cliente de comunicação nativo do Google Gemini.
 """
 

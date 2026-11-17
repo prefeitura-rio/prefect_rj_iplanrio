@@ -34,17 +34,17 @@ Lógica Operacional dos Estágios de Inferência:
 
 Fluxo de Dependências:
 - Consumidores Diretos:
-  * `utils/triage.py`: consome as funções `atualizar_probabilidade_bayesiana_log_odds`,
+  * `helpers/triage.py`: consome as funções `atualizar_probabilidade_bayesiana_log_odds`,
     `calcular_dispersao_cot`, `construir_prediction_set_aps` e a classe `DecisaoProcessualFinal`
     para executar a triagem processo a processo.
 - Dependências Diretas:
-  * `utils/schemas.py`: utiliza `EsquemaDecisao` para estruturação de dados de entrada/saída,
+  * `helpers/schemas.py`: utiliza `EsquemaDecisao` para estruturação de dados de entrada/saída,
     garantindo formato comum para respostas e decisões.
-  * `utils/conformal.py`: utiliza `ArtefatosConforme` para conferir limites de cobertura
+  * `helpers/conformal.py`: utiliza `ArtefatosConforme` para conferir limites de cobertura
     estatística e tamanho de conjuntos conformais CCCP.
-  * `utils/meta_calibrator.py`: consome `ModeloCalibrador` e `predizer_probabilidade_calibrada`.
-  * `utils/feature_extractor.py`: consome rotinas de vetorização semântica e cálculo de embeddings.
-  * `utils/guardrails.py`: validações estruturais de integridade das decisões.
+  * `helpers/meta_calibrator.py`: consome `ModeloCalibrador` e `predizer_probabilidade_calibrada`.
+  * `helpers/feature_extractor.py`: consome rotinas de vetorização semântica e cálculo de embeddings.
+  * `helpers/guardrails.py`: validações estruturais de integridade das decisões.
 """
 
 import math

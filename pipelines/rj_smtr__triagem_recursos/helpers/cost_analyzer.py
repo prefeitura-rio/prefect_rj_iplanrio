@@ -12,7 +12,7 @@ tokens de saída e tokens reutilizados via Prompt Caching):
 
 Fluxo de Dependências:
 - Consumidores Diretos:
-  * `utils/triage.py`: consome `calcular_custo_chamada` para precificar cada processo
+  * `helpers/triage.py`: consome `calcular_custo_chamada` para precificar cada processo
     individualmente e computar as métricas financeiras consolidadas em `gerar_sumario_lote`.
 - Dependências Diretas:
   * Módulo folha de tarifação orçamentária (sem dependências de outros submódulos da pipeline).

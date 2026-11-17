@@ -9,11 +9,11 @@ seja reportada para telemetria de custos e auditoria de Prompt Caching.
 
 Fluxo de Dependências:
 - Consumidores Diretos:
-  * `utils/providers/openai_client.py`: herda desta classe base e implementa a comunicação via Bifrost/OpenAI.
-  * `utils/providers/google_client.py`: herda desta classe base e implementa a comunicação via SDK Vertex AI.
-  * `utils/triage.py`: tipagem genérica para injeção de dependência de clientes LLM.
+  * `helpers/providers/openai_client.py`: herda desta classe base e implementa a comunicação via Bifrost/OpenAI.
+  * `helpers/providers/google_client.py`: herda desta classe base e implementa a comunicação via SDK Vertex AI.
+  * `helpers/triage.py`: tipagem genérica para injeção de dependência de clientes LLM.
 - Dependências Diretas:
-  * `utils/schemas.py`: importa `EsquemaDecisao` para definição do tipo de retorno do método de classificação.
+  * `helpers/schemas.py`: importa `EsquemaDecisao` para definição do tipo de retorno do método de classificação.
 """
 
 from abc import ABC, abstractmethod

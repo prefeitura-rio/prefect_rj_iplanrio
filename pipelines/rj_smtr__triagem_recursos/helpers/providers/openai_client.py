@@ -10,10 +10,10 @@ Captura a telemetria integral de tokens retornada por `response.usage` (incluind
 
 Fluxo de Dependências:
 - Consumidores Diretos:
-  * `utils/triage.py`: instancia `OpenAILLMClient` para executar as inferências N=1 e N=2.
+  * `helpers/triage.py`: instancia `OpenAILLMClient` para executar as inferências N=1 e N=2.
 - Dependências Diretas:
-  * `utils/providers/base.py`: herda da interface abstrata `BaseLLMClient`.
-  * `utils/schemas.py`: utiliza `EsquemaDecisao` para validação e tipagem da resposta JSON.
+  * `helpers/providers/base.py`: herda da interface abstrata `BaseLLMClient`.
+  * `helpers/schemas.py`: utiliza `EsquemaDecisao` para validação e tipagem da resposta JSON.
   * `constants.py`: importa o identificador padrão do modelo (`VERTEX_LLM_MODEL`).
   * PyMuPDF (`fitz`): renderização in-memory das laudas em imagens JPEG.
   * SDK `openai.OpenAI`: cliente de transporte HTTP com suporte a chamadas multimodais.

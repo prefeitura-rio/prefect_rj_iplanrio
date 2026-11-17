@@ -10,11 +10,11 @@ que força saídas tipadas e determinísticas nas chamadas multimodais da LLM.
 
 Fluxo de Dependências:
 - Consumidores Diretos:
-  * `utils/router.py`: utiliza `EsquemaDecisao` para compor `DecisaoProcessualFinal` e rotear rotas de execução.
-  * `utils/triage.py`: valida e tipa a resposta bruta das chamadas N=1 e N=2 da LLM.
-  * `utils/guardrails.py`: consome os Enums para aplicar salvaguardas epistêmicas e conversões de mérito.
-  * `utils/feature_extractor.py`: extrai métricas de citação a partir dos campos de evidência do schema.
-  * `utils/providers/base.py`, `openai_client.py`, `google_client.py`: impõem este schema como saída estruturada (JSON Schema) nos provedores.
+  * `helpers/router.py`: utiliza `EsquemaDecisao` para compor `DecisaoProcessualFinal` e rotear rotas de execução.
+  * `helpers/triage.py`: valida e tipa a resposta bruta das chamadas N=1 e N=2 da LLM.
+  * `helpers/guardrails.py`: consome os Enums para aplicar salvaguardas epistêmicas e conversões de mérito.
+  * `helpers/feature_extractor.py`: extrai métricas de citação a partir dos campos de evidência do schema.
+  * `helpers/providers/base.py`, `openai_client.py`, `google_client.py`: impõem este schema como saída estruturada (JSON Schema) nos provedores.
 - Dependências Diretas:
   * Módulo folha de tipos canônicos (sem dependências internas de outros submódulos da pipeline).
 """

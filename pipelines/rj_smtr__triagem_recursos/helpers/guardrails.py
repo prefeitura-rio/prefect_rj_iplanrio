@@ -13,11 +13,11 @@ comportamento do modelo:
 
 Fluxo de Dependências:
 - Consumidores Diretos:
-  * `utils/triage.py`: executa `aplicar_guardrail_epistemico` imediatamente após a recepção
+  * `helpers/triage.py`: executa `aplicar_guardrail_epistemico` imediatamente após a recepção
     da resposta da LLM nos estágios N=1 e N=2.
-  * `utils/router.py`: utiliza as rotinas para validação de integridade pré-roteamento.
+  * `helpers/router.py`: utiliza as rotinas para validação de integridade pré-roteamento.
 - Dependências Diretas:
-  * `utils/schemas.py`: utiliza `EsquemaDecisao`, `HipoteseLegal`, `Encaminhamento` e `TipoCitacao`
+  * `helpers/schemas.py`: utiliza `EsquemaDecisao`, `HipoteseLegal`, `Encaminhamento` e `TipoCitacao`
     para inspeção e correção estruturada dos campos de decisão.
 """
 

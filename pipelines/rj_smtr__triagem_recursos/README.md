@@ -24,8 +24,8 @@ graph TD
     CCCP --> GATE{7. Roteador Adaptativo}
     
     GATE -->|p_cal_1 >= 0.85 e !C_X! <= 1| R1[Rota 1: N1_DIRETO]
-    GATE -->|p_cal_1 < 0.33 ou !C_X! == 0| R2[Rota 2: HITL_BAIXA_CONFIANCA]
-    GATE -->|0.33 <= p_cal_1 < 0.85 ou !C_X! >= 2| N2[8. Validação Adaptativa N=2, T=0.7]
+    GATE -->|p_cal_1 < 0.50 ou !C_X! == 0| R2[Rota 2: HITL_BAIXA_CONFIANCA]
+    GATE -->|0.50 <= p_cal_1 < 0.85 ou !C_X! >= 2| N2[8. Validação Adaptativa N=2, T=0.7]
     
     N2 --> CONS{Avaliação de Consenso e CoT}
     CONS -->|Consenso com Delta_CoT <= 0.50| R3[Rota 3: N2_CONSENSO]
@@ -70,7 +70,7 @@ pipelines/rj_smtr__triagem_recursos/
 ├── tasks.py                        # Definição fina de @task decoradas
 ├── constants.py                    # Constantes de negócio, limiares e resolução de banco
 ├── pyproject.toml                  # Manifesto Hatchling do pacote no workspace
-├── prefect.yaml                    # Deployments staging e prod da SMTR
+├── prefect.yaml                    # Deployments staging e prod no onprem-pool
 ├── Dockerfile                      # Imagem de execução com Tesseract OCR e cache MiniLM
 ├── queries/                        # Consultas SQL externalizadas
 │   ├── buscar_configuracao_calibracao_ativa.sql
@@ -79,25 +79,37 @@ pipelines/rj_smtr__triagem_recursos/
 │   ├── filtrar_processos_ja_triados.sql
 │   ├── insert_predicoes.sql
 │   ├── recuperar_processos_travados.sql
+│   ├── update_erro_fila.sql
 │   ├── update_processo_documento.sql
+│   ├── update_processo_protocolo_documento.sql
 │   ├── update_status_fila.sql
 │   └── upsert_processo_sei.sql
 ├── scripts/                        # Utilitários operacionais locais e mock SEI
 │   ├── mock_sei_server.py          # Mock HTTP do mod-wssei para testes locais
 │   └── run_local.py                # Entrypoint CLI para testes locais
-├── utils/                          # Módulos internos (calibração, OCR, SEI, LLM, DB)
+├── tests/                          # Testes unitários e de concorrência/provedores
+│   ├── conftest.py
+│   ├── test_artifacts.py
+│   ├── test_frente_ab.py
+│   ├── test_infisical.py
+│   ├── test_providers.py
+│   ├── test_sei_client.py
+│   └── test_triage_concurrency.py
+├── helpers/                        # Módulos internos (calibração, OCR, SEI, LLM, DB, Infisical)
+│   ├── __init__.py                 # Ajuste de nível INFO no logger da pipeline (STYLEGUIDE)
+│   ├── _sei_fallback.py            # Fallback síncrono do SEI quando sei-client-smtr não estiver instalado
 │   ├── artifacts.py                # Carregamento do calibrador (PostgreSQL + fallback local) e prompt
-│   ├── calibration.py              # Métricas de calibração (ECE, MCE, CECE, Brier)
 │   ├── conformal.py                # Predição conforme condicional por classe (CCCP) e CRC
 │   ├── cost_analyzer.py            # Estimativa de custos e economia de cache
 │   ├── db_repository.py            # Persistência transacional e consulta de fila no PostgreSQL
 │   ├── feature_extractor.py        # Extração dos 8 sinais epistêmicos
 │   ├── guardrails.py               # Guardrails de consistência fática
+│   ├── infisical.py                # Carregamento REST de segredos do Infisical (staging/prod)
 │   ├── meta_calibrator.py          # Carregamento e inferência do LightGBM calibrado
 │   ├── ocr_engine.py               # Lazy OCR Tesseract na lauda citada
 │   ├── router.py                   # Atualização de log-odds e chaveamento de rotas
 │   ├── schemas.py                  # Schemas Pydantic / Enums operacionais
-│   ├── sei_client.py               # Cliente REST assíncrono/httpx para SEI-Rio (mod-wssei)
+│   ├── sei_client.py               # Cliente REST para SEI-Rio (mod-wssei)
 │   ├── storage.py                  # Leitura de bytes de PDF em RAM (local ou SEI)
 │   ├── triage.py                   # Fluxo completo de inferência, calibração e roteamento
 │   ├── windowing.py                # Smart windowing de PDFs (até 20 páginas em RAM)
@@ -106,21 +118,21 @@ pipelines/rj_smtr__triagem_recursos/
 │       ├── google_client.py        # Cliente direto Gemini (Google GenAI SDK)
 │       └── openai_client.py        # Conexão com Gateway Bifrost (API compatível OpenAI)
 ├── pdfs/                           # (Local / .gitignore) PDFs para testes
-├── artifacts/                      # (Local / .gitignore) Artefatos .joblib locais (não versionados)
-├── prompts/                        # (Local / .gitignore) Prompts locais (em nuvem vem do Infisical PROMPT_SISTEMA_V4)
-├── outputs/                        # (Local / .gitignore) Exports SQL gerados para carga inicial
-└── docs/                           # Documentação técnica da pipeline
+├── artifacts/                      # (Local / .gitignore) Artefatos .joblib locais (não vão no Docker)
+├── prompts/                        # (Local / .gitignore) Prompts locais (não vão no Docker)
+├── outputs/                        # (Local / .gitignore) Exports SQL, logs e payloads locais
+└── docs/                           # Documentação técnica e de fluxos da pipeline
 ```
 
 ---
 
 ## Como Executar a Pipeline
 
-As tabelas e migrações DDL pertencem ao repositório externo de banco (`mcp-triagem-smtr`), não à pipeline. Em **staging/prod**, a conexão usa `DATABASE_URL` e o prompt vem de `PROMPT_SISTEMA_V4` via Infisical, enquanto a baseline ativa do calibrador e os parâmetros CCCP residem na tabela `configuracoes_calibracao`. Em execução **local** (`is_local=True`), utiliza-se `DB_URL_LOCAL` (com fallback local opcional em `artifacts/` e `prompts/`).
+As tabelas e migrações DDL pertencem ao repositório externo de banco (`mcp-triagem-smtr`), não à pipeline. Em **staging/prod**, a pipeline roda no work pool `onprem-pool` (`namespaces`: `pipelines-staging` / `pipelines-prod`) consumindo segredos do projeto `pipelines` no Infisical (`https://secrets.dados.rio`, paths `/rj_smtr__triagem_recursos,/shared`, Kubernetes secret `pipelines-infisical-dados`). O módulo [`helpers/infisical.py`](helpers/infisical.py) injeta as variáveis em `os.environ` quando `is_local=False`, utilizando `DATABASE_URL` (ou `DB_URL_CLOUD`) e o prompt em `PROMPT_SISTEMA_V4` (ou `PROMPT_SISTEMA` / `SMTR_TRIAGEM_PROMPT` / `RJ_SMTR__TRIAGEM_RECURSOS_PROMPT`), já que `prompts/` e `artifacts/` estão no `.gitignore` e não são empacotados na imagem Docker. A baseline ativa do calibrador e os parâmetros CCCP residem na tabela `configuracoes_calibracao` do Cloud SQL. Em execução **local** (`is_local=True`), utiliza-se `DB_URL_LOCAL` com fallback opcional para arquivos em `artifacts/` e `prompts/`.
 
 ### 1. Execução Local (via `scripts/run_local.py`)
 
-Inicie um PostgreSQL 16 local compatível com o schema das migrações (ex.: `smtr-postgres-local`) e rode o entrypoint CLI:
+Inicie um PostgreSQL local compatível com o schema das migrações (ex.: `smtr-postgres-local`) e rode o entrypoint CLI:
 
 ```powershell
 # Teste local lendo PDFs da pasta pdfs/
@@ -130,9 +142,15 @@ uv run --package rj_smtr__triagem_recursos python pipelines/rj_smtr__triagem_rec
 uv run --package rj_smtr__triagem_recursos python pipelines/rj_smtr__triagem_recursos/scripts/run_local.py --local --fonte-pdf sei --modo PASSIVO --limite 5
 ```
 
-### 2. Execução em Nuvem (Staging / Cloud SQL via Prefect)
+### 2. Execução em Nuvem (Staging / Prod via Prefect no `onprem-pool`)
 
-No cluster (via deployment `rj-smtr--triagem-recursos--staging` em `prefect.yaml`), o entrypoint carrega os segredos com `python -m utils.secrets`, lê `DATABASE_URL` e `PROMPT_SISTEMA_V4` do Infisical e consome `configuracoes_calibracao` diretamente do Cloud SQL:
+No cluster, os deployments `rj-smtr--triagem-recursos--staging` e `rj-smtr--triagem-recursos--prod` definidos em `prefect.yaml` executam o flow com `is_local=False`:
+
+- Carregamento de segredos no container via `helpers/infisical.py` (`INFISICAL_URL`, `INFISICAL_PROJECT_ID`, `INFISICAL_ENVIRONMENT`, `INFISICAL_PATHS` + credenciais de máquina do `secretName: pipelines-infisical-dados`).
+- Conexão com o Cloud SQL via `DATABASE_URL` (com leitura obrigatória de `configuracoes_calibracao`, pois `artifacts/` não existe na imagem).
+- Prompt carregado de `PROMPT_SISTEMA_V4` no Infisical (pois `prompts/` também não é versionado).
+
+Para simulação pontual com `is_local=False` usando `.env` ou variáveis já carregadas no ambiente:
 
 ```powershell
 uv run --package rj_smtr__triagem_recursos python -c "from pipelines.rj_smtr__triagem_recursos.flow import rj_smtr__triagem_recursos; rj_smtr__triagem_recursos(is_local=False, modo_execucao='INCREMENTAL', limite_lote=50)"
@@ -166,7 +184,7 @@ JOIN fila_trabalho f ON f.processo_id = pr.processo_id;
 
 ## Resultados Operacionais Consolidados
 
-Métricas obtidas sobre o Golden Set de **730 processos auditados da SMTR-RJ**:
+Métricas obtidas na validação histórica sobre o Golden Set de **730 processos auditados da SMTR-RJ** *(nota: nesse estudo de benchmark foi usado o corte inferior `0.33`; na configuração operacional atual de [`constants.py`](constants.py), `LIMIAR_BAIXA` foi elevado para `0.50`)*:
 
 ### Distribuição das Rotas Adaptativas e Critérios de Ativação
 
