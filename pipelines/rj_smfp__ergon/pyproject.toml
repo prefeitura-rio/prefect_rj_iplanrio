@@ -1,0 +1,10 @@
+[project]
+name = "rj_smfp__ergon"
+version = "1.0.0"
+description = "TODO: replace with one sentence describing what this pipeline does and why."
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
