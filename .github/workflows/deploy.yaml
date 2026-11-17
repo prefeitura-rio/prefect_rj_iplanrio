@@ -12,7 +12,7 @@ on:
       - .allow.json
   pull_request:
     branches:
-      - master
+      - staging/main
     types:
       - opened
       - synchronize
@@ -68,6 +68,7 @@ jobs:
     name: Choose the pipelines
     if: >-
       (github.event_name == 'pull_request'
+      && github.base_ref == 'staging/main'
       && github.event.pull_request.head.repo.full_name == github.repository
       && startsWith(github.head_ref, 'staging/'))
       || (github.event_name == 'workflow_dispatch'
@@ -88,6 +89,7 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - name: Set up devenv
         uses: ./.github/actions/setup-devenv
@@ -97,7 +99,7 @@ jobs:
           PIPELINE: ${{ inputs.pipeline }}
           ALL: ${{ inputs.all }}
           BEFORE: ${{ github.event.before || github.event.pull_request.base.sha }}
-          AFTER: ${{ github.sha }}
+          AFTER: ${{ github.event.pull_request.head.sha || github.sha }}
           BRANCH: ${{ github.ref_name }}
           EVENT: ${{ github.event_name }}
         run: |
@@ -125,6 +127,8 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Connect to Tailscale
         uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4
         with:
