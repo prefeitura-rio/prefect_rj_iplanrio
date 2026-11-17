@@ -3,8 +3,21 @@ on:
   push:
     branches:
       - master
-      - staging/*
-      - '!staging/main'
+    paths:
+      - pipelines/**
+      - src/**
+      - packages/**
+      - pyproject.toml
+      - uv.lock
+      - .allow.json
+  pull_request:
+    branches:
+      - master
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
     paths:
       - pipelines/**
       - src/**
@@ -53,12 +66,18 @@ env:
 jobs:
   plan:
     name: Choose the pipelines
-    if: contains(format(',{0},', vars.DEPLOY_BRANCHES), format(',{0},', github.ref_name))
+    if: >-
+      (github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && startsWith(github.head_ref, 'staging/'))
+      || (github.event_name == 'workflow_dispatch'
+      && inputs.environment == 'staging'
+      && startsWith(github.ref_name, 'staging/'))
+      || contains(format(',{0},', vars.DEPLOY_BRANCHES), format(',{0},', github.ref_name))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: read
     defaults:
       run:
         shell: devenv --profile deploy shell -- bash -e {0}
@@ -75,10 +94,9 @@ jobs:
       - name: Choose the pipelines
         id: plan
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PIPELINE: ${{ inputs.pipeline }}
           ALL: ${{ inputs.all }}
-          BEFORE: ${{ github.event.before }}
+          BEFORE: ${{ github.event.before || github.event.pull_request.base.sha }}
           AFTER: ${{ github.sha }}
           BRANCH: ${{ github.ref_name }}
           EVENT: ${{ github.event_name }}
@@ -86,7 +104,6 @@ jobs:
           args=(--environment "$ENVIRONMENT" --before "$BEFORE" --after "$AFTER")
           [ -n "$PIPELINE" ] && args+=(--pipeline "$PIPELINE")
           [ "$ALL" = true ] && args+=(--all)
-          [ "$EVENT" = push ] && [[ "$BRANCH" == staging/* ]] && args+=(--open-pr-from "$BRANCH")
           [ "$EVENT" = push ] && [ "$BRANCH" = master ] && args+=(--defer-to-image-build)
           nu scripts/deploy.nu plan "${args[@]}"
   deploy:

@@ -211,7 +211,7 @@ def 'main lint deps' []: nothing -> nothing {
 def allow-problems []: nothing -> list<string> {
     let allowed = try { open .allow.json } catch { return ['.allow.json: cannot be read'] }
 
-    ['staging' 'prod'] | each {|environment|
+    ['prod'] | each {|environment|
         let names = try { $allowed | get $environment } catch { null }
 
         if not (($names | describe) starts-with 'list') {
