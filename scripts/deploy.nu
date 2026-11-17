@@ -49,16 +49,46 @@ def skip-deploy [reason: string]: nothing -> nothing {
     } | to json --raw)
 }
 
+# Expand comma-separated names and `*` patterns into pipeline names.
+# A name that exists but is outside the pool fails, and so does a pattern with no match.
+def expand-selectors [selectors: string, pool: list<string>, every: list<string>, environment: string]: nothing -> list<string> {
+    let items = $selectors | split row ',' | each { str trim } | where {|item| $item != '' }
+
+    if ($items | is-empty) {
+        fail 'The pipelines input has no name' {command: expand-selectors, span: (metadata $selectors).span}
+    }
+
+    $items | each {|item|
+        if not ($item =~ '^[a-z0-9_*]+$') {
+            fail $'Invalid pipeline name or pattern: ($item)' {command: expand-selectors, span: (metadata $item).span}
+        }
+
+        let regex = $'^($item | str replace --all "*" ".*")$'
+        let found = $pool | where {|name| $name =~ $regex }
+
+        if ($found | is-empty) and not ($item | str contains '*') and ($item in $every) {
+            fail $'The pipeline ($item) is not in .allow.json for ($environment)' {command: expand-selectors, span: (metadata $item).span}
+        }
+
+        if ($found | is-empty) {
+            fail $'No pipeline matches: ($item)' {command: expand-selectors, span: (metadata $item).span}
+        }
+
+        $found
+    } | flatten | uniq | sort
+}
+
 # Choose the pipelines to deploy and write the matrix of the deploy job.
 def 'main plan' [
     --environment: string # `staging` or `prod`
-    --pipeline: string # deploy only this pipeline
+    --pipelines: string # deploy only these comma-separated names or `*` patterns
     --all # deploy every pipeline
     --before: string # the commit before the push
     --after: string = HEAD # the commit of the push
     --defer-to-image-build # deploy nothing if the push also changes the root image, because its build deploys every pipeline
 ]: nothing -> nothing {
-    let changed = if ($pipeline == null) and (not $all) { list-changed-files $before $after } else { [] }
+    let selecting = ($pipelines != null) and ($pipelines | str trim | is-not-empty) and (not $all)
+    let changed = if (not $selecting) and (not $all) { list-changed-files $before $after } else { [] }
 
     if $defer_to_image_build and ($changed | any {|file| $file in $ROOT_IMAGE_FILES }) {
         skip-deploy 'the push changes the root image, and its build deploys every pipeline'
@@ -68,24 +98,20 @@ def 'main plan' [
     let every_pipeline = glob pipelines/*/prefect.yaml | each { path dirname | path basename }
     let shared_changed = $changed | any {|file| $SHARED_PATHS | any {|path| ($file == $path) or ($file | str starts-with $'($path)/') } }
 
-    let candidates = if $pipeline != null {
-        [$pipeline]
+    let allowed = if $environment == 'prod' { read-allowed $environment } else { $every_pipeline }
+
+    let candidates = if $selecting {
+        expand-selectors $pipelines $allowed $every_pipeline $environment
     } else if $all or $shared_changed {
         $every_pipeline
     } else {
         $changed | list-pipelines
     }
 
-    let allowed = if $environment == 'prod' { read-allowed $environment } else { $every_pipeline }
-
-    if ($pipeline != null) and ($pipeline not-in $allowed) {
-        fail $'The pipeline ($pipeline) is not in .allow.json for ($environment)' {command: plan, span: (metadata $pipeline).span}
-    }
-
     let chosen = $candidates | where $it in $allowed | where (find-deployments $it $environment | is-not-empty) | sort
 
-    if ($pipeline != null) and ($chosen | is-empty) {
-        fail $'The pipeline ($pipeline) has no ($environment) deployment' {command: plan, span: (metadata $pipeline).span}
+    if $selecting and ($chosen | is-empty) {
+        fail $'No selected pipeline has a ($environment) deployment: ($pipelines)' {command: plan, span: (metadata $pipelines).span}
     }
 
     log info $'Pipelines to deploy to ($environment): ($chosen | length)'

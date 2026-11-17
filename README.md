@@ -428,7 +428,7 @@ O `GitHub Actions` roda as tasks do `devenv` e os scripts `Nushell` de `scripts/
 | `build-root-image.yaml` | Mudança no `Dockerfile` ou no `openssl.cnf` da raiz, na `master`; ou manual                                                                          | Publica `ghcr.io/<repositório>:latest` e chama `deploy.yaml` para todas as pipelines, em staging e em prod (os dois ambientes em paralelo). Os dois ambientes não esperam um `pull request`.          |
 | `sast.yaml`             | `pull request` e `push` na `master`                                                                                                                  | Análise de segurança.                                                                                                                                                                                 |
 
-Um `pull request` do mesmo repositório, de um branch `staging/*` para o `staging/main`, faz deploy no `staging` ao abrir e a cada novo commit, com o código do branch do `pull request` e sem juntar com a `master`. Um `pull request` do `staging/main` para a `master` não faz deploy no `staging`. A execução manual de um branch `staging/*` no `staging` também roda. O resto (`master`, a `prod` e outros branches) só roda em um branch listado na variável do repositório `DEPLOY_BRANCHES` (nomes separados por vírgula, por exemplo `master`). Sem ela, nada disso faz deploy: nem um `push`, nem a execução manual, nem o `build-root-image.yaml`. Crie a variável em _Settings > Secrets and variables > Actions > Variables_ para ligar o deploy em um branch, e apague-a para desligar.
+Um `pull request` do mesmo repositório, de um branch `staging/*` para o `staging/main`, faz deploy no `staging` ao abrir e a cada novo commit, com o código do branch do `pull request` e sem juntar com a `master`. Um `pull request` do `staging/main` para a `master` não faz deploy no `staging`. A execução manual (`Run workflow`) roda em qualquer branch, no `staging` ou na `prod`. A `prod` só aceita as pipelines do `.allow.json`. Um `push` na `master` só roda se o branch está na variável do repositório `DEPLOY_BRANCHES` (nomes separados por vírgula, por exemplo `master`). Sem ela, o `push` na `master` e o `build-root-image.yaml` não fazem deploy. Crie a variável em _Settings > Secrets and variables > Actions > Variables_ para ligar o deploy em um branch, e apague-a para desligar.
 
 O `.allow.json` da raiz é a lista das pipelines que podem fazer deploy na `prod`. O `staging` não tem lista: o deploy leva toda pipeline que tem um `deployment` de `staging`. Todo gatilho da `prod` obedece à lista: `push`, execução manual, `all` e o `build-root-image.yaml`. Uma pipeline fora da lista nunca vai para a `prod`, e uma execução manual dela falha. A lista tem só as quatro pipelines `bcadastro`, que o deploy manual do `staging/main` leva à `prod`. O resto da `prod` roda o código antigo da `master`: nada mais vai para a `prod` até alguém incluir a pipeline. Para liberar uma pipeline, ponha o nome (em ordem alfabética) na lista e faça o merge: a mudança do `.allow.json` registra todas as pipelines da lista. `nu scripts/checks.nu lint prefect` confere que cada nome tem pasta e um `deployment` da `prod`.
 
@@ -446,7 +446,7 @@ Como o `deploy.yaml` funciona:
   - Em um `pull request`, o diff é contra o `staging/main`.
   - Na `master`, se o mesmo `push` muda o `Dockerfile` ou o `openssl.cnf`, o `plan` não faz nada. O `build-root-image.yaml` publica a imagem nova e depois faz o deploy de todas as pipelines.
 - **`deploy`:** um job por pipeline, cada um no próprio runner, com quatro em paralelo. Uma falha não cancela as outras. O script tenta de novo (duas vezes) só quando o erro é de rede.
-- **Manual:** informe o ambiente e, se quiser, uma `pipeline` ou `all`.
+- **Manual:** o formulário tem `environment` (`staging` ou `prod`), `Pipelines` e `all`. `Pipelines` aceita nomes e padrões com `*`, separados por vírgula, como `rj_iplanrio__*,rj_smfp__ergon`. `all` vale mais que `Pipelines`, e um campo vazio escolhe as pipelines que mudaram no commit. Um nome ou padrão sem pipeline falha. O GitHub só mostra o formulário se o `deploy.yaml` está no branch padrão.
 - **Permissões e tokens:** cada workflow começa com `permissions: {}` e cada job pede só o que usa. O login no `ghcr.io` usa o `GITHUB_TOKEN`.
 - **Versões das actions:** todas ficam fixas por `hash` de commit, e o `Renovate` (`renovate.json`) atualiza.
 
@@ -454,6 +454,7 @@ Para testar o plano na sua máquina:
 
 ```sh
 devenv --profile deploy shell -- nu scripts/deploy.nu plan --environment staging --all
+devenv --profile deploy shell -- nu scripts/deploy.nu plan --environment staging --pipelines 'rj_iplanrio__*,rj_smfp__ergon'
 devenv --profile deploy shell -- nu scripts/deploy.nu run rj_cor__meteorologia_inmet --environment staging --dry-run
 ```
 
