@@ -79,7 +79,9 @@ pipelines/rj_smtr__triagem_recursos/outputs/
 pipelines/rj_smtr__triagem_recursos/mod-wssei/
 pipelines/rj_smtr__triagem_recursos/mcp-seipro/
 pipelines/rj_smtr__triagem_recursos/mcp-triagem-smtr/
+pipelines/rj_smtr__triagem_recursos/sei-client-smtr/
 pipelines/rj_smtr__triagem_recursos/AGENTS.md
+pipelines/rj_smtr__triagem_recursos/.pytest_cache
 pipelines/rj_iplanrio__nf_agent/__pypackages__/
 
 .postman/
