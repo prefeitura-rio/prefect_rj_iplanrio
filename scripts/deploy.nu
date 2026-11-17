@@ -40,20 +40,6 @@ def list-pipelines []: list<string> -> list<string> {
     | uniq
 }
 
-# Tell whether a branch has an open pull request into master.
-def has-open-pr [branch: string]: nothing -> bool {
-    let result = gh pr list --head $branch --base master --state open --json number | complete
-    if $result.exit_code != 0 {
-        fail $'Cannot list the pull requests: ($result.stderr)' {command: has-open-pr, span: (metadata $branch).span}
-    }
-
-    let pulls = try {
-        $result.stdout | from json
-    } catch {|err| fail $'Cannot read the pull requests: ($err.msg)' {command: has-open-pr, span: (metadata $branch).span} }
-
-    ($pulls | length) > 0
-}
-
 # Write a plan that deploys nothing, and say why.
 def skip-deploy [reason: string]: nothing -> nothing {
     log warning $'Nothing is deployed: ($reason)'
@@ -70,14 +56,8 @@ def 'main plan' [
     --all # deploy every pipeline
     --before: string # the commit before the push
     --after: string = HEAD # the commit of the push
-    --open-pr-from: string # deploy only if this branch has an open pull request into master
     --defer-to-image-build # deploy nothing if the push also changes the root image, because its build deploys every pipeline
 ]: nothing -> nothing {
-    if ($open_pr_from != null) and not (has-open-pr $open_pr_from) {
-        skip-deploy $'no open pull request from ($open_pr_from) into master'
-        return
-    }
-
     let changed = if ($pipeline == null) and (not $all) { list-changed-files $before $after } else { [] }
 
     if $defer_to_image_build and ($changed | any {|file| $file in $ROOT_IMAGE_FILES }) {
@@ -96,7 +76,7 @@ def 'main plan' [
         $changed | list-pipelines
     }
 
-    let allowed = read-allowed $environment
+    let allowed = if $environment == 'prod' { read-allowed $environment } else { $every_pipeline }
 
     if ($pipeline != null) and ($pipeline not-in $allowed) {
         fail $'The pipeline ($pipeline) is not in .allow.json for ($environment)' {command: plan, span: (metadata $pipeline).span}
