@@ -445,7 +445,7 @@ deployments:
           flow_environment: staging
           campaign_name: sme_pesquisa_satisfacao_creche_parceira
           data_extension_filename: whatsapp_pesquisa_creche_parceira
-          de_columns: ["denominacao", "id_aluno"]
+          de_columns: ["denominacao", "hash_cpf_aluno"]
           query_file: queries/sme/sme_pesquisa_satisfacao_creche_parceira.sql
 
       - cron: "0 12 * * *"
@@ -457,7 +457,7 @@ deployments:
           flow_environment: staging
           campaign_name: sme_pesquisa_satisfacao_creche_parceira_lembrete
           data_extension_filename: whatsapp_lembrete_pesquisa_creche_parceira
-          de_columns: ["denominacao", "id_aluno"]
+          de_columns: ["denominacao", "hash_cpf_aluno"]
           query_file: queries/sme/sme_pesquisa_satisfacao_creche_parceira.sql
 
   - name: rj-crm--disparo-template-sf--prod

@@ -147,7 +147,7 @@ SELECT
   cpf,               -- do responsável, 11 dígitos
   nome_responsavel,
   nome_aluno,
-  id_aluno,          -- coluna auxiliar de rastreio
+  id_aluno as hash_cpf_aluno,          -- coluna auxiliar de rastreio
   denominacao
 FROM dados
 WHERE telefone IS NOT NULL
