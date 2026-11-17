@@ -34,8 +34,8 @@ on:
         options:
           - staging
           - prod
-      pipeline:
-        description: Deploy only this pipeline
+      pipelines:
+        description: Pipelines
         required: false
         type: string
       all:
@@ -71,9 +71,7 @@ jobs:
       && github.base_ref == 'staging/main'
       && github.event.pull_request.head.repo.full_name == github.repository
       && startsWith(github.head_ref, 'staging/'))
-      || (github.event_name == 'workflow_dispatch'
-      && inputs.environment == 'staging'
-      && startsWith(github.ref_name, 'staging/'))
+      || github.event_name == 'workflow_dispatch'
       || contains(format(',{0},', vars.DEPLOY_BRANCHES), format(',{0},', github.ref_name))
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -96,7 +94,7 @@ jobs:
       - name: Choose the pipelines
         id: plan
         env:
-          PIPELINE: ${{ inputs.pipeline }}
+          PIPELINES: ${{ inputs.pipelines || inputs.pipeline }}
           ALL: ${{ inputs.all }}
           BEFORE: ${{ github.event.before || github.event.pull_request.base.sha }}
           AFTER: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -104,7 +102,7 @@ jobs:
           EVENT: ${{ github.event_name }}
         run: |
           args=(--environment "$ENVIRONMENT" --before "$BEFORE" --after "$AFTER")
-          [ -n "$PIPELINE" ] && args+=(--pipeline "$PIPELINE")
+          [ -n "$PIPELINES" ] && args+=(--pipelines "$PIPELINES")
           [ "$ALL" = true ] && args+=(--all)
           [ "$EVENT" = push ] && [ "$BRANCH" = master ] && args+=(--defer-to-image-build)
           nu scripts/deploy.nu plan "${args[@]}"
