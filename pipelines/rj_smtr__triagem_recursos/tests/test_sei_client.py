@@ -1,12 +1,16 @@
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 
+from logging import INFO
+
 import pymupdf as fitz
 import pytest
 from httpx import Client, MockTransport, Request, Response
 
+from pipelines.rj_smtr__triagem_recursos.helpers import garantir_nivel_logs_pipeline
 from pipelines.rj_smtr__triagem_recursos.helpers.sei_client import ModWsseiClient, SeiConfig
 from pipelines.rj_smtr__triagem_recursos.tests.conftest import build_pdf_bytes, json_response
+from prefect_rj_iplanrio.logging import get_logger
 
 
 def _make_config(timeout: int = 15) -> SeiConfig:
@@ -160,3 +164,176 @@ def test_obter_pdf_recurso_processo_merges_attachments(
 
     expected_ids = ",".join(f"doc-{i + 1}" for i in range(num_attachments))
     assert ids_csv == expected_ids
+
+
+def test_sei_config_local_preserves_orgao_12_and_allows_http_localhost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Garante fallback local http://localhost:8000 sem bloqueio SSRF e orgao=12 padrão."""
+    for base in (
+        "SEI_URL",
+        "SEI_API_BASE_URL",
+        "SEI_USUARIO",
+        "SEI_SERVICE_USER",
+        "SEI_SENHA",
+        "SEI_SERVICE_PASSWORD",
+        "SEI_UNIDADE_ID",
+        "SEI_ID_UNIDADE",
+        "SEI_ORGAO",
+    ):
+        for prefix in ("", "SMTR_TRIAGEM__", "SMTR_TRIAGEM_"):
+            monkeypatch.delenv(f"{prefix}{base}", raising=False)
+
+    cfg = SeiConfig.from_env(is_local=True)
+    assert cfg.base_url == "http://localhost:8000"
+    assert cfg.usuario == "usuario_servico"
+    assert cfg.id_unidade == "110000001"
+    assert cfg.orgao == 12
+    core_cfg = cfg.to_core_config()
+    assert core_cfg.url == "http://localhost:8000"
+    assert core_cfg.orgao == "12"
+
+
+def test_listar_processos_e_documentos_usam_atributos_numero_e_paginacao_completa() -> None:
+    """Valida leitura de atributos.numero do mod-wssei e paginação de documentos (>10)."""
+
+    def handler(request: Request) -> Response:
+        if request.url.path.endswith("/processo/listar"):
+            return json_response(
+                {
+                    "sucesso": True,
+                    "total": "1",
+                    "data": [
+                        {
+                            "id": "5001",
+                            "atributos": {
+                                "idProcedimento": "5001",
+                                "numero": "000351.000007/2026-99",
+                                "unidade": {"idUnidade": "110000715", "sigla": "10_JARI"},
+                            },
+                        }
+                    ],
+                }
+            )
+        if request.url.path.endswith("/documento/listar/5001"):
+            start = int(request.url.params.get("start", "0"))
+            limit = int(request.url.params.get("limit", "200"))
+            assert limit == 200
+            if start == 0:
+                docs = [
+                    {"idProtocolo": f"d-{i}", "atributos": {"tipoDocumento": "X"}} for i in range(12)
+                ]
+                return json_response({"sucesso": True, "total": 12, "data": docs})
+            return json_response({"sucesso": True, "total": 12, "data": []})
+        return Response(status_code=404)
+
+    http_client = Client(transport=MockTransport(handler))
+    sei = ModWsseiClient(config=_make_config(), http_client=http_client)
+    sei.token = "tok"
+
+    processos = sei.listar_processos_caixa()
+    assert len(processos) == 1
+    assert processos[0]["numero_processo_sei"] == "000351.000007/2026-99"
+
+    docs = sei.listar_documentos_processo("5001")
+    http_client.close()
+    assert len(docs) == 12
+    assert docs[0]["id_documento_sei"] == "d-0"
+    assert docs[-1]["id_documento_sei"] == "d-11"
+
+
+def test_fallback_backend_works_without_external_sei_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Garante paridade completa no FallbackSeiSync (cluster sem sei-client-smtr privado)."""
+    pdf_expected = build_pdf_bytes(num_pages=1, text_prefix="Fallback PDF")
+    counters = {"auth": 0, "download": 0}
+    seen_usuario_params: list[str | None] = []
+
+    def handler(request: Request) -> Response:
+        if request.url.path.endswith("/autenticar"):
+            counters["auth"] += 1
+            return json_response(
+                {
+                    "sucesso": True,
+                    "data": {
+                        "token": f"tok-fb-{counters['auth']}",
+                        "loginData": {"sigla": "BOT_FB", "nome": "Bot Fallback"},
+                    },
+                }
+            )
+        if request.url.path.endswith("/processo/listar"):
+            seen_usuario_params.append(request.url.params.get("usuario"))
+            return json_response(
+                {
+                    "sucesso": True,
+                    "total": "1",
+                    "data": [
+                        {
+                            "id": "9001",
+                            "dataGeracao": "10/03/2026",
+                            "atributos": {
+                                "idProcedimento": "9001",
+                                "numero": "000351.000999/2026-11",
+                                "marcador": [{"nome": "JULGADO #00FF00"}],
+                                "dadosAbertura": {
+                                    "unidades": [{"id": "1100001"}],
+                                    "lista": [{"sigla": "10_JARI (atribuído a maria.relatora)"}],
+                                },
+                            },
+                        }
+                    ],
+                }
+            )
+        if request.url.path.endswith("/documento/listar/9001"):
+            start = int(request.url.params.get("start", "0"))
+            assert request.url.params.get("limit") == "200"
+            if start == 0:
+                docs = [{"idProtocolo": f"doc-{i}", "atributos": {"tipoDocumento": "X"}} for i in range(11)]
+                return json_response({"sucesso": True, "total": 11, "data": docs})
+            return json_response({"sucesso": True, "total": 11, "data": []})
+        if request.url.path.endswith("/documento/baixar/anexo/doc-0"):
+            counters["download"] += 1
+            if counters["download"] == 1:
+                return Response(status_code=401)
+            if counters["download"] == 2:
+                return Response(status_code=504)
+            return Response(status_code=200, content=pdf_expected)
+        return Response(status_code=404)
+
+    monkeypatch.setattr("pipelines.rj_smtr__triagem_recursos._sei_sleep_noop", lambda _s: None, raising=False)
+    http_client = Client(transport=MockTransport(handler))
+    sei = ModWsseiClient(config=_make_config(), http_client=http_client, usar_cliente_externo=False)
+    assert sei._usando_externo is False
+
+    token = sei.autenticar()
+    assert token == "tok-fb-1"
+    assert sei.sigla_usuario == "BOT_FB"
+    assert sei.nome_usuario == "Bot Fallback"
+
+    processos = sei.listar_processos_caixa(usuario_id="42")
+    assert seen_usuario_params == ["42"]
+    assert processos[0]["numero_processo_sei"] == "000351.000999/2026-11"
+    assert processos[0]["usuario_atribuido_sigla"] == "maria.relatora"
+    assert processos[0]["marcador"] == "JULGADO #00FF00"
+
+    docs = sei.listar_documentos_processo("9001")
+    assert len(docs) == 11
+
+    sei.token = "tok-expirado"
+    downloaded = sei.baixar_documento("doc-0")
+    http_client.close()
+    assert downloaded == pdf_expected
+    assert counters["auth"] == 2
+    assert counters["download"] == 3
+
+
+def test_garantir_nivel_logs_pipeline_habilita_info_nos_submodulos() -> None:
+    """Verifica que o logger raiz do pacote e submódulos emitem INFO conforme STYLEGUIDE."""
+    pkg_logger = get_logger("pipelines.rj_smtr__triagem_recursos")
+    pkg_logger.setLevel(0)
+    garantir_nivel_logs_pipeline()
+
+    sub_logger = get_logger("pipelines.rj_smtr__triagem_recursos.helpers.db_repository")
+    assert pkg_logger.level == INFO
+    assert sub_logger.getEffectiveLevel() == INFO
+
+

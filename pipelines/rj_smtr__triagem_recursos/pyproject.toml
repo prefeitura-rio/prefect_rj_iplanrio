@@ -20,6 +20,8 @@ dependencies = [
     "psycopg2-binary>=2.9.10",
     "pillow>=7.1.0",
     "openai>=1.40.0",
+    # Opcional enquanto o repositorio privado sei-client-smtr nao puder ser clonado no docker build:
+    # "sei-client-smtr @ git+https://github.com/prefeitura-rio/sei-client-smtr.git@v0.2.0",
 ]
 
 [tool.uv.sources]
