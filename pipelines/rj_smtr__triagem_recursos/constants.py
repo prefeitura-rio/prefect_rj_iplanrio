@@ -72,6 +72,7 @@ TABELA_FILA = "fila_trabalho"
 TABELA_AUDITORIA = "trilha_auditoria_juridica"
 TABELA_CALIBRACAO = "configuracoes_calibracao"
 
+
 # ==============================================================================
 # STORAGE E CAMINHOS
 # ==============================================================================
