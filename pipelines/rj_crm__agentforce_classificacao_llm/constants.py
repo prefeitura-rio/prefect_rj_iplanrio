@@ -55,10 +55,12 @@ class ClassificacaoConstants(Enum):
     # depois do MERGE parcial, o flow dispara o full refresh do ramo Salesforce pelo
     # deployment do rj_crm__run_dbt (ver tasks/taxonomia.py::dispara_full_refresh_chatbot).
     # O select parte do modelo que faz o left join com a tabela de classificação e não
-    # inclui o ramo da fct_chatbot_v2.
+    # inclui o ramo da fct_chatbot_v2. Também refaz a mart da taxonomia do painel de
+    # clusterização, que lê a taxonomia_regras direto (não é descendente do int): sem ela,
+    # o painel só via as regras novas na rodada diária seguinte.
     # <flow>/<deployment>: o Prefect troca "_" por "-" no nome do flow (função rj_crm__run_dbt)
     DBT_DEPLOYMENT_NAME = "rj-crm--run-dbt/rj-crm--run_dbt--prod"
-    DBT_FULL_REFRESH_SELECT = "int_chatbot_salesforce_sessao_receptivo+"
+    DBT_FULL_REFRESH_SELECT = "int_chatbot_salesforce_sessao_receptivo+ mart_crm_whatsapp_clusterizacao_taxonomia"
     DBT_GITHUB_REPO = "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
     DBT_BIGQUERY_PROJECT = "rj-crm-registry"
 
