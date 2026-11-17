@@ -87,8 +87,8 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
 def rj_crm__disparo_template_sf(
     # Parâmetros opcionais para override manual na UI.
     campaign_name: str | None = None,
-    dataset_id: str | None = None,
-    table_id: str | None = None,
+    dataset_id: str | None = "brutos_salesforce",
+    table_id: str | None = "disparos_efetuados",
     dump_mode: str  = "append",
     test_mode: bool | None = False,
     query: str | None = None,
