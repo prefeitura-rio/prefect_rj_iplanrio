@@ -55,6 +55,10 @@ deployments:
     parameters:
       command: "build"
       select: "tag:daily"
+      # A passada diária não roda teste unitário. A entrada dele é fixa, então
+      # o resultado só muda quando o código muda, e a CI e o CD do
+      # queries-rj-rmi já o rodam a cada mudança.
+      flag: "--exclude-resource-type unit_test"
       target: "prod"
     # Uma execução manual durante a agendada espera a vez em vez de escrever
     # nos mesmos modelos.
