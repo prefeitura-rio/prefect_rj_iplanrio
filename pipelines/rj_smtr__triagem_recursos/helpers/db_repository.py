@@ -16,7 +16,7 @@ Fluxo de Dependências:
 - Consumidores Diretos:
   * `tasks.py`: invoca `buscar_processos_para_triagem_ou_fallback` na busca de processos
     e `persistir_lote_resultados_ia` ao término da triagem concorrente.
-  * `utils/artifacts.py`: consome `buscar_configuracao_calibracao_ativa` para instanciar
+  * `helpers/artifacts.py`: consome `buscar_configuracao_calibracao_ativa` para instanciar
     o calibrador a partir dos parâmetros persistidos em banco.
 - Dependências Diretas:
   * `constants.py`: importa os nomes canônicos de tabelas (`TABELA_PROCESSOS`, `TABELA_FILA`,
@@ -152,11 +152,18 @@ def _possui_coluna_protocolo_documento(cursor: Any) -> bool:
     return cursor.fetchone() is not None
 
 
+STATUSES_JA_TRATADOS: tuple[str, ...] = (
+    StatusProcessamento.CONCLUIDO_IA.value,
+    StatusProcessamento.PROCESSANDO_IA.value,
+    StatusProcessamento.ERRO_PROCESSAMENTO.value,
+)
+
+
 def _filtrar_ja_triados_cursor(cursor: Any, query: str, numeros_processos_sei: list[str]) -> set[str]:
-    """Consulta no cursor atual quais numeros SEI ja constam como CONCLUIDO_IA."""
+    """Consulta no cursor atual quais numeros SEI ja constam concluidos, ativos ou com erro."""
     if not numeros_processos_sei:
         return set()
-    cursor.execute(query, (numeros_processos_sei, StatusProcessamento.CONCLUIDO_IA.value))
+    cursor.execute(query, (numeros_processos_sei, list(STATUSES_JA_TRATADOS)))
     return {str(row[0]) for row in cursor.fetchall()}
 
 
@@ -441,6 +448,154 @@ def registrar_processo_e_enfileirar(
     return proc_id
 
 
+def _avaliar_pagina_sei(
+    cursor: Any,
+    query_ja_triados: str,
+    pagina_processos: list[dict[str, Any]],
+    *,
+    apenas_nao_atribuidos: bool,
+    ignorar_com_marcador: bool,
+    ordem_mais_antigos: bool,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Filtra processos de uma página do SEI contra o banco e regras de marcador/atribuição."""
+    numeros_pagina = [
+        str(p.get("numero_processo_sei") or p.get("numero_processo") or "").strip()
+        for p in pagina_processos
+    ]
+    numeros_validos = [n for n in dict.fromkeys(numeros_pagina) if n]
+    ja_triados = _filtrar_ja_triados_cursor(cursor, query_ja_triados, numeros_validos)
+
+    itens_ordenados = reversed(pagina_processos) if ordem_mais_antigos else pagina_processos
+    elegiveis: list[dict[str, Any]] = []
+    pulados_sei = 0
+
+    for p in itens_ordenados:
+        num_sei = str(p.get("numero_processo_sei") or p.get("numero_processo") or "").strip()
+        if not num_sei or num_sei in ja_triados:
+            continue
+        if ignorar_com_marcador and p.get("marcador"):
+            pulados_sei += 1
+            continue
+        if apenas_nao_atribuidos and p.get("usuario_atribuido_sigla"):
+            pulados_sei += 1
+            continue
+        elegiveis.append(p)
+
+    stats = {
+        "lidos": len(pagina_processos),
+        "ja_no_banco": len(ja_triados),
+        "pulados_sei": pulados_sei,
+    }
+    return elegiveis, stats
+
+
+def _iterar_candidatos_sei_inteligente(
+    cliente_sei: Any,
+    cursor: Any,
+    query_ja_triados: str,
+    *,
+    tam_pagina: int,
+    apenas_nao_atribuidos: bool,
+    ignorar_com_marcador: bool,
+    ordem_mais_antigos: bool,
+    pagina_inicial_sei: int | None,
+) -> Any:
+    """Itera páginas do SEI começando pelos mais antigos (fim da caixa) com salto exponencial."""
+    pag_0, total_itens = cliente_sei.listar_pagina_caixa_com_total(limit=tam_pagina, start=0)
+    if not pag_0:
+        return
+
+    cache: dict[int, tuple[list[dict[str, Any]], dict[str, int]]] = {}
+
+    def obter_ou_avaliar(pag_idx: int, raw_preloaded: list[dict[str, Any]] | None = None) -> tuple[list[dict[str, Any]], dict[str, int]]:
+        if pag_idx in cache:
+            return cache[pag_idx]
+        itens_raw = raw_preloaded if raw_preloaded is not None else cliente_sei.listar_pagina_caixa_com_total(limit=tam_pagina, start=pag_idx)[0]
+        res = _avaliar_pagina_sei(
+            cursor,
+            query_ja_triados,
+            itens_raw,
+            apenas_nao_atribuidos=apenas_nao_atribuidos,
+            ignorar_com_marcador=ignorar_com_marcador,
+            ordem_mais_antigos=ordem_mais_antigos,
+        )
+        cache[pag_idx] = res
+        return res
+
+    ultima_pagina = max(0, (total_itens - 1) // tam_pagina) if total_itens > 0 else 0
+    if not ordem_mais_antigos or ultima_pagina == 0:
+        el_0, st_0 = obter_ou_avaliar(0, pag_0)
+        yield (0, ultima_pagina, el_0, st_0)
+        if ultima_pagina > 0 and not ordem_mais_antigos:
+            for pag_idx in range(1, ultima_pagina + 1):
+                el_p, st_p = obter_ou_avaliar(pag_idx)
+                if not st_p["lidos"]:
+                    break
+                yield (pag_idx, ultima_pagina, el_p, st_p)
+        return
+
+    cache[0] = _avaliar_pagina_sei(
+        cursor,
+        query_ja_triados,
+        pag_0,
+        apenas_nao_atribuidos=apenas_nao_atribuidos,
+        ignorar_com_marcador=ignorar_com_marcador,
+        ordem_mais_antigos=ordem_mais_antigos,
+    )
+    cursor_pag = ultima_pagina if pagina_inicial_sei is None else max(0, min(ultima_pagina, pagina_inicial_sei))
+    vazias_consecutivas = 0
+
+    while cursor_pag >= 0:
+        el_pg, st_pg = obter_ou_avaliar(cursor_pag)
+        yield (cursor_pag, ultima_pagina, el_pg, st_pg)
+
+        if el_pg:
+            vazias_consecutivas = 0
+            cursor_pag -= 1
+            continue
+
+        vazias_consecutivas += 1
+        if vazias_consecutivas < 2 or cursor_pag == 0:
+            cursor_pag -= 1
+            continue
+
+        passo = 1
+        high_vazia = cursor_pag
+        low_nao_vazia: int | None = None
+        while high_vazia - passo >= 0:
+            probe = high_vazia - passo
+            el_probe, _ = obter_ou_avaliar(probe)
+            if el_probe:
+                low_nao_vazia = probe
+                break
+            high_vazia = probe
+            passo *= 2
+
+        if low_nao_vazia is None:
+            if high_vazia > 0 and obter_ou_avaliar(0)[0]:
+                low_nao_vazia = 0
+            else:
+                break
+
+        lo, hi = low_nao_vazia, high_vazia - 1
+        fronteira = low_nao_vazia
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            if obter_ou_avaliar(mid)[0]:
+                fronteira = mid
+                lo = mid + 1
+            else:
+                hi = mid - 1
+
+        logger.info(
+            "SEI salto inteligente: pulando páginas já processadas até a fronteira %d/%d.",
+            fronteira,
+            ultima_pagina,
+        )
+        vazias_consecutivas = 0
+        cursor_pag = fronteira
+
+
 def buscar_processos_para_triagem_ou_fallback(
     db_url: str,
     is_local: bool = False,
@@ -451,6 +606,10 @@ def buscar_processos_para_triagem_ou_fallback(
     data_inicio: str | None = None,
     data_fim: str | None = None,
     arquivos_especificos: list[Any] | None = None,
+    apenas_nao_atribuidos: bool = True,
+    ignorar_com_marcador: bool = True,
+    ordem_mais_antigos: bool = True,
+    pagina_inicial_sei: int | None = None,
 ) -> list[dict[str, Any]]:
     """Consulta ou filtra os processos elegíveis para triagem (fail-fast em cloud/staging).
 
@@ -565,12 +724,13 @@ def buscar_processos_para_triagem_ou_fallback(
     if fonte_pdf == "sei":
         if cliente_sei is None:
             raise RuntimeError("cliente_sei obrigatório quando fonte_pdf='sei'.")
-        logger.info("Listando processos da caixa da JARI no SEI com paginação (limite=%d)...", limite)
-
-        if hasattr(cliente_sei, "iterar_paginas_caixa"):
-            paginas_sei = cliente_sei.iterar_paginas_caixa(limit=min(100, max(20, limite)))
-        else:
-            paginas_sei = [cliente_sei.listar_processos_caixa()]
+        logger.info(
+            "Listando processos da caixa da JARI no SEI (limite=%d | mais_antigos=%s | sem_marcador=%s | nao_atribuidos=%s)...",
+            limite,
+            ordem_mais_antigos,
+            ignorar_com_marcador,
+            apenas_nao_atribuidos,
+        )
 
         query_ja_triados = load_query(
             str(PIPELINE_DIR / "flow.py"),
@@ -591,30 +751,55 @@ def buscar_processos_para_triagem_ou_fallback(
 
         total_lidos = 0
         total_ja_triados = 0
+        total_pulados_sei = 0
         vistos_sei: set[str] = set()
         processos_sincronizados: list[dict[str, Any]] = []
 
         conn = psycopg2.connect(db_url)
         try:
             with conn.cursor() as cursor:
-                for num_pagina, pagina_processos in enumerate(paginas_sei, start=1):
-                    if not pagina_processos:
-                        break
-                    total_lidos += len(pagina_processos)
-                    numeros_pagina = [
-                        str(p.get("numero_processo_sei") or p.get("numero_processo") or "").strip()
-                        for p in pagina_processos
-                    ]
-                    ja_triados = _filtrar_ja_triados_cursor(
+                if hasattr(cliente_sei, "listar_pagina_caixa_com_total"):
+                    fluxo_paginas = _iterar_candidatos_sei_inteligente(
+                        cliente_sei,
                         cursor,
                         query_ja_triados,
-                        [n for n in numeros_pagina if n],
+                        tam_pagina=100,
+                        apenas_nao_atribuidos=apenas_nao_atribuidos,
+                        ignorar_com_marcador=ignorar_com_marcador,
+                        ordem_mais_antigos=ordem_mais_antigos,
+                        pagina_inicial_sei=pagina_inicial_sei,
                     )
-                    total_ja_triados += len(ja_triados)
+                else:
+                    raw_iter = (
+                        cliente_sei.iterar_paginas_caixa(limit=100)
+                        if hasattr(cliente_sei, "iterar_paginas_caixa")
+                        else iter([cliente_sei.listar_processos_caixa()])
+                    )
 
-                    for p in pagina_processos:
+                    def _adaptar_iterador() -> Any:
+                        for idx_pg, pg_bruta in enumerate(raw_iter):
+                            if not pg_bruta:
+                                break
+                            el_pg, st_pg = _avaliar_pagina_sei(
+                                cursor,
+                                query_ja_triados,
+                                pg_bruta,
+                                apenas_nao_atribuidos=apenas_nao_atribuidos,
+                                ignorar_com_marcador=ignorar_com_marcador,
+                                ordem_mais_antigos=False,
+                            )
+                            yield (idx_pg, idx_pg, el_pg, st_pg)
+
+                    fluxo_paginas = _adaptar_iterador()
+
+                for pag_idx, ultima_pag, elegiveis_pg, st_pg in fluxo_paginas:
+                    total_lidos += st_pg["lidos"]
+                    total_ja_triados += st_pg["ja_no_banco"]
+                    total_pulados_sei += st_pg["pulados_sei"]
+
+                    for p in elegiveis_pg:
                         num_sei = str(p.get("numero_processo_sei") or p.get("numero_processo") or "").strip()
-                        if not num_sei or num_sei in ja_triados or num_sei in vistos_sei:
+                        if not num_sei or num_sei in vistos_sei:
                             continue
                         vistos_sei.add(num_sei)
 
@@ -645,10 +830,13 @@ def buscar_processos_para_triagem_ou_fallback(
                             break
 
                     logger.info(
-                        "SEI página %d: %d lido(s) | %d já triado(s) | %d selecionado(s)/%d.",
-                        num_pagina,
-                        len(pagina_processos),
-                        len(ja_triados),
+                        "SEI pág %d/%d: %d lido(s) | %d já no banco | %d marcador/atribuído | %d selecionado(s) (%d/%d).",
+                        pag_idx,
+                        ultima_pag,
+                        st_pg["lidos"],
+                        st_pg["ja_no_banco"],
+                        st_pg["pulados_sei"],
+                        len(elegiveis_pg),
                         len(processos_sincronizados),
                         limite,
                     )
@@ -663,9 +851,10 @@ def buscar_processos_para_triagem_ou_fallback(
 
         if not processos_sincronizados:
             logger.info(
-                "SEI: %d processo(s) inspecionado(s) (%d já triado(s)); nenhum novo pendente.",
+                "SEI: %d inspecionado(s) (%d já no banco | %d marcador/atribuído); nenhum novo elegível.",
                 total_lidos,
                 total_ja_triados,
+                total_pulados_sei,
             )
             return []
 

@@ -15,16 +15,18 @@ Fluxo de Dependências:
 - Dependências Diretas:
   * `tasks.py`: delega a execução das tarefas atômicas e observáveis da pipeline.
   * `constants.py`: importa parâmetros centrais de operação, limiares de decisão e timeouts.
-  * `utils/sei_client.py`: instancia o cliente HTTP quando a fonte de entrada é o SEI-Rio.
+  * `helpers/sei_client.py`: instancia o cliente HTTP quando a fonte de entrada é o SEI-Rio.
 """
 
 from typing import Any
 
-from prefect import flow, get_run_logger
+from prefect import flow
 from prefect.futures import as_completed
 from prefect.task_runners import ThreadPoolTaskRunner
 
 from prefect_rj_iplanrio.logging import get_logger
+
+from pipelines.rj_smtr__triagem_recursos.helpers import garantir_nivel_logs_pipeline
 
 logger = get_logger(__name__)
 
@@ -78,9 +80,13 @@ def rj_smtr__triagem_recursos(
     arquivos_especificos: list[Any] | None = None,
     executar_n2: bool = True,
     max_downloads_sei: int = MAX_DOWNLOADS_SEI_SIMULTANEOS,
+    apenas_nao_atribuidos: bool = True,
+    ignorar_com_marcador: bool = True,
+    ordem_mais_antigos: bool = True,
+    pagina_inicial_sei: int | None = None,
 ) -> dict[str, Any]:
     """Orchestrate automated triage and selective classification of SMTR appeals."""
-    logger = get_run_logger()
+    garantir_nivel_logs_pipeline()
     logger.debug("Telemetria ativa para rj_smtr__triagem_recursos (local=%s).", is_local)
     logger.info(
         "Iniciando pipeline | Local=%s | Fonte=%s | Modo=%s | Limite=%d | Workers=%d | DownloadsSEI=%d",
@@ -94,13 +100,6 @@ def rj_smtr__triagem_recursos(
 
     if not is_local:
         carregar_secrets_infisical_se_necessario(secret_path_override=infisical_secret_path)
-
-    import os
-    vars_ambiente = [
-        k for k in os.environ
-        if any(t in k for t in ("SMTR", "DATABASE", "DB_URL", "BIFROST", "SEI_", "INFISICAL"))
-    ]
-    logger.info("Chaves de ambiente detectadas no container: %s", sorted(vars_ambiente))
 
     artefatos = task_carregar_artefatos_referencia(
         is_local=is_local,
@@ -127,6 +126,10 @@ def rj_smtr__triagem_recursos(
             data_inicio=data_inicio,
             data_fim=data_fim,
             arquivos_especificos=arquivos_especificos,
+            apenas_nao_atribuidos=apenas_nao_atribuidos,
+            ignorar_com_marcador=ignorar_com_marcador,
+            ordem_mais_antigos=ordem_mais_antigos,
+            pagina_inicial_sei=pagina_inicial_sei,
         )
 
         if not processos:

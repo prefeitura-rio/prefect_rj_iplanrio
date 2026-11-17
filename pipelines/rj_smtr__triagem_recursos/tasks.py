@@ -5,25 +5,29 @@ Define as unidades atômicas de trabalho, retentativas automáticas e observabil
 da pipeline. Cada task funciona como uma camada de orquestração fina que recebe os
 parâmetros do flow e delega as operações de I/O de banco, inferência multimodal,
 cálculos matemáticos e compilação estatística para os submódulos especializados
-em `utils/`.
+em `helpers/`.
 
 Fluxo de Dependências:
 - Consumidores Diretos:
   * `flow.py`: consome todas as tasks para compor o fluxo serial e o mapeamento concorrente (.map).
 - Dependências Diretas:
   * `constants.py`: importa limiares de decisão, modelos e resolvedor de URL do banco.
-  * `utils/artifacts.py`: invocado por `task_carregar_artefatos_referencia` para obter
+  * `helpers/artifacts.py`: invocado por `task_carregar_artefatos_referencia` para obter
     o calibrador LightGBM e os quantis conformais CCCP ativos.
-  * `utils/db_repository.py`: invocado por `task_buscar_processos_pendentes` e
+  * `helpers/db_repository.py`: invocado por `task_buscar_processos_pendentes` e
     `task_persistir_lote_resultados` para consultar filas e salvar predições com transação atômica.
-  * `utils/triage.py`: invocado por `task_triar_processo_individual` para processar
+  * `helpers/triage.py`: invocado por `task_triar_processo_individual` para processar
     cada recurso administrativo e por `task_gerar_sumario_lote` para consolidar métricas e custos.
 """
 
 from typing import Any
 
-from prefect import get_run_logger, task
+from prefect import task
 from prefect.cache_policies import NO_CACHE
+
+from prefect_rj_iplanrio.logging import get_logger
+
+logger = get_logger(__name__)
 
 from pipelines.rj_smtr__triagem_recursos.constants import (
     LIMIAR_ALTA,
@@ -40,9 +44,7 @@ from pipelines.rj_smtr__triagem_recursos.helpers.db_repository import (
     persistir_lote_resultados_ia,
 )
 from pipelines.rj_smtr__triagem_recursos.helpers.triage import (
-    classificar_documento_preparado,
     gerar_sumario_lote,
-    preparar_documento_processo,
     triar_processo,
 )
 
@@ -85,6 +87,10 @@ def task_buscar_processos_pendentes(
     data_inicio: str | None = None,
     data_fim: str | None = None,
     arquivos_especificos: list[Any] | None = None,
+    apenas_nao_atribuidos: bool = True,
+    ignorar_com_marcador: bool = True,
+    ordem_mais_antigos: bool = True,
+    pagina_inicial_sei: int | None = None,
 ) -> list[dict[str, Any]]:
     """Consulta ou filtra os processos elegiveis para triagem."""
     db_url = resolver_banco_url(is_local)
@@ -98,66 +104,10 @@ def task_buscar_processos_pendentes(
         data_inicio=data_inicio,
         data_fim=data_fim,
         arquivos_especificos=arquivos_especificos,
-    )
-
-
-@task(
-    name="baixar_e_preparar_pdf",
-    cache_policy=NO_CACHE,
-    cache_result_in_memory=False,
-    persist_result=False,
-    retries=1,
-    retry_delay_seconds=3,
-    timeout_seconds=180,
-)
-def task_baixar_e_preparar_pdf(
-    processo: dict[str, Any],
-    artefatos: dict[str, Any],
-    fonte_pdf: str = "sei",
-    cliente_sei: Any | None = None,
-    max_paginas: int = MAX_PAGINAS_PDF,
-    modelo_llm: str = VERTEX_LLM_MODEL,
-) -> dict[str, Any]:
-    """Executa estágio 1 de download em RAM e recorte Smart Window do PDF."""
-    return preparar_documento_processo(
-        processo=processo,
-        artefatos=artefatos,
-        fonte_pdf=fonte_pdf,
-        cliente_sei=cliente_sei,
-        max_paginas=max_paginas,
-        modelo_llm=modelo_llm,
-    )
-
-
-@task(
-    name="triar_pdf_preparado",
-    cache_policy=NO_CACHE,
-    cache_result_in_memory=False,
-    persist_result=False,
-    retries=2,
-    retry_delay_seconds=5,
-    timeout_seconds=240,
-)
-def task_triar_pdf_preparado(
-    documento_preparado: dict[str, Any],
-    artefatos: dict[str, Any],
-    limiar_alta: float = LIMIAR_ALTA,
-    limiar_baixa: float = LIMIAR_BAIXA,
-    limiar_dispersao_max: float = LIMIAR_DISPERSAO_COT_MAX,
-    modelo_llm: str = VERTEX_LLM_MODEL,
-    reasoning_effort: str = "medium",
-    executar_n2: bool = True,
-) -> dict[str, Any]:
-    """Executa estágio 2 de inferência LLM, OCR e calibração em documento preparado."""
-    return classificar_documento_preparado(
-        documento_preparado=documento_preparado,
-        artefatos=artefatos,
-        limiar_alta=limiar_alta,
-        limiar_baixa=limiar_baixa,
-        limiar_dispersao_max=limiar_dispersao_max,
-        modelo_llm=modelo_llm,
-        reasoning_effort=reasoning_effort,
-        executar_n2=executar_n2,
+        apenas_nao_atribuidos=apenas_nao_atribuidos,
+        ignorar_com_marcador=ignorar_com_marcador,
+        ordem_mais_antigos=ordem_mais_antigos,
+        pagina_inicial_sei=pagina_inicial_sei,
     )
 
 
@@ -211,12 +161,6 @@ def task_triar_processo_individual(
 )
 def task_persistir_lote_resultados(resultados: list[dict[str, Any]], is_local: bool = False) -> None:
     """Persiste as predicoes e atualiza a fila de trabalho no banco de dados."""
-    try:
-        logger = get_run_logger()
-    except Exception:
-        from prefect_rj_iplanrio.logging import get_logger
-
-        logger = get_logger(__name__)
     db_url = resolver_banco_url(is_local)
 
     logger.info("Gravando %d resultado(s) no banco de dados...", len(resultados))

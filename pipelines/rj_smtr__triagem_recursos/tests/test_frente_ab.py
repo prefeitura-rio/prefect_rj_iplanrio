@@ -320,6 +320,72 @@ def test_buscar_processos_sei_paginates_until_limit_and_persists_data_autuacao(
     assert state["closes"] == 1
 
 
+def test_buscar_processos_sei_reverso_com_salto_e_filtros(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Busca reversa começa no fim da caixa, salta blocos já triados e ignora marcador/atribuído."""
+    # Caixa sintética com 12 páginas (0=mais nova .. 11=mais antiga)
+    # Páginas 11, 10, 9, 8 já estão no banco; página 7 tem marcador, atribuído e 2 elegíveis;
+    # página 6 tem mais 2 elegíveis. Esperamos pular direto por salto exponencial sem ler todas!
+    pages: dict[int, list[dict[str, Any]]] = {
+        0: [{"id_procedimento_sei": "900", "numero_processo_sei": "SEI-NOVO"}],
+    }
+    triados: set[str] = set()
+    for pag in range(1, 12):
+        if pag >= 8:
+            item = {"id_procedimento_sei": str(100 - pag), "numero_processo_sei": f"SEI-DONE-{pag}"}
+            pages[pag] = [item]
+            triados.add(item["numero_processo_sei"])
+        elif pag == 7:
+            pages[pag] = [
+                {"id_procedimento_sei": "20", "numero_processo_sei": "SEI-ELIG-2"},
+                {"id_procedimento_sei": "19", "numero_processo_sei": "SEI-JULGADO", "marcador": "JULGADO"},
+                {"id_procedimento_sei": "18", "numero_processo_sei": "SEI-ATRIB", "usuario_atribuido_sigla": "rel1"},
+                {"id_procedimento_sei": "17", "numero_processo_sei": "SEI-ELIG-1"},
+            ]
+        elif pag == 6:
+            pages[pag] = [
+                {"id_procedimento_sei": "22", "numero_processo_sei": "SEI-ELIG-4"},
+                {"id_procedimento_sei": "21", "numero_processo_sei": "SEI-ELIG-3"},
+            ]
+        else:
+            pages[pag] = [{"id_procedimento_sei": str(50 + pag), "numero_processo_sei": f"SEI-MID-{pag}"}]
+
+    state: dict[str, Any] = {
+        "triados": triados,
+        "has_protocolo_col": False,
+        "executed": [],
+        "upserts": [],
+        "enqueues": [],
+        "updates": [],
+        "commits": 0,
+        "rollbacks": 0,
+        "closes": 0,
+    }
+    monkeypatch.setattr(db_repository.psycopg2, "connect", lambda _url: _FakeConnection(state))
+
+    seen_starts: list[int] = []
+
+    class _FakeRandomAccessSEI:
+        def listar_pagina_caixa_com_total(self, limit: int = 100, start: int = 0) -> tuple[list[dict[str, Any]], int]:
+            assert limit == 100
+            seen_starts.append(start)
+            return pages.get(start, []), 1200
+
+    selecionados = db_repository.buscar_processos_para_triagem_ou_fallback(
+        db_url="postgresql://mock/db",
+        is_local=False,
+        fonte_pdf="sei",
+        cliente_sei=_FakeRandomAccessSEI(),
+        limite=3,
+    )
+
+    assert [p["numero_processo_sei"] for p in selecionados] == ["SEI-ELIG-1", "SEI-ELIG-2", "SEI-ELIG-3"]
+    assert seen_starts[0] == 0
+    assert seen_starts[1] == 11
+    assert 9 not in seen_starts or len(seen_starts) < 8
+    assert state["commits"] == 1
+    assert state["closes"] == 1
+
+
 def _build_mock_result(processo_id: str, is_error: bool = False) -> dict[str, Any]:
     """Constrói resultado sintético de triagem para testar persistência em lote."""
     status_val = (
