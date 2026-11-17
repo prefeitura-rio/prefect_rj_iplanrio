@@ -1,0 +1,31 @@
+name: Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy to
+        required: true
+        type: choice
+        options:
+          - staging
+          - prod
+      pipelines:
+        description: Pipelines
+        required: false
+        type: string
+      all:
+        description: Deploy every pipeline
+        required: false
+        type: boolean
+        default: false
+permissions: {}
+jobs:
+  select-branch:
+    name: Select the deploy branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Stop on the default branch
+        run: |
+          echo "::error::Select staging/main under Use workflow from. This copy only shows the form and deploys nothing."
+          exit 1
