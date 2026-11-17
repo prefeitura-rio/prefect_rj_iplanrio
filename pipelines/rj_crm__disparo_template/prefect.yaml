@@ -34,7 +34,7 @@ deployments:
         image_pull_policy: Always
     parameters:
       campaign_name: disparo-template-sf
-      dataset_id: brutos_wetalkie
+      dataset_id: brutos_salesforce
       table_id: disparos_efetuados_sf
       dump_mode: append
       filter_dispatched_phones_or_cpfs: cpf
@@ -433,10 +433,32 @@ deployments:
           campaign_name: smascartaoprimeirainfancialembreteprodv4
           data_extension_filename: whatsapp_smas_cartaopic_lembrete
           de_columns: ["nome_sobrenome", "endereco", "dia", "horario"]
-          dataset_id: brutos_salesforce
-          table_id: disparos_efetuados
           filter_duplicated_cpfs: true
           query_file: queries/smas_cartaopic_lembrete.sql
+
+      - cron: "0 12 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-sme-pesquisa-satisfacao-creche-parceira
+        flow_run_name: sme-pesquisa-satisfacao-creche-parceira
+        parameters:
+          flow_environment: staging
+          campaign_name: sme_pesquisa_satisfacao_creche_parceira
+          data_extension_filename: whatsapp_pesquisa_creche_parceira
+          de_columns: ["denominacao", "id_aluno"]
+          query_file: queries/sme/sme_pesquisa_satisfacao_creche_parceira.sql
+
+      - cron: "0 12 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-sme-pesquisa-satisfacao-creche-parceira-lembrete
+        flow_run_name: sme-pesquisa-satisfacao-creche-parceira-lembrete
+        parameters:
+          flow_environment: staging
+          campaign_name: sme_pesquisa_satisfacao_creche_parceira_lembrete
+          data_extension_filename: whatsapp_lembrete_pesquisa_creche_parceira
+          de_columns: ["denominacao", "id_aluno"]
+          query_file: queries/sme/sme_pesquisa_satisfacao_creche_parceira.sql
 
   - name: rj-crm--disparo-template-sf--prod
     version: '{{ get-commit-hash.stdout }}'
@@ -451,7 +473,7 @@ deployments:
         image_pull_policy: Always
     parameters:
       campaign_name: disparo-template-sf
-      dataset_id: brutos_wetalkie
+      dataset_id: brutos_salesforce
       table_id: disparos_efetuados_sf
       dump_mode: append
       filter_dispatched_phones_or_cpfs: cpf
