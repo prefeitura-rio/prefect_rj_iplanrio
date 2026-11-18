@@ -443,7 +443,7 @@ Como o `deploy.yaml` funciona:
 - **`plan`:** escolhe as pipelines que têm um `deployment` do ambiente (na `prod`, só as do `.allow.json`), isto é, um `name` que termina em `--prod` ou `--staging`. O `plan` lê o `prefect.yaml` como YAML.
   - Se mudou um arquivo de `pipelines/<nome>/`, só essa pipeline entra.
   - Se mudou `src/`, `packages/`, `pyproject.toml`, `uv.lock` ou `.allow.json`, todas as pipelines candidatas entram (na `prod`, a lista filtra), porque cada imagem tem esse código dentro. Arquivos `.md` não contam.
-  - Em um `pull request`, o diff é contra o `staging/main`.
+  - Em um `pull request`, o diff vai do ponto de encontro com o `staging/main` até o último commit do PR. Cada `push` no PR faz deploy de todas as pipelines que o PR mudou, e não só das que o último commit mudou.
   - Na `master`, se o mesmo `push` muda o `Dockerfile` ou o `openssl.cnf`, o `plan` não faz nada. O `build-root-image.yaml` publica a imagem nova e depois faz o deploy de todas as pipelines.
 - **`deploy`:** um job por pipeline, cada um no próprio runner, com quatro em paralelo. Uma falha não cancela as outras. O script tenta de novo (duas vezes) só quando o erro é de rede.
 - **Manual:** o formulário tem `environment` (`staging` ou `prod`), `Pipelines` e `all`. `Pipelines` aceita nomes e padrões com `*`, separados por vírgula, como `rj_iplanrio__*,rj_smfp__ergon`. `all` vale mais que `Pipelines`, e um campo vazio escolhe as pipelines que mudaram no commit. Um nome ou padrão sem pipeline falha. O GitHub só mostra o formulário se o `deploy.yaml` está no branch padrão.
