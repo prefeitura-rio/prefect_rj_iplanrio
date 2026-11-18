@@ -23,13 +23,15 @@ def write-output [name: string, value: string]: nothing -> nothing {
 # List the files that changed between two commits, except Markdown files.
 # Without a `before` commit, use the parent of `after`. For a new branch (zero `before`), use its merge base with `origin/master`.
 def list-changed-files [before: oneof<string, nothing>, after: string]: nothing -> list<string> {
-    let base = match $before {
-        null | '' => $'($after)^'
-        $ZERO_SHA => (git merge-base origin/master $after | str trim)
-        _ => $before
+    let base = if ($before | is-empty) {
+        $'($after)^'
+    } else if $before == $ZERO_SHA {
+        git merge-base origin/master $after | str trim
+    } else {
+        $before
     }
 
-    git diff --name-only $base $after | lines | where not ($it | str ends-with '.md')
+    git diff --name-only $'($base)...($after)' | lines | where not ($it | str ends-with '.md')
 }
 
 # List the pipelines that own the files of the input.

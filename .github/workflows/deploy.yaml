@@ -96,7 +96,7 @@ jobs:
         env:
           PIPELINES: ${{ inputs.pipelines || inputs.pipeline }}
           ALL: ${{ inputs.all }}
-          BEFORE: ${{ github.event.before || github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.pull_request.base.sha || github.event.before }}
           AFTER: ${{ github.event.pull_request.head.sha || github.sha }}
           BRANCH: ${{ github.ref_name }}
           EVENT: ${{ github.event_name }}
