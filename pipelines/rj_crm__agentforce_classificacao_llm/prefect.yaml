@@ -2,14 +2,14 @@
 #
 # Entrypoint: flow.py:rj_crm__agentforce_classificacao_llm
 #
-# Roda 1x/dia às 15h (America/Sao_Paulo): extrai sessões dos últimos 14 dias ainda não
+# Roda de hora em hora (America/Sao_Paulo): extrai sessões dos últimos 7 dias ainda não
 # classificadas (anti-join contra rj-crm-registry.brutos_salesforce.ai_agent_session_classificacao),
 # classifica via Bifrost/Gemini e grava via staging + MERGE (idempotente).
 #
 # Credenciais necessárias no secret do work pool (mesmo secretName usado por
 # rj_crm__salesforce_datacloud, já que escreve no mesmo dataset):
 #   BF_KEY                                        : API key do gateway Bifrost
-#   DISCORD_WEBHOOK_URL_AGENTFORCE_CLASSIFICACAO   : (opcional) resumo diário
+#   DISCORD_WEBHOOK_URL_AGENTFORCE_CLASSIFICACAO   : (opcional) resumo de cada execução
 #   DISCORD_WEBHOOK_URL_ERRORS                     : (opcional) alerta de falha crítica
 
 name: rj_crm__agentforce_classificacao_llm
@@ -62,7 +62,7 @@ deployments:
         image_pull_policy: Always
 
   # -----------------------------------------------------------------------
-  # Deployment de produção — cron diário às 15h (America/Sao_Paulo)
+  # Deployment de produção — cron de hora em hora (America/Sao_Paulo)
   # -----------------------------------------------------------------------
   - name: rj-crm--agentforce-classificacao-llm--prod
     tags: [prod]
@@ -77,7 +77,7 @@ deployments:
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
     schedules:
-      - cron: "0 15 * * *"
+      - cron: "0 * * * *"
         timezone: America/Sao_Paulo
         active: true
-        slug: agentforce-classificacao-llm-diario-15h
+        slug: agentforce-classificacao-llm-horario
