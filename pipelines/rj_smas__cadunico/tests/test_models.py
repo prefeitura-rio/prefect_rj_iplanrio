@@ -4,6 +4,7 @@ import pytest
 
 from pipelines.rj_smas__cadunico.helpers.models import (
     build_models,
+    decode_pattern,
     describe,
     dump_schema,
     find_long_descriptions,
@@ -79,7 +80,22 @@ def test_a_dictionary_adds_a_column_without_the_id_prefix(make_record: Callable[
     field = make_field(make_record("a", nome_padronizado="id_sexo", dicionario_atributos='{"1": "Masculino"}'))
 
     assert field["mapped_alias"] == "sexo"
-    assert field["mapping"] == [{"key": "1", "value": "Masculino"}]
+    assert field["mapping"] == [{"key": "0*1", "value": "Masculino"}]
+
+
+@pytest.mark.parametrize(
+    ("key", "expected"),
+    [
+        pytest.param("1", "0*1", id="a_number"),
+        pytest.param("01", "0*1", id="a_number_with_zeros"),
+        pytest.param("0", "0*0", id="zero"),
+        pytest.param("A", "A", id="text_stays"),
+        pytest.param("1A", "1A", id="mixed_stays"),
+    ],
+)
+def test_a_numeric_key_matches_with_or_without_zeros_on_the_left(key: str, expected: str) -> None:
+    """Turn a numeric key into a regex that ignores the zeros on the left."""
+    assert decode_pattern(key) == expected
 
 
 def test_a_dictionary_needs_an_id_name(make_record: Callable[..., Record]) -> None:

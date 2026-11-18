@@ -3,7 +3,10 @@
 from typing import Final
 
 from pipelines.rj_smas__cadunico.types import RawFolders, Tables
+from utils.types import Cloud
 
+DEFAULT_CLOUD: Final = Cloud(bucket="rj-smas-cadunico", project="rj-iplanrio", connection="rj-iplanrio.us.biglake")
+"""The staging of CadÚnico lives in its own bucket, apart from the project."""
 DEFAULT_RAW: Final[RawFolders] = {
     "bucket": "rj-smas",
     "records_prefix": "raw/protecao_social_cadunico/registro_familia",
