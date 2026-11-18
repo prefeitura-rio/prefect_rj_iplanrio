@@ -1,4 +1,4 @@
-"""Flow for rj_smfp__ergon..."""
+"""Flow for rj_smfp__ergon.."""
 
 from utils.flows import dump_database
 
