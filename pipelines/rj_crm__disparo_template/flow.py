@@ -119,7 +119,7 @@ def rj_crm__disparo_template_sf(
     monitor_check_interval_minutes: int = 5,
     monitor_max_wait_minutes: int = 40,
     sftp_remote_path: str = "/Import/",
-    batch_size: int | None = None,
+    batch_size: int = 10000,
     batch_sleep_minutes: int = 5,
     debug: bool = True,
 ):
