@@ -2,33 +2,33 @@ name: rj_smfp__ergon
 prefect-version: 3.4.3
 
 build:
-- prefect.deployments.steps.run_shell_script:
-    id: get-commit-hash
-    script: git rev-parse --short HEAD
-    stream_output: false
-- prefect_docker.deployments.steps.build_docker_image:
-    id: build-image
-    requires: prefect-docker>=0.6.5
-    image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
-    tag: "rj_smfp__ergon-{{ get-commit-hash.stdout }}"
-    dockerfile: pipelines/rj_smfp__ergon/Dockerfile
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_smfp__ergon-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_smfp__ergon/Dockerfile
 
 push:
-- prefect_docker.deployments.steps.push_docker_image:
-    requires: prefect-docker>=0.6.5
-    image_name: "{{ build-image.image_name }}"
-    tag: "{{ build-image.tag }}"
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
 
 pull:
-- prefect.deployments.steps.set_working_directory:
-    directory: /opt/prefect/prefect_rj_iplanrio
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
   - name: rj-smfp--ergon--staging
     tags:
-    - environment:staging
-    - severity:medium
-    - code_owner:tricktx
+      - environment:staging
+      - severity:medium
+      - code_owner:tricktx
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_smfp__ergon/flow.py:rj_smfp__ergon
     parameters:
@@ -51,16 +51,16 @@ deployments:
         secretName: pipelines-infisical
         image_pull_policy: Always
         env:
-          INFISICAL_URL: https://infisical.iplan.dados.rio
-          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_URL: https://secrets.dados.rio
+          INFISICAL_PROJECT_ID: 5cf5bfc3-e53f-4156-91f6-75714414a316
           INFISICAL_ENVIRONMENT: staging
           INFISICAL_PATHS: /rj_smfp__ergon,/shared
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
   - name: rj-smfp--ergon--prod
     tags:
-    - environment:prod
-    - severity:medium
-    - code_owner:tricktx
+      - environment:prod
+      - severity:medium
+      - code_owner:tricktx
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smfp__ergon/flow.py:rj_smfp__ergon
     parameters:
@@ -83,28 +83,28 @@ deployments:
         secretName: pipelines-infisical
         image_pull_policy: Always
         env:
-          INFISICAL_URL: https://infisical.iplan.dados.rio
-          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_URL: https://secrets.dados.rio
+          INFISICAL_PROJECT_ID: 5cf5bfc3-e53f-4156-91f6-75714414a316
           INFISICAL_ENVIRONMENT: prod
           INFISICAL_PATHS: /rj_smfp__ergon,/shared
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
     schedules:
-    - cron: "0 3 * * *"
-      timezone: America/Sao_Paulo
-      slug: daily
-      parameters:
-        table:
-          dataset_id: brutos_recursos_humanos_ergon_staging
-          table_id: vantagens
-        dump_mode: append
-        read:
-          table: ERGON.VANTAGENS
-        options:
-          columns:
-            add_timestamp: true
-          chunks:
-            column: DTINI
-            width: month
-            begin: 1980-01-30
-            end: 2030
-            lookback: 1
+      - cron: "0 3 * * *"
+        timezone: America/Sao_Paulo
+        slug: daily
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_staging
+            table_id: vantagens
+          dump_mode: append
+          read:
+            table: ERGON.VANTAGENS
+          options:
+            columns:
+              add_timestamp: true
+            chunks:
+              column: DTINI
+              width: month
+              begin: 1980-01-30
+              end: 2030
+              lookback: 1
