@@ -80,6 +80,19 @@ class ClassificacaoConstants(Enum):
     BIFROST_MODEL = "salesforce/gemini-3.6-flash"
     MAX_WORKERS = 8  # mesmo valor usado no notebook (ajustar conforme rate limit do gateway)
     MAX_TENTATIVAS_LLM = 3
+
+    # --- Juiz de tema/motivo (tasks/juiz.py) ---
+    # Confirma cada match das regras de taxonomia_regras: só tira rótulo, nunca põe.
+    # prompts/juiz_taxonomia.txt é cópia literal de clustering_v3/prompts/coleta.txt (o
+    # juiz que mediu a precisão das regras na 08_precisao); parâmetros iguais aos de lá
+    # (config/parametros.yaml, seção auditoria_precisao). Modelo = BIFROST_MODEL.
+    # Subir JUIZ_PROMPT_VERSAO quando o .txt mudar: o recálculo só reaproveita julgamento
+    # da mesma versão e do mesmo modelo.
+    JUIZ_PROMPT_VERSAO = "v1"
+    JUIZ_TAMANHO_LOTE = 50
+    JUIZ_THINKING_BUDGET = 1000
+    JUIZ_MAX_OUTPUT_TOKENS = 8192
+    JUIZ_TENTATIVAS_JSON = 3  # JSON inválido: repete a chamada (igual a 04_coleta.julga)
     ESPERA_INICIAL_SEGUNDOS = 2
 
     # Tamanho do lote de carga incremental dentro de classifica_sessoes: a cada N sessões
