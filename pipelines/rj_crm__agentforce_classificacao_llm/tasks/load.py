@@ -88,19 +88,13 @@ SCHEMA: list[bigquery.SchemaField] = [
     bigquery.SchemaField("tokens_total", _INT64),
     bigquery.SchemaField("prompt_versao", _STRING),
     bigquery.SchemaField("classificado_em", _TIMESTAMP, mode="REQUIRED"),
-    # Etapas 2 e 3 do pipeline de clusterização (ver
-    # clustering/docs/pipeline_clusterizacao_agentforce.md) — tema (indução por
-    # secretaria) e causa sistêmica (indução de motivo dentro do tema). Reservadas
-    # aqui: esta pipeline só escreve a etapa 1 e sempre grava as duas como array
-    # vazio ([]); quando a pipeline de tema/motivo existir, ela faz MERGE nesta
-    # mesma linha (por id_sessao) e preenche de verdade, sem recriar linha. Array
-    # (REPEATED), não string única: a avaliação é por função Python por categoria
-    # (ver clustering/modules/rules_sandbox.py) e pode bater em mais de uma ao
-    # mesmo tempo — "bateu em mais de uma" é só ARRAY_LENGTH(coluna) > 1, sem
-    # precisar de um indicador booleano separado. Array REPEATED nunca é NULL no
-    # BigQuery (vazio é o "sem valor" natural), por isso sem NOT NULL explícito.
+    # Tema da taxonomia (regras de taxonomia_regras, etapa='tema', aplicadas por
+    # tasks/taxonomia.py). Array (REPEATED), não string única: a avaliação é por
+    # função Python por categoria (ver RulesSandbox em tasks/taxonomia.py) e pode bater em mais de
+    # uma ao mesmo tempo. Array REPEATED nunca é NULL no BigQuery (vazio é o "sem
+    # valor" natural), por isso sem NOT NULL explícito. O motivo, que depende do
+    # tema, fica em tema_motivo (no fim do schema).
     bigquery.SchemaField("tema_nome", _STRING, mode="REPEATED"),
-    bigquery.SchemaField("causa_nome", _STRING, mode="REPEATED"),
     bigquery.SchemaField("data_particao", _DATE, mode="REQUIRED"),
     # Se a resposta do cidadão à HSM indica que o número que a recebeu é dele —
     # PERTENCE | INDEFINIDO | NAO_PERTENCE, item 7 do prompt com_hsm (ver
@@ -136,6 +130,20 @@ SCHEMA: list[bigquery.SchemaField] = [
     # RESPOSTA_ATRASADA_BTN e quando o gateway não devolve o campo. Adicionada por ALTER
     # TABLE (ordem física no fim).
     bigquery.SchemaField("tokens_cache", _INT64),
+    # Motivo da taxonomia com o tema de onde saiu: um item por regra de motivo
+    # (etapa='motivo') que bateu. A regra de motivo só é avaliada se o tema pai
+    # (categoria_pai) está em tema_nome, e o mesmo nome de motivo pode existir sob
+    # temas diferentes — por isso o par, e não só o nome. Substitui causa_nome, que
+    # perdia o tema. Adicionada por ALTER TABLE (ordem física no fim).
+    bigquery.SchemaField(
+        "tema_motivo",
+        "RECORD",
+        mode="REPEATED",
+        fields=[
+            bigquery.SchemaField("tema_nome", _STRING),
+            bigquery.SchemaField("motivo_nome", _STRING),
+        ],
+    ),
 ]
 
 _COLUNAS = [f.name for f in SCHEMA]
