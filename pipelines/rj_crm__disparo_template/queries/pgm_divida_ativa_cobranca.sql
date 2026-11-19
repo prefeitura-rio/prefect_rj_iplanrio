@@ -20,7 +20,7 @@ SELECT
     END AS phone_priority,
     pf.telefone.principal.estrategia_envio,
     pf.telefone.principal.qualidade
-FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf
+FROM `rj-rmi.rmi_dados_mestres.pessoa_fisica` pf
 WHERE pf.telefone.principal.qualidade = 'VALIDO'
     AND pf.telefone.principal.estrategia_envio != "NÃO ENVIAR"
     AND pf.telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR", "EVITAR")

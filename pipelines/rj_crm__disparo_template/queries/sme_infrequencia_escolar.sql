@@ -9,7 +9,7 @@ with
                     pf.telefone.principal.valor
                 )
             ) as telefone_rmi
-        from `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf
+        from `rj-rmi.rmi_dados_mestres.pessoa_fisica` pf
         where
             1 = 1
             -- filtros obrigatórios de disparo

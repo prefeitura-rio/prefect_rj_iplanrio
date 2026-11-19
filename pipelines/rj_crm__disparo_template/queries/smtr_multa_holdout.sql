@@ -143,7 +143,7 @@ WITH rmi_base AS (
                 pf.telefone.principal.valor
             )
         ) AS celular_disparo
-    FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf
+    FROM `rj-rmi.rmi_dados_mestres.pessoa_fisica` pf
     WHERE pf.cpf IS NOT NULL
         AND pf.telefone.principal.estrategia_envio != 'NÃO ENVIAR'
         AND pf.obito.indicador IS FALSE
