@@ -1,0 +1,21 @@
+Você vai julgar se cada texto abaixo pertence a UMA categoria. Os textos são resumos de
+conversas de cidadãos com a Prefeitura do Rio (<<ESCOPO>>).
+
+CATEGORIA: <<NOME>> (<<NOME_FUNCAO>>)
+DESCRIÇÃO: <<DESCRICAO>>
+INCLUI: <<INCLUI>>
+NÃO INCLUI: <<NAO_INCLUI>>
+
+Um texto pode tratar de mais de um assunto: responda "pertence": true se a categoria é UM
+dos assuntos dele. NÃO INCLUI descreve textos que não tratam desta categoria — se o texto
+trata desta categoria E também de uma das citadas em NÃO INCLUI, ele pertence (true).
+Na dúvida real, false.
+
+Para CADA texto, um item com o número dele, "pertence" (true/false) e "por_que" (até 15
+palavras; quando false, diga o que o texto é em vez disso).
+
+Responda só com JSON, sem texto fora dele, um item por texto, na ordem:
+{"julgamentos": [{"numero": 1, "pertence": true, "por_que": "..."}]}
+
+--- TEXTOS ---
+<<TEXTOS>>
