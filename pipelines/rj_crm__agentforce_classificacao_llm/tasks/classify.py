@@ -32,7 +32,7 @@ from pipelines.rj_crm__agentforce_classificacao_llm.tasks.roteamento import (
     SECRETARIA_FORA_DA_LISTA,
     TaxonomiaRoteamento,
 )
-from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import aplica_regras_causa, aplica_regras_tema
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import aplica_regras_motivo, aplica_regras_tema
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
@@ -363,7 +363,7 @@ def classifica_sessoes(
     espera_inicial: int,
     classificacao_sem_hsm: str,
     df_regras_tema: pd.DataFrame,
-    df_regras_causa: pd.DataFrame,
+    df_regras_motivo: pd.DataFrame,
     classificacao_resposta_atrasada: str,
     justificativa_resposta_atrasada: str,
     prompt_versao: str,
@@ -388,7 +388,7 @@ def classifica_sessoes(
     acima) — nunca grava linha com o roteamento pela metade.
 
     Carrega no BigQuery em lotes de `tamanho_lote` sessões, à medida que vão sendo
-    classificadas (monta_dataframe_final + aplica_regras_tema + aplica_regras_causa +
+    classificadas (monta_dataframe_final + aplica_regras_tema + aplica_regras_motivo +
     carrega_classificacoes, por lote), em vez de esperar as ~6mil sessões todas
     terminarem pra escrever de uma vez. Um run desse tamanho pode levar 20-30min de
     chamadas pagas à LLM — sem isso, um crash no meio (pod reiniciado, OOM, cancelamento
@@ -415,7 +415,7 @@ def classifica_sessoes(
             prompt_versao=prompt_versao,
         )
         df_chunk_final = aplica_regras_tema(df_final=df_chunk_final, df_regras=df_regras_tema)
-        df_chunk_final = aplica_regras_causa(df_final=df_chunk_final, df_regras=df_regras_causa)
+        df_chunk_final = aplica_regras_motivo(df_final=df_chunk_final, df_regras=df_regras_motivo)
         return carrega_classificacoes(
             df_final=df_chunk_final,
             project_id=project_id,
@@ -640,12 +640,10 @@ def monta_dataframe_final(
         df_final["telefone_confirmacao_flag"].notna()
     )
 
-    # Etapas 2/3 (tema, causa sistêmica) — reservadas, array vazio: esta pipeline só
-    # faz a etapa 1. Quando a pipeline de tema/motivo existir, ela faz MERGE nesta
-    # mesma linha (por id_sessao) e preenche de verdade — "já passou pela etapa" a
-    # partir daí é só ARRAY_LENGTH(coluna) > 0, sem precisar de flag own separada.
+    # Tema e motivo da taxonomia — array vazio aqui; aplica_regras_tema e
+    # aplica_regras_motivo (tasks/taxonomia.py) preenchem depois.
     df_final["tema_nome"] = [[] for _ in range(len(df_final))]
-    df_final["causa_nome"] = [[] for _ in range(len(df_final))]
+    df_final["tema_motivo"] = [[] for _ in range(len(df_final))]
 
     # sentimento (positivo/negativo/neutro) — derivado por regra a partir de
     # natureza, não pela LLM (ver docstring de _deriva_sentimento)
