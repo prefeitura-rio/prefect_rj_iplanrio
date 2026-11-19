@@ -50,7 +50,7 @@ class ClassificacaoConstants(Enum):
     TAXONOMIA_ETAPA_MOTIVO = "motivo"
 
     # --- Recálculo de taxonomia (parâmetro recalcula_taxonomia do flow) ---
-    # tema_nome/causa_nome também chegam ao struct `llm` da chatbot (dbt, repo
+    # tema_nome/tema_motivo também chegam ao struct `llm` da chatbot (dbt, repo
     # queries-rj-crm-registry), cujos incrementais só reescrevem o passado recente —
     # depois do MERGE parcial, o flow dispara o full refresh do ramo Salesforce pelo
     # deployment do rj_crm__run_dbt (ver tasks/taxonomia.py::dispara_full_refresh_chatbot).

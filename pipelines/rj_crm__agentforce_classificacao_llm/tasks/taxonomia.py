@@ -223,12 +223,19 @@ def carrega_catalogo_regras(
 
 
 def _aplica_regras(
-    df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida: str, rotulo_etapa: str, coluna_texto: str
+    df_final: pd.DataFrame,
+    df_regras: pd.DataFrame,
+    coluna_saida: str,
+    rotulo_etapa: str,
+    coluna_texto: str,
+    com_tema_pai: bool = False,
 ) -> pd.DataFrame:
-    """Lógica compartilhada entre aplica_regras_tema e aplica_regras_causa: roda cada
+    """Lógica compartilhada entre aplica_regras_tema e aplica_regras_motivo: roda cada
     regra do catálogo (já sandboxed) contra o texto normalizado (ver `_normaliza_resumo`)
-    da `coluna_texto` das sessões relevantes, e preenche `coluna_saida` com os nomes
-    das categorias que bateram (pode ser mais de uma — por isso a coluna é array).
+    da `coluna_texto` das sessões relevantes, e preenche `coluna_saida` com as
+    categorias que bateram (pode ser mais de uma — por isso a coluna é array). Com
+    `com_tema_pai`, cada item é o par {"tema_nome": categoria_pai, "motivo_nome": nome}
+    (formato de tema_motivo); sem ele, só o nome (formato de tema_nome).
 
     `coluna_texto` é o texto sobre o qual a regra foi induzida e teve a precisão medida
     no clustering: `resumo` pra tema, `motivo` pra motivo (clustering_v3 treina e audita
@@ -244,8 +251,8 @@ def _aplica_regras(
       `tema_nome` (já calculado por aplica_regras_tema, que roda antes — ver flow.py)
       contenha aquele tema. Como o motivo também é buscado só no agrupamento da sessão,
       ele fica preso ao tema E ao macrotema: um tema homônimo em outro macrotema não
-      empresta motivo. Bug real que motivou o filtro por tema: causa_nome vinha com
-      motivo de um cluster ao qual a sessão não pertencia.
+      empresta motivo. Bug real que motivou o filtro por tema: o motivo vinha de um
+      cluster ao qual a sessão não pertencia.
 
     Sessão não relevante, sem texto na `coluna_texto`, sem agrupamento (macrotema_principal NULL: o prompt
     de macrotema não rodou ou devolveu rótulo fora do catálogo) ou de agrupamento sem regra
@@ -284,7 +291,7 @@ def _aplica_regras(
         )
         return df_final
 
-    def _aplica(row) -> list[str]:
+    def _aplica(row) -> list:
         # nullable boolean (pd.NA) não aceita `not x` direto — comparação explícita
         if row.get("conteudo_relevante") is not True:
             return []
@@ -301,7 +308,7 @@ def _aplica_regras(
             return []
 
         # tema(s) já atribuído(s) à sessão nesta mesma passada (aplica_regras_tema roda
-        # antes de aplica_regras_causa — ver flow.py). Ausente/vazio pra quem ainda não
+        # antes de aplica_regras_motivo — ver flow.py). Ausente/vazio pra quem ainda não
         # passou por essa etapa (ex.: quando esta função é chamada PARA a própria etapa
         # de tema) — nesse caso não há regra com categoria_pai preenchido no catálogo
         # mesmo, então o filtro abaixo nunca exclui nada.
@@ -314,7 +321,12 @@ def _aplica_regras(
                 continue  # motivo de um tema que esta sessão não tem — fora de escopo
             try:
                 if regra["funcao"](texto_norm):
-                    matches.append(regra["nome_categoria"])
+                    if com_tema_pai:
+                        matches.append(
+                            {"tema_nome": regra["categoria_pai"], "motivo_nome": regra["nome_categoria"]}
+                        )
+                    else:
+                        matches.append(regra["nome_categoria"])
             except Exception as e:  # função individual não pode derrubar a sessão inteira
                 print(
                     f"[TAXONOMIA] falha ao avaliar '{regra['nome_categoria']}' "
@@ -341,10 +353,11 @@ def aplica_regras_tema(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.Da
 
 
 @task(log_prints=True)
-def aplica_regras_causa(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.DataFrame:
-    """Etapa 3 (causa sistêmica/motivo) — mesma lógica de aplica_regras_tema (mesmo
+def aplica_regras_motivo(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.DataFrame:
+    """Etapa 3 (motivo) — mesma lógica de aplica_regras_tema (mesmo
     sandbox), só que avalia a regra contra o campo `motivo` (não o `resumo`: é sobre ele
-    que a regra de motivo é induzida e medida), escreve em causa_nome e filtra o
+    que a regra de motivo é induzida e medida), escreve em tema_motivo (par tema pai +
+    motivo, para o motivo não se descolar do tema de onde saiu) e filtra o
     catálogo por etapa='motivo' (ver TAXONOMIA_ETAPA_MOTIVO em constants.py). Diferente
     do tema, motivo é escopado DENTRO do tema (categoria_pai em taxonomia_regras) — uma
     regra de motivo só é avaliada em sessão cujo tema_nome (calculado por
@@ -352,7 +365,14 @@ def aplica_regras_causa(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.D
     filtro por categoria_pai em _aplica_regras). df_final PRECISA vir com tema_nome já
     preenchido — chamar esta função antes de aplica_regras_tema faz toda regra de motivo
     ser descartada (nenhum tema bate)."""
-    return _aplica_regras(df_final, df_regras, coluna_saida="causa_nome", rotulo_etapa="motivo", coluna_texto="motivo")
+    return _aplica_regras(
+        df_final,
+        df_regras,
+        coluna_saida="tema_motivo",
+        rotulo_etapa="motivo",
+        coluna_texto="motivo",
+        com_tema_pai=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -362,7 +382,7 @@ def aplica_regras_causa(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.D
 # categoria é adicionada — e as sessões já classificadas precisam refletir isso,
 # sem rechamar a LLM (custo zero, é só reavaliar função Python contra o resumo
 # que já está salvo) e sem sobrescrever relacao_hsm/resumo/motivo/etc. (só
-# tema_nome/causa_nome mudam). MERGE parcial (só essas 2 colunas) em todas as
+# tema_nome/tema_motivo mudam). MERGE parcial (só essas 2 colunas) em todas as
 # sessões relevantes da tabela de classificação e, em seguida, full refresh do ramo
 # Salesforce da chatbot no dbt — os incrementais dele não reprocessam o passado
 # sozinhos quando a tabela de classificação muda.
@@ -376,29 +396,29 @@ def extrai_sessoes_para_recalculo_taxonomia(project_id: str, dataset_id: str, ta
     regras de motivo), a coluna de agrupamento da sessão (macrotema_principal)
     e conteudo_relevante — mesmo filtro (conteudo_relevante = true) que a etapa 1 já usa
     internamente pra decidir quem entra na avaliação de regra. Todo o histórico, sem
-    filtro de data: o recálculo reescreve tema_nome/causa_nome de todas as sessões
-    relevantes. causa_nome é recalculado em seguida por aplica_regras_causa (flow.py)."""
+    filtro de data: o recálculo reescreve tema_nome/tema_motivo de todas as sessões
+    relevantes (aplica_regras_tema e aplica_regras_motivo, em seguida no flow.py)."""
     client = get_bq_client(project_id)
     full_id = _full_table_id(project_id, dataset_id, table_id)
     query = f"""
-        SELECT id_sessao, resumo, motivo, macrotema_principal, conteudo_relevante, causa_nome
+        SELECT id_sessao, resumo, motivo, macrotema_principal, conteudo_relevante
         FROM `{full_id}`
         WHERE conteudo_relevante = true
     """
     df = client.query(query).to_dataframe()
-    print(f"[TAXONOMIA] {len(df)} sessão(ões) relevante(s) carregada(s) da tabela destino pra recálculo de tema/causa.")
+    print(f"[TAXONOMIA] {len(df)} sessão(ões) relevante(s) carregada(s) da tabela destino pra recálculo de tema/motivo.")
     return df
 
 
 @task(log_prints=True, retries=3, retry_delay_seconds=[30, 60, 120])
-def atualiza_tema_causa(
+def atualiza_tema_motivo(
     df_tema: pd.DataFrame,
     project_id: str,
     dataset_id: str,
     table_id: str,
     tmp_table_id: str,
 ) -> int:
-    """MERGE PARCIAL — atualiza só tema_nome/causa_nome (por id_sessao) na tabela
+    """MERGE PARCIAL — atualiza só tema_nome/tema_motivo (por id_sessao) na tabela
     destino, sem tocar em nenhuma outra coluna (relacao_hsm, resumo, motivo etc.
     ficam intactos). Diferente de carrega_classificacoes (tasks/load.py), que
     sobrescreve a linha inteira — esta função é exatamente o "UPDATE parcial,
@@ -406,11 +426,11 @@ def atualiza_tema_causa(
 
     Reaproveita a mesma tabela tmp da carga normal (schema físico já tem as REQUIRED
     id_sessao/classificado_em/data_particao) — como o MERGE só faz UPDATE SET nas 2
-    colunas de tema/causa, os valores de classificado_em/data_particao carregados
+    colunas de tema/motivo, os valores de classificado_em/data_particao carregados
     aqui são só placeholder pra satisfazer o schema da tmp: nunca chegam na tabela
     destino."""
     if df_tema.empty:
-        print("[TAXONOMIA] Nada a atualizar — nenhuma sessão com tema/causa recalculado.")
+        print("[TAXONOMIA] Nada a atualizar — nenhuma sessão com tema/motivo recalculado.")
         return 0
 
     client = get_bq_client(project_id)
@@ -418,11 +438,11 @@ def atualiza_tema_causa(
     destino_full = _full_table_id(project_id, dataset_id, table_id)
 
     agora = datetime.now(tz=timezone.utc)
-    df_carga = df_tema[["id_sessao", "tema_nome", "causa_nome"]].copy()
+    df_carga = df_tema[["id_sessao", "tema_nome", "tema_motivo"]].copy()
     df_carga["classificado_em"] = agora  # placeholder, nunca lido pelo MERGE (ver docstring)
     df_carga["data_particao"] = date.today()  # placeholder, idem
 
-    colunas_tmp = {"id_sessao", "tema_nome", "causa_nome", "classificado_em", "data_particao"}
+    colunas_tmp = {"id_sessao", "tema_nome", "tema_motivo", "classificado_em", "data_particao"}
     schema_tmp = [f for f in SCHEMA if f.name in colunas_tmp]
 
     job_config = bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_APPEND, schema=schema_tmp)
@@ -436,14 +456,14 @@ def atualiza_tema_causa(
         USING `{tmp_full}` AS s
         ON t.id_sessao = s.id_sessao
         WHEN MATCHED THEN
-            UPDATE SET t.tema_nome = s.tema_nome, t.causa_nome = s.causa_nome
+            UPDATE SET t.tema_nome = s.tema_nome, t.tema_motivo = s.tema_motivo
     """
     merge_job = client.query(merge_sql)
     merge_job.result()
     linhas = merge_job.num_dml_affected_rows or 0
 
     client.query(f"TRUNCATE TABLE `{tmp_full}`").result()
-    print(f"[TAXONOMIA] MERGE parcial concluído: {linhas} linha(s) de tema/causa atualizada(s) em '{table_id}'.")
+    print(f"[TAXONOMIA] MERGE parcial concluído: {linhas} linha(s) de tema/motivo atualizada(s) em '{table_id}'.")
     return linhas
 
 
@@ -455,7 +475,7 @@ def dispara_full_refresh_chatbot(
     bigquery_project: str,
 ) -> None:
     """Dispara o full refresh do ramo Salesforce da chatbot (deployment do
-    rj_crm__run_dbt) pra tema_nome/causa_nome recalculados chegarem ao struct `llm` de
+    rj_crm__run_dbt) pra tema_nome/tema_motivo recalculados chegarem ao struct `llm` de
     todas as sessões, de qualquer data. Os incrementais da cadeia só reescrevem o passado
     recente (chatbot: ~9 dias; fct_chatbot_salesforce: 35), então sem isso o tema novo
     só aparece nas sessões novas.
@@ -484,6 +504,6 @@ def dispara_full_refresh_chatbot(
     if not flow_run.state.is_completed():
         raise RuntimeError(
             f"Full refresh do dbt ({deployment_name}, select '{select}') não completou: "
-            f"{flow_run.state.name}. tema_nome/causa_nome já estão na tabela de classificação; "
+            f"{flow_run.state.name}. tema_nome/tema_motivo já estão na tabela de classificação; "
             f"rodar o full refresh de novo pra eles chegarem à chatbot."
         )
