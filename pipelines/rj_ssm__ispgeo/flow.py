@@ -1,5 +1,3 @@
-"""Flow para extrair ocorrências criminais do ISP-GEO (ISP/RJ) e enviar para BigQuery."""
-
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow

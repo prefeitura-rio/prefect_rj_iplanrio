@@ -350,7 +350,7 @@ def upload_ocorrencias(
         )
 
         logger.info("%s linha(s), %s coluna(s) → enviando...", len(df), len(df.columns))
-        breakpoint()
+        
         create_table_and_upload_to_gcs(
             data_path=savepath,
             dataset_id=dataset_id,
