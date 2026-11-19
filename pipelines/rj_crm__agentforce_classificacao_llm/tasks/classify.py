@@ -27,12 +27,13 @@ import pandas as pd
 import requests
 from prefect import task
 
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.juiz import ConfigJuiz
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import carrega_classificacoes
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.roteamento import (
     SECRETARIA_FORA_DA_LISTA,
     TaxonomiaRoteamento,
 )
-from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import aplica_regras_motivo, aplica_regras_tema
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import aplica_taxonomia
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
@@ -364,6 +365,7 @@ def classifica_sessoes(
     classificacao_sem_hsm: str,
     df_regras_tema: pd.DataFrame,
     df_regras_motivo: pd.DataFrame,
+    cfg_juiz: ConfigJuiz,
     classificacao_resposta_atrasada: str,
     justificativa_resposta_atrasada: str,
     prompt_versao: str,
@@ -388,7 +390,7 @@ def classifica_sessoes(
     acima) — nunca grava linha com o roteamento pela metade.
 
     Carrega no BigQuery em lotes de `tamanho_lote` sessões, à medida que vão sendo
-    classificadas (monta_dataframe_final + aplica_regras_tema + aplica_regras_motivo +
+    classificadas (monta_dataframe_final + aplica_taxonomia (regras + juiz) +
     carrega_classificacoes, por lote), em vez de esperar as ~6mil sessões todas
     terminarem pra escrever de uma vez. Um run desse tamanho pode levar 20-30min de
     chamadas pagas à LLM — sem isso, um crash no meio (pod reiniciado, OOM, cancelamento
@@ -414,8 +416,9 @@ def classifica_sessoes(
             justificativa_resposta_atrasada=justificativa_resposta_atrasada,
             prompt_versao=prompt_versao,
         )
-        df_chunk_final = aplica_regras_tema(df_final=df_chunk_final, df_regras=df_regras_tema)
-        df_chunk_final = aplica_regras_motivo(df_final=df_chunk_final, df_regras=df_regras_motivo)
+        df_chunk_final = aplica_taxonomia(
+            df_final=df_chunk_final, df_regras_tema=df_regras_tema, df_regras_motivo=df_regras_motivo, cfg_juiz=cfg_juiz
+        )
         return carrega_classificacoes(
             df_final=df_chunk_final,
             project_id=project_id,
@@ -640,10 +643,14 @@ def monta_dataframe_final(
         df_final["telefone_confirmacao_flag"].notna()
     )
 
-    # Tema e motivo da taxonomia — array vazio aqui; aplica_regras_tema e
-    # aplica_regras_motivo (tasks/taxonomia.py) preenchem depois.
+    # Tema e motivo da taxonomia e julgamentos do juiz — vazios aqui; aplica_taxonomia
+    # (tasks/taxonomia.py) preenche depois.
     df_final["tema_nome"] = [[] for _ in range(len(df_final))]
     df_final["tema_motivo"] = [[] for _ in range(len(df_final))]
+    df_final["tema_julgamento"] = [[] for _ in range(len(df_final))]
+    df_final["tema_motivo_julgamento"] = [[] for _ in range(len(df_final))]
+    df_final["modelo_juiz"] = None
+    df_final["prompt_versao_juiz"] = None
 
     # sentimento (positivo/negativo/neutro) — derivado por regra a partir de
     # natureza, não pela LLM (ver docstring de _deriva_sentimento)
