@@ -13,10 +13,10 @@ from typing import Optional
 
 import aiohttp
 import requests
+from iplanrio.pipelines_utils.env import getenv_or_action
 from prefect_rj_iplanrio.logging import get_logger
 
-import env
-from constants import (
+from pipelines.rj_ssm__ispgeo.constants import (
     AUTH_TIMEOUT,
     COUNT_TIMEOUT,
     DEFAULT_PAGE_SIZE,
@@ -34,12 +34,12 @@ class IspGeoClient:
     __slots__ = ("_username", "_password", "_portal_url", "_layer_url", "_referer", "_token", "_session")
 
     def __init__(self) -> None:
-        """Inicializa o cliente com credenciais lidas de ``env.py``."""
-        self._username: Optional[str] = env.ISPGEO_USER
-        self._password: Optional[str] = env.ISPGEO_PASS
-        self._portal_url: Optional[str] = env.ISPGEO_PORTAL_URL
-        self._layer_url: Optional[str] = env.ISPGEO_LAYER_URL
-        self._referer: Optional[str] = env.ISPGEO_REFERER
+        """Inicializa o cliente com credenciais lidas das variáveis de ambiente."""
+        self._username: Optional[str] = getenv_or_action(key="ISPGEO_USER", action="ignore")
+        self._password: Optional[str] = getenv_or_action(key="ISPGEO_PASS", action="ignore")
+        self._portal_url: Optional[str] = getenv_or_action(key="ISPGEO_PORTAL_URL", action="ignore")
+        self._layer_url: Optional[str] = getenv_or_action(key="ISPGEO_LAYER_URL", action="ignore")
+        self._referer: Optional[str] = getenv_or_action(key="ISPGEO_REFERER", action="ignore")
         self._token: Optional[str] = None
         self._session: Optional[requests.Session] = None
 
@@ -104,6 +104,7 @@ class IspGeoClient:
                 domains[field["name"]] = {
                     cv["code"]: cv["name"] for cv in domain["codedValues"]
                 }
+
         return domains
 
     def count_records(self, where: str) -> int:
@@ -173,7 +174,6 @@ class IspGeoClient:
                 params=params,
                 timeout=aiohttp.ClientTimeout(total=QUERY_TIMEOUT),
             ) as resp:
-
                 resp.raise_for_status()
                 data = await resp.json(content_type=None)
 
@@ -235,19 +235,23 @@ class IspGeoClient:
         where: str,
         page_size: int = DEFAULT_PAGE_SIZE,
         max_concurrent_requests: int = MAX_CONCURRENT_REQUESTS,
+        total: Optional[int] = None,
     ) -> list[dict]:
         """Busca todas as features que batem com ``where``, paginando de forma assíncrona.
 
-        Obtém o total de registros via :meth:`count_records` e dispara todas as
-        páginas em paralelo usando ``asyncio`` + ``aiohttp``.
+        Obtém o total de registros via :meth:`count_records` (se ``total`` não for
+        informado) e dispara todas as páginas em paralelo usando ``asyncio`` + ``aiohttp``.
 
         :param where: Cláusula ``WHERE`` no dialeto SQL da API ArcGIS.
         :param page_size: Quantidade de registros por página.
         :param max_concurrent_requests: Número máximo de requisições simultâneas.
+        :param total: Total de registros já contado pelo chamador, para evitar uma
+            segunda contagem que pode divergir da primeira.
         :returns: Lista de dicts de atributos (``attributes``) de cada feature.
         :raises RuntimeError: Se a API retornar um erro em alguma página.
         """
-        total = self.count_records(where=where)
+        if total is None:
+            total = self.count_records(where=where)
         if total == 0:
             logger.info(f"Nenhum registro encontrado para o filtro informado.")
             return []

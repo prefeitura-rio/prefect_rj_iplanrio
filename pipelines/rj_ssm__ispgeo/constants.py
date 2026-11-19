@@ -1,4 +1,4 @@
-"""Constantes do pipeline rj_ssm__isp."""
+"""Constantes do pipeline rj_ssm__ispgeo."""
 
 from typing import Final
 from zoneinfo import ZoneInfo
@@ -7,14 +7,7 @@ from zoneinfo import ZoneInfo
 SP_TZ: Final = ZoneInfo("America/Sao_Paulo")
 
 # Diretório base para arquivos temporários
-TMP_BASE: Final = "/tmp/rj_ssm__isp"
-
-# Fases de disponibilidade dos dados
-FASE_LABEL: dict[str, str] = {
-    "parcial": "parcial",
-    "consolidados": "consolidado",
-    "errata": "errata",
-}
+TMP_BASE: Final = "/tmp/rj_ssm__ispgeo"
 
 # Timeouts HTTP (segundos)
 AUTH_TIMEOUT: Final = 30.0
@@ -104,12 +97,11 @@ DATE_FIELDS: Final[list[str]] = ["datc", "datf"]
 # snake_case (sem espaço/acento) para poderem ser usados direto como nome de
 # coluna no BigQuery.
 CSV_COLUMNS: Final[list[tuple[str, str]]] = [
-    ("fase_particao", "fase_particao"),
     ("objectid", "objectid"),
     ("distancia_focoespecial", "distancia_area_foco_especial"),
     ("target_fid", "target_fid"),
     ("chave", "chave"),
-    ("rgocronu", "RO"),
+    ("rgocronu", "id_ro"),
     ("etit", "titulo_delito"),
     ("eseq", "sequencial_envolvido"),
     ("delito_do", "titulo_do"),
@@ -162,4 +154,5 @@ CSV_COLUMNS: Final[list[tuple[str, str]]] = [
     ("dominio_focoespecial", "dominio_focoespecial"),
     ("ffaixa", "faixa_horaria"),
     ("periodo_dia", "periodo_dia"),
+    ("id_hash", "id_hash"),
 ]

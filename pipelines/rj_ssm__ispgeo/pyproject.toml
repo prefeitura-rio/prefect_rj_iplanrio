@@ -1,5 +1,5 @@
 [project]
-name = "rj_ssm__isp"
+name = "rj_ssm__ispgeo"
 version = "1.0.0"
 description = "Fetches criminal occurrence records from ISP-GEO (Instituto de Segurança Pública do RJ) and loads them into BigQuery."
 dependencies = [

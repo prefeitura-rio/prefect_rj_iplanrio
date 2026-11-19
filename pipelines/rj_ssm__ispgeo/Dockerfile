@@ -7,6 +7,6 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 COPY ./src ./src/
 
-COPY ./pipelines/rj_ssm__isp ./pipelines/rj_ssm__isp/
+COPY ./pipelines/rj_ssm__ispgeo ./pipelines/rj_ssm__ispgeo/
 
-RUN uv sync --package rj_ssm__isp
+RUN uv sync --package rj_ssm__ispgeo

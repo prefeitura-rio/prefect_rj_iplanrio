@@ -1,98 +1,79 @@
-"""Utilitários gerais do pipeline rj_ssm__isp."""
+"""Utilitários gerais do pipeline rj_ssm__ispgeo."""
 
+import hashlib
+import json
+import shutil
 import unicodedata
 from datetime import datetime, timedelta, timezone
-from typing import Literal, Optional
+from pathlib import Path
+from typing import Optional
 
 import pandas as pd
+from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
+from iplanrio.pipelines_utils.pandas import parse_date_columns, to_partitions
 from prefect_rj_iplanrio.logging import get_logger
 
-from constants import (
-    SP_TZ,
+from pipelines.rj_ssm__ispgeo.client import IspGeoClient
+from pipelines.rj_ssm__ispgeo.constants import (
     CSV_COLUMNS,
     DATE_FIELDS,
+    DEFAULT_CRIME_TITLES,
+    MAX_CONCURRENT_REQUESTS,
     MESES_ABREV,
     MUNICIPIO_RIO_DE_JANEIRO,
     PERIODO_DIA_POR_FFAIXA,
+    SP_TZ,
+    TMP_BASE,
 )
 
 logger = get_logger(__name__)
 
-
-def _ultimo_trimestre(ref: datetime) -> tuple[str, str]:
-    """Retorna (data_inicio, data_fim) do último trimestre completo.
-
-    Trimestres: Jan–Mar, Abr–Jun, Jul–Set, Out–Dez.
-
-    :param ref: Data de referência.
-    :returns: Tupla ``(data_inicio, data_fim)`` no formato ``YYYY-MM-DD``.
-    """
-    mes = ref.month
-    ano = ref.year
-
-    trimestre_atual = (mes - 1) // 3
-    trimestre_anterior = trimestre_atual - 1
-    if trimestre_anterior < 0:
-        trimestre_anterior = 3
-        ano -= 1
-
-    mes_inicio = trimestre_anterior * 3 + 1
-    mes_fim = mes_inicio + 2
-
-    if mes_fim == 12:
-        ultimo_dia = datetime(ano, 12, 31)
-    else:
-        ultimo_dia = datetime(ano, mes_fim + 1, 1) - timedelta(days=1)
-
-    return datetime(ano, mes_inicio, 1).strftime("%Y-%m-%d"), ultimo_dia.strftime("%Y-%m-%d")
+BQ_PROJECT_ID = "rj-ssm"
 
 
 def resolve_dates(
-    fase: Literal["parcial", "consolidados", "errata"],
     data_inicio: Optional[str],
     data_fim: Optional[str],
 ) -> dict[str, str]:
-    """Resolve ``data_inicio`` e ``data_fim`` conforme a fase, quando não fornecidos.
+    """Resolve ``data_inicio`` e ``data_fim`` quando não fornecidos.
 
     Retorna um dict em vez de tupla para compatibilidade com ``@task`` do Prefect,
     que não suporta unpacking direto de tuplas retornadas por tasks.
 
-    - ``"parcial"`` (Fase 1): janela do dia anterior (D-1 a D-1).
-    - ``"consolidados"`` (Fase 2): mês anterior completo (1º ao último dia do mês anterior).
-    - ``"errata"`` (Fase 3): janela do último trimestre completo.
+    Default: janela móvel de 6 meses, de ``D-1`` menos 6 meses até ``D-1``. Como o flow
+    roda diariamente, a janela avança um dia a cada execução.
 
-    :param fase: Fase de disponibilidade dos dados.
-    :param data_inicio: Data de início explícita, ou ``None`` para usar o default da fase.
-    :param data_fim: Data de fim explícita, ou ``None`` para usar o default da fase.
+    :param data_inicio: Data de início explícita, ou ``None`` para usar ``D-1`` menos 6 meses.
+    :param data_fim: Data de fim explícita, ou ``None`` para usar ``D-1``.
     :returns: Dict com chaves ``"data_inicio"`` e ``"data_fim"`` no formato ``YYYY-MM-DD``.
-    :raises ValueError: Se ``fase`` for inválida.
     """
-    now = datetime.now(tz=SP_TZ)
-
-    if fase == "parcial":
-        if data_inicio is None:
-            data_inicio = (now - timedelta(days=1)).strftime("%Y-%m-%d")
-        if data_fim is None:
-            data_fim = data_inicio
-    elif fase == "consolidados":
-        # Primeiro dia do mês anterior
-        primeiro_dia_mes_atual = now.replace(day=1)
-        ultimo_dia_mes_anterior = primeiro_dia_mes_atual - timedelta(days=1)
-        primeiro_dia_mes_anterior = ultimo_dia_mes_anterior.replace(day=1)
-        if data_inicio is None:
-            data_inicio = primeiro_dia_mes_anterior.strftime("%Y-%m-%d")
-        if data_fim is None:
-            data_fim = ultimo_dia_mes_anterior.strftime("%Y-%m-%d")
-    elif fase == "errata":
-        inicio_tri, fim_tri = _ultimo_trimestre(now)
-        if data_inicio is None:
-            data_inicio = inicio_tri
-        if data_fim is None:
-            data_fim = fim_tri
-    else:
-        raise ValueError(f"Fase inválida: {fase!r}. Use 'parcial', 'consolidados' ou 'errata'.")
+    ontem = datetime.now(tz=SP_TZ).replace(tzinfo=None) - timedelta(days=1)
+    if data_inicio is None:
+        data_inicio = (ontem - pd.DateOffset(months=6)).strftime("%Y-%m-%d")
+    if data_fim is None:
+        data_fim = ontem.strftime("%Y-%m-%d")
 
     return {"data_inicio": data_inicio, "data_fim": data_fim}
+
+
+def add_id_hash(data: list[dict]) -> list[dict]:
+    """Adiciona ``id_hash`` a cada row com base nos dados brutos da API.
+
+    Hasheado antes da criação do DataFrame para evitar inconsistências de dtype
+    inference do pandas (ex: coluna inferida como int64 num run e float64 em outro
+    quando None aparece). json.dumps com sort_keys garante representação canônica
+    e determinística independente de tipo ou ordem de chaves.
+
+    Usa os 32 chars do MD5 (128 bits) — suficiente para o volume dessa API.
+
+    :param data: Linhas brutas da API (mutadas in-place e também retornadas).
+    :returns: As próprias linhas, com a chave ``id_hash`` adicionada.
+    """
+    for row in data:
+        row["id_hash"] = hashlib.md5(
+            json.dumps(row, sort_keys=True, ensure_ascii=False).encode()
+        ).hexdigest()
+    return data
 
 
 def strip_accents(text: str) -> str:
@@ -249,7 +230,6 @@ def decode_row(attrs: dict, domains: dict[str, dict[int, str]]) -> dict:
     return enrich_row(row, ffaixa_code)
 
 
-
 def build_dataframe(rows: list[dict]) -> pd.DataFrame:
     """Monta o DataFrame final, na ordem e com os nomes de coluna do BigQuery.
 
@@ -262,3 +242,125 @@ def build_dataframe(rows: list[dict]) -> pd.DataFrame:
     }
     return pd.DataFrame(data=data, dtype=object)
 
+
+def fetch_ocorrencias(
+    data_inicio: str,
+    data_fim: str,
+    todos: bool = False,
+    municipio: int = MUNICIPIO_RIO_DE_JANEIRO,
+    max_concurrent_requests: int = MAX_CONCURRENT_REQUESTS,
+) -> pd.DataFrame:
+    """Extrai ocorrências do ISP-GEO para o período e filtro informados.
+
+    ``todos=True`` traz todos os registros do período/município, ignorando o
+    filtro de tipo de delito — ver nota em :func:`build_where` sobre códigos de
+    ``delito_do`` órfãos no domínio da camada.
+
+    :param data_inicio: Data de início (``YYYY-MM-DD``), inclusive.
+    :param data_fim: Data de fim (``YYYY-MM-DD``), inclusive.
+    :param todos: Se ``True``, ignora o filtro de tipo de delito.
+    :param municipio: Código IBGE do município do fato.
+    :param max_concurrent_requests: Número máximo de requisições assíncronas simultâneas.
+    :returns: DataFrame com uma linha por ocorrência, colunas nomeadas para o BigQuery.
+    :raises RuntimeError: Se o total baixado divergir da contagem do servidor.
+    """
+    with IspGeoClient() as client:
+        logger.info("Baixando domínios da camada...")
+        domains = client.get_field_domains()
+
+        if todos:
+            crime_codes = None
+            logger.info("Tipos de DO: SEM filtro (todos os registros do período/município).")
+        else:
+            crime_codes = resolve_crime_codes(DEFAULT_CRIME_TITLES, domains["delito_do"])
+            logger.info("Tipos de DO incluídos na consulta: %s", len(crime_codes))
+
+        where = build_where(
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            crime_codes=crime_codes,
+            municipio_cod=municipio,
+        )
+        logger.info("Where: %s", where)
+
+        total_no_servidor = client.count_records(where=where)
+        logger.info("Registros no servidor (returnCountOnly): %s", total_no_servidor)
+        raw_rows = client.fetch_features(
+            where=where,
+            max_concurrent_requests=max_concurrent_requests,
+            total=total_no_servidor,
+        )
+        logger.info("%s ocorrências baixadas.", len(raw_rows))
+
+        if len(raw_rows) != total_no_servidor:
+            raise RuntimeError(
+                f"Divergência entre contagem do servidor ({total_no_servidor}) "
+                f"e registros baixados ({len(raw_rows)})."
+            )
+
+        codigos_nao_mapeados = sorted(
+            {
+                r["delito_do"]
+                for r in raw_rows
+                if r.get("delito_do") not in domains["delito_do"]
+            }
+        )
+        if codigos_nao_mapeados:
+            logger.warning(
+                "%s código(s) de delito_do sem nome no domínio da camada: %s",
+                len(codigos_nao_mapeados),
+                ", ".join(str(c) for c in codigos_nao_mapeados),
+            )
+
+        raw_rows = add_id_hash(raw_rows)
+        rows = [decode_row(r, domains) for r in raw_rows]
+    return build_dataframe(rows)
+
+
+def upload_ocorrencias(
+    dataframe: pd.DataFrame,
+    dataset_id: str,
+    table_id: str,
+    dump_mode: str,
+) -> None:
+    """Particiona por data de registro e envia o DataFrame para o BigQuery via GCS.
+
+    :param dataframe: DataFrame retornado por :func:`fetch_ocorrencias`.
+    :param dataset_id: Dataset do BigQuery.
+    :param table_id: Tabela do BigQuery.
+    :param dump_mode: ``"append"`` para acumular dados, ``"overwrite"`` para substituir.
+    """
+    if dataframe.empty:
+        logger.warning("Nenhuma ocorrência para enviar — pulando upload.")
+        return
+
+    df = dataframe.astype("string")
+    df["update_at"] = datetime.now(tz=SP_TZ).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+    df, _ = parse_date_columns(dataframe=df, partition_date_column="data_registro")
+
+    savepath = f"{TMP_BASE}/{table_id}"
+    Path(savepath).mkdir(parents=True, exist_ok=True)
+
+    try:
+        to_partitions(
+            data=df,
+            partition_columns=["ano_particao", "mes_particao", "data_particao"],
+            savepath=savepath,
+            data_type="parquet",
+        )
+
+        logger.info("%s linha(s), %s coluna(s) → enviando...", len(df), len(df.columns))
+        breakpoint()
+        create_table_and_upload_to_gcs(
+            data_path=savepath,
+            dataset_id=dataset_id,
+            table_id=table_id,
+            dump_mode=dump_mode,
+            biglake_table=True,
+            source_format="parquet",
+            only_staging_dataset=True,
+            project_id=BQ_PROJECT_ID,
+        )
+    finally:
+        shutil.rmtree(savepath, ignore_errors=True)
+    logger.info("Upload concluído.")
