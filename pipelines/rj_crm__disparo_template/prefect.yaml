@@ -857,6 +857,7 @@ deployments:
           data_extension_filename: whatsapp_smtr_multas_transito_v5
           de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo", "id_autuacao"]
           filter_duplicated_cpfs: true
+          filter_failed_phones: true
           query_file: queries/smtr_multa_holdout_tratamento_2.sql
           query_replacements: {"cota_inicial_placeholder": 300, "incremento_cota_placeholder": 0,
             "cota_maxima_placeholder": 5000, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5,
@@ -874,6 +875,7 @@ deployments:
           data_extension_filename: whatsapp_smtr_multas_transito_v3
           de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo", "id_autuacao"]
           filter_duplicated_cpfs: true
+          filter_failed_phones: true
           query_file: queries/smtr_multa_holdout_tratamento_4.sql
           query_replacements: {"cota_inicial_placeholder": 300, "incremento_cota_placeholder": 0,
             "cota_maxima_placeholder": 5000, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5,
@@ -891,7 +893,25 @@ deployments:
           data_extension_filename: whatsapp_smtr_multas_transito_v4
           de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo", "id_autuacao"]
           filter_duplicated_cpfs: true
+          filter_failed_phones: true
           query_file: queries/smtr_multa_holdout_tratamento_4.sql
           query_replacements: {"cota_inicial_placeholder": 300, "incremento_cota_placeholder": 0,
             "cota_maxima_placeholder": 5000, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5,
             "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}
+
+      # SMT - Emprego - Candidatura recebida (12h e 17h)
+      - cron: "0 9,13,17 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: daily-smt-emprego-candidatura-recebida
+        flow_run_name: smt-emprego-candidatura-recebida
+        parameters:
+          flow_environment: production
+          campaign_name: smt_emprego_candidatura_recebida
+          data_extension_filename: whatsapp_smt_emprego_candidatura_recebida
+          de_columns: ["nome_sobrenome", "nome_vaga", "nome_empresa", "orgao_intermediario",
+            "id_candidatura", "rota_pagina"]
+          filter_dispatched_phones_or_cpfs:
+          filter_duplicated_cpfs: false
+          filter_failed_phones: true
+          query_file: queries/smt/smt_emprego_candidatura_recebida.sql

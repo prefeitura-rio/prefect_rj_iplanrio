@@ -108,7 +108,14 @@ vagas AS (
   LEFT JOIN `rj-iplanrio.brutos_unidades_administrativas.orgaos_superapp` u
     ON u.cd_ua = v.id_orgao_parceiro
 ),
-
+remove_enviados as (
+  select
+    distinct json_value(hsm.dados_disparo, '$.id_candidatura') as id_candidatura
+  from `rj-crm-registry.rmi_conversas.chatbot`
+  where data_particao >= date_sub(current_date(), interval 7 day)
+    and json_value(hsm.dados_disparo, '$.id_candidatura') is not null
+    and hsm.nome_hsm like 'smt_emprego_candidatura_recebida%'
+),
 base AS (
   SELECT
     c.id_candidatura,
@@ -127,9 +134,11 @@ base AS (
     ON r.cpf = c.cpf
   LEFT JOIN telefone_origem t
     ON t.cpf = c.cpf
+    LEFT JOIN remove_enviados env ON env.id_candidatura = c.id_candidatura
   WHERE r.obito IS NOT TRUE
     AND r.menor_idade IS NOT TRUE
     AND COALESCE(t.telefone, r.telefone) IS NOT NULL
+    AND env.id_candidatura IS NULL -- remove quem já recebeu sobre aquela candidatura
 )
 
 SELECT
@@ -146,5 +155,6 @@ SELECT
   nome_vaga,
   nome_empresa,
   orgao_intermediario,
+  "servicos/trabalho" as rota_pagina,
   created_at
 FROM base
