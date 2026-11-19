@@ -18,7 +18,7 @@ Consumo: outras pipelines/dashboards fazem LEFT JOIN nessa tabela filtrando o ú
 (margem de segurança bem acima da janela de 14 dias desta extração).
 
 Parâmetro recalcula_taxonomia=True: modo alternativo, não roda a classificação normal
-acima — reavalia só tema_nome/causa_nome contra o catálogo de regras atual (sem LLM,
+acima — reavalia só tema_nome/tema_motivo contra o catálogo de regras atual (sem LLM,
 sem tocar em nenhuma outra coluna) via MERGE parcial na tabela destino, e dispara o full
 refresh do ramo Salesforce da chatbot no dbt pra chegar ao struct `llm` de todas as
 sessões. Usar quando a taxonomia mudar e as sessões já classificadas precisarem refletir
@@ -47,9 +47,9 @@ from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import (
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.notify import notify_falha_flow, notify_resumo
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.roteamento import carrega_taxonomia_roteamento
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import (
-    aplica_regras_causa,
+    aplica_regras_motivo,
     aplica_regras_tema,
-    atualiza_tema_causa,
+    atualiza_tema_motivo,
     carrega_catalogo_regras,
     dispara_full_refresh_chatbot,
     extrai_sessoes_para_recalculo_taxonomia,
@@ -81,7 +81,7 @@ def rj_crm__agentforce_classificacao_llm(
     destino_full_table_id = f"{project_id}.{dest_dataset_id}.{dest_table_id}"
 
     # Modo alternativo do flow: a taxonomia (catálogo de regras) mudou e as sessões já
-    # classificadas precisam refletir isso em tema_nome/causa_nome — sem rechamar a LLM
+    # classificadas precisam refletir isso em tema_nome/tema_motivo — sem rechamar a LLM
     # (custo zero) e sem sobrescrever nenhuma outra coluna (classificacao, resumo, motivo
     # etc. ficam intactos). Não usa BF_KEY, não faz extração/classificação — é só reler o
     # que já está na tabela destino, reavaliar as regras, gravar via MERGE parcial e
@@ -99,7 +99,7 @@ def rj_crm__agentforce_classificacao_llm(
             etapa=C.TAXONOMIA_ETAPA_TEMA.value,
             agrupamento_tipo=taxonomia_agrupamento_tipo,
         )
-        df_regras_causa = carrega_catalogo_regras(
+        df_regras_motivo = carrega_catalogo_regras(
             project_id=project_id,
             dataset_id=dest_dataset_id,
             table_id=taxonomia_regras_table_id,
@@ -107,8 +107,8 @@ def rj_crm__agentforce_classificacao_llm(
             agrupamento_tipo=taxonomia_agrupamento_tipo,
         )
         df_tema = aplica_regras_tema(df_final=df_sessoes_relevantes, df_regras=df_regras_tema)
-        df_tema = aplica_regras_causa(df_final=df_tema, df_regras=df_regras_causa)
-        linhas_aux = atualiza_tema_causa(
+        df_tema = aplica_regras_motivo(df_final=df_tema, df_regras=df_regras_motivo)
+        linhas_aux = atualiza_tema_motivo(
             df_tema=df_tema,
             project_id=project_id,
             dataset_id=dest_dataset_id,
@@ -179,7 +179,7 @@ def rj_crm__agentforce_classificacao_llm(
     # 4. Catálogo de regras de tema/motivo — carregado antes da classificação porque
     #    tanto o passo 5 (pré-classificadas) quanto o passo 6 (LLM, lote a lote)
     #    precisam dele. Catálogo ausente ou sem regra pra secretaria/tema da sessão:
-    #    tema_nome/causa_nome ficam vazios, não bloqueia nada — ver aplica_regras_causa
+    #    tema_nome/tema_motivo ficam vazios, não bloqueia nada — ver aplica_regras_motivo
     #    (motivo só é aplicado dentro do tema ao qual pertence, via categoria_pai).
     df_regras_tema = carrega_catalogo_regras(
         project_id=project_id,
@@ -188,7 +188,7 @@ def rj_crm__agentforce_classificacao_llm(
         etapa=C.TAXONOMIA_ETAPA_TEMA.value,
         agrupamento_tipo=taxonomia_agrupamento_tipo,
     )
-    df_regras_causa = carrega_catalogo_regras(
+    df_regras_motivo = carrega_catalogo_regras(
         project_id=project_id,
         dataset_id=dest_dataset_id,
         table_id=taxonomia_regras_table_id,
@@ -207,7 +207,7 @@ def rj_crm__agentforce_classificacao_llm(
         prompt_versao=C.PROMPT_VERSAO.value,
     )
     df_pre_final = aplica_regras_tema(df_final=df_pre_final, df_regras=df_regras_tema)
-    df_pre_final = aplica_regras_causa(df_final=df_pre_final, df_regras=df_regras_causa)
+    df_pre_final = aplica_regras_motivo(df_final=df_pre_final, df_regras=df_regras_motivo)
     linhas_pre = carrega_classificacoes(
         df_final=df_pre_final,
         project_id=project_id,
@@ -230,7 +230,7 @@ def rj_crm__agentforce_classificacao_llm(
         espera_inicial=espera_inicial_segundos,
         classificacao_sem_hsm=C.CLASSIFICACAO_SEM_HSM_ASSOCIADO.value,
         df_regras_tema=df_regras_tema,
-        df_regras_causa=df_regras_causa,
+        df_regras_motivo=df_regras_motivo,
         classificacao_resposta_atrasada=C.CLASSIFICACAO_RESPOSTA_ATRASADA_BTN.value,
         justificativa_resposta_atrasada=C.JUSTIFICATIVA_RESPOSTA_ATRASADA_BTN.value,
         prompt_versao=C.PROMPT_VERSAO.value,
