@@ -7,7 +7,7 @@ CHATBOT_DATASET = "rmi_conversas"
 CHATBOT_TABLE = "chatbot"
 
 BIFROST_BASE_URL = "https://bifrost.iplan.dados.rio"
-BIFROST_MODEL = "vertex/gemini-3.6-flash"
+BIFROST_MODEL = "salesforce/gemini-3.6-flash"
 MAX_TENTATIVAS_LLM = 3
 ESPERA_INICIAL_SEGUNDOS = 2
 MAX_OUTPUT_TOKENS_LOTE = 8192

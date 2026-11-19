@@ -50,7 +50,7 @@ class ClassificacaoConstants(Enum):
     TAXONOMIA_ETAPA_MOTIVO = "motivo"
 
     # --- Recálculo de taxonomia (parâmetro recalcula_taxonomia do flow) ---
-    # tema_nome/causa_nome também chegam ao struct `llm` da chatbot (dbt, repo
+    # tema_nome/tema_motivo também chegam ao struct `llm` da chatbot (dbt, repo
     # queries-rj-crm-registry), cujos incrementais só reescrevem o passado recente —
     # depois do MERGE parcial, o flow dispara o full refresh do ramo Salesforce pelo
     # deployment do rj_crm__run_dbt (ver tasks/taxonomia.py::dispara_full_refresh_chatbot).
@@ -77,7 +77,7 @@ class ClassificacaoConstants(Enum):
 
     # --- LLM (Bifrost / Gemini) ---
     BIFROST_BASE_URL = "https://bifrost.iplan.dados.rio"
-    BIFROST_MODEL = "vertex/gemini-3.6-flash"
+    BIFROST_MODEL = "salesforce/gemini-3.6-flash"
     MAX_WORKERS = 8  # mesmo valor usado no notebook (ajustar conforme rate limit do gateway)
     MAX_TENTATIVAS_LLM = 3
     ESPERA_INICIAL_SEGUNDOS = 2
