@@ -136,6 +136,27 @@ def fetch_agendamentos_from_api(credentials: Dict[str, str], date: str) -> List[
             return []
 
         agendamentos_data = response.json()
+
+        # A API pode retornar um dict (ex.: {"message": "..."}) em vez de uma lista
+        if isinstance(agendamentos_data, dict):
+            log(f"Aviso: API retornou dict em vez de lista: {agendamentos_data}")
+            # Envelope com a lista de registros dentro de alguma chave conhecida
+            for key in ("data", "agendamentos", "items", "results"):
+                if isinstance(agendamentos_data.get(key), list):
+                    agendamentos_data = agendamentos_data[key]
+                    break
+            else:
+                if "id" in agendamentos_data:
+                    # Um único registro
+                    agendamentos_data = [agendamentos_data]
+                else:
+                    # Resposta sem agendamentos (ex.: apenas "message")
+                    log("Resposta sem registros de agendamento. Retornando lista vazia.")
+                    return []
+        elif not isinstance(agendamentos_data, list):
+            log(f"Aviso: API retornou tipo inesperado ({type(agendamentos_data).__name__}): {agendamentos_data}")
+            return []
+
         log(f"Recuperados {len(agendamentos_data)} agendamentos")
 
         return agendamentos_data
@@ -158,6 +179,11 @@ def transform_agendamentos_data(
     """
     Transforma e valida os dados brutos dos agendamentos.
     """
+    if isinstance(agendamentos_data, dict):
+        # Iterar sobre um dict percorre as chaves (strings) - tratar como resposta sem lista
+        log(f"Aviso: esperava lista, recebeu dict: {agendamentos_data}")
+        agendamentos_data = [agendamentos_data] if "id" in agendamentos_data else []
+
     log(f"Transformando {len(agendamentos_data)} registros")
 
     agendamentos = []
@@ -169,7 +195,14 @@ def transform_agendamentos_data(
                 if not data.strip():
                     log("Registro ignorado: string vazia recebida da API")
                     continue
-                data = json.loads(data)
+                try:
+                    data = json.loads(data)
+                except json.JSONDecodeError:
+                    log(f"Registro ignorado: string não é um JSON válido: {data!r}")
+                    continue
+            if not isinstance(data, dict):
+                log(f"Registro ignorado: tipo inesperado {type(data).__name__}: {data!r}")
+                continue
             agendamento = {
                 "id": data["id"],
                 "id_capacidade": data["id_capacidade"],

@@ -34,7 +34,7 @@ deployments:
         image_pull_policy: Always
     parameters:
       campaign_name: disparo-template-sf
-      dataset_id: brutos_wetalkie
+      dataset_id: brutos_salesforce
       table_id: disparos_efetuados_sf
       dump_mode: append
       filter_dispatched_phones_or_cpfs: cpf
@@ -433,10 +433,36 @@ deployments:
           campaign_name: smascartaoprimeirainfancialembreteprodv4
           data_extension_filename: whatsapp_smas_cartaopic_lembrete
           de_columns: ["nome_sobrenome", "endereco", "dia", "horario"]
-          dataset_id: brutos_salesforce
-          table_id: disparos_efetuados
           filter_duplicated_cpfs: true
           query_file: queries/smas_cartaopic_lembrete.sql
+
+      - cron: "30 11 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-sme-pesquisa-satisfacao-creche-parceira
+        flow_run_name: sme-pesquisa-satisfacao-creche-parceira
+        parameters:
+          flow_environment: staging
+          campaign_name: sme_pesquisa_satisfacao_creche_parceira
+          data_extension_filename: whatsapp_pesquisa_creche_parceira
+          de_columns: ["denominacao", "hash_cpf_aluno"]
+          filter_dispatched_phones_or_cpfs: None
+          batch_size: 10000
+          query_file: queries/sme/sme_pesquisa_satisfacao_creche_parceira.sql
+
+      - cron: "0 12 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-sme-pesquisa-satisfacao-creche-parceira-lembrete
+        flow_run_name: sme-pesquisa-satisfacao-creche-parceira-lembrete
+        parameters:
+          flow_environment: staging
+          campaign_name: sme_pesquisa_satisfacao_creche_parceira_lembrete
+          data_extension_filename: whatsapp_lembrete_pesquisa_creche_parceira
+          de_columns: ["denominacao", "hash_cpf_aluno"]
+          filter_dispatched_phones_or_cpfs: None
+          batch_size: 10000
+          query_file: queries/sme/sme_pesquisa_satisfacao_creche_parceira.sql
 
   - name: rj-crm--disparo-template-sf--prod
     version: '{{ get-commit-hash.stdout }}'
@@ -451,7 +477,7 @@ deployments:
         image_pull_policy: Always
     parameters:
       campaign_name: disparo-template-sf
-      dataset_id: brutos_wetalkie
+      dataset_id: brutos_salesforce
       table_id: disparos_efetuados_sf
       dump_mode: append
       filter_dispatched_phones_or_cpfs: cpf
@@ -803,7 +829,7 @@ deployments:
           query_file: queries/smas_cartaopic_lembrete.sql
 
       # Multas de transito (SMTR): holdout diario com cota em rampa
-      - cron: "0 11 * * 1-5"
+      - cron: "0 10 * * 1-5"
         timezone: America/Sao_Paulo
         active: true
         slug: daily-smtr-multa-holdout
@@ -812,12 +838,80 @@ deployments:
           flow_environment: production
           campaign_name: smtrmultasdetransitov1
           data_extension_filename: whatsapp_smtr_multas_transito
-          de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo",
-            "id_autuacao"]
-          dataset_id: brutos_salesforce
-          table_id: disparos_efetuados
+          de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo", "id_autuacao"]
           filter_duplicated_cpfs: true
           query_file: queries/smtr_multa_holdout.sql
           query_replacements: {"cota_inicial_placeholder": 300, "incremento_cota_placeholder": 0,
             "cota_maxima_placeholder": 5000, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5,
             "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}
+
+      # Multas de transito (SMTR): holdout diario com cota em rampa
+      - cron: "0 12 * * 1-5"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: daily-smtr-multa-holdout
+        flow_run_name: smtr-multa-holdout
+        parameters:
+          flow_environment: production
+          campaign_name: smtrmultasdetransitov5
+          data_extension_filename: whatsapp_smtr_multas_transito_v5
+          de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo", "id_autuacao"]
+          filter_duplicated_cpfs: true
+          filter_failed_phones: true
+          query_file: queries/smtr_multa_holdout_tratamento_2.sql
+          query_replacements: {"cota_inicial_placeholder": 300, "incremento_cota_placeholder": 0,
+            "cota_maxima_placeholder": 5000, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5,
+            "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}
+
+      # Multas de transito (SMTR): holdout diario com cota em rampa
+      - cron: "0 14 * * 1-5"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: daily-smtr-multa-holdout
+        flow_run_name: smtr-multa-holdout
+        parameters:
+          flow_environment: production
+          campaign_name: smtrmultasdetransitov3
+          data_extension_filename: whatsapp_smtr_multas_transito_v3
+          de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo", "id_autuacao"]
+          filter_duplicated_cpfs: true
+          filter_failed_phones: true
+          query_file: queries/smtr_multa_holdout_tratamento_4.sql
+          query_replacements: {"cota_inicial_placeholder": 300, "incremento_cota_placeholder": 0,
+            "cota_maxima_placeholder": 5000, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5,
+            "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}
+
+      # Multas de transito (SMTR): holdout diario com cota em rampa
+      - cron: "0 16 * * 1-5"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: daily-smtr-multa-holdout
+        flow_run_name: smtr-multa-holdout
+        parameters:
+          flow_environment: production
+          campaign_name: smtrmultasdetransitov4
+          data_extension_filename: whatsapp_smtr_multas_transito_v4
+          de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo", "id_autuacao"]
+          filter_duplicated_cpfs: true
+          filter_failed_phones: true
+          query_file: queries/smtr_multa_holdout_tratamento_4.sql
+          query_replacements: {"cota_inicial_placeholder": 300, "incremento_cota_placeholder": 0,
+            "cota_maxima_placeholder": 5000, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5,
+            "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}
+
+      # SMT - Emprego - Candidatura recebida (12h e 17h)
+      - cron: "0 9,13,17 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: daily-smt-emprego-candidatura-recebida
+        flow_run_name: smt-emprego-candidatura-recebida
+        parameters:
+          flow_environment: production
+          campaign_name: smt_emprego_candidatura_recebida
+          data_extension_filename: whatsapp_smt_emprego_candidatura_recebida
+          de_columns: ["nome_sobrenome", "nome_vaga", "nome_empresa", "orgao_intermediario",
+            "id_candidatura", "rota_pagina"]
+          filter_dispatched_phones_or_cpfs:
+          filter_duplicated_cpfs: false
+          filter_failed_phones: true
+          query_file: queries/smt/smt_emprego_candidatura_recebida.sql
