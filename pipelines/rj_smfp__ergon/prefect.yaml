@@ -48,7 +48,7 @@ deployments:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --no-sync --package rj_smfp__ergon -- python -m utils.secrets -- prefect flow-run execute
         namespace: pipelines-staging
-        secretName: pipelines-infisical
+        secretName: pipelines-infisical-dados
         image_pull_policy: Always
         env:
           INFISICAL_URL: https://secrets.dados.rio
@@ -80,7 +80,7 @@ deployments:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --no-sync --package rj_smfp__ergon -- python -m utils.secrets -- prefect flow-run execute
         namespace: pipelines-prod
-        secretName: pipelines-infisical
+        secretName: pipelines-infisical-dados
         image_pull_policy: Always
         env:
           INFISICAL_URL: https://secrets.dados.rio
