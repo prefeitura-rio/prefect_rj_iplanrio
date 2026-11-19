@@ -91,6 +91,7 @@ members = [
     "rj-smfp-sigma",
     "rj-smi-siscob",
     "rj-sms-sisreg-disparo-lembretes",
+    "rj-ssm-ispgeo",
     "rj-ssm-run-dbt",
 ]
 overrides = [
@@ -1801,7 +1802,7 @@ wheels = [
 [[package]]
 name = "iplanrio"
 version = "0.1.0"
-source = { git = "https://github.com/prefeitura-rio/iplanrio.git#fda88406e677516f5a2d7d511930b89b7c0357bb" }
+source = { git = "https://github.com/prefeitura-rio/iplanrio.git?branch=staging%2Fupload-gcs-outher-project#943bb3749133925a18892c8ff0585280d923f7c8" }
 dependencies = [
     { name = "basedosdados", extra = ["upload"] },
     { name = "croniter" },
@@ -3039,7 +3040,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "idna", specifier = ">=3.10" },
-    { name = "iplanrio", git = "https://github.com/prefeitura-rio/iplanrio.git" },
+    { name = "iplanrio", git = "https://github.com/prefeitura-rio/iplanrio.git?branch=staging%2Fupload-gcs-outher-project" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "prefect", specifier = "==3.4.9" },
@@ -5626,6 +5627,23 @@ requires-dist = [
     { name = "pytz", specifier = ">=2021.1" },
     { name = "requests", specifier = ">=2.25.0" },
     { name = "simplejson", specifier = "==3.20.1" },
+]
+
+[[package]]
+name = "rj-ssm-ispgeo"
+version = "1.0.0"
+source = { virtual = "pipelines/rj_ssm__ispgeo" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "prefect-rj-iplanrio" },
+    { name = "requests" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiohttp", specifier = ">=3.9.0" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "requests", specifier = ">=2.32.0" },
 ]
 
 [[package]]
