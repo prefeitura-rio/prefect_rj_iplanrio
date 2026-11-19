@@ -144,6 +144,37 @@ SCHEMA: list[bigquery.SchemaField] = [
             bigquery.SchemaField("motivo_nome", _STRING),
         ],
     ),
+    # Juiz de tema/motivo (tasks/juiz.py): todo candidato das regras, aceito ou não, com a
+    # decisão e o por_que. pertence NULL = juiz sem resposta (o rótulo da regra fica em
+    # tema_nome/tema_motivo). regra_criado_em = versão da regra julgada. Adicionadas por
+    # ALTER TABLE (ordem física no fim; DDL em clustering_v3/queries/adicionar_colunas_juiz.sql).
+    bigquery.SchemaField(
+        "tema_julgamento",
+        "RECORD",
+        mode="REPEATED",
+        fields=[
+            bigquery.SchemaField("tema_nome", _STRING),
+            bigquery.SchemaField("nome_funcao", _STRING),
+            bigquery.SchemaField("regra_criado_em", "TIMESTAMP"),
+            bigquery.SchemaField("pertence", "BOOLEAN"),
+            bigquery.SchemaField("por_que", _STRING),
+        ],
+    ),
+    bigquery.SchemaField(
+        "tema_motivo_julgamento",
+        "RECORD",
+        mode="REPEATED",
+        fields=[
+            bigquery.SchemaField("tema_nome", _STRING),
+            bigquery.SchemaField("motivo_nome", _STRING),
+            bigquery.SchemaField("nome_funcao", _STRING),
+            bigquery.SchemaField("regra_criado_em", "TIMESTAMP"),
+            bigquery.SchemaField("pertence", "BOOLEAN"),
+            bigquery.SchemaField("por_que", _STRING),
+        ],
+    ),
+    bigquery.SchemaField("modelo_juiz", _STRING),
+    bigquery.SchemaField("prompt_versao_juiz", _STRING),
 ]
 
 _COLUNAS = [f.name for f in SCHEMA]
