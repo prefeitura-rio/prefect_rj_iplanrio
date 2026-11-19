@@ -1,0 +1,20 @@
+[project]
+name = "rj_smfp__nota_carioca_adn"
+version = "1.0.0"
+description = "Extracts the Nota Carioca documents straight from the national ADN (sequential mTLS consumer) into immutable GCS batches plus a BigQuery index, and backfills the history from the read-only Oracle."
+dependencies = [
+    "prefect_rj_iplanrio",
+    "cryptography>=46.0.0",
+    "google-cloud-bigquery>=3.41.0",
+    "google-cloud-storage>=2.10.0",
+    "httpx>=0.28.1",
+    "oracledb>=4.0.1",
+]
+
+[dependency-groups]
+dev = [
+    "testcontainers>=4.13.0",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

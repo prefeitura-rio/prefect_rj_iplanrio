@@ -1,0 +1,139 @@
+name: rj_smfp__nota_carioca_adn
+
+prefect-version: 3.4.3
+
+build:
+- prefect.deployments.steps.run_shell_script:
+    id: get-commit-hash
+    script: git rev-parse --short HEAD
+    stream_output: false
+- prefect_docker.deployments.steps.build_docker_image:
+    id: build-image
+    requires: prefect-docker>=0.6.5
+    image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+    tag: "rj_smfp__nota_carioca_adn-{{ get-commit-hash.stdout }}"
+    dockerfile: pipelines/rj_smfp__nota_carioca_adn/Dockerfile
+
+push:
+- prefect_docker.deployments.steps.push_docker_image:
+    requires: prefect-docker>=0.6.5
+    image_name: "{{ build-image.image_name }}"
+    tag: "{{ build-image.tag }}"
+
+pull:
+- prefect.deployments.steps.set_working_directory:
+    directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+# Extração do ADN: um consumidor sequencial por ambiente. As agendas ficam INATIVAS até o gate 38 do plano
+# (verificação viva com o certificado, o egress liberado e a janela da DBA); ligar é decisão do dono. Kill switch:
+# pausar o deployment (ver a docstring do flow).
+- name: rj-smfp--nota-carioca-adn-extracao--staging
+  tags:
+  - environment:staging
+  - severity:low
+  - code_owner:fredzolio
+  version: "{{ build-image.tag }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_adn/flow.py:rj_smfp__nota_carioca_adn_extracao
+  # Um flow run por vez; um novo disparo com outro em curso é cancelado em vez de entrar na fila.
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  # Staging consulta a produção restrita do ADN (ADN_BASE_URL do secret de staging) e grava em adn/staging/.
+  parameters:
+    ambiente: staging
+    dataset_id: raw_nfse_nacional_staging
+    intervalo_entre_chamadas_s: 2
+    max_lacunas_por_run: 10000
+    cursor_inclusivo: false
+    tamanho_lote_esperado: 50
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_adn -- prefect flow-run execute
+      secretName: prefect-jobs-secrets-staging
+      image_pull_policy: Always
+      cpu_request: 500m
+      cpu_limit: "1"
+      memory_request: 512Mi
+      memory_limit: 1Gi
+  schedules:
+  # intervalo_apos_vazio_min=60: o manual do ADN pede esperar ao menos 1 h depois de "nenhum documento localizado".
+  - interval: 3600
+    anchor_date: "2026-01-01T00:00:00+00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: adn-extracao-staging-60min
+- name: rj-smfp--nota-carioca-adn-extracao--prod
+  tags:
+  - environment:prod
+  - severity:medium
+  - code_owner:fredzolio
+  version: "{{ get-commit-hash.stdout }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_adn/flow.py:rj_smfp__nota_carioca_adn_extracao
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  parameters:
+    ambiente: prod
+    dataset_id: raw_nfse_nacional
+    intervalo_entre_chamadas_s: 2
+    max_lacunas_por_run: 10000
+    cursor_inclusivo: false
+    tamanho_lote_esperado: 50
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_adn -- prefect flow-run execute
+      secretName: prefect-jobs-secrets
+      image_pull_policy: Always
+      cpu_request: 500m
+      cpu_limit: "1"
+      memory_request: 512Mi
+      memory_limit: 1Gi
+  schedules:
+  - interval: 3600
+    anchor_date: "2026-01-01T00:00:00+00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: adn-extracao-prod-60min
+# Backfill do histórico a partir do XML já gravado no Oracle (usuário somente leitura, só na janela noturna).
+- name: rj-smfp--nota-carioca-adn-backfill--prod
+  tags:
+  - environment:prod
+  - severity:medium
+  - code_owner:fredzolio
+  version: "{{ get-commit-hash.stdout }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_adn/flow_backfill.py:rj_smfp__nota_carioca_adn_backfill
+  # Duas leituras simultâneas somariam carga no Oracle da app.
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  # nsu_inicio e nsu_fim são obrigatórios e vêm de cada disparo (faixas aprovadas pela DBA).
+  parameters:
+    ambiente: prod
+    dataset_id: raw_nfse_nacional
+    modo: backfill
+    linhas_por_minuto: 20000
+    janela_horaria: "20:00-06:00"
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_adn -- prefect flow-run execute
+      secretName: prefect-jobs-secrets
+      image_pull_policy: Always
+      cpu_request: 500m
+      cpu_limit: "2"
+      memory_request: 1Gi
+      memory_limit: 2Gi
+  schedules:
+  - cron: "0 20 * * *"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: adn-backfill-noturno
