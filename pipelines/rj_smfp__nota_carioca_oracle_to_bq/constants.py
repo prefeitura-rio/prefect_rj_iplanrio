@@ -8,7 +8,30 @@ GCS_PREFIX = "oracle_to_bq"
 # ``oracle_to_bq/<tabela>/<run id>/`` e não pode enxergá-los.
 PROGRESS_PREFIX = "oracle_to_bq_progress"
 TEMP_TABLE_SUFFIX = "__oracle_to_bq_tmp"
-DEFAULT_TABLES = ("DPS", "NOTAS_NACIONAIS", "PESSOAS_NACIONAIS")
+# As três primeiras são do schema do segredo (DFEN) ou de ``source_schema``; as cinco réplicas de cadastro e de eventos
+# que seguem alimentam o dbt do Nota Carioca v2 e têm o dono fixo em SOURCE_SCHEMAS.
+DEFAULT_TABLES = (
+    "DPS",
+    "NOTAS_NACIONAIS",
+    "PESSOAS_NACIONAIS",
+    "MV_CONTRIBUINTES",
+    "MV_CONTRIBUINTES_HISTORICOS",
+    "DESIFINSTITUICOES",
+    "CONFIGURACOES",
+    "EVENTOS_DFEN",
+)
+
+# Dono no Oracle das tabelas que não estão no schema do segredo; vale mesmo com ``source_schema`` preenchido, que
+# continua mandando só nas tabelas fora deste mapa. O destino no BigQuery tem o nome da tabela, sem o dono, como nas
+# três originais. Donos conferidos no código do nfs-e (NFSE_RPE.MV_CONTRIBUINTES*, NFSE_OWNER.DESIFINSTITUICOES e
+# NFSE_OWNER.CONFIGURACOES, DFEN.EVENTOS_DFEN).
+SOURCE_SCHEMAS = {
+    "MV_CONTRIBUINTES": "NFSE_RPE",
+    "MV_CONTRIBUINTES_HISTORICOS": "NFSE_RPE",
+    "DESIFINSTITUICOES": "NFSE_OWNER",
+    "CONFIGURACOES": "NFSE_OWNER",
+    "EVENTOS_DFEN": "DFEN",
+}
 
 AIRBYTE_RAW_ID = "_airbyte_raw_id"
 AIRBYTE_EXTRACTED_AT = "_airbyte_extracted_at"
@@ -25,6 +48,14 @@ CLUSTER_KEYS = {
     "DPS": "DPS",
     "NOTAS_NACIONAIS": "NOTA_NACIONAL",
     "PESSOAS_NACIONAIS": "PESSOA_NACIONAL",
+    # Chave de cada réplica nova: INSCRICAO nas MVs de contribuintes, INSTITUICAO (sequência) no cadastro DESIF,
+    # SESSAO (primeira parte da chave Sessao+Chave) nas configurações e EVENTO (chave do INSERT/SELECT do nfs-e) nos
+    # eventos.
+    "MV_CONTRIBUINTES": "INSCRICAO",
+    "MV_CONTRIBUINTES_HISTORICOS": "INSCRICAO",
+    "DESIFINSTITUICOES": "INSTITUICAO",
+    "CONFIGURACOES": "SESSAO",
+    "EVENTOS_DFEN": "EVENTO",
 }
 
 # Colunas NUMBER de cada tabela cuja contagem de não nulos e soma exata são comparadas entre o que foi extraído do
@@ -34,6 +65,13 @@ CHECKSUM_COLUMNS = {
     "DPS": ("VALOR_SERVICO", "NUMERO_DPS"),
     "NOTAS_NACIONAIS": ("NSU", "VALOR_ISSQN"),
     "PESSOAS_NACIONAIS": ("TELEFONE", "CAEPF"),
+    # Réplicas novas: só colunas NUMBER com evidência no código do nfs-e (o plano as confere no Oracle antes de
+    # extrair). CONFIGURACOES (SESSAO, CHAVE, VALOR) não tem coluna numérica: é validada só pela contagem de linhas.
+    "MV_CONTRIBUINTES": ("INSCRICAO", "INSCRICAO_NOTANACIONAL"),
+    "MV_CONTRIBUINTES_HISTORICOS": ("INSCRICAO", "HISTORICO"),
+    "DESIFINSTITUICOES": ("INSTITUICAO",),
+    "CONFIGURACOES": (),
+    "EVENTOS_DFEN": ("NSU", "NUMERO_DFE"),
 }
 
 # Esperas (s) antes de cada nova tentativa do lançamento dos filhos: ~9 min cobrem uma queda curta da API do Prefect.

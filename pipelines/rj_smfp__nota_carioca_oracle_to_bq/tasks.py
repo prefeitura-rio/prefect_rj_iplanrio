@@ -59,7 +59,7 @@ def drop_leftover_chunk_tasks_task(infisical_secret_path: str) -> None:
 
 @task(cache_policy=NO_CACHE)
 def take_snapshot_task(infisical_secret_path: str) -> oracle.Snapshot:
-    """Lê o SCN que fixa o ponto de leitura das três tabelas."""
+    """Lê o SCN que fixa o ponto de leitura de todas as tabelas."""
     snapshot = oracle.read_snapshot(oracle.read_oracle_config(infisical_secret_path))
     log(
         f"SCN da foto: {snapshot.scn} ({snapshot.taken_at:%Y-%m-%d %H:%M:%S} UTC); "
@@ -79,7 +79,7 @@ def plan_table_task(  # noqa: PLR0913
 ) -> plan.TablePlan:
     """Lê as colunas do Oracle, monta o schema do BigQuery e o confere com a tabela final atual."""
     config = oracle.read_oracle_config(infisical_secret_path)
-    schema = oracle.validate_identifier(source_schema or config.schema)
+    schema = oracle.validate_identifier(plan.resolve_source_schema(table_id, source_schema, config.schema))
     table_plan = plan.check_destination(
         project, dataset_id, plan.plan_table(config, schema, oracle.validate_identifier(table_id), snapshot)
     )
