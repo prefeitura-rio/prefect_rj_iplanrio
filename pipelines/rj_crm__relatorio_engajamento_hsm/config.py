@@ -264,3 +264,100 @@ EMBEDDING_MODEL = "PORTULAN/serafim-100m-portuguese-pt-sentence-encoder"
 # (os vizinhos mais distantes viram ruído) e a classificação manda 50 conversas por
 # chamada — os exemplos do lote são deduplicados, mas o prompt cresce com k.
 N_EXEMPLOS_RAG = 3
+
+# ============================================================================
+# Relatórios executivos (segundo Google Form — ver tasks/executivo.py)
+# ============================================================================
+# O Form "Solicitação de Relatório Executivo de Disparo" grava no Sheet abaixo (mesmo
+# padrão do Form de engajamento: o flow LÊ e ESCREVE o status só nele). Cada pedido gera
+# 4 PDFs no Drive, no padrão visual de assets/style-guide-relatorios-disparo.md.
+EXEC_SOLICITACOES_SHEET_ID = "1NU_W0oCJMWs2EQu4e2D1W3C_YQoRegM6PpWQWgZ45cs"
+EXEC_SOLICITACOES_ABA = "Respostas ao formulário 1"
+# Cabeçalhos = títulos exatos das perguntas do Form. As 3 de status são criadas à mão.
+COL_EXEC_CAMPANHAS = "Campanha(s)"  # caixas de seleção: 1 a MAX_BASES_EXEC, separadas por vírgula
+COL_EXEC_INICIO = "Data de início dos disparos"
+COL_EXEC_FIM = "Data de fim dos disparos"
+COL_EXEC_GERACAO = "Data de geração"
+COL_EXEC_OBSERVACOES = "Observações para o relatório (opcional)"
+# Etapas do funil ANTES do disparo: não existem no BigQuery (a planilha de destinatários e a
+# quarentena do Prefect não são gravadas em tabela) — vêm do Form, opcionais. Valor único
+# se houver uma campanha; com várias, "campanha=valor; outra_campanha=valor".
+COL_EXEC_LINHAS = "Linhas na planilha (opcional)"
+COL_EXEC_DISTINTAS = "Pessoas distintas na planilha (opcional)"
+COL_EXEC_INVALIDOS = "Telefones inválidos ou sem telefone (opcional)"
+COL_EXEC_VALIDOS_QUERY = "Telefones válidos após a query (opcional)"
+COL_EXEC_LIBERADOS = "Telefones liberados após a quarentena no Prefect (opcional)"
+MAX_BASES_EXEC = 4
+
+# Disparo "diário" do dashboard (fonte do funil) e fato de conversas (fonte do engajamento).
+# Nunca usar enviado_iplan_quantidade: o log do flow de disparo não liga ao disparo real.
+DASHBOARD_DATASET = "dashboard_crm_whatsapp"
+DASHBOARD_DISPARO_TABLE = "disparo_diario"
+DASHBOARD_FALHA_TABLE = "disparo_diario_falha"
+# Conversa do cidadão chega até 7 dias depois do HSM (ligação por proximidade na fato).
+DIAS_RECEPTIVO_APOS_DISPARO = 7
+
+# Textos da LLM dos relatórios executivos.
+EXEC_TEMPERATURA_LLM = 0.2
+EXEC_MAX_OUTPUT_TOKENS = 4096
+EXEC_MAX_TENTATIVAS_TEXTO = 2  # 1ª tentativa + 1 correção (números fora dos fatos / JSON inválido)
+EXEC_ELABORACAO = "IplanRio"
+EXEC_EMPRESA_RODAPE = "Empresa Municipal de Tecnologia do Rio de Janeiro"
+
+# Os 4 PDFs de cada pedido: chave -> rótulo no nome do arquivo (style guide, seção 10).
+PDF_FUNIL_EXECUTIVO = "funil_executivo"
+PDF_FUNIL_DIAGNOSTICO = "funil_diagnostico"
+PDF_ENGAJAMENTO_EXECUTIVO = "engajamento_executivo"
+PDF_ENGAJAMENTO_DETALHADO = "engajamento_detalhado"
+ROTULO_PDF = {
+    PDF_FUNIL_EXECUTIVO: "versão executiva",
+    PDF_FUNIL_DIAGNOSTICO: "diagnóstico do funil",
+    PDF_ENGAJAMENTO_EXECUTIVO: "engajamento, versão executiva",
+    PDF_ENGAJAMENTO_DETALHADO: "engajamento e temas das respostas",
+}
+
+# Erros da Meta que o style guide (seção 6) nomeia: código numérico da fato -> (nome exato
+# da Meta, descrição curta). Os demais códigos aparecem como "Código N" com a descrição do
+# seed whatsapp_falha_codigo do projeto dbt.
+ERROS_META_PADRAO = {
+    "131026": (
+        "Message Undeliverable",
+        "Número inexistente, sem WhatsApp ativo ou fora de área.",
+    ),
+    "130472": (
+        "Phone number part of an experiment",
+        "Número retido pela Meta em grupo de teste ou experimento interno.",
+    ),
+    "131049": (
+        "Healthy ecosystem engagement",
+        "Bloqueio temporário de proteção da Meta contra spam ou excesso de envio.",
+    ),
+}
+# Os 2 códigos que contam como "política da Meta" (e não número inválido) no gargalo.
+ERROS_META_POLITICA = ("130472", "131049")
+ERROS_META_OUTROS = {
+    "130429": "Limite de volume de envio atingido.",
+    "131048": "Limite de envio por marcação de spam.",
+    "131000": "Erro genérico da Meta.",
+    "131056": "Muitas mensagens para o mesmo destinatário em pouco tempo.",
+    "131047": "Fora da janela de 24 horas, exige template.",
+    "131053": "Falha ao baixar ou enviar a mídia.",
+    "131009": "Parâmetro inválido no conteúdo da mensagem.",
+    "132000": "Número de parâmetros do template não confere.",
+    "132001": "Template inexistente ou não aprovado no idioma.",
+    "132005": "Texto do template longo demais.",
+    "132015": "Template pausado por baixa qualidade.",
+    "132016": "Template desativado.",
+}
+MAX_CODIGOS_ERRO_EXIBIDOS = 5  # os demais viram "Outros códigos"
+
+# Engajamento: critérios dos exemplos de fala (citações) — ver utils/executivo.py.
+EXEMPLO_MIN_CHARS = 20
+EXEMPLO_MAX_CHARS = 200
+EXEMPLO_MIN_LETRAS = 8  # fala só com emoji/símbolo não vira citação
+SENTIMENTO_ROTULO_MIN_PCT = 7.0  # abaixo disso o segmento da barra é estreito demais pro rótulo
+N_EXEMPLOS_EXECUTIVO = 4  # citações na versão executiva do engajamento
+N_EXEMPLOS_ELOGIO_DETALHADO = 5
+N_EXEMPLOS_CRITICA_DETALHADO = 10
+N_CATEGORIAS_EXECUTIVO = 8  # linhas por base na versão executiva
+SENTIMENTO_BQ = {"positivo": SENTIMENTO_POSITIVO, "neutro": SENTIMENTO_NEUTRO, "negativo": SENTIMENTO_NEGATIVO}
