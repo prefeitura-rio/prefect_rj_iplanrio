@@ -1,0 +1,10 @@
+[project]
+name = "rj_iplanrio__cancela_flow_runs_presos"
+version = "1.0.0"
+description = "Cancels Prefect flow runs stuck in Pending for hours (e.g. a Kubernetes Job in ImagePullBackOff after its image tag disappeared), so the worker deletes the Job instead of leaving it waiting forever."
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
