@@ -6,7 +6,7 @@ import pytest
 from prefect.client.schemas.objects import FlowRun, State, StateType
 from prefect.client.schemas.responses import OrchestrationResult, SetStateStatus, StateAbortDetails
 
-from pipelines.rj_iplanrio__cancela_flow_runs_presos import tasks
+from pipelines.rj_iplanrio__cancela_flow_runs_presos.utils import runs
 
 NOW = datetime(2026, 11, 21, 12, 0, tzinfo=UTC)
 SIX_HOURS = timedelta(hours=6)
@@ -56,7 +56,7 @@ class FakeClient:
 
 
 def run_cancel(client: FakeClient, dry_run: bool = False) -> list[str]:
-    return tasks.cancel_stuck_runs(client, now=NOW, max_pending=SIX_HOURS, dry_run=dry_run)
+    return runs.cancel_stuck_runs(client, now=NOW, max_pending=SIX_HOURS, dry_run=dry_run)
 
 
 def test_run_stuck_for_days_is_cancelled() -> None:
@@ -103,10 +103,10 @@ def test_refused_cancellation_is_not_reported_as_cancelled(status: SetStateStatu
 
 
 def test_listing_walks_every_page(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(tasks, "PAGE_SIZE", 2)
-    runs = [make_flow_run(pending_for=timedelta(days=day)) for day in range(1, 6)]
-    client = FakeClient(runs)
-    assert len(run_cancel(client)) == 5
+    monkeypatch.setattr(runs, "PAGE_SIZE", 2)
+    listed = [make_flow_run(pending_for=timedelta(days=day)) for day in range(1, 6)]
+    client = FakeClient(listed)
+    assert len(run_cancel(client)) == len(listed)
     assert [call["offset"] for call in client.list_calls] == [0, 2, 4]
 
 

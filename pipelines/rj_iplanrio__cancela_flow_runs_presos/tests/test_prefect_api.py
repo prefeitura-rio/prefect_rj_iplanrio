@@ -10,7 +10,7 @@ from prefect.client.schemas.objects import StateType
 from prefect.states import Pending, Running, Scheduled, State
 from prefect.testing.utilities import prefect_test_harness
 
-from pipelines.rj_iplanrio__cancela_flow_runs_presos import tasks
+from pipelines.rj_iplanrio__cancela_flow_runs_presos.utils import runs
 
 SIX_HOURS = timedelta(hours=6)
 
@@ -37,12 +37,12 @@ def test_only_the_run_stuck_in_pending_goes_to_cancelling(client: SyncPrefectCli
 
     # O servidor grava o horário do estado; o "agora" de referência avança 7 h.
     later = datetime.now(UTC) + timedelta(hours=7)
-    assert tasks.cancel_stuck_runs(client, now=datetime.now(UTC), max_pending=SIX_HOURS, dry_run=False) == []
-    assert tasks.cancel_stuck_runs(client, now=later, max_pending=SIX_HOURS, dry_run=True) == [str(stuck.id)]
+    assert runs.cancel_stuck_runs(client, now=datetime.now(UTC), max_pending=SIX_HOURS, dry_run=False) == []
+    assert runs.cancel_stuck_runs(client, now=later, max_pending=SIX_HOURS, dry_run=True) == [str(stuck.id)]
     assert client.read_flow_run(stuck.id).state.type == StateType.PENDING
 
-    assert tasks.cancel_stuck_runs(client, now=later, max_pending=SIX_HOURS, dry_run=False) == [str(stuck.id)]
+    assert runs.cancel_stuck_runs(client, now=later, max_pending=SIX_HOURS, dry_run=False) == [str(stuck.id)]
     assert client.read_flow_run(stuck.id).state.type == StateType.CANCELLING
     assert client.read_flow_run(running.id).state.type == StateType.RUNNING
     assert client.read_flow_run(scheduled.id).state.type == StateType.SCHEDULED
-    assert tasks.cancel_stuck_runs(client, now=later, max_pending=SIX_HOURS, dry_run=False) == []
+    assert runs.cancel_stuck_runs(client, now=later, max_pending=SIX_HOURS, dry_run=False) == []

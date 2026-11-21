@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+MIN_PENDING_MINUTES = 60
+
 
 @dataclass(frozen=True)
 class PendingRun:
@@ -28,6 +30,19 @@ class PendingRun:
     infrastructure_pid: str | None
 
 
+def validate_max_pending(max_pending: timedelta) -> None:
+    """Recuse um limite curto o bastante para cancelar runs em Pending normal.
+
+    Um pod que espera nó novo ou baixa uma imagem grande fica minutos em Pending;
+    abaixo de :data:`MIN_PENDING_MINUTES` o flow passaria a cancelar runs saudáveis.
+
+    :param max_pending: Tempo máximo aceito em Pending.
+    :raises ValueError: Se ``max_pending`` for menor que :data:`MIN_PENDING_MINUTES`.
+    """
+    if max_pending < timedelta(minutes=MIN_PENDING_MINUTES):
+        raise ValueError(f"max_pending precisa ser de pelo menos {MIN_PENDING_MINUTES} minutos, recebido {max_pending}")
+
+
 def is_stuck(run: PendingRun, now: datetime, max_pending: timedelta) -> bool:
     """Diga se o run está em Pending, nunca começou e passou do tempo máximo.
 
@@ -36,12 +51,11 @@ def is_stuck(run: PendingRun, now: datetime, max_pending: timedelta) -> bool:
     :param max_pending: Tempo máximo aceito em Pending.
     :returns: ``True`` quando o run deve ser cancelado.
     :raises ValueError: Se ``now`` ou ``run.state_since`` não tiverem fuso, ou se
-        ``max_pending`` não for positivo.
+        ``max_pending`` for menor que :data:`MIN_PENDING_MINUTES`.
     """
     if now.tzinfo is None or run.state_since.tzinfo is None:
         raise ValueError("now e state_since precisam ter fuso horário")
-    if max_pending <= timedelta(0):
-        raise ValueError("max_pending precisa ser positivo")
+    validate_max_pending(max_pending)
     if run.state_type != "PENDING" or run.started:
         return False
     return now - run.state_since > max_pending
@@ -54,8 +68,9 @@ def select_stuck_runs(runs: list[PendingRun], now: datetime, max_pending: timede
     :param now: Instante de referência, com fuso.
     :param max_pending: Tempo máximo aceito em Pending.
     :returns: Os runs que passaram do tempo máximo, ordenados por ``state_since``.
-    :raises ValueError: Nas mesmas condições de :func:`is_stuck`.
+    :raises ValueError: Nas mesmas condições de :func:`is_stuck`, mesmo sem runs.
     """
+    validate_max_pending(max_pending)
     stuck = [run for run in runs if is_stuck(run, now=now, max_pending=max_pending)]
     return sorted(stuck, key=lambda run: run.state_since)
 
