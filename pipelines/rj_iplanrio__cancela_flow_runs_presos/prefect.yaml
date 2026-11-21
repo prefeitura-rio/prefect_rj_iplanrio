@@ -1,0 +1,69 @@
+name: rj_iplanrio__cancela_flow_runs_presos
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_iplanrio__cancela_flow_runs_presos-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_iplanrio__cancela_flow_runs_presos/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-iplanrio--cancela-flow-runs-presos--staging
+    tags:
+      - environment:staging
+      - severity:low
+      - code_owner:fredzolio
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_iplanrio__cancela_flow_runs_presos/flow.py:rj_iplanrio__cancela_flow_runs_presos
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__cancela_flow_runs_presos -- prefect flow-run execute
+        secretName: prefect-jobs-secrets-staging
+        image_pull_policy: Always
+    parameters:
+      max_pending_minutes: 360
+      dry_run: true
+
+  - name: rj-iplanrio--cancela-flow-runs-presos--prod
+    tags:
+      - environment:prod
+      - severity:low
+      - code_owner:fredzolio
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_iplanrio__cancela_flow_runs_presos/flow.py:rj_iplanrio__cancela_flow_runs_presos
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__cancela_flow_runs_presos -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+    parameters:
+      max_pending_minutes: 360
+      dry_run: false
+    schedules:
+      # Cancela runs em Pending há mais de 6 h (ex.: Job em ImagePullBackOff
+      # depois que a tag da imagem saiu do GHCR); o worker apaga o Job.
+      - cron: "17 * * * *"
+        timezone: America/Sao_Paulo
+        slug: hourly-cancela-flow-runs-presos
