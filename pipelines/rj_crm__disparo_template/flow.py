@@ -87,8 +87,8 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
 def rj_crm__disparo_template_sf(
     # Parâmetros opcionais para override manual na UI.
     campaign_name: str | None = None,
-    dataset_id: str | None = None,
-    table_id: str | None = None,
+    dataset_id: str | None = "brutos_salesforce",
+    table_id: str | None = "disparos_efetuados",
     dump_mode: str  = "append",
     test_mode: bool | None = False,
     query: str | None = None,
@@ -119,7 +119,7 @@ def rj_crm__disparo_template_sf(
     monitor_check_interval_minutes: int = 5,
     monitor_max_wait_minutes: int = 40,
     sftp_remote_path: str = "/Import/",
-    batch_size: int | None = None,
+    batch_size: int = 10000,
     batch_sleep_minutes: int = 5,
     debug: bool = True,
 ):
