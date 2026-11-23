@@ -832,8 +832,8 @@ deployments:
       - cron: "0 10 * * 1-5"
         timezone: America/Sao_Paulo
         active: true
-        slug: daily-smtr-multa-holdout
-        flow_run_name: smtr-multa-holdout
+        slug: daily-smtr-multa-holdout1
+        flow_run_name: smtr-multa-holdout1
         parameters:
           flow_environment: production
           campaign_name: smtrmultasdetransitov1
@@ -848,9 +848,9 @@ deployments:
       # Multas de transito (SMTR): holdout diario com cota em rampa
       - cron: "0 13 * * 1-5"
         timezone: America/Sao_Paulo
-        active: false
-        slug: daily-smtr-multa-holdout
-        flow_run_name: smtr-multa-holdout
+        active: true
+        slug: daily-smtr-multa-holdout2
+        flow_run_name: smtr-multa-holdout2
         parameters:
           flow_environment: production
           campaign_name: smtrmultasdetransitov5
@@ -866,9 +866,9 @@ deployments:
       # Multas de transito (SMTR): holdout diario com cota em rampa
       - cron: "0 13 * * 1-5"
         timezone: America/Sao_Paulo
-        active: false
-        slug: daily-smtr-multa-holdout
-        flow_run_name: smtr-multa-holdout
+        active: true
+        slug: daily-smtr-multa-holdout3
+        flow_run_name: smtr-multa-holdout3
         parameters:
           flow_environment: production
           campaign_name: smtrmultasdetransitov3
@@ -884,9 +884,9 @@ deployments:
       # Multas de transito (SMTR): holdout diario com cota em rampa
       - cron: "0 13 * * 1-5"
         timezone: America/Sao_Paulo
-        active: false
-        slug: daily-smtr-multa-holdout
-        flow_run_name: smtr-multa-holdout
+        active: true
+        slug: daily-smtr-multa-holdout4
+        flow_run_name: smtr-multa-holdout4
         parameters:
           flow_environment: production
           campaign_name: smtrmultasdetransitov4
