@@ -848,7 +848,7 @@ deployments:
       # Multas de transito (SMTR): holdout diario com cota em rampa
       - cron: "0 13 * * 1-5"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: daily-smtr-multa-holdout
         flow_run_name: smtr-multa-holdout
         parameters:
@@ -866,7 +866,7 @@ deployments:
       # Multas de transito (SMTR): holdout diario com cota em rampa
       - cron: "0 13 * * 1-5"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: daily-smtr-multa-holdout
         flow_run_name: smtr-multa-holdout
         parameters:
@@ -884,7 +884,7 @@ deployments:
       # Multas de transito (SMTR): holdout diario com cota em rampa
       - cron: "0 13 * * 1-5"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: daily-smtr-multa-holdout
         flow_run_name: smtr-multa-holdout
         parameters:
