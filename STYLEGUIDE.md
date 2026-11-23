@@ -829,9 +829,15 @@ Tags separam **infraestrutura** (Prefect) de **negócio** (parâmetros do flow).
 
 ### 13.5 Validação
 
-O CI valida em todo PR que modifica `prefect.yaml`. Cada deployment deve incluir:
-- `environment:staging` ou `environment:prod`
-- `severity` com um dos 4 valores válidos
-- `code_owner` com um GitHub username válido
+O workflow `Validate prefect.yaml tags` (`.github/workflows/validate-prefect-tags.yaml`) roda em todo PR para `master` que altera um `pipelines/*/prefect.yaml` e executa `.github/scripts/validate_prefect_tags.py`. O gate é **incremental**: ele compara cada `prefect.yaml` alterado com a base do PR e valida só os deployments que o PR **adiciona ou edita** (qualquer diferença no bloco do deployment, identificado pelo `name`). Deployments que o PR não toca não são cobrados, então pipelines antigas sem tags não travam PRs não relacionados; ao editar um deployment antigo, inclua as tags nele.
 
-Se um deployment violar essas regras, o workflow rejeita o PR. Deployments sem tags são sinalizados como erro.
+Cada deployment validado deve ter, exatamente uma vez cada:
+- `environment:staging` ou `environment:prod`
+- `severity:` com um dos 4 valores válidos (`low`, `medium`, `high`, `critical`)
+- `code_owner:` com um username no formato do GitHub (letras, dígitos e hífens simples, até 39 caracteres; o CI confere o formato, não se a conta existe)
+
+Deployment validado sem alguma dessas tags, com valor inválido ou com a mesma chave repetida com valores diferentes, ou `prefect.yaml` com YAML inválido, falha o job e o erro aparece anotado no arquivo do PR. Para conferir localmente antes de abrir o PR:
+
+```bash
+uv run .github/scripts/validate_prefect_tags.py --base origin/master
+```
