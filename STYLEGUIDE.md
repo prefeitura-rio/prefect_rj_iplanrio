@@ -275,7 +275,13 @@ Não use `_` como prefixo para indicar nomes internos/privados. Use fronteiras d
 
 ### 5.5 Logging
 
-`print()` é **proibido** em qualquer arquivo Python do repositório. Todo logging usa o objeto pré-configurado de `prefect_rj_iplanrio.logging`, que integra OpenTelemetry e garante formato e destino uniformes em todas as pipelines.
+`print()` é **proibido** em qualquer arquivo Python do repositório. Todo logging usa o objeto pré-configurado de `prefect_rj_iplanrio.logging`, que garante nível, formato e destino uniformes em todas as pipelines, sem configuração extra por pipeline:
+
+- **Nível:** `INFO` por padrão, ou o valor de `PREFECT_LOGGING_LEVEL`. Um nível que a pipeline já definiu naquele logger é mantido.
+- **Formato e destino:** os registros vão para o handler de console do Prefect no logger raiz (stderr do pod da execução), no formato `HH:MM:SS.mmm | NÍVEL | nome.do.logger - mensagem`. Se o Prefect ainda não configurou o logging no processo, `get_logger` o configura do mesmo jeito que o Prefect faz ao ser importado.
+- **Prefect UI:** para enviar também os registros aos logs da execução na API do Prefect, liste o prefixo dos loggers da pipeline (ex.: `pipelines.rj_crm__exemplo`) na variável `PREFECT_LOGGING_EXTRA_LOGGERS` do deployment.
+
+Não há integração com OpenTelemetry: nenhum exportador está configurado para as pipelines.
 
 ```python
 # ✅ correto
@@ -720,7 +726,7 @@ Promoção especulativa ("isso pode ser útil em outro lugar") não é motivo. C
 
 | Módulo                        | Símbolo                                   | Propósito                                                                                             |
 | ----------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `prefect_rj_iplanrio.logging` | `get_logger(name)`                        | Retorna um logger pré-configurado com integração OpenTelemetry. Passe `__name__` como argumento.      |
+| `prefect_rj_iplanrio.logging` | `get_logger(name)`                        | Retorna um logger pré-configurado: nível `INFO` no console do Prefect (§5.5). Passe `__name__`.       |
 | `prefect_rj_iplanrio.sql`     | `load_query(caller_file, name, **params)` | Carrega e renderiza um arquivo `.sql` do diretório `queries/` relativo ao chamador. Passe `__file__`. |
 
 ## 12. Higiene do repositório
