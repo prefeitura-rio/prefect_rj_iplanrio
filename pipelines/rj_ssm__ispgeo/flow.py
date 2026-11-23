@@ -26,8 +26,10 @@ def rj_ssm__ispgeo(
     :param dataset_id: Dataset do BigQuery.
     :param table_id: Tabela do BigQuery.
     :param dump_mode: ``"append"`` para acumular dados, ``"overwrite"`` para substituir.
-    :param data_inicio: Data de início (``YYYY-MM-DD``). Default: D-1 menos 6 meses.
-    :param data_fim: Data de fim (``YYYY-MM-DD``). Default: D-1.
+    :param data_inicio: Data de início (``YYYY-MM-DD``) da data de registro (``datc``).
+        Default: primeiro dia do mês de 6 meses atrás.
+    :param data_fim: Data de fim (``YYYY-MM-DD``) da data de registro (``datc``).
+        Default: hoje.
     :param todos: Se ``True``, ignora o filtro de tipos de delito e traz tudo.
     :param municipio: Código IBGE do município do fato.
     :param max_concurrent_requests: Número máximo de requisições assíncronas simultâneas

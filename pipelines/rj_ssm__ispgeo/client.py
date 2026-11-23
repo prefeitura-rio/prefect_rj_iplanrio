@@ -9,12 +9,10 @@ Autentica via token e consulta a camada de microdados de ocorrências
 
 import asyncio
 from types import TracebackType
-from typing import Optional
 
 import aiohttp
 import requests
 from iplanrio.pipelines_utils.env import getenv_or_action
-from prefect_rj_iplanrio.logging import get_logger
 
 from pipelines.rj_ssm__ispgeo.constants import (
     AUTH_TIMEOUT,
@@ -24,6 +22,7 @@ from pipelines.rj_ssm__ispgeo.constants import (
     MAX_CONCURRENT_REQUESTS,
     QUERY_TIMEOUT,
 )
+from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -31,50 +30,50 @@ logger = get_logger(__name__)
 class IspGeoClient:
     """Cliente autocontido para o portal ArcGIS do ISP-GEO."""
 
-    __slots__ = ("_username", "_password", "_portal_url", "_layer_url", "_referer", "_token", "_session")
+    __slots__ = ("username", "password", "portal_url", "layer_url", "referer", "token", "session")
 
     def __init__(self) -> None:
         """Inicializa o cliente com credenciais lidas das variáveis de ambiente."""
-        self._username: Optional[str] = getenv_or_action(key="ISPGEO_USER", action="ignore")
-        self._password: Optional[str] = getenv_or_action(key="ISPGEO_PASS", action="ignore")
-        self._portal_url: Optional[str] = getenv_or_action(key="ISPGEO_PORTAL_URL", action="ignore")
-        self._layer_url: Optional[str] = getenv_or_action(key="ISPGEO_LAYER_URL", action="ignore")
-        self._referer: Optional[str] = getenv_or_action(key="ISPGEO_REFERER", action="ignore")
-        self._token: Optional[str] = None
-        self._session: Optional[requests.Session] = None
+        self.username: str | None = getenv_or_action(key="ISPGEO_USER", action="ignore")
+        self.password: str | None = getenv_or_action(key="ISPGEO_PASS", action="ignore")
+        self.portal_url: str | None = getenv_or_action(key="ISPGEO_PORTAL_URL", action="ignore")
+        self.layer_url: str | None = getenv_or_action(key="ISPGEO_LAYER_URL", action="ignore")
+        self.referer: str | None = getenv_or_action(key="ISPGEO_REFERER", action="ignore")
+        self.token: str | None = None
+        self.session: requests.Session | None = None
 
     def __enter__(self) -> "IspGeoClient":
         """Abre a sessão HTTP e autentica no portal.
 
         :returns: A própria instância, autenticada.
         """
-        self._session = requests.Session()
-        self._token = self._authenticate()
+        self.session = requests.Session()
+        self.token = self.authenticate()
         return self
 
     def __exit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
     ) -> None:
         """Fecha a sessão HTTP."""
-        if self._session:
-            self._session.close()
+        if self.session:
+            self.session.close()
 
-    def _authenticate(self) -> str:
+    def authenticate(self) -> str:
         """Autentica no portal ArcGIS e retorna o token de acesso.
 
         :returns: Token de acesso válido.
         :raises RuntimeError: Se a resposta não contiver um token.
         """
-        assert self._session is not None
-        resp = self._session.post(
-            self._portal_url,
+        assert self.session is not None
+        resp = self.session.post(
+            self.portal_url,
             data={
-                "username": self._username,
-                "password": self._password,
-                "referer": self._referer,
+                "username": self.username,
+                "password": self.password,
+                "referer": self.referer,
                 "f": "json",
             },
             timeout=AUTH_TIMEOUT,
@@ -83,7 +82,7 @@ class IspGeoClient:
         data = resp.json()
         if "token" not in data:
             raise RuntimeError(f"Falha ao autenticar no ISP-GEO: {data}")
-        print(f"Autenticado no portal ISP-GEO.")
+        logger.info("Autenticado no portal ISP-GEO.")
         return data["token"]
 
     def get_field_domains(self) -> dict[str, dict[int, str]]:
@@ -91,9 +90,9 @@ class IspGeoClient:
 
         :returns: Mapa de nome do campo para o mapa código -> nome do domínio.
         """
-        assert self._session is not None
-        resp = self._session.get(
-            self._layer_url, params={"f": "json", "token": self._token}, timeout=DOMAIN_TIMEOUT
+        assert self.session is not None
+        resp = self.session.get(
+            self.layer_url, params={"f": "json", "token": self.token}, timeout=DOMAIN_TIMEOUT
         )
         resp.raise_for_status()
         data = resp.json()
@@ -117,14 +116,14 @@ class IspGeoClient:
         :returns: Total de registros no servidor para a cláusula informada.
         :raises RuntimeError: Se a API retornar um erro.
         """
-        assert self._session is not None
-        resp = self._session.get(
-            f"{self._layer_url}/query",
+        assert self.session is not None
+        resp = self.session.get(
+            f"{self.layer_url}/query",
             params={
                 "where": where,
                 "returnCountOnly": "true",
                 "f": "json",
-                "token": self._token,
+                "token": self.token,
             },
             timeout=COUNT_TIMEOUT,
         )
@@ -135,13 +134,14 @@ class IspGeoClient:
 
         return data["count"]
 
-    async def _fetch_page_async(
+    async def fetch_page_async(
         self,
         session: aiohttp.ClientSession,
         sem: asyncio.Semaphore,
         where: str,
         offset: int,
         page_size: int,
+        total: int,
         page_num: int,
         total_pages: int,
     ) -> list[dict]:
@@ -152,12 +152,15 @@ class IspGeoClient:
         :param where: Cláusula ``WHERE`` no dialeto SQL da API ArcGIS.
         :param offset: Índice do primeiro registro da página.
         :param page_size: Quantidade de registros por página.
+        :param total: Total de registros esperados, usado para validar o tamanho da página.
         :param page_num: Número ordinal desta página (1-based).
         :param total_pages: Total de páginas da requisição.
         :returns: Lista de dicts de atributos da página.
-        :raises RuntimeError: Se a API retornar um erro.
+        :raises RuntimeError: Se a API retornar um erro ou se a página vier com
+            menos registros do que o esperado (ex.: ``maxRecordCount`` da camada
+            menor que ``page_size``).
         """
-        url = f"{self._layer_url}/query"
+        url = f"{self.layer_url}/query"
         params = {
             "where": where,
             "outFields": "*",
@@ -165,7 +168,7 @@ class IspGeoClient:
             "resultOffset": offset,
             "resultRecordCount": page_size,
             "f": "json",
-            "token": self._token,
+            "token": self.token,
         }
 
         async with sem:
@@ -181,13 +184,19 @@ class IspGeoClient:
             raise RuntimeError(f"Erro na consulta ao ISP-GEO (offset={offset}): {data['error']}")
 
         features = [f["attributes"] for f in data.get("features", [])]
+        expected = min(page_size, total - offset)
+        if len(features) != expected:
+            raise RuntimeError(
+                f"Página incompleta (offset={offset}): "
+                f"{len(features)} de {expected} registros esperados."
+            )
         pct = round(page_num / total_pages * 100)
         logger.info(
             f"GET {url} [página {page_num}/{total_pages} ({pct}%), pageSize={page_size}] → {len(features)} itens"
         )
         return features
 
-    async def _fetch_all_async(
+    async def fetch_all_async(
         self,
         where: str,
         total: int,
@@ -203,6 +212,7 @@ class IspGeoClient:
         :param page_size: Quantidade de registros por página.
         :param max_concurrent_requests: Número máximo de requisições simultâneas.
         :returns: Lista completa de dicts de atributos, na ordem dos offsets.
+        :raises RuntimeError: Se alguma página vier incompleta ou a API retornar um erro.
         """
         offsets = list(range(0, total, page_size))
         total_pages = len(offsets)
@@ -214,8 +224,9 @@ class IspGeoClient:
         sem = asyncio.Semaphore(max_concurrent_requests)
         async with aiohttp.ClientSession() as session:
             tasks = [
-                self._fetch_page_async(
+                self.fetch_page_async(
                     session, sem, where, offset, page_size,
+                    total=total,
                     page_num=i + 1,
                     total_pages=total_pages,
                 )
@@ -235,7 +246,7 @@ class IspGeoClient:
         where: str,
         page_size: int = DEFAULT_PAGE_SIZE,
         max_concurrent_requests: int = MAX_CONCURRENT_REQUESTS,
-        total: Optional[int] = None,
+        total: int | None = None,
     ) -> list[dict]:
         """Busca todas as features que batem com ``where``, paginando de forma assíncrona.
 
@@ -248,7 +259,7 @@ class IspGeoClient:
         :param total: Total de registros já contado pelo chamador, para evitar uma
             segunda contagem que pode divergir da primeira.
         :returns: Lista de dicts de atributos (``attributes``) de cada feature.
-        :raises RuntimeError: Se a API retornar um erro em alguma página.
+        :raises RuntimeError: Se a API retornar um erro ou uma página incompleta.
         """
         if total is None:
             total = self.count_records(where=where)
@@ -256,7 +267,7 @@ class IspGeoClient:
             logger.info(f"Nenhum registro encontrado para o filtro informado.")
             return []
 
-        return asyncio.run(self._fetch_all_async(
+        return asyncio.run(self.fetch_all_async(
             where=where,
             total=total,
             page_size=page_size,

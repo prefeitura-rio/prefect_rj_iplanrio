@@ -4,14 +4,12 @@ import hashlib
 import json
 import shutil
 import unicodedata
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
 from iplanrio.pipelines_utils.pandas import parse_date_columns, to_partitions
-from prefect_rj_iplanrio.logging import get_logger
 
 from pipelines.rj_ssm__ispgeo.client import IspGeoClient
 from pipelines.rj_ssm__ispgeo.constants import (
@@ -25,6 +23,7 @@ from pipelines.rj_ssm__ispgeo.constants import (
     SP_TZ,
     TMP_BASE,
 )
+from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -32,26 +31,38 @@ BQ_PROJECT_ID = "rj-ssm"
 
 
 def resolve_dates(
-    data_inicio: Optional[str],
-    data_fim: Optional[str],
+    data_inicio: str | None,
+    data_fim: str | None,
 ) -> dict[str, str]:
     """Resolve ``data_inicio`` e ``data_fim`` quando não fornecidos.
 
     Retorna um dict em vez de tupla para compatibilidade com ``@task`` do Prefect,
     que não suporta unpacking direto de tuplas retornadas por tasks.
 
-    Default: janela móvel de 6 meses, de ``D-1`` menos 6 meses até ``D-1``. Como o flow
-    roda diariamente, a janela avança um dia a cada execução.
+    Default: do primeiro dia do mês de 6 meses atrás até hoje. O ``WHERE`` filtra
+    pela data de registro (``datc``), aplicando ``00:00:00`` ao início e
+    ``23:59:59`` ao fim.
 
-    :param data_inicio: Data de início explícita, ou ``None`` para usar ``D-1`` menos 6 meses.
-    :param data_fim: Data de fim explícita, ou ``None`` para usar ``D-1``.
+    :param data_inicio: Data de início explícita (``YYYY-MM-DD``), ou ``None`` para
+        usar o primeiro dia do mês de 6 meses atrás.
+    :param data_fim: Data de fim explícita (``YYYY-MM-DD``), ou ``None`` para usar hoje.
     :returns: Dict com chaves ``"data_inicio"`` e ``"data_fim"`` no formato ``YYYY-MM-DD``.
+    :raises ValueError: Se uma data explícita não estiver no formato ``YYYY-MM-DD``
+        ou se ``data_inicio`` for posterior a ``data_fim``.
     """
-    ontem = datetime.now(tz=SP_TZ).replace(tzinfo=None) - timedelta(days=1)
+    hoje = datetime.now(tz=SP_TZ).replace(tzinfo=None)
     if data_inicio is None:
-        data_inicio = (ontem - pd.DateOffset(months=6)).strftime("%Y-%m-%d")
+        seis_meses_atras = hoje - pd.DateOffset(months=6)
+        data_inicio = seis_meses_atras.replace(day=1).strftime("%Y-%m-%d")
     if data_fim is None:
-        data_fim = ontem.strftime("%Y-%m-%d")
+        data_fim = hoje.strftime("%Y-%m-%d")
+
+    inicio = datetime.strptime(data_inicio, "%Y-%m-%d")
+    fim = datetime.strptime(data_fim, "%Y-%m-%d")
+    if inicio > fim:
+        raise ValueError(
+            f"data_inicio ({data_inicio}) posterior a data_fim ({data_fim})."
+        )
 
     return {"data_inicio": data_inicio, "data_fim": data_fim}
 
@@ -116,7 +127,7 @@ def resolve_crime_codes(
 def build_where(
     data_inicio: str,
     data_fim: str,
-    crime_codes: Optional[list[int]],
+    crime_codes: list[int] | None,
     municipio_cod: int = MUNICIPIO_RIO_DE_JANEIRO,
 ) -> str:
     """Monta a cláusula ``WHERE`` da consulta à camada de microdados.
@@ -126,24 +137,30 @@ def build_where(
     ``delito_do`` não esteja cadastrado no domínio da camada — o domínio fica
     desatualizado em relação aos dados reais, ver uso em ``task.py``).
 
-    :param data_inicio: Data de início (``YYYY-MM-DD``), inclusive.
-    :param data_fim: Data de fim (``YYYY-MM-DD``), inclusive.
+    O período é filtrado pela data de registro da ocorrência (``datc``), não
+    pela data do fato (``datf``).
+
+    :param data_inicio: Data de início (``YYYY-MM-DD``) de ``datc``, inclusive (``00:00:00``).
+    :param data_fim: Data de fim (``YYYY-MM-DD``) de ``datc``, inclusive (``23:59:59``).
     :param crime_codes: Códigos de ``delito_do`` a incluir, ou ``None`` para
         não filtrar por tipo de delito.
     :param municipio_cod: Código IBGE do município do fato.
     :returns: Cláusula ``WHERE`` no dialeto SQL da API ArcGIS.
+    :raises ValueError: Se ``crime_codes`` for uma lista vazia.
     """
     clausulas = []
     if crime_codes is not None:
+        if not crime_codes:
+            raise ValueError("Nenhum código de delito_do resolvido; filtro vazio.")
         codes_sql = ",".join(str(c) for c in crime_codes)
         clausulas.append(f"delito_do IN ({codes_sql})")
     clausulas.append(f"fmun_cod = {municipio_cod}")
-    clausulas.append(f"datf >= timestamp '{data_inicio} 00:00:00'")
-    clausulas.append(f"datf <= timestamp '{data_fim} 23:59:59'")
+    clausulas.append(f"datc >= timestamp '{data_inicio} 00:00:00'")
+    clausulas.append(f"datc <= timestamp '{data_fim} 23:59:59'")
     return " AND ".join(clausulas)
 
 
-def format_date(epoch_ms: Optional[int]) -> Optional[str]:
+def format_date(epoch_ms: int | None) -> str | None:
     """Converte um timestamp epoch em milissegundos para ``YYYY-MM-DD``.
 
     :param epoch_ms: Timestamp em milissegundos desde a época UNIX, ou ``None``.
@@ -157,8 +174,8 @@ def format_date(epoch_ms: Optional[int]) -> Optional[str]:
 
 
 def build_wkt_point(
-    longitude: Optional[float], latitude: Optional[float]
-) -> Optional[str]:
+    longitude: float | None, latitude: float | None
+) -> str | None:
     """Monta um ponto WKT a partir de coordenadas geográficas.
 
     Formato ``'POINT(long lat)'``, aceito pelo BigQuery para colunas
@@ -174,7 +191,7 @@ def build_wkt_point(
     return f"POINT({longitude} {latitude})"
 
 
-def enrich_row(row: dict, ffaixa_code: Optional[int]) -> dict:
+def enrich_row(row: dict, ffaixa_code: int | None) -> dict:
     """Deriva colunas auxiliares a partir de ``datf``, ``horf``, ``fdiasem``, ``ffaixa``.
 
     Deriva ano/mês do fato, faixa horária, dia da semana e ponto WKT,
@@ -302,7 +319,8 @@ def fetch_ocorrencias(
             {
                 r["delito_do"]
                 for r in raw_rows
-                if r.get("delito_do") not in domains["delito_do"]
+                if r.get("delito_do") is not None
+                and r.get("delito_do") not in domains["delito_do"]
             }
         )
         if codigos_nao_mapeados:
@@ -350,7 +368,7 @@ def upload_ocorrencias(
         )
 
         logger.info("%s linha(s), %s coluna(s) → enviando...", len(df), len(df.columns))
-        
+
         create_table_and_upload_to_gcs(
             data_path=savepath,
             dataset_id=dataset_id,

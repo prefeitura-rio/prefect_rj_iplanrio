@@ -37,7 +37,7 @@ deployments:
     job_variables:
       image: "{{ build-image.image_name }}:{{ build-image.tag }}"
       command: uv run --package rj_ssm__ispgeo -- prefect flow-run execute
-      secretName: prefect-jobs-secrets
+      secretName: prefect-jobs-secrets-staging
       image_pull_policy: Always
 - name: rj-ssm--ispgeo--prod
   tags:
@@ -56,9 +56,9 @@ deployments:
       image_pull_policy: Always
 
   schedules:
-  # Roda diariamente às 15h.
-  # Janela: de D-1 menos 6 meses até D-1 (avança um dia por execução), calculada pelo flow.
-  - cron: "0 4 * * *"
+  # Roda diariamente às 10h.
+  # Janela: do dia 1 do mês de 6 meses atrás até hoje, sobre a data de registro (datc), calculada pelo flow.
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     slug: ocorrencias
     parameters:
