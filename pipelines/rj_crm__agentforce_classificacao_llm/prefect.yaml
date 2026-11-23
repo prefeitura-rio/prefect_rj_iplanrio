@@ -68,6 +68,13 @@ deployments:
     tags: [prod]
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_crm__agentforce_classificacao_llm/flow.py:rj_crm__agentforce_classificacao_llm
+    # Uma execução por vez: a classificação horária e o recalcula_taxonomia usam a mesma
+    # tabela tmp. Se a horária fizesse o MERGE dela (linha inteira) com as linhas do
+    # recálculo na tmp (só tema/motivo, resto NULL), apagaria resumo/motivo/etc. dessas
+    # sessões. ENQUEUE: a que chega depois espera a outra terminar.
+    concurrency_limit:
+      limit: 1
+      collision_strategy: ENQUEUE
     work_pool:
       name: default-pool
       work_queue_name: default
