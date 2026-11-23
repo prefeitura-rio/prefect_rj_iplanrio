@@ -15,7 +15,10 @@ validação de precisão (não existe promoção automática — função gerada
 produção sem humano no meio). Mesma tabela serve tema e motivo (coluna `etapa`) — motivo
 tem `categoria_pai` preenchido (o tema ao qual pertence) e só é avaliado em sessão que já
 tenha aquele tema em `tema_nome` (ver filtro por categoria_pai em `_candidatos`); tema
-tem `categoria_pai` nulo (é top-level, não pertence a nada).
+tem `categoria_pai` nulo (é top-level, não pertence a nada). Motivo independente (clustering_v3)
+também tem `categoria_pai` nulo: vale pro macrotema inteiro, em qualquer tema, e é gravado em
+`motivo_nome`/`motivo_julgamento`, dimensão paralela ao tema. `tema_motivo` (pares) é a ponte da
+migração (ver `_pares_tema_motivo`) e sai depois.
 
 `RulesSandbox` portado de clustering/modules/rules_sandbox.py — mesma lógica, sem mudança
 de comportamento: valida o código via AST antes de compilar (bloqueia import fora de
@@ -349,15 +352,14 @@ def _candidatos(row, coluna_texto: str, coluna_agrupamento: str | None, regras_p
 
 def _julgamentos_reaproveitaveis(row, cfg_juiz: ConfigJuiz, coluna: str, etapa: str) -> dict:
     """{chave: (pertence, por_que)} dos julgamentos já gravados na sessão, só se foram
-    feitos pelo mesmo modelo e versão de prompt do juiz atual. Chave = (etapa, tema pai
-    — '' no tema —, nome_funcao, versão da regra): mudou a regra, julga de novo. Itens com
+    feitos pelo mesmo modelo e versão de prompt do juiz atual. Chave = (etapa, nome_funcao,
+    versão da regra): mudou a regra, julga de novo. Itens com
     pertence None também são reaproveitados (sem decisão do juiz não se julga de novo)."""
     if row.get("modelo_juiz") != cfg_juiz.modelo or row.get("prompt_versao_juiz") != cfg_juiz.prompt_versao:
         return {}
     saida = {}
     for item in _lista(row.get(coluna)):
-        tema_pai = item.get("tema_nome") if etapa == "motivo" else ""
-        chave = (etapa, tema_pai, item.get("nome_funcao"), _versao(item.get("regra_criado_em")))
+        chave = (etapa, item.get("nome_funcao"), _versao(item.get("regra_criado_em")))
         pertence = item.get("pertence")
         saida[chave] = (None if pertence is None or pd.isna(pertence) else bool(pertence), item.get("por_que"))
     return saida
@@ -383,7 +385,7 @@ def _decide(  # noqa: PLR0913 — tudo nomeado (keyword-only)
     for i, cands in candidatos.items():
         ja_julgados = (reaproveita or {}).get(i, {})
         for k, regra in enumerate(cands):
-            chave = (etapa, regra["categoria_pai"] or "", regra["nome_funcao"], _versao(regra["criado_em"]))
+            chave = (etapa, regra["nome_funcao"], _versao(regra["criado_em"]))
             if chave in ja_julgados:
                 decisoes[i][k] = (regra, *ja_julgados[chave])
                 n_reaproveitados += 1
@@ -401,6 +403,22 @@ def _decide(  # noqa: PLR0913 — tudo nomeado (keyword-only)
         f"recusados {sum(d[1] is False for d in todos)}, sem decisão {sum(d[1] is None for d in todos)}."
     )
     return pd.Series(decisoes, dtype=object).reindex(df.index)
+
+
+def _pares_tema_motivo(decisoes, temas_da_sessao: list) -> list[dict]:
+    """Pares {tema_nome, motivo_nome} dos motivos aceitos. Motivo com tema pai (modelo antigo):
+    um par com o pai. Motivo independente (categoria_pai nulo): um par por tema da sessão, ou
+    um par com tema_nome NULL se a sessão não tem tema."""
+    pares = []
+    for r, p, _ in decisoes:
+        if p is False:
+            continue
+        if r["categoria_pai"] is not None:
+            pares.append({"tema_nome": r["categoria_pai"], "motivo_nome": r["nome"]})
+        else:
+            for tema in temas_da_sessao or [None]:
+                pares.append({"tema_nome": tema, "motivo_nome": r["nome"]})
+    return pares
 
 
 @task(log_prints=True, cache_policy=NO_CACHE)
@@ -440,6 +458,8 @@ def aplica_taxonomia(
         return f"macrotema '{regra['agrupamento']}'"
 
     def _escopo_motivo(regra):
+        if regra["categoria_pai"] is None:  # motivo independente (mesmo texto do clustering_v3, escopo_texto)
+            return f"motivos do macrotema '{regra['agrupamento']}' (o porquê do cidadão, em qualquer tema)"
         tema = tema_funcao.get((regra["agrupamento"], regra["categoria_pai"]), regra["categoria_pai"])
         return f"tema '{tema}' do macrotema '{regra['agrupamento']}'"
 
@@ -449,7 +469,7 @@ def aplica_taxonomia(
             i: _julgamentos_reaproveitaveis(row, cfg_juiz, "tema_julgamento", "tema") for i, row in df.iterrows()
         }
         reaproveita_motivo = {
-            i: _julgamentos_reaproveitaveis(row, cfg_juiz, "tema_motivo_julgamento", "motivo")
+            i: _julgamentos_reaproveitaveis(row, cfg_juiz, "motivo_julgamento", "motivo")
             for i, row in df.iterrows()
         }
 
@@ -482,6 +502,16 @@ def aplica_taxonomia(
         df, candidatos=cand_motivo, etapa="motivo", coluna_texto="motivo", escopo_de=_escopo_motivo,
         cfg_juiz=cfg_juiz, reaproveita=reaproveita_motivo,
     )
+    df["motivo_julgamento"] = [
+        [
+            {"motivo_nome": r["nome"], "nome_funcao": r["nome_funcao"],
+             "regra_criado_em": _datahora(r["criado_em"]), "pertence": p, "por_que": q}
+            for r, p, q in decisoes
+        ]
+        for decisoes in dec_motivo
+    ]
+    df["motivo_nome"] = [[r["nome"] for r, p, _ in decisoes if p is not False] for decisoes in dec_motivo]
+    # ponte (sai com a migração): pares tema/motivo no formato antigo
     df["tema_motivo_julgamento"] = [
         [
             {"tema_nome": r["categoria_pai"], "motivo_nome": r["nome"], "nome_funcao": r["nome_funcao"],
@@ -491,8 +521,8 @@ def aplica_taxonomia(
         for decisoes in dec_motivo
     ]
     df["tema_motivo"] = [
-        [{"tema_nome": r["categoria_pai"], "motivo_nome": r["nome"]} for r, p, _ in decisoes if p is not False]
-        for decisoes in dec_motivo
+        _pares_tema_motivo(decisoes, temas)
+        for decisoes, temas in zip(dec_motivo, df["tema_nome"], strict=True)
     ]
 
     tem_candidato = [bool(a) or bool(b) for a, b in zip(dec_tema, dec_motivo, strict=True)]
@@ -521,7 +551,8 @@ def aplica_taxonomia(
 # ---------------------------------------------------------------------------
 
 _COLUNAS_TAXONOMIA = [
-    "tema_nome", "tema_motivo", "tema_julgamento", "tema_motivo_julgamento", "modelo_juiz", "prompt_versao_juiz",
+    "tema_nome", "tema_motivo", "tema_julgamento", "tema_motivo_julgamento", "motivo_nome", "motivo_julgamento",
+    "modelo_juiz", "prompt_versao_juiz",
 ]
 
 
