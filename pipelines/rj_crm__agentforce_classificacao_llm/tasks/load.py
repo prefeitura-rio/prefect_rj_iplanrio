@@ -144,6 +144,23 @@ SCHEMA: list[bigquery.SchemaField] = [
             bigquery.SchemaField("motivo_nome", _STRING),
         ],
     ),
+    # Motivo independente (clustering_v3, sem tema pai): dimensão paralela ao tema, nomes
+    # aceitos sem repetir por tema. motivo_julgamento = todos os candidatos de motivo com a
+    # decisão do juiz (sem tema_nome). tema_motivo/tema_motivo_julgamento acima são a ponte
+    # da migração e saem depois (clustering_v3/docs/todo_motivo_nome.md).
+    bigquery.SchemaField("motivo_nome", _STRING, mode="REPEATED"),
+    bigquery.SchemaField(
+        "motivo_julgamento",
+        "RECORD",
+        mode="REPEATED",
+        fields=[
+            bigquery.SchemaField("motivo_nome", _STRING),
+            bigquery.SchemaField("nome_funcao", _STRING),
+            bigquery.SchemaField("regra_criado_em", "TIMESTAMP"),
+            bigquery.SchemaField("pertence", "BOOLEAN"),
+            bigquery.SchemaField("por_que", _STRING),
+        ],
+    ),
     # Juiz de tema/motivo (tasks/juiz.py): todo candidato das regras, aceito ou não, com a
     # decisão e o por_que. pertence NULL = juiz sem resposta (o rótulo da regra fica em
     # tema_nome/tema_motivo). regra_criado_em = versão da regra julgada. Adicionadas por
