@@ -96,7 +96,7 @@ def test_format_precipitation_alert_message_without_synoptic_keeps_layout():
 
 
 def test_alert_log_rows_are_partitioned_and_serialized_like_the_flow_uploads_them(tmp_path: Path) -> None:
-    """The alert log rows land in the alert_date partition with ISO dates, as the flow writes them before upload."""
+    """Grava as linhas do log de alertas como o flow e confere a partição de ``alert_date`` e as datas ISO."""
     alerts = [
         PrecipitationAlert(
             forecast_date=date(2025, 12, 3),
