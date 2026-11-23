@@ -28,9 +28,12 @@ Só o deployment de produção tem agendamento; o de staging roda sob demanda.
 
 ## Fonte
 
-`rj-crm-registry.brutos_salesforce.ai_agent_interaction_step` — passos em que
-`saida_valor_texto` contém `URL_Redacted` **e** o atributo `redacted_urls` está
-preenchido. Passo sem o atributo está fora de escopo: não é acionável.
+`rj-crm-registry.brutos_salesforce.ai_agent_interaction_step` — passos em que o
+atributo `redacted_urls` de `passo_atributos_json` está preenchido. Passo sem o atributo
+está fora de escopo: não é acionável.
+
+O marcador `URL_Redacted` em `saida_valor_texto` não é critério: desde 2026-09-08 essa
+coluna chega `NULL` nos passos com URL redigida, e filtrar por ele zerava o relatório.
 
 O endereço da tabela não é literal no SQL: os arquivos em `queries/` trazem
 `$project.$dataset_id.$table_id` e os valores chegam pelos `replacements` do deployment
@@ -102,4 +105,4 @@ isso a query não tem um — e não vale pedir particionamento ao time dono da t
 | --- | --- |
 | nenhuma mensagem no dia | o flow não rodou, ou falhou antes de publicar |
 | ⚠️ **O envio do e-mail falhou** | houve ocorrência, mas o Data Relay não entregou; as URLs estão na execução do Prefect |
-| "última ocorrência conhecida há N dias" crescendo | a fonte parou de gerar ocorrências — investigar se o marcador `URL_Redacted` mudou ou a redação foi desligada |
+| "última ocorrência conhecida há N dias" crescendo | a fonte parou de gerar ocorrências — investigar se a chave `redacted_urls` sumiu do JSON ou a redação foi desligada |
