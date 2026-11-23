@@ -7,6 +7,8 @@ WHEN MATCHED THEN
     UPDATE SET
         t.tema_nome = s.tema_nome,
         t.tema_motivo = s.tema_motivo,
+        t.motivo_nome = s.motivo_nome,
+        t.motivo_julgamento = s.motivo_julgamento,
         t.tema_julgamento = s.tema_julgamento,
         t.tema_motivo_julgamento = s.tema_motivo_julgamento,
         t.modelo_juiz = s.modelo_juiz,
