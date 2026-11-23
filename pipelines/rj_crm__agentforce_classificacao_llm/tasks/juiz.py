@@ -22,7 +22,8 @@ Sem decisão do juiz -> pertence None (o rótulo da regra fica, ver tasks/taxono
 from __future__ import annotations
 
 import json
-from concurrent.futures import ThreadPoolExecutor
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -146,8 +147,13 @@ def julga(cfg: ConfigJuiz, pedidos: list[dict]) -> list[tuple[bool | None, str |
             return indices, {}, f"{type(e).__name__}: {e}"
 
     n_falhas = 0
+    # andamento no log a cada ~10% dos lotes (no mínimo a cada lote, se forem poucos)
+    passo_log = max(1, len(lotes) // 10)
+    inicio = time.monotonic()
     with ThreadPoolExecutor(max_workers=cfg.max_workers) as executor:
-        for indices, julgamentos, erro in executor.map(_roda, lotes):
+        futuros = [executor.submit(_roda, lote) for lote in lotes]
+        for feitos, futuro in enumerate(as_completed(futuros), start=1):
+            indices, julgamentos, erro = futuro.result()
             if erro:
                 n_falhas += 1
                 print(
@@ -156,6 +162,11 @@ def julga(cfg: ConfigJuiz, pedidos: list[dict]) -> list[tuple[bool | None, str |
             for n, i in enumerate(indices, start=1):
                 if n in julgamentos:
                     resultado[i] = julgamentos[n]
+            if feitos % passo_log == 0 or feitos == len(lotes):
+                print(
+                    f"[JUIZ] andamento: {feitos}/{len(lotes)} lote(s) ({feitos / len(lotes):.0%}), "
+                    f"{n_falhas} com falha, {time.monotonic() - inicio:.0f}s"
+                )
 
     n_sem_definicao = len(pedidos) - sum(len(v) for v in grupos.values())
     print(
