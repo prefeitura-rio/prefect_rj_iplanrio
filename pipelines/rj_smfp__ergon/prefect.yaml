@@ -53,7 +53,7 @@ deployments:
         env:
           INFISICAL_URL: https://secrets.dados.rio
           INFISICAL_PROJECT_ID: 5cf5bfc3-e53f-4156-91f6-75714414a316
-          INFISICAL_ENVIRONMENT: staging
+          INFISICAL_ENVIRONMENT: stg
           INFISICAL_PATHS: /rj_smfp__ergon,/shared
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
   - name: rj-smfp--ergon--prod
