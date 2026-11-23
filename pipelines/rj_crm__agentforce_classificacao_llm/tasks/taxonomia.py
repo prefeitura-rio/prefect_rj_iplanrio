@@ -556,7 +556,13 @@ def atualiza_tema_motivo(
     Reaproveita a mesma tabela tmp da carga normal (schema físico já tem as REQUIRED
     id_sessao/classificado_em/data_particao) — como o MERGE só faz UPDATE SET nas colunas
     de taxonomia, os valores de classificado_em/data_particao carregados aqui são só
-    placeholder pra satisfazer o schema da tmp: nunca chegam na tabela destino."""
+    placeholder pra satisfazer o schema da tmp: nunca chegam na tabela destino.
+
+    Trunca a tmp ANTES de carregar também (não só depois do MERGE): se o MERGE falha, a
+    task é repetida (retries) e, sem isso, cada tentativa empilhava outra cópia das
+    linhas na tmp — MERGE com id_sessao repetido na origem falha de novo, sempre. O
+    deployment de produção tem concurrency_limit 1, então nenhuma outra execução usa a
+    tmp ao mesmo tempo."""
     if df_tema.empty:
         print("[TAXONOMIA] Nada a atualizar — nenhuma sessão com tema/motivo recalculado.")
         return 0
@@ -573,6 +579,7 @@ def atualiza_tema_motivo(
     colunas_tmp = {"id_sessao", "classificado_em", "data_particao", *_COLUNAS_TAXONOMIA}
     schema_tmp = [f for f in SCHEMA if f.name in colunas_tmp]
 
+    client.query(f"TRUNCATE TABLE `{tmp_full}`").result()
     job_config = bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_APPEND, schema=schema_tmp)
     job = client.load_table_from_dataframe(df_carga, tmp_full, job_config=job_config)
     job.result()
