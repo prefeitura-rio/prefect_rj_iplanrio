@@ -64,7 +64,10 @@ def test_info_is_emitted_once_for_a_logger_listed_in_prefect_extra_loggers() -> 
         "from prefect_rj_iplanrio.logging import get_logger\n"
         "logger = get_logger('pipelines.rj_demo__exemplo.tasks')\n"
         f"logger.info('{MESSAGE}')\n",
-        {"PREFECT_LOGGING_EXTRA_LOGGERS": "pipelines.rj_demo__exemplo", "PREFECT_LOGGING_TO_API_WHEN_MISSING_FLOW": "ignore"},
+        {
+            "PREFECT_LOGGING_EXTRA_LOGGERS": "pipelines.rj_demo__exemplo",
+            "PREFECT_LOGGING_TO_API_WHEN_MISSING_FLOW": "ignore",
+        },
     )
 
     assert output.count(MESSAGE) == 1
