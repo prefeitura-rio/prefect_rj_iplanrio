@@ -649,6 +649,8 @@ def monta_dataframe_final(
     df_final["tema_motivo"] = [[] for _ in range(len(df_final))]
     df_final["tema_julgamento"] = [[] for _ in range(len(df_final))]
     df_final["tema_motivo_julgamento"] = [[] for _ in range(len(df_final))]
+    df_final["motivo_nome"] = [[] for _ in range(len(df_final))]
+    df_final["motivo_julgamento"] = [[] for _ in range(len(df_final))]
     df_final["modelo_juiz"] = None
     df_final["prompt_versao_juiz"] = None
 
