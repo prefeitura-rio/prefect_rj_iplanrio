@@ -3,17 +3,18 @@
 Aplicação das regras de tema/motivo (funções Python já induzidas e validadas no repo
 `clustering`, tabela `taxonomia_regras`) sobre o `resumo` das sessões recém-classificadas.
 
-Diferente da classificação inicial (etapa 1, com LLM), esta etapa não chama LLM nenhuma:
-as funções já existem (foram induzidas por LLM sobre uma amostra, e validadas por precisão
-em `clustering/validacao_taxonomia.ipynb` — ver docs/pipeline_clusterizacao_agentforce.md),
-aqui só são executadas. Por isso cabe na mesma execução diária da classificação, sem custo
-de API extra.
+As funções já existem (induzidas e validadas por precisão no clustering_v3), aqui só são
+executadas e propõem candidatos. Cada candidato passa pelo juiz (tasks/juiz.py), que só
+tira rótulo, nunca põe: tema_nome/tema_motivo = candidatos aceitos + os sem decisão do juiz
+(pertence None, o rótulo da regra fica). Todos os candidatos, com a decisão e o por_que,
+ficam em tema_julgamento/tema_motivo_julgamento. Ordem: regra de tema -> juiz -> regra de
+motivo (só nos temas que ficaram) -> juiz — ver aplica_taxonomia.
 
 Catálogo (`taxonomia_regras`) é dado, não código: promovido manualmente pra lá depois da
 validação de precisão (não existe promoção automática — função gerada por LLM não vira
 produção sem humano no meio). Mesma tabela serve tema e motivo (coluna `etapa`) — motivo
 tem `categoria_pai` preenchido (o tema ao qual pertence) e só é avaliado em sessão que já
-tenha aquele tema em `tema_nome` (ver filtro por categoria_pai em `_aplica_regras`); tema
+tenha aquele tema em `tema_nome` (ver filtro por categoria_pai em `_candidatos`); tema
 tem `categoria_pai` nulo (é top-level, não pertence a nada).
 
 `RulesSandbox` portado de clustering/modules/rules_sandbox.py — mesma lógica, sem mudança
@@ -28,14 +29,17 @@ import ast
 import re
 import unicodedata
 from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import ClassVar
 
 import pandas as pd
 from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 from prefect import task
+from prefect.cache_policies import NO_CACHE
 from prefect.deployments import run_deployment
 
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.juiz import ConfigJuiz, julga
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import SCHEMA, _full_table_id
 from pipelines.rj_crm__agentforce_classificacao_llm.utils.bigquery import get_bq_client
 
@@ -183,27 +187,31 @@ class RulesSandbox:
 # Tasks
 # ---------------------------------------------------------------------------
 
+_QUERIES_DIR = Path(__file__).resolve().parent.parent / "queries"
+
+_COLUNAS_CATALOGO = [
+    "agrupamento_tipo", "agrupamento", "categoria_pai", "nome_funcao", "nome", "descricao", "inclui",
+    "nao_inclui", "regra_python", "criado_em",
+]
+
 
 @task(log_prints=True, retries=2, retry_delay_seconds=30)
 def carrega_catalogo_regras(
     project_id: str, dataset_id: str, table_id: str, etapa: str, agrupamento_tipo: str
 ) -> pd.DataFrame:
     """Lê as regras ativas de uma etapa ('tema' ou 'motivo') de um agrupamento_tipo só
-    (hoje 'macrotema'). Regra de outro tipo, se existir no catálogo, fica de fora — a
-    sessão é classificada num nível de agregação por vez. Tabela é gerenciada por fora
-    desta pipeline (promovida manualmente do clustering, ver docstring do módulo) — se
-    ainda não existir, trata como "sem regras hoje" em vez de falhar o flow inteiro."""
+    (hoje 'macrotema') — queries/carrega_catalogo_regras.sql. Regra de outro tipo, se
+    existir no catálogo, fica de fora — a sessão é classificada num nível de agregação por
+    vez. Tabela é gerenciada por fora desta pipeline (promovida do clustering_v3, ver
+    docstring do módulo) — se ainda não existir, trata como "sem regras hoje" em vez de
+    falhar o flow inteiro."""
     if agrupamento_tipo not in COLUNA_SESSAO_POR_AGRUPAMENTO:
         raise ValueError(
             f"agrupamento_tipo '{agrupamento_tipo}' sem coluna de sessão em COLUNA_SESSAO_POR_AGRUPAMENTO."
         )
     client = get_bq_client(project_id)
     full_id = f"{project_id}.{dataset_id}.{table_id}"
-    query = f"""
-        SELECT agrupamento_tipo, agrupamento, categoria_pai, nome_funcao, nome, descricao, regra_python
-        FROM `{full_id}`
-        WHERE etapa = @etapa AND agrupamento_tipo = @agrupamento_tipo AND ativo_indicador = TRUE
-    """
+    query = (_QUERIES_DIR / "carrega_catalogo_regras.sql").read_text().format(full_id=full_id)
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("etapa", "STRING", etapa),
@@ -214,55 +222,51 @@ def carrega_catalogo_regras(
         df = client.query(query, job_config=job_config).to_dataframe()
     except NotFound:
         print(f"[TAXONOMIA] '{table_id}' não existe ainda — nenhuma regra de '{etapa}' aplicada nesta execução.")
-        df = pd.DataFrame(
-            columns=["agrupamento_tipo", "agrupamento", "categoria_pai", "nome_funcao", "nome", "descricao", "regra_python"]
-        )
+        df = pd.DataFrame(columns=_COLUNAS_CATALOGO)
 
-    print(f"[TAXONOMIA] {len(df)} regra(s) ativa(s) de '{etapa}' ({agrupamento_tipo}) carregadas do catálogo.")
+    n_sem_definicao = int((df["inclui"].isna() | df["nao_inclui"].isna()).sum()) if len(df) else 0
+    print(
+        f"[TAXONOMIA] {len(df)} regra(s) ativa(s) de '{etapa}' ({agrupamento_tipo}) carregadas do catálogo"
+        f" ({n_sem_definicao} sem inclui/nao_inclui — não passam pelo juiz)."
+    )
     return df
 
 
-def _aplica_regras(
-    df_final: pd.DataFrame,
-    df_regras: pd.DataFrame,
-    coluna_saida: str,
-    rotulo_etapa: str,
-    coluna_texto: str,
-    com_tema_pai: bool = False,
-) -> pd.DataFrame:
-    """Lógica compartilhada entre aplica_regras_tema e aplica_regras_motivo: roda cada
-    regra do catálogo (já sandboxed) contra o texto normalizado (ver `_normaliza_resumo`)
-    da `coluna_texto` das sessões relevantes, e preenche `coluna_saida` com as
-    categorias que bateram (pode ser mais de uma — por isso a coluna é array). Com
-    `com_tema_pai`, cada item é o par {"tema_nome": categoria_pai, "motivo_nome": nome}
-    (formato de tema_motivo); sem ele, só o nome (formato de tema_nome).
+def _vazio(valor) -> bool:
+    """None, NaN do BigQuery (float('nan') é truthy) ou string em branco."""
+    if valor is None:
+        return True
+    if isinstance(valor, float) and pd.isna(valor):
+        return True
+    return not str(valor).strip()
 
-    `coluna_texto` é o texto sobre o qual a regra foi induzida e teve a precisão medida
-    no clustering: `resumo` pra tema, `motivo` pra motivo (clustering_v3 treina e audita
-    as regras de motivo sobre o campo `motivo`, ver queries/carregar_sessoes_motivo.sql).
-    Aplicar a regra de motivo sobre o `resumo` muda o que ela pega e invalida a precisão.
 
-    Hierárquico: agrupamento (hoje o macrotema) > tema > motivo.
-    - A sessão só é avaliada contra as regras do SEU agrupamento — o valor da coluna da
-      sessão que corresponde ao agrupamento_tipo do catálogo (macrotema_principal, ver
-      COLUNA_SESSAO_POR_AGRUPAMENTO). Tema de outro macrotema nunca é herdado, mesmo que a
-      regra dele bata no resumo.
-    - Regra com `categoria_pai` preenchido (etapa='motivo') só é avaliada em sessão cujo
-      `tema_nome` (já calculado por aplica_regras_tema, que roda antes — ver flow.py)
-      contenha aquele tema. Como o motivo também é buscado só no agrupamento da sessão,
-      ele fica preso ao tema E ao macrotema: um tema homônimo em outro macrotema não
-      empresta motivo. Bug real que motivou o filtro por tema: o motivo vinha de um
-      cluster ao qual a sessão não pertencia.
+def _lista(valor) -> list:
+    """Coluna REPEATED: lista Python, array numpy (to_dataframe do BigQuery) ou None/NaN.
+    Array numpy não aceita `valor or []` (truthiness ambígua) — por isso a conversão."""
+    if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+        return []
+    return list(valor)
 
-    Sessão não relevante, sem texto na `coluna_texto`, sem agrupamento (macrotema_principal NULL: o prompt
-    de macrotema não rodou ou devolveu rótulo fora do catálogo) ou de agrupamento sem regra
-    continua com `coluna_saida` vazio (já é o default vindo de monta_dataframe_final).
 
-    Regra que falha ao compilar (rejeitada pelo sandbox) ou ao rodar numa sessão específica
-    é pulada e logada — nunca derruba a classificação da sessão nem do resto das regras."""
-    if df_final.empty or df_regras.empty:
-        return df_final
+def _versao(criado_em) -> int | None:
+    """criado_em da regra como inteiro (ns) — chave de comparação estável entre o Timestamp
+    do catálogo e o datetime que volta do BigQuery no recálculo."""
+    if criado_em is None or pd.isna(criado_em):
+        return None
+    return pd.Timestamp(criado_em).value
 
+
+def _datahora(criado_em):
+    return None if criado_em is None or pd.isna(criado_em) else pd.Timestamp(criado_em).to_pydatetime()
+
+
+def _compila_catalogo(df_regras: pd.DataFrame, rotulo_etapa: str) -> tuple[str | None, dict[str, list[dict]]]:
+    """Compila (sandbox) as regras do catálogo, agrupadas pelo agrupamento (macrotema).
+    Devolve (coluna da sessão que dá o agrupamento, {agrupamento: [regra, ...]}). Regra
+    rejeitada pelo sandbox é pulada e logada."""
+    if df_regras.empty:
+        return None, {}
     tipos = set(df_regras["agrupamento_tipo"])
     if len(tipos) != 1:
         raise ValueError(f"catálogo de '{rotulo_etapa}' mistura agrupamento_tipo {sorted(tipos)} — esperado um só.")
@@ -278,101 +282,228 @@ def _aplica_regras(
             n_rejeitadas += 1
             print(f"[TAXONOMIA] regra '{row.nome_funcao}' (agrupamento={row.agrupamento}) rejeitada pelo sandbox: {e}")
             continue
-        categoria_pai = None if pd.isna(row.categoria_pai) else row.categoria_pai
         for info in compiladas.values():
-            regras_por_agrupamento.setdefault(row.agrupamento, []).append(
-                {"nome_categoria": row.nome, "categoria_pai": categoria_pai, "funcao": info["funcao"]}
+            regras_por_agrupamento.setdefault(row.agrupamento, []).append({
+                "agrupamento": row.agrupamento,
+                "categoria_pai": None if _vazio(row.categoria_pai) else row.categoria_pai,
+                "nome_funcao": row.nome_funcao,
+                "nome": row.nome,
+                "descricao": row.descricao,
+                "inclui": None if _vazio(row.inclui) else row.inclui,
+                "nao_inclui": None if _vazio(row.nao_inclui) else row.nao_inclui,
+                "criado_em": row.criado_em,
+                "funcao": info["funcao"],
+            })
+    n_ok = sum(len(v) for v in regras_por_agrupamento.values())
+    print(f"[TAXONOMIA] '{rotulo_etapa}': {n_ok} regra(s) compiladas, {n_rejeitadas} rejeitada(s) pelo sandbox.")
+    return coluna_agrupamento, regras_por_agrupamento
+
+
+def _candidatos(row, coluna_texto: str, coluna_agrupamento: str | None, regras_por_agrupamento: dict,
+                temas_da_sessao: set | None = None) -> list[dict]:
+    """Regras do catálogo que batem no texto normalizado (ver `_normaliza_resumo`) da
+    `coluna_texto` da sessão: `resumo` pra tema, `motivo` pra motivo — o texto sobre o qual
+    a regra foi induzida e teve a precisão medida (aplicar a regra de motivo sobre o
+    `resumo` muda o que ela pega e invalida a precisão).
+
+    Hierárquico: agrupamento (hoje o macrotema) > tema > motivo.
+    - A sessão só é avaliada contra as regras do SEU agrupamento (macrotema_principal, ver
+      COLUNA_SESSAO_POR_AGRUPAMENTO). Tema de outro macrotema nunca é herdado.
+    - Regra com `categoria_pai` (etapa='motivo') só é avaliada se esse tema está em
+      `temas_da_sessao` — os temas que FICARAM depois do juiz (ver aplica_taxonomia). Um
+      tema homônimo em outro macrotema não empresta motivo.
+
+    Sessão não relevante, sem texto, sem agrupamento ou de agrupamento sem regra -> [].
+    Função que falha numa sessão é pulada e logada — nunca derruba a sessão."""
+    if coluna_agrupamento is None:
+        return []
+    # nullable boolean (pd.NA) não aceita `not x` direto — comparação explícita
+    if row.get("conteudo_relevante") is not True:
+        return []
+    texto = row.get(coluna_texto)
+    if _vazio(texto):
+        return []
+    agrupamento = row.get(coluna_agrupamento)
+    if agrupamento is None or pd.isna(agrupamento):
+        return []
+    regras = regras_por_agrupamento.get(agrupamento, [])
+    if not regras:
+        return []
+
+    temas_da_sessao = temas_da_sessao or set()
+    texto_norm = _normaliza_resumo(texto)
+    matches = []
+    for regra in regras:
+        if regra["categoria_pai"] is not None and regra["categoria_pai"] not in temas_da_sessao:
+            continue  # motivo de um tema que esta sessão não tem — fora de escopo
+        try:
+            if regra["funcao"](texto_norm):
+                matches.append(regra)
+        except Exception as e:  # função individual não pode derrubar a sessão inteira
+            print(
+                f"[TAXONOMIA] falha ao avaliar '{regra['nome']}' na sessão {row.get('id_sessao')}: "
+                f"{type(e).__name__}: {e}"
             )
+    return matches
 
-    if not regras_por_agrupamento:
-        print(
-            f"[TAXONOMIA] nenhuma regra de '{rotulo_etapa}' compilou com segurança "
-            f"({n_rejeitadas} rejeitada(s)) — {coluna_saida} fica vazio."
-        )
-        return df_final
 
-    def _aplica(row) -> list:
-        # nullable boolean (pd.NA) não aceita `not x` direto — comparação explícita
-        if row.get("conteudo_relevante") is not True:
-            return []
-        texto = row.get(coluna_texto)
-        if texto is None or (isinstance(texto, float) and pd.isna(texto)) or not str(texto).strip():
-            return []
+def _julgamentos_reaproveitaveis(row, cfg_juiz: ConfigJuiz, coluna: str, etapa: str) -> dict:
+    """{chave: (pertence, por_que)} dos julgamentos já gravados na sessão, só se foram
+    feitos pelo mesmo modelo e versão de prompt do juiz atual. Chave = (etapa, tema pai
+    — '' no tema —, nome_funcao, versão da regra): mudou a regra, julga de novo. Itens com
+    pertence None também são reaproveitados (sem decisão do juiz não se julga de novo)."""
+    if row.get("modelo_juiz") != cfg_juiz.modelo or row.get("prompt_versao_juiz") != cfg_juiz.prompt_versao:
+        return {}
+    saida = {}
+    for item in _lista(row.get(coluna)):
+        tema_pai = item.get("tema_nome") if etapa == "motivo" else ""
+        chave = (etapa, tema_pai, item.get("nome_funcao"), _versao(item.get("regra_criado_em")))
+        pertence = item.get("pertence")
+        saida[chave] = (None if pertence is None or pd.isna(pertence) else bool(pertence), item.get("por_que"))
+    return saida
 
-        # NULL do BigQuery chega como float('nan'), que é truthy — pd.isna explícito
-        agrupamento = row.get(coluna_agrupamento)
-        if agrupamento is None or pd.isna(agrupamento):
-            return []
-        regras = regras_por_agrupamento.get(agrupamento, [])
-        if not regras:
-            return []
 
-        # tema(s) já atribuído(s) à sessão nesta mesma passada (aplica_regras_tema roda
-        # antes de aplica_regras_motivo — ver flow.py). Ausente/vazio pra quem ainda não
-        # passou por essa etapa (ex.: quando esta função é chamada PARA a própria etapa
-        # de tema) — nesse caso não há regra com categoria_pai preenchido no catálogo
-        # mesmo, então o filtro abaixo nunca exclui nada.
-        temas_da_sessao = set(row.get("tema_nome") or [])
+def _decide(  # noqa: PLR0913 — tudo nomeado (keyword-only)
+    df: pd.DataFrame,
+    *,
+    candidatos: pd.Series,
+    etapa: str,
+    coluna_texto: str,
+    escopo_de,
+    cfg_juiz: ConfigJuiz,
+    reaproveita: dict | None,
+) -> pd.Series:
+    """Decisão do juiz pra cada candidato de cada sessão: Series (mesmo índice de df) de
+    listas [(regra, pertence, por_que)] na ordem dos candidatos. Reaproveita o que estiver
+    em `reaproveita` ({índice da sessão: {chave: (pertence, por_que)}}); o resto vai pro
+    juiz numa chamada só (tasks/juiz.py agrupa por categoria em lotes)."""
+    decisoes = {i: [None] * len(c) for i, c in candidatos.items()}
+    pedidos, destinos = [], []
+    n_reaproveitados = 0
+    for i, cands in candidatos.items():
+        ja_julgados = (reaproveita or {}).get(i, {})
+        for k, regra in enumerate(cands):
+            chave = (etapa, regra["categoria_pai"] or "", regra["nome_funcao"], _versao(regra["criado_em"]))
+            if chave in ja_julgados:
+                decisoes[i][k] = (regra, *ja_julgados[chave])
+                n_reaproveitados += 1
+                continue
+            pedidos.append({"escopo": escopo_de(regra), "regra": regra, "texto": df.at[i, coluna_texto]})
+            destinos.append((i, k))
 
-        matches = []
-        texto_norm = _normaliza_resumo(texto)
-        for regra in regras:
-            if regra["categoria_pai"] is not None and regra["categoria_pai"] not in temas_da_sessao:
-                continue  # motivo de um tema que esta sessão não tem — fora de escopo
-            try:
-                if regra["funcao"](texto_norm):
-                    if com_tema_pai:
-                        matches.append(
-                            {"tema_nome": regra["categoria_pai"], "motivo_nome": regra["nome_categoria"]}
-                        )
-                    else:
-                        matches.append(regra["nome_categoria"])
-            except Exception as e:  # função individual não pode derrubar a sessão inteira
-                print(
-                    f"[TAXONOMIA] falha ao avaliar '{regra['nome_categoria']}' "
-                    f"na sessão {row.get('id_sessao')}: {type(e).__name__}: {e}"
-                )
-        return matches
+    for (i, k), (pertence, por_que) in zip(destinos, julga(cfg_juiz, pedidos), strict=True):
+        decisoes[i][k] = (candidatos[i][k], pertence, por_que)
 
-    df_final = df_final.copy()
-    df_final[coluna_saida] = df_final.apply(_aplica, axis=1)
-
-    n_com_categoria = (df_final[coluna_saida].str.len() > 0).sum()
+    todos = [d for lista in decisoes.values() for d in lista]
     print(
-        f"[TAXONOMIA] {n_rejeitadas} regra(s) de '{rotulo_etapa}' rejeitada(s) pelo sandbox, "
-        f"{sum(len(v) for v in regras_por_agrupamento.values())} regra(s) aplicadas, "
-        f"{n_com_categoria} sessão(ões) com {coluna_saida} atribuído."
+        f"[TAXONOMIA] '{etapa}': {len(todos)} candidato(s) — {n_reaproveitados} reaproveitado(s), "
+        f"{len(pedidos)} julgado(s) agora; aceitos {sum(d[1] is True for d in todos)}, "
+        f"recusados {sum(d[1] is False for d in todos)}, sem decisão {sum(d[1] is None for d in todos)}."
     )
-    return df_final
+    return pd.Series(decisoes, dtype=object).reindex(df.index)
 
 
-@task(log_prints=True)
-def aplica_regras_tema(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.DataFrame:
-    """Etapa 2 (tema, dentro do agrupamento da sessão) — ver _aplica_regras pra lógica completa."""
-    return _aplica_regras(df_final, df_regras, coluna_saida="tema_nome", rotulo_etapa="tema", coluna_texto="resumo")
+@task(log_prints=True, cache_policy=NO_CACHE)
+def aplica_taxonomia(
+    df_final: pd.DataFrame,
+    df_regras_tema: pd.DataFrame,
+    df_regras_motivo: pd.DataFrame,
+    cfg_juiz: ConfigJuiz,
+    reaproveita_julgamentos: bool = False,
+) -> pd.DataFrame:
+    """Tema e motivo da sessão: regra de tema -> juiz -> regra de motivo -> juiz.
 
+    - Regra (regex) propõe candidatos; o juiz (tasks/juiz.py) confirma cada um sobre o
+      mesmo texto da regra. Só tira rótulo, nunca põe.
+    - tema_nome / tema_motivo = candidatos com pertence True ou None (juiz sem resposta:
+      fica o rótulo da regra). Motivo só é avaliado nos temas que FICARAM — tema recusado
+      não leva motivo.
+    - tema_julgamento / tema_motivo_julgamento = todos os candidatos, com pertence e
+      por_que; modelo_juiz / prompt_versao_juiz preenchidos só em sessão com candidato.
+    - reaproveita_julgamentos (recálculo): df_final traz os julgamentos já gravados;
+      candidato com mesma regra (nome_funcao + criado_em), mesmo modelo e mesmo prompt do
+      juiz não é julgado de novo.
 
-@task(log_prints=True)
-def aplica_regras_motivo(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.DataFrame:
-    """Etapa 3 (motivo) — mesma lógica de aplica_regras_tema (mesmo
-    sandbox), só que avalia a regra contra o campo `motivo` (não o `resumo`: é sobre ele
-    que a regra de motivo é induzida e medida), escreve em tema_motivo (par tema pai +
-    motivo, para o motivo não se descolar do tema de onde saiu) e filtra o
-    catálogo por etapa='motivo' (ver TAXONOMIA_ETAPA_MOTIVO em constants.py). Diferente
-    do tema, motivo é escopado DENTRO do tema (categoria_pai em taxonomia_regras) — uma
-    regra de motivo só é avaliada em sessão cujo tema_nome (calculado por
-    aplica_regras_tema, chamada antes desta no flow.py) já contenha aquele tema (ver
-    filtro por categoria_pai em _aplica_regras). df_final PRECISA vir com tema_nome já
-    preenchido — chamar esta função antes de aplica_regras_tema faz toda regra de motivo
-    ser descartada (nenhum tema bate)."""
-    return _aplica_regras(
-        df_final,
-        df_regras,
-        coluna_saida="tema_motivo",
-        rotulo_etapa="motivo",
-        coluna_texto="motivo",
-        com_tema_pai=True,
+    cache_policy=NO_CACHE: cfg_juiz carrega a BF_KEY e não deve virar chave de cache."""
+    if df_final.empty:
+        return df_final
+    df = df_final.copy()
+
+    col_agr_tema, regras_tema = _compila_catalogo(df_regras_tema, "tema")
+    col_agr_motivo, regras_motivo = _compila_catalogo(df_regras_motivo, "motivo")
+    # escopo do prompt igual ao da 08_precisao: motivo cita o nome_funcao do tema pai
+    tema_funcao = {
+        (r["agrupamento"], r["nome"]): r["nome_funcao"] for regras in regras_tema.values() for r in regras
+    }
+
+    def _escopo_tema(regra):
+        return f"macrotema '{regra['agrupamento']}'"
+
+    def _escopo_motivo(regra):
+        tema = tema_funcao.get((regra["agrupamento"], regra["categoria_pai"]), regra["categoria_pai"])
+        return f"tema '{tema}' do macrotema '{regra['agrupamento']}'"
+
+    reaproveita_tema = reaproveita_motivo = None
+    if reaproveita_julgamentos:
+        reaproveita_tema = {
+            i: _julgamentos_reaproveitaveis(row, cfg_juiz, "tema_julgamento", "tema") for i, row in df.iterrows()
+        }
+        reaproveita_motivo = {
+            i: _julgamentos_reaproveitaveis(row, cfg_juiz, "tema_motivo_julgamento", "motivo")
+            for i, row in df.iterrows()
+        }
+
+    # 1. tema
+    cand_tema = df.apply(lambda row: _candidatos(row, "resumo", col_agr_tema, regras_tema), axis=1)
+    dec_tema = _decide(
+        df, candidatos=cand_tema, etapa="tema", coluna_texto="resumo", escopo_de=_escopo_tema,
+        cfg_juiz=cfg_juiz, reaproveita=reaproveita_tema,
     )
+    df["tema_julgamento"] = [
+        [
+            {"tema_nome": r["nome"], "nome_funcao": r["nome_funcao"], "regra_criado_em": _datahora(r["criado_em"]),
+             "pertence": p, "por_que": q}
+            for r, p, q in decisoes
+        ]
+        for decisoes in dec_tema
+    ]
+    df["tema_nome"] = [[r["nome"] for r, p, _ in decisoes if p is not False] for decisoes in dec_tema]
+
+    # 2. motivo, só nos temas que ficaram
+    cand_motivo = pd.Series(
+        [
+            _candidatos(row, "motivo", col_agr_motivo, regras_motivo, temas_da_sessao=set(temas))
+            for (_, row), temas in zip(df.iterrows(), df["tema_nome"], strict=True)
+        ],
+        index=df.index,
+        dtype=object,
+    )
+    dec_motivo = _decide(
+        df, candidatos=cand_motivo, etapa="motivo", coluna_texto="motivo", escopo_de=_escopo_motivo,
+        cfg_juiz=cfg_juiz, reaproveita=reaproveita_motivo,
+    )
+    df["tema_motivo_julgamento"] = [
+        [
+            {"tema_nome": r["categoria_pai"], "motivo_nome": r["nome"], "nome_funcao": r["nome_funcao"],
+             "regra_criado_em": _datahora(r["criado_em"]), "pertence": p, "por_que": q}
+            for r, p, q in decisoes
+        ]
+        for decisoes in dec_motivo
+    ]
+    df["tema_motivo"] = [
+        [{"tema_nome": r["categoria_pai"], "motivo_nome": r["nome"]} for r, p, _ in decisoes if p is not False]
+        for decisoes in dec_motivo
+    ]
+
+    tem_candidato = [bool(a) or bool(b) for a, b in zip(dec_tema, dec_motivo, strict=True)]
+    df["modelo_juiz"] = [cfg_juiz.modelo if t else None for t in tem_candidato]
+    df["prompt_versao_juiz"] = [cfg_juiz.prompt_versao if t else None for t in tem_candidato]
+
+    print(
+        f"[TAXONOMIA] {(df['tema_nome'].str.len() > 0).sum()} sessão(ões) com tema, "
+        f"{(df['tema_motivo'].str.len() > 0).sum()} com motivo (de {len(df)})."
+    )
+    return df
 
 
 # ---------------------------------------------------------------------------
@@ -380,31 +511,30 @@ def aplica_regras_motivo(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.
 #
 # Cenário: a taxonomia (catálogo de regras) muda — uma regra é corrigida, uma
 # categoria é adicionada — e as sessões já classificadas precisam refletir isso,
-# sem rechamar a LLM (custo zero, é só reavaliar função Python contra o resumo
-# que já está salvo) e sem sobrescrever relacao_hsm/resumo/motivo/etc. (só
-# tema_nome/tema_motivo mudam). MERGE parcial (só essas 2 colunas) em todas as
+# sem rechamar a classificação principal e sem sobrescrever relacao_hsm/resumo/motivo/etc.
+# (só as colunas de tema/motivo e do juiz mudam). As regras rodam de novo sobre o
+# resumo/motivo salvos; o juiz só é chamado pros candidatos sem julgamento reaproveitável
+# (regra nova ou alterada, ou juiz de outro modelo/versão). MERGE parcial em todas as
 # sessões relevantes da tabela de classificação e, em seguida, full refresh do ramo
 # Salesforce da chatbot no dbt — os incrementais dele não reprocessam o passado
 # sozinhos quando a tabela de classificação muda.
 # ---------------------------------------------------------------------------
 
+_COLUNAS_TAXONOMIA = [
+    "tema_nome", "tema_motivo", "tema_julgamento", "tema_motivo_julgamento", "modelo_juiz", "prompt_versao_juiz",
+]
+
 
 @task(log_prints=True, retries=2, retry_delay_seconds=30)
 def extrai_sessoes_para_recalculo_taxonomia(project_id: str, dataset_id: str, table_id: str) -> pd.DataFrame:
-    """Lê da própria tabela destino (não da fonte, não rechama a LLM) só o que
-    as regras precisam: id_sessao, resumo (texto das regras de tema), motivo (texto das
-    regras de motivo), a coluna de agrupamento da sessão (macrotema_principal)
-    e conteudo_relevante — mesmo filtro (conteudo_relevante = true) que a etapa 1 já usa
-    internamente pra decidir quem entra na avaliação de regra. Todo o histórico, sem
-    filtro de data: o recálculo reescreve tema_nome/tema_motivo de todas as sessões
-    relevantes (aplica_regras_tema e aplica_regras_motivo, em seguida no flow.py)."""
+    """Lê da própria tabela destino (queries/extrai_sessoes_recalculo_taxonomia.sql) só o
+    que a taxonomia precisa: id_sessao, resumo (texto das regras de tema), motivo (texto
+    das regras de motivo), macrotema_principal, conteudo_relevante e os julgamentos atuais
+    (reaproveitados quando regra, modelo e prompt do juiz não mudaram). Todo o histórico,
+    sem filtro de data."""
     client = get_bq_client(project_id)
     full_id = _full_table_id(project_id, dataset_id, table_id)
-    query = f"""
-        SELECT id_sessao, resumo, motivo, macrotema_principal, conteudo_relevante
-        FROM `{full_id}`
-        WHERE conteudo_relevante = true
-    """
+    query = (_QUERIES_DIR / "extrai_sessoes_recalculo_taxonomia.sql").read_text().format(full_id=full_id)
     df = client.query(query).to_dataframe()
     print(f"[TAXONOMIA] {len(df)} sessão(ões) relevante(s) carregada(s) da tabela destino pra recálculo de tema/motivo.")
     return df
@@ -418,17 +548,21 @@ def atualiza_tema_motivo(
     table_id: str,
     tmp_table_id: str,
 ) -> int:
-    """MERGE PARCIAL — atualiza só tema_nome/tema_motivo (por id_sessao) na tabela
-    destino, sem tocar em nenhuma outra coluna (relacao_hsm, resumo, motivo etc.
-    ficam intactos). Diferente de carrega_classificacoes (tasks/load.py), que
-    sobrescreve a linha inteira — esta função é exatamente o "UPDATE parcial,
-    coluna a coluna" que o docstring daquela função avisa ser necessário aqui.
+    """MERGE PARCIAL (queries/merge_tema_motivo.sql) — atualiza só as colunas de
+    tema/motivo e do juiz (por id_sessao) na tabela destino, sem tocar em nenhuma outra
+    coluna (relacao_hsm, resumo, motivo etc. ficam intactos). Diferente de
+    carrega_classificacoes (tasks/load.py), que sobrescreve a linha inteira.
 
     Reaproveita a mesma tabela tmp da carga normal (schema físico já tem as REQUIRED
-    id_sessao/classificado_em/data_particao) — como o MERGE só faz UPDATE SET nas 2
-    colunas de tema/motivo, os valores de classificado_em/data_particao carregados
-    aqui são só placeholder pra satisfazer o schema da tmp: nunca chegam na tabela
-    destino."""
+    id_sessao/classificado_em/data_particao) — como o MERGE só faz UPDATE SET nas colunas
+    de taxonomia, os valores de classificado_em/data_particao carregados aqui são só
+    placeholder pra satisfazer o schema da tmp: nunca chegam na tabela destino.
+
+    Trunca a tmp ANTES de carregar também (não só depois do MERGE): se o MERGE falha, a
+    task é repetida (retries) e, sem isso, cada tentativa empilhava outra cópia das
+    linhas na tmp — MERGE com id_sessao repetido na origem falha de novo, sempre. O
+    deployment de produção tem concurrency_limit 1, então nenhuma outra execução usa a
+    tmp ao mesmo tempo."""
     if df_tema.empty:
         print("[TAXONOMIA] Nada a atualizar — nenhuma sessão com tema/motivo recalculado.")
         return 0
@@ -438,26 +572,23 @@ def atualiza_tema_motivo(
     destino_full = _full_table_id(project_id, dataset_id, table_id)
 
     agora = datetime.now(tz=timezone.utc)
-    df_carga = df_tema[["id_sessao", "tema_nome", "tema_motivo"]].copy()
+    df_carga = df_tema[["id_sessao", *_COLUNAS_TAXONOMIA]].copy()
     df_carga["classificado_em"] = agora  # placeholder, nunca lido pelo MERGE (ver docstring)
     df_carga["data_particao"] = date.today()  # placeholder, idem
 
-    colunas_tmp = {"id_sessao", "tema_nome", "tema_motivo", "classificado_em", "data_particao"}
+    colunas_tmp = {"id_sessao", "classificado_em", "data_particao", *_COLUNAS_TAXONOMIA}
     schema_tmp = [f for f in SCHEMA if f.name in colunas_tmp]
 
+    client.query(f"TRUNCATE TABLE `{tmp_full}`").result()
     job_config = bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_APPEND, schema=schema_tmp)
     job = client.load_table_from_dataframe(df_carga, tmp_full, job_config=job_config)
     job.result()
     if job.errors:
         raise RuntimeError(f"[TAXONOMIA] Erro ao carregar tmp: {job.errors}")
 
-    merge_sql = f"""
-        MERGE `{destino_full}` AS t
-        USING `{tmp_full}` AS s
-        ON t.id_sessao = s.id_sessao
-        WHEN MATCHED THEN
-            UPDATE SET t.tema_nome = s.tema_nome, t.tema_motivo = s.tema_motivo
-    """
+    merge_sql = (_QUERIES_DIR / "merge_tema_motivo.sql").read_text().format(
+        destino_full=destino_full, tmp_full=tmp_full
+    )
     merge_job = client.query(merge_sql)
     merge_job.result()
     linhas = merge_job.num_dml_affected_rows or 0

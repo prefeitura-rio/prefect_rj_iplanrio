@@ -17,9 +17,13 @@ e docstrings dos módulos em tasks/ para o detalhe de cada etapa.
 Consumo: outras pipelines/dashboards fazem LEFT JOIN nessa tabela filtrando o último mês
 (margem de segurança bem acima da janela de 14 dias desta extração).
 
+Tema e motivo: regras do catálogo propõem, o juiz (tasks/juiz.py) confirma cada candidato
+— ver tasks/taxonomia.py::aplica_taxonomia.
+
 Parâmetro recalcula_taxonomia=True: modo alternativo, não roda a classificação normal
-acima — reavalia só tema_nome/tema_motivo contra o catálogo de regras atual (sem LLM,
-sem tocar em nenhuma outra coluna) via MERGE parcial na tabela destino, e dispara o full
+acima — reavalia só tema/motivo contra o catálogo de regras atual (o juiz só julga os
+candidatos sem julgamento reaproveitável; nenhuma outra coluna é tocada) via MERGE
+parcial na tabela destino, e dispara o full
 refresh do ramo Salesforce da chatbot no dbt pra chegar ao struct `llm` de todas as
 sessões. Usar quando a taxonomia mudar e as sessões já classificadas precisarem refletir
 isso — ver tasks/taxonomia.py.
@@ -40,6 +44,7 @@ from pipelines.rj_crm__agentforce_classificacao_llm.tasks.classify import (
     monta_prompts,
 )
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.extract import extrai_sessoes_nao_classificadas
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.juiz import ConfigJuiz
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import (
     carrega_classificacoes,
     ensure_destino_table,
@@ -47,8 +52,8 @@ from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import (
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.notify import notify_falha_flow, notify_resumo
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.roteamento import carrega_taxonomia_roteamento
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import (
-    aplica_regras_motivo,
-    aplica_regras_tema,
+    COLUNA_SESSAO_POR_AGRUPAMENTO,
+    aplica_taxonomia,
     atualiza_tema_motivo,
     carrega_catalogo_regras,
     dispara_full_refresh_chatbot,
@@ -80,12 +85,34 @@ def rj_crm__agentforce_classificacao_llm(
 ) -> None:
     destino_full_table_id = f"{project_id}.{dest_dataset_id}.{dest_table_id}"
 
+    # BF_KEY nos dois modos: a classificação e o juiz de tema/motivo (que também roda no
+    # recálculo) chamam o Bifrost.
+    bf_key = os.environ.get("BF_KEY")
+    if not bf_key:
+        raise ValueError(
+            "BF_KEY não encontrada nas variáveis de ambiente — adicionar ao secret do work pool "
+            "(mesmo secretName usado por rj_crm__salesforce_datacloud)."
+        )
+    cfg_juiz = ConfigJuiz(
+        bf_key=bf_key,
+        base_url=bifrost_base_url,
+        modelo=bifrost_model,
+        prompt_versao=C.JUIZ_PROMPT_VERSAO.value,
+        tamanho_lote=C.JUIZ_TAMANHO_LOTE.value,
+        thinking_budget=C.JUIZ_THINKING_BUDGET.value,
+        max_output_tokens=C.JUIZ_MAX_OUTPUT_TOKENS.value,
+        tentativas_json=C.JUIZ_TENTATIVAS_JSON.value,
+        max_workers=max_workers,
+        max_tentativas=max_tentativas_llm,
+        espera_inicial=espera_inicial_segundos,
+    )
+
     # Modo alternativo do flow: a taxonomia (catálogo de regras) mudou e as sessões já
-    # classificadas precisam refletir isso em tema_nome/tema_motivo — sem rechamar a LLM
-    # (custo zero) e sem sobrescrever nenhuma outra coluna (classificacao, resumo, motivo
-    # etc. ficam intactos). Não usa BF_KEY, não faz extração/classificação — é só reler o
-    # que já está na tabela destino, reavaliar as regras, gravar via MERGE parcial e
-    # disparar o full refresh do dbt (ver docstrings em tasks/taxonomia.py).
+    # classificadas precisam refletir isso em tema/motivo — sem rechamar a classificação
+    # principal e sem sobrescrever nenhuma outra coluna (classificacao, resumo, motivo
+    # etc. ficam intactos). Relê o que já está na tabela destino, reavalia as regras,
+    # julga só os candidatos sem julgamento reaproveitável, grava via MERGE parcial e
+    # dispara o full refresh do dbt (ver docstrings em tasks/taxonomia.py).
     if recalcula_taxonomia:
         rename_current_flow_run_task(new_name=f"recalcula_taxonomia_{dest_dataset_id}_{dest_table_id}")
 
@@ -106,15 +133,30 @@ def rj_crm__agentforce_classificacao_llm(
             etapa=C.TAXONOMIA_ETAPA_MOTIVO.value,
             agrupamento_tipo=taxonomia_agrupamento_tipo,
         )
-        df_tema = aplica_regras_tema(df_final=df_sessoes_relevantes, df_regras=df_regras_tema)
-        df_tema = aplica_regras_motivo(df_final=df_tema, df_regras=df_regras_motivo)
-        linhas_aux = atualiza_tema_motivo(
-            df_tema=df_tema,
-            project_id=project_id,
-            dataset_id=dest_dataset_id,
-            table_id=dest_table_id,
-            tmp_table_id=dest_tmp_table_id,
-        )
+        # Um agrupamento (macrotema) por vez: julga e já grava (MERGE parcial) antes do
+        # próximo. Uma falha no meio perde só o agrupamento em andamento — os gravados são
+        # reaproveitados na próxima tentativa — e o andamento aparece no log e no BQ.
+        # Regras e motivos são sempre do agrupamento da sessão, então separar não muda o
+        # resultado. Sessão sem agrupamento (NULL) também é gravada: fica sem tema/motivo.
+        coluna_agrupamento = COLUNA_SESSAO_POR_AGRUPAMENTO[taxonomia_agrupamento_tipo]
+        grupos = list(df_sessoes_relevantes.groupby(coluna_agrupamento, dropna=False, sort=False))
+        linhas_aux = 0
+        for n_grupo, (agrupamento, df_grupo) in enumerate(grupos, start=1):
+            print(f"[FLOW] Recálculo {n_grupo}/{len(grupos)}: '{agrupamento}' ({len(df_grupo)} sessão(ões)).")
+            df_tema = aplica_taxonomia(
+                df_final=df_grupo.reset_index(drop=True),
+                df_regras_tema=df_regras_tema,
+                df_regras_motivo=df_regras_motivo,
+                cfg_juiz=cfg_juiz,
+                reaproveita_julgamentos=True,
+            )
+            linhas_aux += atualiza_tema_motivo(
+                df_tema=df_tema,
+                project_id=project_id,
+                dataset_id=dest_dataset_id,
+                table_id=dest_table_id,
+                tmp_table_id=dest_tmp_table_id,
+            )
         dispara_full_refresh_chatbot(
             deployment_name=dbt_deployment_name,
             select=dbt_full_refresh_select,
@@ -128,13 +170,6 @@ def rj_crm__agentforce_classificacao_llm(
         return
 
     rename_current_flow_run_task(new_name=f"classificacao_llm_{dest_dataset_id}_{dest_table_id}")
-
-    bf_key = os.environ.get("BF_KEY")
-    if not bf_key:
-        raise ValueError(
-            "BF_KEY não encontrada nas variáveis de ambiente — adicionar ao secret do work pool "
-            "(mesmo secretName usado por rj_crm__salesforce_datacloud)."
-        )
 
     # Não precisa de try/except aqui: on_failure=[notify_falha_flow] no decorator acima já
     # notifica o Discord em qualquer exceção não tratada, e o flow run continua marcado
@@ -179,7 +214,7 @@ def rj_crm__agentforce_classificacao_llm(
     # 4. Catálogo de regras de tema/motivo — carregado antes da classificação porque
     #    tanto o passo 5 (pré-classificadas) quanto o passo 6 (LLM, lote a lote)
     #    precisam dele. Catálogo ausente ou sem regra pra secretaria/tema da sessão:
-    #    tema_nome/tema_motivo ficam vazios, não bloqueia nada — ver aplica_regras_motivo
+    #    tema_nome/tema_motivo ficam vazios, não bloqueia nada — ver aplica_taxonomia
     #    (motivo só é aplicado dentro do tema ao qual pertence, via categoria_pai).
     df_regras_tema = carrega_catalogo_regras(
         project_id=project_id,
@@ -206,8 +241,9 @@ def rj_crm__agentforce_classificacao_llm(
         justificativa_resposta_atrasada=C.JUSTIFICATIVA_RESPOSTA_ATRASADA_BTN.value,
         prompt_versao=C.PROMPT_VERSAO.value,
     )
-    df_pre_final = aplica_regras_tema(df_final=df_pre_final, df_regras=df_regras_tema)
-    df_pre_final = aplica_regras_motivo(df_final=df_pre_final, df_regras=df_regras_motivo)
+    df_pre_final = aplica_taxonomia(
+        df_final=df_pre_final, df_regras_tema=df_regras_tema, df_regras_motivo=df_regras_motivo, cfg_juiz=cfg_juiz
+    )
     linhas_pre = carrega_classificacoes(
         df_final=df_pre_final,
         project_id=project_id,
@@ -231,6 +267,7 @@ def rj_crm__agentforce_classificacao_llm(
         classificacao_sem_hsm=C.CLASSIFICACAO_SEM_HSM_ASSOCIADO.value,
         df_regras_tema=df_regras_tema,
         df_regras_motivo=df_regras_motivo,
+        cfg_juiz=cfg_juiz,
         classificacao_resposta_atrasada=C.CLASSIFICACAO_RESPOSTA_ATRASADA_BTN.value,
         justificativa_resposta_atrasada=C.JUSTIFICATIVA_RESPOSTA_ATRASADA_BTN.value,
         prompt_versao=C.PROMPT_VERSAO.value,
