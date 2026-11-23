@@ -4,6 +4,6 @@
 -- que o recálculo reaproveita quando regra, modelo e prompt do juiz não mudaram.
 SELECT
     id_sessao, resumo, motivo, macrotema_principal, conteudo_relevante,
-    tema_julgamento, tema_motivo_julgamento, modelo_juiz, prompt_versao_juiz
+    tema_julgamento, motivo_julgamento, modelo_juiz, prompt_versao_juiz
 FROM `{full_id}`
 WHERE conteudo_relevante = true
