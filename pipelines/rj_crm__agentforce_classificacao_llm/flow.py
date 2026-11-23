@@ -52,6 +52,7 @@ from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import (
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.notify import notify_falha_flow, notify_resumo
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.roteamento import carrega_taxonomia_roteamento
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import (
+    COLUNA_SESSAO_POR_AGRUPAMENTO,
     aplica_taxonomia,
     atualiza_tema_motivo,
     carrega_catalogo_regras,
@@ -132,20 +133,30 @@ def rj_crm__agentforce_classificacao_llm(
             etapa=C.TAXONOMIA_ETAPA_MOTIVO.value,
             agrupamento_tipo=taxonomia_agrupamento_tipo,
         )
-        df_tema = aplica_taxonomia(
-            df_final=df_sessoes_relevantes,
-            df_regras_tema=df_regras_tema,
-            df_regras_motivo=df_regras_motivo,
-            cfg_juiz=cfg_juiz,
-            reaproveita_julgamentos=True,
-        )
-        linhas_aux = atualiza_tema_motivo(
-            df_tema=df_tema,
-            project_id=project_id,
-            dataset_id=dest_dataset_id,
-            table_id=dest_table_id,
-            tmp_table_id=dest_tmp_table_id,
-        )
+        # Um agrupamento (macrotema) por vez: julga e já grava (MERGE parcial) antes do
+        # próximo. Uma falha no meio perde só o agrupamento em andamento — os gravados são
+        # reaproveitados na próxima tentativa — e o andamento aparece no log e no BQ.
+        # Regras e motivos são sempre do agrupamento da sessão, então separar não muda o
+        # resultado. Sessão sem agrupamento (NULL) também é gravada: fica sem tema/motivo.
+        coluna_agrupamento = COLUNA_SESSAO_POR_AGRUPAMENTO[taxonomia_agrupamento_tipo]
+        grupos = list(df_sessoes_relevantes.groupby(coluna_agrupamento, dropna=False, sort=False))
+        linhas_aux = 0
+        for n_grupo, (agrupamento, df_grupo) in enumerate(grupos, start=1):
+            print(f"[FLOW] Recálculo {n_grupo}/{len(grupos)}: '{agrupamento}' ({len(df_grupo)} sessão(ões)).")
+            df_tema = aplica_taxonomia(
+                df_final=df_grupo.reset_index(drop=True),
+                df_regras_tema=df_regras_tema,
+                df_regras_motivo=df_regras_motivo,
+                cfg_juiz=cfg_juiz,
+                reaproveita_julgamentos=True,
+            )
+            linhas_aux += atualiza_tema_motivo(
+                df_tema=df_tema,
+                project_id=project_id,
+                dataset_id=dest_dataset_id,
+                table_id=dest_table_id,
+                tmp_table_id=dest_tmp_table_id,
+            )
         dispara_full_refresh_chatbot(
             deployment_name=dbt_deployment_name,
             select=dbt_full_refresh_select,
