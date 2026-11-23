@@ -846,7 +846,7 @@ deployments:
             "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}
 
       # Multas de transito (SMTR): holdout diario com cota em rampa
-      - cron: "0 12 * * 1-5"
+      - cron: "0 13 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
         slug: daily-smtr-multa-holdout
@@ -864,7 +864,7 @@ deployments:
             "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}
 
       # Multas de transito (SMTR): holdout diario com cota em rampa
-      - cron: "0 14 * * 1-5"
+      - cron: "0 13 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
         slug: daily-smtr-multa-holdout
@@ -876,13 +876,13 @@ deployments:
           de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo", "id_autuacao"]
           filter_duplicated_cpfs: true
           filter_failed_phones: true
-          query_file: queries/smtr_multa_holdout_tratamento_4.sql
+          query_file: queries/smtr_multa_holdout_tratamento_3.sql
           query_replacements: {"cota_inicial_placeholder": 300, "incremento_cota_placeholder": 0,
             "cota_maxima_placeholder": 5000, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5,
             "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}
 
       # Multas de transito (SMTR): holdout diario com cota em rampa
-      - cron: "0 16 * * 1-5"
+      - cron: "0 13 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
         slug: daily-smtr-multa-holdout
