@@ -5,12 +5,13 @@
 --   1) monta a base do dia e tira quem foi sorteado há menos de 40 dias, de qualquer
 --      grupo (janela do desfecho de 30 dias + 10 de folga); no dia D+40 a pessoa volta
 --      para a fila e pode ser sorteada de novo, numa coorte nova, em qualquer grupo;
---   2) seleciona 2 × cota_diaria em ordem aleatória (FARM_FINGERPRINT(cpf || data));
+--   2) seleciona 5 × cota_diaria em ordem aleatória (FARM_FINGERPRINT(cpf || data));
 --      a cota começa em cota_inicial e sobe incremento_cota por coorte até cota_maxima;
---   3) embaralha os selecionados e divide exatamente 50/50 (par = controle);
+--   3) embaralha os selecionados e divide em 5 grupos iguais (20% cada):
+--      controle, tratamento_1, tratamento_2, tratamento_3, tratamento_4;
 --   4) insere a coorte do dia em smtr_multa_atribuicao, só se ela ainda não existir
 --      (o job é idempotente: rodar de novo no mesmo dia não sorteia de novo);
---   5) devolve a lista de disparo só com o tratamento do dia, lida da tabela.
+--   5) devolve a lista de disparo só com o tratamento_1 do dia, lida da tabela.
 --
 -- O controle não pode receber nenhuma mensagem até fim_quarentena. Todo outro
 -- disparo ou jornada que atinja esse público precisa filtrar:
@@ -496,7 +497,7 @@ WHERE NULLIF(TRIM(r.nome_completo), '') IS NOT NULL
 
 
 -- ============================================================
--- 7) Seleção (2 × cota) e divisão 50/50, inserida só se a coorte do dia não existe
+-- 7) Seleção (5 × cota) e divisão em 5 grupos, inserida só se a coorte do dia não existe
 -- ============================================================
 INSERT INTO `{tabela_atribuicao_placeholder}`
 WITH selecionados AS (
@@ -506,7 +507,7 @@ WITH selecionados AS (
             ORDER BY FARM_FINGERPRINT(CONCAT(cpf, '|selecao|', CAST(hoje AS STRING))), cpf
         ) AS ordem_selecao
     FROM base_do_dia
-    QUALIFY ordem_selecao <= 2 * cota_diaria
+    QUALIFY ordem_selecao <= 5 * cota_diaria
 ),
 
 divididos AS (
@@ -521,8 +522,14 @@ divididos AS (
 SELECT
     cpf AS id_devedor,
     hoje AS data_selecao,
-    IF(MOD(ordem_grupo, 2) = 0, 'controle', 'tratamento') AS grupo,
-    IF(MOD(ordem_grupo, 2) = 0, DATE_ADD(hoje, INTERVAL dias_quarentena DAY), NULL) AS fim_quarentena,
+    CASE MOD(ordem_grupo, 5)
+        WHEN 0 THEN 'controle'
+        WHEN 1 THEN 'tratamento_1'
+        WHEN 2 THEN 'tratamento_2'
+        WHEN 3 THEN 'tratamento_3'
+        WHEN 4 THEN 'tratamento_4'
+    END AS grupo,
+    IF(MOD(ordem_grupo, 5) = 0, DATE_ADD(hoje, INTERVAL dias_quarentena DAY), NULL) AS fim_quarentena,
     ordem_selecao,
     ordem_grupo,
     celular_disparo,
@@ -587,7 +594,7 @@ WHERE dia_util
 
 
 -- ============================================================
--- 8) Lista de disparo: só o tratamento do dia, lido da tabela
+-- 8) Lista de disparo: só o tratamento_1 do dia, lido da tabela
 -- ============================================================
 SELECT
     celular_disparo AS telefone,
@@ -598,6 +605,6 @@ SELECT
     id_autuacao
 FROM `{tabela_atribuicao_placeholder}`
 WHERE data_selecao = hoje
-    AND grupo = 'tratamento'
+    AND grupo = 'tratamento_1'
     AND dia_util
 ORDER BY ordem_grupo;
