@@ -2,21 +2,22 @@
 """
 Flow para envio de e-mails em massa com templates HTML..
 """
+import os
+
 from prefect import flow
 from iplanrio.pipelines_utils.env import (
     inject_bd_credentials_task,
 )
 import logging
 
-from pipelines.rj_pic__disparos_email.env import (
-    BIGQUERY_PROJECT_ID,
-    BIGQUERY_DATASET_ID,
-    BIGQUERY_TABLE_ID,
-)
 from pipelines.rj_pic__disparos_email.tasks import (
     read_bigquery_task,
     process_email_task,
 )
+
+BIGQUERY_PROJECT_ID = os.getenv("PIC_DISPAROS_EMAIL_BIGQUERY_PROJECT_ID")
+BIGQUERY_DATASET_ID = os.getenv("PIC_DISPAROS_EMAIL_BIGQUERY_DATASET_ID")
+BIGQUERY_TABLE_ID = os.getenv("PIC_DISPAROS_EMAIL_BIGQUERY_TABLE_ID")
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"

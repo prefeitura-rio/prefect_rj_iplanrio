@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import asyncio
+import os
 from typing import Optional
 from pathlib import Path
 
@@ -7,7 +8,6 @@ import basedosdados as bd
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
-from pipelines.rj_iplanrio__eai_history import env
 from pipelines.rj_iplanrio__eai_history.history import GoogleAgentEngineHistory
 
 
@@ -32,11 +32,11 @@ def get_last_update(
         return last_update
 
     if environment == "staging":
-        project_id = env.PROJECT_ID
+        project_id = os.getenv("EAI__PROJECT_ID")
         log(f"'environment' staging using project_id: {project_id}")
 
     elif environment == "prod":
-        project_id = env.PROJECT_ID_PROD
+        project_id = os.getenv("EAI__PROJECT_ID_PROD")
         log(f"'environment' prod using project_id: {project_id}")
     else:
         raise (ValueError("environment must be prod or staging"))

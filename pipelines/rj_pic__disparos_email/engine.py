@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Módulo de envio de e-mails via Data Relay API."""
+import os
 from pathlib import Path
 from datetime import datetime
 
@@ -9,16 +10,24 @@ import logging
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from typing import Optional, List
 
-from pipelines.rj_pic__disparos_email.env import (
-    DATA_RELAY_URL,
-    DATA_RELAY_API_KEY,
-    DATA_RELAY_FROM_ADDRESS,
-    DATA_RELAY_USE_GMAIL_API,
-    DATA_RELAY_IS_HTML_BODY,
-    MAX_RETRIES,
-    RETRY_DELAY,
-    THROTTLE_DELAY,
+# Configuração do Data Relay, lida do ambiente do container
+DATA_RELAY_URL = os.getenv(
+    "PIC_DISPAROS_EMAIL_DATA_RELAY_URL",
+    "https://staging.data-relay.dados.rio/data/mailman",
 )
+DATA_RELAY_API_KEY = os.getenv("PIC_DISPAROS_EMAIL_DATA_RELAY_API_KEY")
+DATA_RELAY_FROM_ADDRESS = os.getenv("PIC_DISPAROS_EMAIL_DATA_RELAY_FROM_ADDRESS")
+DATA_RELAY_USE_GMAIL_API = (
+    os.getenv("PIC_DISPAROS_EMAIL_DATA_RELAY_USE_GMAIL_API", "true").lower() == "true"
+)
+DATA_RELAY_IS_HTML_BODY = (
+    os.getenv("PIC_DISPAROS_EMAIL_DATA_RELAY_IS_HTML_BODY", "true").lower() == "true"
+)
+
+# Retry e throttle
+MAX_RETRIES = int(os.getenv("PIC_DISPAROS_EMAIL_MAX_RETRIES", "3"))
+RETRY_DELAY = int(os.getenv("PIC_DISPAROS_EMAIL_RETRY_DELAY", "5"))  # segundos
+THROTTLE_DELAY = float(os.getenv("PIC_DISPAROS_EMAIL_THROTTLE_DELAY", "1"))  # segundos
 
 # Configuração de logging
 logging.basicConfig(
@@ -45,12 +54,12 @@ class EmailSender:
         if not DATA_RELAY_API_KEY:
             raise ValueError(
                 "Credenciais Data Relay não configuradas. "
-                "Configure PIC_DISPAROS_EMAIL_DATA_RELAY_API_KEY no arquivo .env"
+                "Configure PIC_DISPAROS_EMAIL_DATA_RELAY_API_KEY no ambiente do container"
             )
         if not DATA_RELAY_URL:
             raise ValueError(
                 "URL do Data Relay não configurada. "
-                "Configure PIC_DISPAROS_EMAIL_DATA_RELAY_URL no arquivo .env"
+                "Configure PIC_DISPAROS_EMAIL_DATA_RELAY_URL no ambiente do container"
             )
 
     def _throttle(self):

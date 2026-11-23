@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import json
+import os
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
@@ -18,7 +19,6 @@ from langchain_google_cloud_sql_pg import PostgresEngine, PostgresLoader, Postgr
 from langchain_google_cloud_sql_pg.version import __version__ as gc_sql_pg_version
 from langchain_core.version import VERSION as langchain_version
 
-from pipelines.rj_iplanrio__eai_history import env
 from pipelines.rj_iplanrio__eai_history.message_formatter import to_gateway_format
 
 
@@ -31,19 +31,19 @@ class GoogleAgentEngineHistory:
     async def create(cls, environment: str) -> "GoogleAgentEngineHistory":
         """Factory method para criar uma instância com checkpointer inicializado"""
         if environment == "staging":
-            project_id = env.PROJECT_ID or ""
-            region = env.LOCATION or ""
-            instance = env.INSTANCE or ""
-            database = env.DATABASE or ""
-            user = env.DATABASE_USER or ""
-            password = env.DATABASE_PASSWORD or ""
+            project_id = os.getenv("EAI__PROJECT_ID") or ""
+            region = os.getenv("EAI__LOCATION") or ""
+            instance = os.getenv("EAI__INSTANCE") or ""
+            database = os.getenv("EAI__DATABASE") or ""
+            user = os.getenv("EAI__DATABASE_USER") or ""
+            password = os.getenv("EAI__DATABASE_PASSWORD") or ""
         elif environment == "prod":
-            project_id = env.PROJECT_ID_PROD or ""
-            region = env.LOCATION_PROD or ""
-            instance = env.INSTANCE_PROD or ""
-            database = env.DATABASE_PROD or ""
-            user = env.DATABASE_USER_PROD or ""
-            password = env.DATABASE_PASSWORD_PROD or ""
+            project_id = os.getenv("EAI__PROJECT_ID_PROD") or ""
+            region = os.getenv("EAI__LOCATION_PROD") or ""
+            instance = os.getenv("EAI__INSTANCE_PROD") or ""
+            database = os.getenv("EAI__DATABASE_PROD") or ""
+            user = os.getenv("EAI__DATABASE_USER_PROD") or ""
+            password = os.getenv("EAI__DATABASE_PASSWORD_PROD") or ""
         else:
             raise (ValueError("enviromet must be prod or staging"))
 
