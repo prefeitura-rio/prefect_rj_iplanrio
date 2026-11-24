@@ -110,11 +110,11 @@ vagas AS (
 ),
 remove_enviados as (
   select
-    distinct json_value(hsm.dados_disparo, '$.id_candidatura') as id_candidatura
-  from `rj-crm-registry.rmi_conversas.chatbot`
-  where data_particao >= date_sub(current_date(), interval 7 day)
-    and json_value(hsm.dados_disparo, '$.id_candidatura') is not null
-    and hsm.nome_hsm like 'smt_emprego_candidatura_recebida%'
+    distinct json_value(`data`, '$.id_candidatura') as id_candidatura
+  from `rj-crm-registry.brutos_salesforce_staging.disparos_efetuados`
+  where data_particao >= cast(date_sub(current_date(), interval 1 day) as string)
+    and json_value(`data`, '$.id_candidatura') is not null
+    and campaign_name like 'smt_emprego_candidatura_recebida%'
 ),
 base AS (
   SELECT
