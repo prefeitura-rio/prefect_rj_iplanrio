@@ -112,7 +112,7 @@ remove_enviados as (
   select
     distinct json_value(`data`, '$.id_candidatura') as id_candidatura
   from `rj-crm-registry.brutos_salesforce_staging.disparos_efetuados`
-  where data_particao >= cast(date_sub(current_date(), interval 1 day) as string)
+  where data_particao >= cast(date_sub(current_date(), interval 60 day) as string)
     and json_value(`data`, '$.id_candidatura') is not null
     and campaign_name like 'smt_emprego_candidatura_recebida%'
 ),
