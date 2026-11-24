@@ -69,40 +69,102 @@ async def cancel_shards(ids: Sequence[UUID]) -> None:
             logger.info("Shard cancelled: run=%s", run.name)
 
 
+def build_shard_key(parent: UUID, index: int, attempt: int) -> str:
+    """Return the idempotency key of one attempt of a shard of a parent run."""
+    return f"{parent}-shard-{index}-{attempt}"
+
+
+def ended_without_completing(run: FlowRun) -> bool:
+    """Return whether a child run ended in a state other than completed."""
+    return run.state is not None and run.state.is_final() and run.state.type != StateType.COMPLETED
+
+
+async def start_shard(
+    deployment: UUID,
+    parameters: Mapping[str, object],
+    index: int,
+    count: int,
+    name: str,
+    parent: UUID | None,
+) -> FlowRun:
+    """Start the child run of shard `index`, or return the one an earlier attempt started.
+
+    With a `parent` each child run has an idempotency key, so a parent that runs again
+    gets back the child runs it started before: a completed or unfinished one is
+    reused, and one that failed or was cancelled is followed by a new attempt. Without
+    a `parent` every call starts a new child run.
+    """
+    attempt = 0
+
+    while True:
+        run = await arun_deployment(
+            name=deployment,
+            parameters=build_shard_parameters(parameters, index, count),
+            timeout=0,
+            work_queue_name=SHARD_QUEUE,
+            tags=[SHARD_TAG],
+            flow_run_name=f"{name}-shard-{index}",
+            as_subflow=True,
+            idempotency_key=None if parent is None else build_shard_key(parent, index, attempt),
+        )
+
+        if parent is None or not ended_without_completing(run):
+            return run
+
+        attempt += 1
+
+
+async def is_rescheduled(parent: UUID | None) -> bool:
+    """Return whether the parent run went back to scheduled.
+
+    A SIGTERM with the `reschedule` behavior, such as the end of the job deadline,
+    sets the run to `AwaitingRetry` before it stops the process.
+    """
+    if parent is None:
+        return False
+
+    async with get_client() as client:
+        state = (await client.read_flow_run(parent)).state
+
+    return state is not None and state.type == StateType.SCHEDULED
+
+
 async def run_shards(
     deployment: UUID,
     parameters: Mapping[str, object],
     count: int,
     name: str,
     poll: float = SHARD_POLL_SECONDS,
+    *,
+    parent: UUID | None = None,
 ) -> None:
     """Run a dump in `count` child runs of the deployment, and wait for all of them.
 
     Child `index` of `count` gets the parameters of the parent with `options.shard` set
     (see `build_shard_parameters`). They go to the work queue `SHARD_QUEUE`, whose
-    concurrency limit caps how many run at once. If the parent stops, the child runs
-    that did not end are cancelled, because Prefect does not do it. Raise `RuntimeError`
-    that names the child runs that did not complete, after all of them have ended.
+    concurrency limit caps how many run at once. `parent` is the id of the parent run:
+    with it, a parent that runs again picks up the child runs of its earlier attempt
+    (see `start_shard`). If the parent stops, the child runs that did not end are
+    cancelled, because Prefect does not do it, unless the parent was rescheduled: then
+    they keep running for its next attempt. Raise `RuntimeError` that names the child
+    runs that did not complete, after all of them have ended.
     """
     ids: list[UUID] = []
 
     try:
         for index in range(count):
-            run = await arun_deployment(
-                name=deployment,
-                parameters=build_shard_parameters(parameters, index, count),
-                timeout=0,
-                work_queue_name=SHARD_QUEUE,
-                tags=[SHARD_TAG],
-                flow_run_name=f"{name}-shard-{index}",
-                as_subflow=True,
-            )
+            run = await start_shard(deployment, parameters, index, count, name, parent)
             ids.append(run.id)
 
         logger.info("Shards started: runs=%d queue=%s", count, SHARD_QUEUE)
         runs = await wait_for_shards(ids, poll)
-    finally:
-        await cancel_shards(ids)
+    except BaseException:
+        if await is_rescheduled(parent):
+            logger.warning("Parent rescheduled, so its shards keep running: runs=%d", len(ids))
+        else:
+            await cancel_shards(ids)
+
+        raise
 
     failed = sorted(run.name for run in runs if run.state and run.state.type != StateType.COMPLETED)
 
