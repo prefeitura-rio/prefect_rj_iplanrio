@@ -76,7 +76,7 @@ deployments:
           INFISICAL_PATHS: /rj_iplanrio__bcadastro_chcno,/shared
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
     schedules:
-      - cron: "0 4 * * *"
+      - cron: "0 4 1-2,4-31 * *"
         timezone: America/Sao_Paulo
         slug: chcno-daily
         parameters:
@@ -90,6 +90,31 @@ deployments:
           table:
             dataset_id: brutos_bcadastro
             table_id: chcno_bcadastros
+          read:
+            table: chcno_bcadastros
+            since: table
+          dump_mode: merge
+          options:
+            merge:
+              key:
+                - id
+            columns:
+              add_timestamp: true
+      - cron: "0 4 3 * *"
+        timezone: America/Sao_Paulo
+        slug: chcno-monthly
+        parameters:
+          database:
+            type: couchdb
+            host: 10.2.231.241
+            port: 6984
+            database: chcno_bcadastros
+            options:
+              shape: utils.couchdb:BCADASTRO
+          table:
+            dataset_id: brutos_bcadastro
+            table_id: chcno_bcadastros
+          dump_mode: overwrite
           read:
             table: chcno_bcadastros
           options:

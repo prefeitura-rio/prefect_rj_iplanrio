@@ -18,6 +18,9 @@ SHARD_TAG: Final = "shard"
 SHARD_POLL_SECONDS: Final = 15
 """The seconds between two reads of the state of the child runs."""
 
+SINCE_FROM_TABLE: Final = "table"
+"""The `since` of a CouchDB read that resumes from the sequence its table holds."""
+
 RETRIES: Final = 2
 """How many times a failed step of a dump runs again."""
 

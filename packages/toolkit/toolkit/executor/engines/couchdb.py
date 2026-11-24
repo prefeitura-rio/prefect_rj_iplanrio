@@ -5,11 +5,12 @@ from collections.abc import AsyncGenerator, Mapping, Sequence
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import ClassVar, Self, override
+from typing import ClassVar, Self, cast, override
 
 from httpx2 import HTTPError
 from polars import DataFrame
-from pyarrow import Table
+from pyarrow import Schema, Table
+from pyarrow.dataset import dataset
 from pyarrow.parquet import ParquetWriter
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
@@ -72,6 +73,27 @@ def build_page_table(
     ]
 
     return Table.from_pylist(rows, schema=shape.columns)
+
+
+def keep_last_changes(path: Path, columns: Schema) -> None:
+    """Keep only the last change of each document in a file of changes.
+
+    A document written while the feed is read comes back later in it with a newer
+    sequence, so the file can hold it twice, and the last row is the newest. A file
+    with no id column, or with no repeated id, is left as it is.
+    """
+    if COUCHDB_ID_COLUMN not in columns.names:
+        return
+
+    table = dataset(path, format="parquet", schema=columns).to_table()
+    ids = cast("list[str | None]", table.column(COUCHDB_ID_COLUMN).to_pylist())
+    last = {key: index for index, key in enumerate(ids)}
+
+    if len(last) == len(ids):
+        return
+
+    with ParquetWriter(path, columns) as writer:
+        writer.write_table(table.take(sorted(last.values())))
 
 
 @dataclass
@@ -262,6 +284,9 @@ class CouchDBEngine(Engine):
         with ParquetWriter(target, self.shape.columns) as writer:
             async for items, update_seq in self.read_pages(origin, rows):
                 await to_thread(write_page, writer, self.shape, items, update_seq)
+
+        if isinstance(origin, Changes):
+            await to_thread(keep_last_changes, target, self.shape.columns)
 
         return target
 

@@ -435,6 +435,14 @@ def table_exists(uri: str) -> bool:
     return DeltaTable.is_deltatable(uri)
 
 
+def open_dataset(uri: str) -> Dataset:
+    """Return the current version of the Delta table at `uri`, read lazily.
+
+    Raise `TableNotFoundError` if no Delta table lives at `uri`.
+    """
+    return cast("Dataset", DeltaTable(uri).to_pyarrow_dataset())  # pyright: ignore[reportUnknownMemberType]  # deltalake types it loosely
+
+
 def inspect_table(uri: str) -> TableReport:
     """Read the version, the files, the bytes, the last commit and the chunk keys.
 
@@ -444,8 +452,7 @@ def inspect_table(uri: str) -> TableReport:
     sizes = cast(
         "list[int]", arrow_table(table.get_add_actions())["size_bytes"].to_pylist()
     )
-    source = cast("Dataset", table.to_pyarrow_dataset())  # pyright: ignore[reportUnknownMemberType]  # deltalake types it loosely
-    chunks = source.to_table(columns=[BATCH_COLUMN])
+    chunks = open_dataset(uri).to_table(columns=[BATCH_COLUMN])
     keys = cast("list[str]", chunks.column(BATCH_COLUMN).unique().to_pylist())
     stamp = cast("int", table.history(1)[0]["timestamp"])
 

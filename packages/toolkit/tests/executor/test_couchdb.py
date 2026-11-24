@@ -5,18 +5,19 @@ from json import loads
 
 import pytest
 from httpx2 import AsyncClient, HTTPStatusError
+from pyarrow import Table as ArrowTable
 from pyarrow import bool_ as arrow_bool
 from pyarrow import json_ as arrow_json
 from pyarrow import schema as arrow_schema
 from pyarrow import string as arrow_string
-from pyarrow.parquet import read_table
+from pyarrow.parquet import read_table, write_table
 from pydantic import BaseModel, JsonValue
 
 import toolkit.executor.sources.backends.couchdb as couchdb_module
 from toolkit.chunks import NULL_CHUNK, Chunk, Rows
 from toolkit.executor.couchdb import CouchDBClient
 from toolkit.executor.engines.base import Engine
-from toolkit.executor.engines.couchdb import CouchDBEngine
+from toolkit.executor.engines.couchdb import CouchDBEngine, keep_last_changes
 from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.requests import Table
 from toolkit.executor.sources.backends.couchdb import CouchDBSource
@@ -617,6 +618,50 @@ async def test_a_changes_read_after_a_sequence_gives_only_what_changed(
         "_rev": "2-00000000003",
         "_deleted": True,
     }
+
+
+def test_a_file_of_changes_keeps_the_last_change_of_each_document(tmp_path) -> None:
+    """Keep the newest row of a document that the feed gave twice, in feed order."""
+    path = tmp_path / "changes.parquet"
+    rows = [
+        {
+            "id": "a",
+            "seq": "1-x",
+            "last_seq": "2-x",
+            "deleted": False,
+            "doc": '{"v":1}',
+        },
+        {
+            "id": "b",
+            "seq": "2-x",
+            "last_seq": "2-x",
+            "deleted": False,
+            "doc": '{"v":1}',
+        },
+        {"id": "a", "seq": "3-x", "last_seq": "3-x", "deleted": True, "doc": '{"v":2}'},
+    ]
+    write_table(ArrowTable.from_pylist(rows, schema=CHANGES.columns), path)
+
+    keep_last_changes(path, CHANGES.columns)
+    table = read_table(path)
+
+    assert table.schema == CHANGES.columns
+    assert [(row["id"], row["seq"], row["deleted"]) for row in table.to_pylist()] == [
+        ("b", "2-x", False),
+        ("a", "3-x", True),
+    ]
+
+
+def test_a_file_of_changes_with_no_repeated_document_is_left_as_it_is(tmp_path) -> None:
+    """Leave a file whose documents are all different untouched."""
+    path = tmp_path / "changes.parquet"
+    rows = [{"id": "a", "seq": "1-x", "last_seq": "1-x", "deleted": False, "doc": "{}"}]
+    write_table(ArrowTable.from_pylist(rows, schema=CHANGES.columns), path)
+    before = path.stat().st_mtime_ns
+
+    keep_last_changes(path, CHANGES.columns)
+
+    assert path.stat().st_mtime_ns == before
 
 
 async def test_a_changes_read_with_nothing_new_keeps_the_columns(
