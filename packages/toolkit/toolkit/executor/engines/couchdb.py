@@ -10,7 +10,7 @@ from typing import ClassVar, Self, cast, override
 from httpx2 import HTTPError
 from polars import DataFrame
 from pyarrow import Schema, Table
-from pyarrow.parquet import ParquetWriter, read_table
+from pyarrow.parquet import ParquetFile, ParquetWriter
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from ...chunks import Chunk, Probe, Rows, hash_summary
@@ -84,7 +84,9 @@ def keep_last_changes(path: Path, columns: Schema) -> None:
     if COUCHDB_ID_COLUMN not in columns.names:
         return
 
-    table = read_table(path, schema=columns)
+    with ParquetFile(path) as file:
+        table = file.read()
+
     ids = cast("list[str | None]", table.column(COUCHDB_ID_COLUMN).to_pylist())
     last = {key: index for index, key in enumerate(ids)}
 
