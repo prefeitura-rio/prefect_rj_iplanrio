@@ -9,6 +9,7 @@ from prefect import get_client
 from prefect.client.schemas.filters import FlowRunFilter, FlowRunFilterId
 from prefect.client.schemas.objects import FlowRun, StateType
 from prefect.deployments import arun_deployment
+from prefect.runtime import flow_run
 from prefect.states import Cancelled, Cancelling
 from toolkit.telemetry import logger
 
@@ -69,9 +70,9 @@ async def cancel_shards(ids: Sequence[UUID]) -> None:
             logger.info("Shard cancelled: run=%s", run.name)
 
 
-def build_shard_key(parent: UUID, index: int, attempt: int) -> str:
-    """Return the idempotency key of one attempt of a shard of a parent run."""
-    return f"{parent}-shard-{index}-{attempt}"
+def build_shard_key(parent: UUID, index: int) -> str:
+    """Return the idempotency key of shard `index` of a parent run, with no attempt."""
+    return f"{parent}-shard-{index}"
 
 
 def ended_without_completing(run: FlowRun) -> bool:
@@ -79,36 +80,29 @@ def ended_without_completing(run: FlowRun) -> bool:
     return run.state is not None and run.state.is_final() and run.state.type != StateType.COMPLETED
 
 
-async def start_shard(
-    deployment: UUID,
-    parameters: Mapping[str, object],
-    index: int,
-    count: int,
-    name: str,
-    parent: UUID | None,
-) -> FlowRun:
-    """Start the child run of shard `index`, or return the one an earlier attempt started.
+async def start_shard(deployment: UUID, parameters: Mapping[str, object], name: str, key: str | None) -> FlowRun:
+    """Start a child run, or return the one an earlier attempt of the parent started.
 
-    With a `parent` each child run has an idempotency key, so a parent that runs again
-    gets back the child runs it started before: a completed or unfinished one is
-    reused, and one that failed or was cancelled is followed by a new attempt. Without
-    a `parent` every call starts a new child run.
+    With a `key` each attempt gets the idempotency key `{key}-{attempt}`, so a parent
+    that runs again gets back the child run it started before: a completed or
+    unfinished one is reused, and one that failed or was cancelled is followed by a
+    new attempt. Without a `key` every call starts a new child run.
     """
     attempt = 0
 
     while True:
         run = await arun_deployment(
             name=deployment,
-            parameters=build_shard_parameters(parameters, index, count),
+            parameters=dict(parameters),
             timeout=0,
             work_queue_name=SHARD_QUEUE,
             tags=[SHARD_TAG],
-            flow_run_name=f"{name}-shard-{index}",
+            flow_run_name=name,
             as_subflow=True,
-            idempotency_key=None if parent is None else build_shard_key(parent, index, attempt),
+            idempotency_key=None if key is None else f"{key}-{attempt}",
         )
 
-        if parent is None or not ended_without_completing(run):
+        if key is None or not ended_without_completing(run):
             return run
 
         attempt += 1
@@ -135,25 +129,30 @@ async def run_shards(
     count: int,
     name: str,
     poll: float = SHARD_POLL_SECONDS,
-    *,
-    parent: UUID | None = None,
 ) -> None:
     """Run a dump in `count` child runs of the deployment, and wait for all of them.
 
     Child `index` of `count` gets the parameters of the parent with `options.shard` set
     (see `build_shard_parameters`). They go to the work queue `SHARD_QUEUE`, whose
-    concurrency limit caps how many run at once. `parent` is the id of the parent run:
-    with it, a parent that runs again picks up the child runs of its earlier attempt
-    (see `start_shard`). If the parent stops, the child runs that did not end are
-    cancelled, because Prefect does not do it, unless the parent was rescheduled: then
-    they keep running for its next attempt. Raise `RuntimeError` that names the child
-    runs that did not complete, after all of them have ended.
+    concurrency limit caps how many run at once. In a flow run, a parent that runs
+    again picks up the child runs of its earlier attempt (see `start_shard`). If the
+    parent stops, the child runs that did not end are cancelled, because Prefect does
+    not do it, unless the parent was rescheduled: then they keep running for its next
+    attempt. Raise `RuntimeError` that names the child runs that did not complete,
+    after all of them have ended.
     """
+    current = cast("str | None", flow_run.id)
+    parent = None if current is None else UUID(current)
     ids: list[UUID] = []
 
     try:
         for index in range(count):
-            run = await start_shard(deployment, parameters, index, count, name, parent)
+            run = await start_shard(
+                deployment,
+                build_shard_parameters(parameters, index, count),
+                f"{name}-shard-{index}",
+                None if parent is None else build_shard_key(parent, index),
+            )
             ids.append(run.id)
 
         logger.info("Shards started: runs=%d queue=%s", count, SHARD_QUEUE)

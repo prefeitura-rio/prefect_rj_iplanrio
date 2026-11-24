@@ -201,9 +201,7 @@ async def dump_database(
         count = plan_shards(dump_mode, chosen)
         await prepare_delta_table(table, bucket=bucket, dump_mode=dump_mode)
         parameters = cast("dict[str, object]", flow_run.parameters)
-        await run_shards(
-            UUID(deployment_id), parameters, count, table["table_id"], parent=UUID(cast("str", flow_run.id))
-        )
+        await run_shards(UUID(deployment_id), parameters, count, table["table_id"])
         await finish_delta_table(table, bucket=bucket, dump_mode=dump_mode, options=options)
     else:
         await dump_db_to_gcs(database, table, read, bucket=bucket, dump_mode=dump_mode, options=options)

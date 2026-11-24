@@ -159,10 +159,11 @@ async def test_a_parent_that_stops_cancels_the_child_runs_that_have_not_ended(de
     assert states == [StateType.COMPLETED, StateType.CANCELLING, StateType.CANCELLED]
 
 
-async def test_a_rescheduled_parent_keeps_its_child_runs(deployment) -> None:
+async def test_a_rescheduled_parent_keeps_its_child_runs(deployment, monkeypatch) -> None:
     """Leave the child runs as they are when the parent went back to scheduled."""
     parent_id = await create_parent(Running())
-    parent = create_task(run_shards(deployment, PARAMETERS, 3, "tbl", POLL, parent=parent_id))
+    monkeypatch.setenv("PREFECT__FLOW_RUN_ID", str(parent_id))
+    parent = create_task(run_shards(deployment, PARAMETERS, 3, "tbl", POLL))
     children = await read_children(deployment, 3)
 
     async with get_client() as client:
@@ -179,10 +180,13 @@ async def test_a_rescheduled_parent_keeps_its_child_runs(deployment) -> None:
     assert states == [StateType.SCHEDULED, StateType.RUNNING, StateType.SCHEDULED]
 
 
-async def test_a_parent_that_runs_again_reuses_its_child_runs_and_retries_the_failed_one(deployment) -> None:
-    """Keep the completed and unfinished child runs, and start a new run for a failed one."""
+async def test_a_parent_that_runs_again_reuses_its_child_runs_and_retries_the_failed_one(
+    deployment, monkeypatch
+) -> None:
+    """Keep the completed and unfinished child runs, and restart a failed one."""
     parent_id = await create_parent(Running())
-    first = create_task(run_shards(deployment, PARAMETERS, 3, "tbl", POLL, parent=parent_id))
+    monkeypatch.setenv("PREFECT__FLOW_RUN_ID", str(parent_id))
+    first = create_task(run_shards(deployment, PARAMETERS, 3, "tbl", POLL))
     children = await read_children(deployment, 3)
 
     async with get_client() as client:
@@ -197,7 +201,7 @@ async def test_a_parent_that_runs_again_reuses_its_child_runs_and_retries_the_fa
             await first
 
         await client.set_flow_run_state(parent_id, Running(), force=True)
-        second = create_task(run_shards(deployment, PARAMETERS, 3, "tbl", POLL, parent=parent_id))
+        second = create_task(run_shards(deployment, PARAMETERS, 3, "tbl", POLL))
         runs = await read_children(deployment, 4)
         new = [run for run in runs if run.id not in {child.id for child in children}]
 
