@@ -6,8 +6,8 @@ import pytest
 from prefect import get_client
 from prefect.client.schemas.actions import WorkPoolCreate
 from prefect.client.schemas.filters import DeploymentFilter, DeploymentFilterId
-from prefect.client.schemas.objects import FlowRun, StateType
-from prefect.states import Completed, Failed, Running
+from prefect.client.schemas.objects import FlowRun, State, StateType
+from prefect.states import AwaitingRetry, Completed, Failed, Running
 from prefect.testing.utilities import prefect_test_harness
 
 from utils.constants import SHARD_QUEUE, SHARD_TAG
@@ -38,6 +38,23 @@ async def deployment() -> AsyncIterator[UUID]:
         await client.create_work_queue(name=SHARD_QUEUE, work_pool_name=name)
 
         yield await client.create_deployment(flow_id=flow_id, name=name, work_pool_name=name)
+
+
+async def create_parent(state: State) -> UUID:
+    """Create a run of another deployment to stand for the parent, in `state`.
+
+    Give its id.
+    """
+    name = uuid4().hex
+
+    async with get_client() as client:
+        flow_id = await client.create_flow_from_name(name)
+        await client.create_work_pool(WorkPoolCreate(name=name, type="process"))
+        other = await client.create_deployment(flow_id=flow_id, name=name, work_pool_name=name)
+        run = await client.create_flow_run_from_deployment(other)
+        await client.set_flow_run_state(run.id, state, force=True)
+
+    return run.id
 
 
 async def read_children(deployment: UUID, count: int) -> list[FlowRun]:
@@ -140,3 +157,61 @@ async def test_a_parent_that_stops_cancels_the_child_runs_that_have_not_ended(de
         states = [(await client.read_flow_run(run.id)).state_type for run in children]
 
     assert states == [StateType.COMPLETED, StateType.CANCELLING, StateType.CANCELLED]
+
+
+async def test_a_rescheduled_parent_keeps_its_child_runs(deployment, monkeypatch) -> None:
+    """Leave the child runs as they are when the parent went back to scheduled."""
+    parent_id = await create_parent(Running())
+    monkeypatch.setenv("PREFECT__FLOW_RUN_ID", str(parent_id))
+    parent = create_task(run_shards(deployment, PARAMETERS, 3, "tbl", POLL))
+    children = await read_children(deployment, 3)
+
+    async with get_client() as client:
+        await client.set_flow_run_state(children[1].id, Running(), force=True)
+        await client.set_flow_run_state(parent_id, AwaitingRetry(), force=True)
+
+        parent.cancel()
+
+        with pytest.raises(CancelledError):
+            await parent
+
+        states = [(await client.read_flow_run(run.id)).state_type for run in children]
+
+    assert states == [StateType.SCHEDULED, StateType.RUNNING, StateType.SCHEDULED]
+
+
+async def test_a_parent_that_runs_again_reuses_its_child_runs_and_retries_the_failed_one(
+    deployment, monkeypatch
+) -> None:
+    """Keep the completed and unfinished child runs, and restart a failed one."""
+    parent_id = await create_parent(Running())
+    monkeypatch.setenv("PREFECT__FLOW_RUN_ID", str(parent_id))
+    first = create_task(run_shards(deployment, PARAMETERS, 3, "tbl", POLL))
+    children = await read_children(deployment, 3)
+
+    async with get_client() as client:
+        await client.set_flow_run_state(children[0].id, Completed(), force=True)
+        await client.set_flow_run_state(children[1].id, Failed(), force=True)
+        await client.set_flow_run_state(children[2].id, Running(), force=True)
+        await client.set_flow_run_state(parent_id, AwaitingRetry(), force=True)
+
+        first.cancel()
+
+        with pytest.raises(CancelledError):
+            await first
+
+        await client.set_flow_run_state(parent_id, Running(), force=True)
+        second = create_task(run_shards(deployment, PARAMETERS, 3, "tbl", POLL))
+        runs = await read_children(deployment, 4)
+        new = [run for run in runs if run.id not in {child.id for child in children}]
+
+        assert [run.name for run in new] == ["tbl-shard-1"]
+        assert new[0].parameters["options"]["shard"] == {"index": 1, "count": 3}
+
+        await sleep(4 * POLL)
+        assert not second.done()
+
+        for run in (new[0], children[2]):
+            await client.set_flow_run_state(run.id, Completed(), force=True)
+
+    await second
