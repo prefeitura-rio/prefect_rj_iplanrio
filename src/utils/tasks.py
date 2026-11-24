@@ -33,7 +33,8 @@ from toolkit.gcs import create_store
 from toolkit.settings import DatabaseSettings, DiscordSettings
 from toolkit.telemetry import logger
 
-from .constants import DBT_FAILED, RETRIES, RETRY_DELAY_SECONDS, USER_AGENT
+from .constants import DBT_FAILED, RETRIES, RETRY_DELAY_SECONDS, SINCE_FROM_TABLE, USER_AGENT
+from .couchdb import read_resume_sequence
 from .delta import (
     Destination,
     bigquery_source,
@@ -155,6 +156,9 @@ async def dump_db_to_gcs(
     - `shard` limits the run to its slice of the chunks, and `dump_database` sets it for
       each child run of `shards`. A shard does not publish, sweep or maintain the table.
 
+    A CouchDB `read` with `since: table` resumes the changes from the sequence that the
+    table holds (see `read_resume_sequence`), for a `merge` by `id` between two loads.
+
     `append` skips what did not change. `overwrite` writes every chunk again and
     deletes the chunks outside the range. `merge` matches the rows to the table by the
     key in `options['merge']` and writes only the new and changed ones: it reads the
@@ -180,11 +184,18 @@ async def dump_db_to_gcs(
         credentials.DB_PASSWORD.get_secret_value(),
     )
 
+    destination = Destination(bucket, table["dataset_id"], table["table_id"])
+    resumed = read.copy()
+
+    if read.get("since") == SINCE_FROM_TABLE:
+        resumed["since"] = await to_thread(read_resume_sequence, destination.uri)
+        logger.info("Changes resumed: since=%s", resumed["since"])
+
     await load_to_delta(
         get_source(database["type"])(
-            conn=conn, origin=read_request(database["type"], read, "chunks" in chosen), **source_options
+            conn=conn, origin=read_request(database["type"], resumed, "chunks" in chosen), **source_options
         ),
-        Destination(bucket, table["dataset_id"], table["table_id"]),
+        destination,
         dump_mode,
         chosen,
     )

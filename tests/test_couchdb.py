@@ -1,15 +1,19 @@
 from dataclasses import replace
 from json import loads
 from pathlib import Path
+from typing import Any
 
 import pytest
-from deltalake import DeltaTable
-from fixtures import PEOPLE, UPDATE_SEQ, all_docs_page, cpf_document, revision
+from deltalake import DeltaTable, write_deltalake
+from fixtures import PEOPLE, UPDATE_SEQ, all_docs_page, changes_page, cpf_document, revision
+from pyarrow import Table as ArrowTable
+from pyarrow import schema as arrow_schema
+from pyarrow import string
 from pyarrow.parquet import ParquetWriter, read_table
 from pydantic import JsonValue
 from toolkit.executor.couchdb import convert_change
 from toolkit.executor.engines.couchdb import write_page
-from toolkit.executor.requests import Table
+from toolkit.executor.requests import Changes, Table
 from toolkit.executor.sources.backends.couchdb import CouchDBSource
 from toolkit.executor.sources.models import CouchDBChanges
 from toolkit.executor.sources.protocols import DBConn
@@ -17,7 +21,7 @@ from toolkit.types import Chunks
 from yaml import safe_load
 
 from utils import tasks
-from utils.couchdb import BCADASTRO
+from utils.couchdb import BCADASTRO, read_resume_sequence
 from utils.delta import dump_to_delta
 from utils.origins import read_request
 from utils.types import Database, Read
@@ -255,12 +259,13 @@ async def test_a_database_that_reads_one_chunk_at_a_time_refuses_concurrency(mon
         pytest.param("rj_iplanrio__bcadastro_chcaepf", "chcaepf_bcadastros", None, id="activities"),
     ],
 )
-async def test_a_bcadastro_pipeline_dumps_what_its_prod_schedule_says(
+async def test_a_bcadastro_pipeline_merges_the_changes_daily_and_reloads_monthly(
     monkeypatch, pipeline, database, key_width
 ) -> None:
-    """Build the dump from the parameters of the prod schedule.
+    """Build both dumps from the parameters of the prod schedules.
 
-    They are the database, shape, chunks and more.
+    The daily one merges the changes by id from the sequence of the table, and the
+    monthly one overwrites every chunk from `_all_docs`.
     """
     seen = {}
 
@@ -270,28 +275,136 @@ async def test_a_bcadastro_pipeline_dumps_what_its_prod_schedule_says(
 
     config = safe_load((Path(__file__).parent.parent / "pipelines" / pipeline / "prefect.yaml").read_text())
     [prod] = [deployment for deployment in config["deployments"] if deployment["name"].endswith("--prod")]
-    [schedule] = prod["schedules"]
-    parameters = schedule["parameters"]
+    schedules = {schedule["slug"].rsplit("-", 1)[1]: schedule["parameters"] for schedule in prod["schedules"]}
     monkeypatch.setattr(tasks, "load_to_delta", load)
+    monkeypatch.setattr(tasks, "read_resume_sequence", lambda uri: f"42-{uri}")
     monkeypatch.setenv("DB_USERNAME", "user")
     monkeypatch.setenv("DB_PASSWORD", "password")
 
-    await tasks.dump_db_to_gcs.fn(
-        parameters["database"], parameters["table"], parameters["read"], bucket="b", options=parameters["options"]
-    )
+    async def dump(parameters: dict[str, Any]) -> None:
+        """Run the dump of one schedule."""
+        await tasks.dump_db_to_gcs.fn(
+            parameters["database"],
+            parameters["table"],
+            parameters["read"],
+            bucket="b",
+            dump_mode=parameters["dump_mode"],
+            options=parameters["options"],
+        )
 
+    assert sorted(schedules) == ["daily", "monthly"]
+
+    await dump(schedules["daily"])
     source = seen["source"]
-    assert (source.shape, source.origin, source.conn.hostname, source.conn.port) == (
-        BCADASTRO,
-        Table(database),
-        "10.2.231.241",
-        6984,
-    )
+    assert (source.shape, source.conn.hostname, source.conn.port) == (BCADASTRO, "10.2.231.241", 6984)
+    assert source.origin == Changes(f"42-{seen['destination'].uri}", database)
     assert (seen["destination"].dataset_id, seen["destination"].table_id, seen["mode"]) == (
         "brutos_bcadastro",
         database,
-        "append",
+        "merge",
+    )
+    assert seen["options"] == {"merge": {"key": ["id"]}, "columns": {"add_timestamp": True}}
+
+    await dump(schedules["monthly"])
+    source = seen["source"]
+    assert (source.shape, source.origin, seen["destination"].table_id, seen["mode"]) == (
+        BCADASTRO,
+        Table(database),
+        database,
+        "overwrite",
     )
     assert source.key_width == key_width
     assert seen["options"]["chunks"]["column"] == "id"
     assert seen["options"]["columns"] == {"add_timestamp": True}
+
+
+def write_sequences(uri: str, rows: list[tuple[str | None, str]]) -> None:
+    """Write a bcadastro table of ids with the `seq` and `last_seq` of each row."""
+    write_deltalake(
+        uri,
+        ArrowTable.from_pylist(
+            [{"id": str(index), "seq": seq, "last_seq": last} for index, (seq, last) in enumerate(rows)],
+            schema=arrow_schema([("id", string()), ("seq", string()), ("last_seq", string())]),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("rows", "expected"),
+    [
+        pytest.param(
+            [(None, "12-b"), (None, "9-a"), (None, "10-c")],
+            "9-a",
+            id="after_a_load_the_earliest_page_by_its_number",
+        ),
+        pytest.param(
+            [(None, "9-a"), ("15-x", "20-d"), ("21-y", "30-e"), ("8-z", "11-f")],
+            "30-e",
+            id="after_merges_the_end_of_the_latest_changes",
+        ),
+        pytest.param(
+            [(None, "40-a"), (None, "45-b"), ("21-y", "30-e")],
+            "40-a",
+            id="after_a_reload_the_load_when_it_is_later_than_the_changes",
+        ),
+    ],
+)
+def test_the_changes_resume_from_the_sequence_that_the_table_holds(tmp_path, rows, expected) -> None:
+    """Resume from the later of the earliest loaded page and the end of the changes."""
+    uri = str(tmp_path / "table")
+    write_sequences(uri, rows)
+
+    assert read_resume_sequence(uri) == expected
+
+
+def test_changes_cannot_resume_without_a_loaded_table(tmp_path) -> None:
+    """Refuse to guess a sequence for a table that was never loaded."""
+    with pytest.raises(ValueError, match=r"load .* from _all_docs first"):
+        read_resume_sequence(str(tmp_path / "missing"))
+
+
+async def test_the_changes_merge_into_a_loaded_table_by_id(fake_api, tmp_path) -> None:
+    """Load the people in chunks, then merge the changes after the load by id.
+
+    A person changed twice keeps the last change, a new person is added, and the
+    others stay as loaded. The next read resumes from the end of the changes.
+    """
+    uri = str(tmp_path / "t")
+    people = [cpf_document(number) for number in PEOPLE]
+    renamed = {**people[0], "_rev": f"2-{revision(people[0]['_id'])[2:]}", "nomeContribuinte": "NOVO NOME"}
+    again = {**renamed, "_rev": f"3-{revision(people[0]['_id'])[2:]}", "nomeContribuinte": "OUTRO NOME"}
+    newcomer: dict[str, JsonValue] = {"_id": "00000009999", "_rev": revision("00000009999")}
+    conn = DBConn("127.0.0.1", fake_api.server.server_port, "ignored", "user", "password")
+    source = CouchDBSource(conn, shape=BCADASTRO, secure=False, key_width=11, concurrency=1)
+    chunks: Chunks = {"column": "id", "width": 5_000, "begin": 0, "end": 9_999}
+    columns = {"add_timestamp": True}
+    fake_api.replies.append((200, {"db_name": "ignored"}))
+    fake_api.replies.extend(
+        (200, loads(all_docs_page(documents, 3))) for documents in [[people[0], people[1]], [people[2]], [], []]
+    )
+
+    await dump_to_delta(
+        replace(source, origin=read_request("couchdb", {"table": "chcpf_bcadastros"}, True)),
+        uri,
+        "overwrite",
+        {"chunks": chunks, "columns": columns},
+    )
+    since = read_resume_sequence(uri)
+    changes = [(616823200, renamed), (616823201, newcomer), (616823202, again)]
+    fake_api.replies.append((200, {"db_name": "ignored"}))
+    fake_api.replies.append((200, loads(changes_page(changes, pending=0))))
+
+    await dump_to_delta(
+        replace(source, origin=read_request("couchdb", {"table": "chcpf_bcadastros", "since": since}, False)),
+        uri,
+        "merge",
+        {"merge": {"key": ["id"]}, "columns": columns},
+    )
+    rows = {row["id"]: row for row in DeltaTable(uri).to_pyarrow_table().to_pylist()}
+
+    assert since == UPDATE_SEQ
+    assert sorted(rows) == sorted([*(person["_id"] for person in people), "00000009999"])
+    assert loads(rows[people[0]["_id"]]["doc"])["nomeContribuinte"] == "OUTRO NOME"
+    assert rows[people[0]["_id"]]["seq"] == "616823202-g1AAAAKTeJzLYWBg"
+    assert (rows[people[1]["_id"]]["seq"], loads(rows[people[1]["_id"]]["doc"])) == (None, people[1])
+    assert read_resume_sequence(uri) == "616823202-g1AAAAKTeJzLYWBg"
