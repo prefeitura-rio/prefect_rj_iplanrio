@@ -51,7 +51,7 @@ class PicLembreteConstants(Enum):
             cpf,
             CONCAT(tel_alt.ddi, tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
-          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi,
+          FROM `rj-rmi.rmi_dados_mestres.pessoa_fisica` AS rmi,
           UNNEST(rmi.telefone.alternativo) AS tel_alt
           WHERE tel_alt.valor IS NOT NULL
         ),
@@ -83,7 +83,7 @@ class PicLembreteConstants(Enum):
           FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
           LEFT JOIN agendamentos_unicos AS a
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
-          LEFT JOIN `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+          LEFT JOIN `rj-rmi.rmi_dados_mestres.pessoa_fisica` AS rmi
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
           LEFT JOIN telefones_alternativos_rmi AS tel_alt
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
@@ -100,7 +100,7 @@ class PicLembreteConstants(Enum):
         filtra_celulares_sem_whats as (
           SELECT distinct f.*
           FROM filtra_quem_nao_recebeu_hsm AS f
-          LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+          LEFT JOIN `rj-rmi.intermediario_rmi_telefones.int_telefone` AS tel
             ON f.celular_disparo = tel.telefone_numero_completo
           LEFT JOIN UNNEST(tel.consentimento) AS c
           WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
@@ -186,7 +186,7 @@ class PicLembreteConstants(Enum):
             cpf,
             CONCAT(tel_alt.ddi, tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
-          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi,
+          FROM `rj-rmi.rmi_dados_mestres.pessoa_fisica` AS rmi,
           UNNEST(rmi.telefone.alternativo) AS tel_alt
           WHERE tel_alt.valor IS NOT NULL
         ),
@@ -218,7 +218,7 @@ class PicLembreteConstants(Enum):
           FROM `rj-crm-registry-dev.teste.cartao_primeira_infancia_carioca_status_teste` AS t1
           LEFT JOIN agendamentos_unicos AS a
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
-          LEFT JOIN `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+          LEFT JOIN `rj-rmi.rmi_dados_mestres.pessoa_fisica` AS rmi
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
           LEFT JOIN telefones_alternativos_rmi AS tel_alt
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1

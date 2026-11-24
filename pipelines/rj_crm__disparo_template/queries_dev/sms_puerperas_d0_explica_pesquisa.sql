@@ -29,7 +29,7 @@ WITH segmentacao_original AS (
             SELECT
                 cpf,
                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_PHONE`(CONCAT(ifnull(telefone.principal.ddi, '55'), telefone.principal.ddd, telefone.principal.valor)) AS celular_disparo_rmi,
-            FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+            FROM `rj-rmi.rmi_dados_mestres.pessoa_fisica` AS rmi
             WHERE menor_idade is False
             and obito.indicador is False
             and telefone.principal.estrategia_envio in ('ENVIAR', 'TESTAR')

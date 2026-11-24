@@ -49,7 +49,7 @@ filtra_celulares_sem_whats AS (
     SELECT
         DISTINCT s.*
     FROM filtra_disparados AS s
-    LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+    LEFT JOIN `rj-rmi.intermediario_rmi_telefones.int_telefone` AS tel
         ON s.celular_disparo = tel.telefone_numero_completo
     LEFT JOIN UNNEST(tel.consentimento) AS c
     WHERE

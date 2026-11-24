@@ -122,7 +122,7 @@ deployments: []
 #               SELECT
 #                 cpf,
 #                 telefone
-#               FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+#               FROM `rj-rmi.rmi_dados_mestres.pessoa_fisica` AS rmi
 #               WHERE menor_idade is False
 #               and obito.indicador is False),
 #             telefone_principal_rmi AS (
@@ -188,7 +188,7 @@ deployments: []
 #             filtra_celulares_sem_whats as (
 #               SELECT distinct f.*
 #               FROM filtra_quem_nao_recebeu_hsm AS f
-#               LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+#               LEFT JOIN `rj-rmi.intermediario_rmi_telefones.int_telefone` AS tel
 #                 ON f.celular_disparo = tel.telefone_numero_completo
 #               LEFT JOIN UNNEST(tel.consentimento) AS c
 #               WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
@@ -286,7 +286,7 @@ deployments: []
 #               SELECT
 #                 cpf,
 #                 telefone
-#               FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+#               FROM `rj-rmi.rmi_dados_mestres.pessoa_fisica` AS rmi
 #               WHERE menor_idade is False
 #               and obito.indicador is False),
 #             telefone_principal_rmi AS (
@@ -352,7 +352,7 @@ deployments: []
 #               filtra_celulares_sem_whats as (
 #                 SELECT distinct f.*
 #                 FROM filtra_quem_nao_recebeu_hsm AS f
-#                 LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+#                 LEFT JOIN `rj-rmi.intermediario_rmi_telefones.int_telefone` AS tel
 #                   ON f.celular_disparo = tel.telefone_numero_completo
 #                 LEFT JOIN UNNEST(tel.consentimento) AS c
 #                 WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
