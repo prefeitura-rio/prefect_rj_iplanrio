@@ -35,7 +35,7 @@ deployments:
     parameters:
       campaign_name: disparo-template-sf
       dataset_id: brutos_salesforce
-      table_id: disparos_efetuados_sf
+      table_id: disparos_efetuados
       dump_mode: append
       filter_dispatched_phones_or_cpfs: cpf
       filter_duplicated_phones: false
@@ -464,6 +464,21 @@ deployments:
           batch_size: 10000
           query_file: queries/sme/sme_pesquisa_satisfacao_creche_parceira.sql
 
+      # SMTR - Rio Rotativo - Novas vagas (one-shot)
+      - cron: "0 12 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-smtr-rio-rotativo-novas-vagas
+        flow_run_name: smtr-rio-rotativo-novas-vagas
+        parameters:
+          flow_environment: staging
+          campaign_name: smtr_rio_rotativo_novas_vagas
+          data_extension_filename: whatsapp_smtr_rio_rotativo_novas_vagas
+          de_columns: ["nome_sobrenome", "relacao_local", "numero_vagas", "logradouros"]
+          filter_duplicated_cpfs: true
+          batch_size: 10000
+          query_file: queries/smtr/smtr_rio_rotativo_novas_vagas.sql
+
   - name: rj-crm--disparo-template-sf--prod
     version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template_sf
@@ -478,7 +493,7 @@ deployments:
     parameters:
       campaign_name: disparo-template-sf
       dataset_id: brutos_salesforce
-      table_id: disparos_efetuados_sf
+      table_id: disparos_efetuados
       dump_mode: append
       filter_dispatched_phones_or_cpfs: cpf
       filter_duplicated_cpfs: true
@@ -840,7 +855,7 @@ deployments:
           data_extension_filename: whatsapp_smtr_multas_transito
           de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo", "id_autuacao"]
           filter_duplicated_cpfs: true
-          query_file: queries/smtr_multa_holdout.sql
+          query_file: queries/smtr/smtr_multa_holdout.sql
           query_replacements: {"cota_inicial_placeholder": 300, "incremento_cota_placeholder": 0,
             "cota_maxima_placeholder": 5000, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5,
             "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}
@@ -858,7 +873,7 @@ deployments:
           de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo", "id_autuacao"]
           filter_duplicated_cpfs: true
           filter_failed_phones: true
-          query_file: queries/smtr_multa_holdout_tratamento_2.sql
+          query_file: queries/smtr/smtr_multa_holdout_tratamento_2.sql
           query_replacements: {"cota_inicial_placeholder": 300, "incremento_cota_placeholder": 0,
             "cota_maxima_placeholder": 5000, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5,
             "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}
@@ -876,7 +891,7 @@ deployments:
           de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo", "id_autuacao"]
           filter_duplicated_cpfs: true
           filter_failed_phones: true
-          query_file: queries/smtr_multa_holdout_tratamento_3.sql
+          query_file: queries/smtr/smtr_multa_holdout_tratamento_3.sql
           query_replacements: {"cota_inicial_placeholder": 300, "incremento_cota_placeholder": 0,
             "cota_maxima_placeholder": 5000, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5,
             "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}
@@ -894,7 +909,7 @@ deployments:
           de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo", "id_autuacao"]
           filter_duplicated_cpfs: true
           filter_failed_phones: true
-          query_file: queries/smtr_multa_holdout_tratamento_4.sql
+          query_file: queries/smtr/smtr_multa_holdout_tratamento_4.sql
           query_replacements: {"cota_inicial_placeholder": 300, "incremento_cota_placeholder": 0,
             "cota_maxima_placeholder": 5000, "dias_quarentena_placeholder": 40, "max_infracoes_veiculo_placeholder": 5,
             "tabela_atribuicao_placeholder": "rj-crm-registry.ab_test.smtr_multa_atribuicao"}
