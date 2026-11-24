@@ -33,8 +33,15 @@ def itens_validos(valores: object) -> tuple[str, ...]:
 def extrair_urls(valor: object) -> tuple[str, ...]:
     """Normaliza o conteúdo de ``redacted_urls`` para uma tupla de URLs.
 
-    A coluna vem do tipo ``JSON`` do BigQuery e pode chegar como lista, como string JSON
-    ou como escalar. Todos os formatos são aceitos.
+    A query só entrega linhas em que ``redacted_urls`` é um array JSON com pelo menos um
+    item, e o cliente do BigQuery repassa esse array ao DataFrame serializado como texto
+    (``'["https://..."]'``). O caminho normal, portanto, é a string JSON decodificada por
+    ``json.loads``. Lista, tupla, escalar e vazio são tratados por defesa, para quando a
+    função for chamada fora da query ou o cliente passar a desserializar o JSON.
+
+    Se a ingestão passar a gravar o array como texto dentro do JSON, o ``JSON_TYPE`` deixa
+    de ser ``array``: o SQL descarta a linha antes de chegar aqui, e a data da última
+    ocorrência para de avançar (o caso "mudar de formato" do README).
 
     :param valor: Valor bruto da coluna ``redacted_urls``.
     :returns: URLs encontradas, possivelmente vazia.
@@ -63,8 +70,10 @@ def extrair_urls(valor: object) -> tuple[str, ...]:
 def normalizar(dados: pd.DataFrame) -> list[Ocorrencia]:
     """Converte o resultado da query em ocorrências tipadas.
 
-    Linhas sem nenhuma URL utilizável são descartadas e contabilizadas no log: a query
-    já filtra ``redacted_urls IS NOT NULL``, então elas indicam formato inesperado.
+    Linhas sem nenhuma URL utilizável são descartadas e contabilizadas no log. A query já
+    exige ``redacted_urls`` como array JSON com pelo menos um item (JSON ``null``, ``[]``
+    e ``""`` ficam no SQL), então o que sobra para descartar aqui é formato inesperado —
+    por exemplo, um array só com itens vazios.
 
     :param dados: Resultado da query, com ``id_passo``, ``inicio_datahora`` e
         ``redacted_urls``.
