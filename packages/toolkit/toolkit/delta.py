@@ -421,13 +421,16 @@ def compact(uri: str) -> None:
 
 
 def maintain(uri: str) -> None:
-    """Write a checkpoint and remove the files that no version reads any more.
+    """Write a checkpoint and remove the files that the current version does not read.
 
-    BigQuery replays the log of the table, so a checkpoint keeps its queries fast.
+    BigQuery replays the log of the table, so a checkpoint keeps its queries fast. The
+    vacuum is full: it also removes the files that no commit ever added, which a write
+    leaves when its commit fails. A file younger than the retention is kept, since a
+    write may still be about to commit it.
     """
     table = DeltaTable(uri)
     table.create_checkpoint()
-    table.vacuum(retention_hours=VACUUM_RETENTION_HOURS, dry_run=False)
+    table.vacuum(retention_hours=VACUUM_RETENTION_HOURS, dry_run=False, full=True)
 
 
 def table_exists(uri: str) -> bool:
