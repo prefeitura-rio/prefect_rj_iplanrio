@@ -1,7 +1,6 @@
 from dataclasses import replace
 from json import loads
 from pathlib import Path
-from typing import Any
 
 import pytest
 from deltalake import DeltaTable, write_deltalake
@@ -24,7 +23,7 @@ from utils import tasks
 from utils.couchdb import BCADASTRO, read_resume_sequence
 from utils.delta import dump_to_delta
 from utils.origins import read_request
-from utils.types import Database, Read
+from utils.types import Database, DumpOptions, Read
 
 CPF_IDS = ["00000000272", "00000000353", "00000008001"]
 
@@ -281,7 +280,7 @@ async def test_a_bcadastro_pipeline_merges_the_changes_daily_and_reloads_monthly
     monkeypatch.setenv("DB_USERNAME", "user")
     monkeypatch.setenv("DB_PASSWORD", "password")
 
-    async def dump(parameters: dict[str, Any]) -> None:
+    async def dump(parameters) -> None:
         """Run the dump of one schedule."""
         await tasks.dump_db_to_gcs.fn(
             parameters["database"],
@@ -371,13 +370,15 @@ async def test_the_changes_merge_into_a_loaded_table_by_id(fake_api, tmp_path) -
     """
     uri = str(tmp_path / "t")
     people = [cpf_document(number) for number in PEOPLE]
-    renamed = {**people[0], "_rev": f"2-{revision(people[0]['_id'])[2:]}", "nomeContribuinte": "NOVO NOME"}
-    again = {**renamed, "_rev": f"3-{revision(people[0]['_id'])[2:]}", "nomeContribuinte": "OUTRO NOME"}
+    first, second, _ = CPF_IDS
+    renamed = {**people[0], "_rev": f"2-{revision(first)[2:]}", "nomeContribuinte": "NOVO NOME"}
+    again = {**renamed, "_rev": f"3-{revision(first)[2:]}", "nomeContribuinte": "OUTRO NOME"}
     newcomer: dict[str, JsonValue] = {"_id": "00000009999", "_rev": revision("00000009999")}
     conn = DBConn("127.0.0.1", fake_api.server.server_port, "ignored", "user", "password")
     source = CouchDBSource(conn, shape=BCADASTRO, secure=False, key_width=11, concurrency=1)
     chunks: Chunks = {"column": "id", "width": 5_000, "begin": 0, "end": 9_999}
-    columns = {"add_timestamp": True}
+    load: DumpOptions = {"chunks": chunks, "columns": {"add_timestamp": True}}
+    merge: DumpOptions = {"merge": {"key": ["id"]}, "columns": {"add_timestamp": True}}
     fake_api.replies.append((200, {"db_name": "ignored"}))
     fake_api.replies.extend(
         (200, loads(all_docs_page(documents, 3))) for documents in [[people[0], people[1]], [people[2]], [], []]
@@ -387,7 +388,7 @@ async def test_the_changes_merge_into_a_loaded_table_by_id(fake_api, tmp_path) -
         replace(source, origin=read_request("couchdb", {"table": "chcpf_bcadastros"}, True)),
         uri,
         "overwrite",
-        {"chunks": chunks, "columns": columns},
+        load,
     )
     since = read_resume_sequence(uri)
     changes = [(616823200, renamed), (616823201, newcomer), (616823202, again)]
@@ -398,13 +399,13 @@ async def test_the_changes_merge_into_a_loaded_table_by_id(fake_api, tmp_path) -
         replace(source, origin=read_request("couchdb", {"table": "chcpf_bcadastros", "since": since}, False)),
         uri,
         "merge",
-        {"merge": {"key": ["id"]}, "columns": columns},
+        merge,
     )
     rows = {row["id"]: row for row in DeltaTable(uri).to_pyarrow_table().to_pylist()}
 
     assert since == UPDATE_SEQ
-    assert sorted(rows) == sorted([*(person["_id"] for person in people), "00000009999"])
-    assert loads(rows[people[0]["_id"]]["doc"])["nomeContribuinte"] == "OUTRO NOME"
-    assert rows[people[0]["_id"]]["seq"] == "616823202-g1AAAAKTeJzLYWBg"
-    assert (rows[people[1]["_id"]]["seq"], loads(rows[people[1]["_id"]]["doc"])) == (None, people[1])
+    assert sorted(rows) == [*CPF_IDS, "00000009999"]
+    assert loads(rows[first]["doc"])["nomeContribuinte"] == "OUTRO NOME"
+    assert rows[first]["seq"] == "616823202-g1AAAAKTeJzLYWBg"
+    assert (rows[second]["seq"], loads(rows[second]["doc"])) == (None, people[1])
     assert read_resume_sequence(uri) == "616823202-g1AAAAKTeJzLYWBg"
