@@ -63,8 +63,10 @@ def extrair_urls(valor: object) -> tuple[str, ...]:
 def normalizar(dados: pd.DataFrame) -> list[Ocorrencia]:
     """Converte o resultado da query em ocorrências tipadas.
 
-    Linhas sem nenhuma URL utilizável são descartadas e contabilizadas no log: a query
-    já filtra ``redacted_urls IS NOT NULL``, então elas indicam formato inesperado.
+    Linhas sem nenhuma URL utilizável são descartadas e contabilizadas no log. A query já
+    exige ``redacted_urls`` como array JSON com pelo menos um item (JSON ``null``, ``[]``
+    e ``""`` ficam no SQL), então o que sobra para descartar aqui é formato inesperado —
+    por exemplo, um array só com itens vazios.
 
     :param dados: Resultado da query, com ``id_passo``, ``inicio_datahora`` e
         ``redacted_urls``.
