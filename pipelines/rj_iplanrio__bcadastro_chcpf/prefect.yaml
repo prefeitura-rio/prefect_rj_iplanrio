@@ -45,6 +45,7 @@ deployments:
         namespace: pipelines-staging
         secretName: pipelines-infisical
         image_pull_policy: Always
+        active_deadline_seconds: 172800
         env:
           INFISICAL_URL: https://infisical.iplan.dados.rio
           INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
@@ -67,6 +68,7 @@ deployments:
         namespace: pipelines-prod
         secretName: pipelines-infisical
         image_pull_policy: Always
+        active_deadline_seconds: 172800
         env:
           INFISICAL_URL: https://infisical.iplan.dados.rio
           INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
@@ -74,7 +76,7 @@ deployments:
           INFISICAL_PATHS: /rj_iplanrio__bcadastro_chcpf,/shared
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
     schedules:
-      - cron: "0 3 * * 0"
+      - cron: "0 3 * * *"
         timezone: America/Sao_Paulo
         slug: chcpf-daily
         parameters:
