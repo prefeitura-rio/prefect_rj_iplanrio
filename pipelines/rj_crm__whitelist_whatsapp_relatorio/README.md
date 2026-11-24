@@ -29,11 +29,19 @@ Só o deployment de produção tem agendamento; o de staging roda sob demanda.
 ## Fonte
 
 `rj-crm-registry.brutos_salesforce.ai_agent_interaction_step` — passos em que o
-atributo `redacted_urls` de `passo_atributos_json` está preenchido. Passo sem o atributo
-está fora de escopo: não é acionável.
+atributo `redacted_urls` de `passo_atributos_json` é um **array JSON com pelo menos um
+item**. Passo sem o atributo, ou com ele vazio, está fora de escopo: não é acionável.
+
+As duas queries usam exatamente essa definição de ocorrência e precisam mudar juntas.
+`IS NOT NULL` não basta: no BigQuery um JSON `null`, `[]` ou `""` não é SQL `NULL`.
 
 O marcador `URL_Redacted` em `saida_valor_texto` não é critério: desde 2026-09-08 essa
 coluna chega `NULL` nos passos com URL redigida, e filtrar por ele zerava o relatório.
+
+A guarda da última ocorrência conhecida (ver *Como ler o canal*) cobre os modos de
+quebra da fonte: a chave sumir do JSON, mudar de formato ou continuar presente mas vazia
+porque a redação foi desligada. Em todos, nenhum passo casa com o critério e a data
+congela.
 
 O endereço da tabela não é literal no SQL: os arquivos em `queries/` trazem
 `$project.$dataset_id.$table_id` e os valores chegam pelos `replacements` do deployment
@@ -90,10 +98,35 @@ corrigir, e rodar duas vezes manda duas mensagens.
 Execução atrasada não perde dados: a janela é ancorada no horário agendado, então uma
 execução que ficou `Late` calcula exatamente o recorte que lhe cabia.
 
+Para disparar no deployment de produção, com `PREFECT_API_URL` apontando para o servidor:
+
+```sh
+uv run --package rj_crm__whitelist_whatsapp_relatorio -- prefect deployment run \
+  'rj-crm--whitelist-whatsapp-relatorio/rj-crm--whitelist-whatsapp-relatorio--prod' \
+  --param start_datetime='2026-09-08 09:00:00' \
+  --param end_datetime='2026-09-09 09:00:00'
+```
+
+As datas são lidas em `America/Sao_Paulo`. Prefira janelas de um dia: uma janela longa
+gera um e-mail grande demais (o período de 08/09 a 23/11/2026 renderiza ~1,2 MB, e o Gmail
+corta acima de ~100 KB).
+
+### Período sem cobertura: 2026-09-08 a 2026-11-23
+
+De 2026-09-08 00:00 até a primeira execução com o critério atual, o relatório saiu vazio
+todos os dias (o filtro pelo marcador `URL_Redacted` deixou de casar). Esse período **não
+foi reprocessado pelo flow**: foi reconciliado à parte, numa planilha com uma linha por
+URL, anexada ao card CHATR-365 (1.619 ocorrências e 967 URLs até 23/11/2026 09:00).
+Reenviar as 77 janelas diárias mandaria 77 mensagens no Discord e quase outros tantos
+e-mails, com conteúdo já entregue. Se o merge da correção atrasar, os dias seguintes a
+23/11 entram nessa reconciliação, e não num reprocesso.
+
 ## Custo
 
-**912 MB por execução**, mais **733 MB apenas nos dias sem ocorrência**, quando a guarda
-consulta a última ocorrência conhecida. Algo em torno de **US$ 4 por ano**.
+**~753 MiB por execução**, mais **~427 MiB apenas nos dias sem ocorrência**, quando a
+guarda consulta a última ocorrência conhecida (dry run de 24/11/2026). Pior caso, todos os
+dias vazios: **~US$ 2,60 por ano**. As queries não leem `saida_valor_texto`, a coluna mais
+pesada da tabela; com ela, a mesma varredura passaria de 2 GiB por execução.
 
 A tabela não é particionada nem clusterizada: no BigQuery a cobrança é por bytes de
 coluna varridos, então um filtro por data reduziria o resultado sem reduzir o custo. Por
@@ -105,4 +138,4 @@ isso a query não tem um — e não vale pedir particionamento ao time dono da t
 | --- | --- |
 | nenhuma mensagem no dia | o flow não rodou, ou falhou antes de publicar |
 | ⚠️ **O envio do e-mail falhou** | houve ocorrência, mas o Data Relay não entregou; as URLs estão na execução do Prefect |
-| "última ocorrência conhecida há N dias" crescendo | a fonte parou de gerar ocorrências — investigar se a chave `redacted_urls` sumiu do JSON ou a redação foi desligada |
+| "última ocorrência conhecida há N dias" crescendo | a fonte parou de gerar ocorrências — investigar se a chave `redacted_urls` sumiu do JSON, mudou de formato ou chega vazia porque a redação foi desligada |

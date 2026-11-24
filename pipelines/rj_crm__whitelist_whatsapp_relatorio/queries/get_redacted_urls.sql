@@ -5,9 +5,11 @@
 -- inicio_datahora é DATETIME em hora-parede de São Paulo, por isso a comparação usa DATETIME()
 -- e a janela precisa ser calculada em America/Sao_Paulo.
 -- passo_atributos_json é do tipo JSON: o acesso por campo dispensa JSONPath e evita o escape $$.
--- O critério é só a chave redacted_urls. Até 2026-09-07 toda linha com a chave também trazia
--- o marcador URL_Redacted em saida_valor_texto; a partir de 2026-09-08 a ingestão passou a
--- gravar saida_valor_texto como NULL nesses passos, e filtrar pelo marcador zerava o relatório.
+-- Ocorrência = redacted_urls é um array JSON com pelo menos um item. É a mesma definição de
+-- get_ultima_ocorrencia.sql; as duas precisam mudar juntas.
+-- IS NOT NULL não basta: um JSON null, [] ou "" não é SQL NULL e passaria pelo filtro.
+-- O marcador URL_Redacted em saida_valor_texto não entra: desde 2026-09-08 essa coluna chega
+-- NULL nos passos com URL redigida, e filtrar por ele zerava o relatório.
 -- O alias só pode ser filtrado fora da CTE: no SQL padrão o WHERE é avaliado antes do SELECT.
 -- Sem filtro de partição: o recorte da varredura é feito apenas por inicio_datahora.
 WITH passos AS (
@@ -26,5 +28,6 @@ SELECT
     ingestao_datahora,
     redacted_urls
 FROM passos
-WHERE redacted_urls IS NOT NULL
+WHERE JSON_TYPE(redacted_urls) = 'array'
+  AND ARRAY_LENGTH(JSON_QUERY_ARRAY(redacted_urls)) > 0
 ORDER BY inicio_datahora DESC
