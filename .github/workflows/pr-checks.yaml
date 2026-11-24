@@ -1,0 +1,66 @@
+name: PR checks
+
+# Ruff on the lines a pull request adds or edits, and the tests of the pipelines it touches
+# (all pipelines with tests/ when it touches src/, the root pyproject.toml or uv.lock).
+# See .github/scripts/pr_checks.py and AGENTS.md.
+on:
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  ruff:
+    name: Ruff (changed lines)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.13.6"
+          enable-cache: false
+
+      - name: Ruff on the lines this PR adds or edits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: uv run .github/scripts/pr_checks.py lint --base "$BASE_SHA"
+
+  tests:
+    name: Tests (changed pipelines)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.13.6"
+          enable-cache: false
+
+      - name: Test the PR checks script
+        run: uv run --no-project --python 3.13 --with pytest --with ruff==0.12.5 pytest -q .github/scripts/tests/test_pr_checks.py
+
+      - name: Tests of the pipelines this PR touches
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: uv run .github/scripts/pr_checks.py tests --base "$BASE_SHA"
