@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, timedelta, timezone
+from os import utime
 from pathlib import Path, PurePosixPath
 from threading import Thread
 
@@ -173,6 +174,29 @@ def test_maintain_writes_a_checkpoint_for_the_readers_of_the_log(uri, tmp_path) 
 
     log = Path(uri, "_delta_log")
     assert any("checkpoint" in name.name for name in log.iterdir())
+
+
+def test_maintain_removes_the_files_that_no_commit_added_once_they_are_old(
+    uri, tmp_path, read_rows
+) -> None:
+    """Remove a file a failed commit left past the retention, and keep a recent one."""
+    write_chunk(
+        uri, chunk_files(tmp_path / "a", "w1", [1]), "w1", LedgerEntry("c:w1", 1)
+    )
+    old = Path(uri, "part-old-orphan.snappy.parquet")
+    recent = Path(uri, "part-recent-orphan.snappy.parquet")
+    for path in (old, recent):
+        write_table(
+            Table.from_pylist([{"id": 9, "nome": "x", "batch": "w1"}], schema=SCHEMA),
+            path,
+        )
+    stamp = (datetime.now(UTC) - timedelta(days=8)).timestamp()
+    utime(old, (stamp, stamp))
+
+    maintain(uri)
+
+    assert (old.exists(), recent.exists()) == (False, True)
+    assert read_rows(uri) == {"w1": [1]}
 
 
 @pytest.mark.parametrize(
