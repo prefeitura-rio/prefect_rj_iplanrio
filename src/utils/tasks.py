@@ -193,7 +193,8 @@ async def dump_db_to_gcs(
         logger.info("Changes resumed: since=%s", resumed["since"])
 
         if dump_mode == "append" and "capture" not in chosen:
-            chosen = {**chosen, "capture": capture_time()}
+            chosen = chosen.copy()
+            chosen["capture"] = capture_time()
 
     await load_to_delta(
         get_source(database["type"])(

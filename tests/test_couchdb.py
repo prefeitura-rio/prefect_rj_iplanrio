@@ -389,11 +389,10 @@ async def test_the_changes_are_appended_to_a_loaded_table_and_the_reload_drops_t
     table = replace(source, origin=read_request("couchdb", {"table": "chcpf_bcadastros"}, True))
 
     def reply_all_docs(documents: list[dict[str, JsonValue]]) -> None:
-        """Queue the pages of an `_all_docs` read of the two chunks and the null one."""
+        """Queue an `_all_docs` read: two documents in the first chunk, one in the next."""
         fake_api.replies.append((200, {"db_name": "ignored"}))
         fake_api.replies.extend(
-            (200, loads(all_docs_page(page, 3)))
-            for page in [[doc for doc in documents if doc["_id"] < "00000005000"], [documents[2]], [], []]
+            (200, loads(all_docs_page(page, 3))) for page in [documents[:2], [documents[2]], [], []]
         )
 
     reply_all_docs(people)
