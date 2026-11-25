@@ -39,6 +39,9 @@ logging.basicConfig(
 
 DOCKER_IMAGE_FORMAT_PARTS_COUNT = 2
 BASE_IMAGE = "ghcr.io/prefeitura-rio/prefect_rj_iplanrio:latest"
+# Ambientes de teste extras que o deploy de staging também registra, nas pipelines que os têm (a Nota Carioca tem o
+# homteste e o desenvolvimento, além da homologação).
+EXTRA_DEPLOYMENT_SUFFIXES = {"staging": ("--stagingteste", "--dev")}
 
 DeploymentFunc = Callable[[Path, str], Awaitable[tuple[Path, int]]]
 
@@ -241,8 +244,16 @@ async def cleanup_docker_system() -> None:
         _ = await process.communicate()
 
 
-def build_deployment_command(package: str, deployment: str, file_path: str) -> list[str]:
+def select_deployments(deployments: list[str], environment: str) -> list[str]:
+    """Pick the deployments of an environment: the first one ending with its name, then its extra test environments."""
+    primary = next(d for d in deployments if d.endswith(environment))
+    extra = [d for d in deployments if d != primary and d.endswith(EXTRA_DEPLOYMENT_SUFFIXES.get(environment, ()))]
+    return [primary, *extra]
+
+
+def build_deployment_command(package: str, deployments: list[str], file_path: str) -> list[str]:
     """Build deployment command array."""
+    names = [arg for deployment in deployments for arg in ("--name", deployment)]
     return [
         "uv",
         "run",
@@ -252,8 +263,7 @@ def build_deployment_command(package: str, deployment: str, file_path: str) -> l
         "prefect",
         "--no-prompt",
         "deploy",
-        "--name",
-        deployment,
+        *names,
         "--prefect-file",
         file_path,
     ]
@@ -391,12 +401,12 @@ async def deploy_flow(file: Path, environment: str) -> tuple[Path, int]:
     deployments = await get_deployments(file)
 
     try:
-        deployment = next(d for d in deployments if d.endswith(environment))
+        selected = select_deployments(deployments, environment)
     except StopIteration:
         logging.warning(f"No deployment found for `{package}` in `{environment}` environment. Skipping.")
         return file, 0
 
-    command = build_deployment_command(package, deployment, str(file))
+    command = build_deployment_command(package, selected, str(file))
 
     process = await run_subprocess(command)
 

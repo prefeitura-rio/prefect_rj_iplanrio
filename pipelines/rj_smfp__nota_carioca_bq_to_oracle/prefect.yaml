@@ -76,6 +76,111 @@ deployments:
       cpu_limit: "6"
       memory_request: 4Gi
       memory_limit: 6Gi
+# StagingTeste (homteste): o mesmo Oracle e o mesmo usuário de staging, com tabelas, sinônimos e grants só dos owners de
+# teste. Assim a troca do homteste nunca reponta os sinônimos da homologação, no mesmo banco.
+- name: rj-smfp--nota-carioca-bq-to-oracle--stagingteste
+  tags:
+  - environment:stagingteste
+  - severity:low
+  - code_owner:fredzolio
+  version: "{{ build-image.tag }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_oracle/flow.py:rj_smfp__nota_carioca_bq_to_oracle
+  concurrency_limit:
+    limit: 1
+    collision_strategy: ENQUEUE
+  parameters:
+    dataset_id: nota_carioca_stagingteste
+    run_dbt: true
+    table_ids:
+    - MVT_NOTAS_NACIONAIS_EXIGIVEIS
+    - MVT_NOTAS_NACIONAIS_EXIGIVEIS_DETALHES
+    - MVT_NOTAS_NACIONAIS_DETALHES
+    dbt_parameters:
+      command: build
+      select: >-
+        mart_nota_carioca_stagingteste__notas_nacionais_exigiveis
+        mart_nota_carioca_stagingteste__notas_nacionais_exigiveis_detalhes
+        mart_nota_carioca_stagingteste__notas_nacionais_detalhes
+      send_discord_report: false
+      github_repo: https://github.com/prefeitura-rio/queries-rj-iplanrio.git
+      bigquery_project: rj-iplanrio
+      target: prod
+      gcs_buckets:
+        prod: rj-iplanrio_dbt
+        dev: rj-iplanrio-dev_dbt
+    sqlldr_sessions: 4
+    index_parallel_degree: 8
+    raw_text_encoding: hex
+    target_schema: DFEN_TESTE
+    consumer_synonym_owners:
+    - NFSE_SIGA_TESTE
+    - NFSE_USER_TESTE
+    - NFSE_TESTE
+    consumer_grants:
+      RL_NFSE_TESTE: SELECT
+      RL_NFSE_SIGA_TESTE: SELECT
+      RL_NFSE_OWNER_DRL: SELECT
+      NFSE_TESTE: SELECT, ALTER, DELETE
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_bq_to_oracle -- prefect flow-run execute
+      secretName: prefect-jobs-secrets-staging
+      image_pull_policy: Always
+      cpu_request: "4"
+      cpu_limit: "6"
+      memory_request: 4Gi
+      memory_limit: 6Gi
+# Dev: o Oracle de desenvolvimento (segredo de dev), com os mesmos owners, sinônimos e grants de prod. O schema vem
+# explícito porque o DB_SCHEMA do segredo de dev não é o dono das tabelas.
+- name: rj-smfp--nota-carioca-bq-to-oracle--dev
+  tags:
+  - environment:dev
+  - severity:low
+  - code_owner:fredzolio
+  version: "{{ build-image.tag }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_oracle/flow.py:rj_smfp__nota_carioca_bq_to_oracle
+  concurrency_limit:
+    limit: 1
+    collision_strategy: ENQUEUE
+  parameters:
+    dataset_id: nota_carioca_dev
+    run_dbt: true
+    table_ids:
+    - MVT_NOTAS_NACIONAIS_EXIGIVEIS
+    - MVT_NOTAS_NACIONAIS_EXIGIVEIS_DETALHES
+    - MVT_NOTAS_NACIONAIS_DETALHES
+    dbt_parameters:
+      command: build
+      select: >-
+        mart_nota_carioca_dev__notas_nacionais_exigiveis
+        mart_nota_carioca_dev__notas_nacionais_exigiveis_detalhes
+        mart_nota_carioca_dev__notas_nacionais_detalhes
+      send_discord_report: false
+      github_repo: https://github.com/prefeitura-rio/queries-rj-iplanrio.git
+      bigquery_project: rj-iplanrio
+      target: prod
+      gcs_buckets:
+        prod: rj-iplanrio_dbt
+        dev: rj-iplanrio-dev_dbt
+    sqlldr_sessions: 4
+    index_parallel_degree: 8
+    raw_text_encoding: hex
+    target_schema: DFEN
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_bq_to_oracle -- prefect flow-run execute
+      secretName: prefect-jobs-secrets-dev
+      image_pull_policy: Always
+      cpu_request: "4"
+      cpu_limit: "6"
+      memory_request: 4Gi
+      memory_limit: 6Gi
 - name: rj-smfp--nota-carioca-bq-to-oracle--prod
   tags:
   - environment:prod

@@ -3,7 +3,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from pipelines.rj_smfp__nota_carioca_extracao_xml.constants import PROXY_URL, URL_PROD, URL_STAGING
+from pipelines.rj_smfp__nota_carioca_extracao_xml.constants import (
+    PROXY_URL,
+    URL_DEV,
+    URL_PROD,
+    URL_STAGING,
+    URL_STAGINGTESTE,
+)
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.config import (
     read_token,
     resolve_proxy,
@@ -41,6 +47,15 @@ def test_resolve_url_uses_homologation_in_staging_and_production_in_prod() -> No
     assert URL_PROD.startswith("https://notacarioca.rio.gov.br/intranet/")
 
 
+def test_resolve_url_uses_homteste_in_stagingteste_and_development_in_dev() -> None:
+    assert resolve_url(None, Environment.STAGINGTESTE) == URL_STAGINGTESTE
+    assert resolve_url(None, Environment.DEV) == URL_DEV
+    assert URL_STAGINGTESTE.startswith("https://notacariocahomteste.rio.gov.br/intranet/")
+    assert URL_DEV.startswith("https://notacariocades.rio.gov.br/intranet/")
+    urls = (URL_PROD, URL_STAGING, URL_STAGINGTESTE, URL_DEV)
+    assert len(set(urls)) == len(urls)
+
+
 def test_resolve_url_accepts_an_explicit_https_url() -> None:
     assert resolve_url("https://outro.rio.gov.br/x.asmx", Environment.PROD) == "https://outro.rio.gov.br/x.asmx"
     with pytest.raises(ValueError, match="https"):
@@ -55,7 +70,10 @@ def deployments() -> dict[str, dict[str, object]]:
 def test_prefect_yaml_has_one_deployment_per_environment_without_schedule() -> None:
     found = deployments()
 
-    assert set(found) == {"rj-smfp--nota-carioca-extracao-xml--staging", "rj-smfp--nota-carioca-extracao-xml--prod"}
+    assert set(found) == {
+        f"rj-smfp--nota-carioca-extracao-xml--{environment}"
+        for environment in ("prod", "staging", "stagingteste", "dev")
+    }
     for item in found.values():
         assert "schedules" not in item
         assert item["concurrency_limit"] == {"limit": 1, "collision_strategy": "CANCEL_NEW"}
@@ -68,6 +86,14 @@ def test_prefect_yaml_uses_the_secret_of_each_environment() -> None:
     prod = found["rj-smfp--nota-carioca-extracao-xml--prod"]["work_pool"]
     assert staging["job_variables"]["secretName"] == "prefect-jobs-secrets-staging"
     assert prod["job_variables"]["secretName"] == "prefect-jobs-secrets"
+    # O homteste usa o banco e o usuário da homologação; o desenvolvimento, o seu próprio segredo
+    homteste = found["rj-smfp--nota-carioca-extracao-xml--stagingteste"]
+    dev = found["rj-smfp--nota-carioca-extracao-xml--dev"]
+    assert homteste["work_pool"]["job_variables"]["secretName"] == "prefect-jobs-secrets-staging"
+    assert dev["work_pool"]["job_variables"]["secretName"] == "prefect-jobs-secrets-dev"
+    # E só o homteste lê a TAREFAS de outro dono
+    assert homteste["parameters"] == {"tasks_owner": "NFSE_TESTE"}
+    assert "parameters" not in dev
 
 
 def test_resolve_proxy_uses_the_cluster_squid_by_default() -> None:
@@ -84,7 +110,7 @@ def test_resolve_proxy_can_be_disabled_or_replaced() -> None:
 
 
 @pytest.mark.parametrize(
-    "name", ["rj-smfp--nota-carioca-extracao-xml--prod", "rj-smfp--nota-carioca-extracao-xml--staging"]
+    "name", [f"rj-smfp--nota-carioca-extracao-xml--{env}" for env in ("prod", "staging", "stagingteste", "dev")]
 )
 def test_extraction_pod_is_guaranteed_so_it_is_evicted_last(name: str) -> None:
     variables = deployments()[name]["work_pool"]["job_variables"]

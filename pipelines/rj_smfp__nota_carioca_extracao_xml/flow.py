@@ -20,6 +20,7 @@ from pipelines.rj_smfp__nota_carioca_extracao_xml.constants import (
     INFISICAL_SECRET_PATH,
     SECONDS_PER_HOUR,
     SECONDS_PER_MINUTE,
+    TASKS_OWNER,
 )
 from pipelines.rj_smfp__nota_carioca_extracao_xml.tasks import run_extraction_task
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.config import resolve_proxy, resolve_url
@@ -38,10 +39,12 @@ def rj_smfp__nota_carioca_extracao_xml(  # noqa: PLR0913, PLR0917
     idle_checks: int = 2,
     progress_minutes: int = 30,
     discord_notifications: bool = True,
+    tasks_owner: str = TASKS_OWNER,
 ) -> str:
     """Dispara a extração XML e espera ela e o pós-processamento terminarem.
 
-    :param url: Endereço do ``RotinasAutomaticas.asmx``; vazio usa o do ambiente (staging = homologação).
+    :param url: Endereço do ``RotinasAutomaticas.asmx``; vazio usa o do ambiente (staging = homologação, stagingteste =
+        homteste, dev = desenvolvimento).
     :param proxy_url: Proxy HTTP da chamada; vazio usa o squid do cluster, ``""`` chama direto.
     :param infisical_secret_path: Pasta do Infisical com o Oracle.
     :param poll_seconds: Intervalo entre consultas a ``NFSE_OWNER.TAREFAS``.
@@ -50,6 +53,7 @@ def rj_smfp__nota_carioca_extracao_xml(  # noqa: PLR0913, PLR0917
     :param idle_checks: Consultas seguidas sem 46/48 em execução para considerar liberado.
     :param progress_minutes: Intervalo entre avisos de progresso no Discord.
     :param discord_notifications: ``False`` desliga o Discord.
+    :param tasks_owner: Dono da tabela ``TAREFAS`` (``NFSE_OWNER``; no homteste, ``NFSE_TESTE``).
     :returns: Resumo do que aconteceu.
     """
     rename_current_flow_run_task(new_name="extracao-xml")
@@ -68,4 +72,5 @@ def rj_smfp__nota_carioca_extracao_xml(  # noqa: PLR0913, PLR0917
         limits=limits,
         discord_notifications=discord_notifications,
         environment=environment,
+        tasks_owner=tasks_owner,
     )

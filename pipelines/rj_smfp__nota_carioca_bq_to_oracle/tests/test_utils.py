@@ -24,6 +24,7 @@ import io
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle import tasks as tasks_module
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery, slots
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.bigquery import changed_tables, quiet_wait_seconds
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.inmemory import InMemoryStatus
@@ -1225,3 +1226,81 @@ def test_delete_blobs_with_no_objects_makes_no_request(monkeypatch):
     monkeypatch.setattr(bigquery.storage, "Client", lambda project: FakeStorageClient(log))
     bigquery.delete_blobs("proj", "bucket", [])
     assert log == []
+
+
+HOMTESTE = slots.OracleTarget(
+    "/db-oracle-nota-fiscal",
+    "dfen_teste",
+    ("NFSE_SIGA_TESTE", "NFSE_USER_TESTE", "nfse_teste"),
+    (
+        ("RL_NFSE_TESTE", "SELECT"),
+        ("RL_NFSE_SIGA_TESTE", "SELECT"),
+        ("RL_NFSE_OWNER_DRL", "SELECT"),
+        ("NFSE_TESTE", "select, alter, delete"),
+    ),
+)
+
+
+def homteste_config():
+    return replace(slots_config(), schema="DFEN_TESTE")
+
+
+def test_the_target_normalizes_names_and_privileges_and_defaults_to_the_homologation_consumers():
+    assert HOMTESTE.schema == "DFEN_TESTE"
+    assert HOMTESTE.synonym_owners == ("NFSE_SIGA_TESTE", "NFSE_USER_TESTE", "NFSE_TESTE")
+    assert HOMTESTE.grants[-1] == ("NFSE_TESTE", "SELECT, ALTER, DELETE")
+    default = slots.OracleTarget("/db-oracle-nota-fiscal")
+    assert (default.schema, default.synonym_owners, default.grants) == (
+        None,
+        slots.CONSUMER_SYNONYM_OWNERS,
+        CONSUMER_GRANTS,
+    )
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"grants": (("RL_NFSE_TESTE", "DROP"),)}, "Privilégios inválidos"),
+        ({"grants": (("RL_NFSE_TESTE", " , "),)}, "Privilégios inválidos"),
+        ({"grants": (("RL NFSE", "SELECT"),)}, "Identificador inválido"),
+        ({"synonym_owners": ('NFSE_SIGA"."X',)}, "Identificador inválido"),
+        ({"schema": "DFEN; DROP"}, "Identificador inválido"),
+    ],
+)
+def test_the_target_refuses_names_and_privileges_that_would_change_the_statements(changes, message):
+    with pytest.raises(ValueError, match=message):
+        slots.OracleTarget("/db-oracle-nota-fiscal", **changes)
+
+
+def test_the_target_schema_replaces_only_the_schema_of_the_secret(monkeypatch):
+    monkeypatch.setattr(tasks_module.oracle, "read_oracle_config", lambda _path: slots_config())
+    assert tasks_module.target_config(HOMTESTE) == homteste_config()
+    assert tasks_module.target_config(slots.OracleTarget("/db-oracle-nota-fiscal")) == slots_config()
+
+
+def test_the_homteste_ignores_the_synonyms_of_the_homologation_in_the_same_database():
+    # Given the synonyms of the homologation, on DFEN and its consumers
+    homologation = [syn("DFEN", "BQLOAD_X_A"), syn("NFSE_SIGA", "BQLOAD_X_A"), syn("NFSE_OWNER", "BQLOAD_X_A")]
+    # When the homteste chooses its slots, Then it sees none of them: first load, into A, nothing refused
+    plan = choose_slots("BQLOAD_X", "DFEN_TESTE", homologation, HOMTESTE.synonym_owners)
+    assert plan == SlotPlan("BQLOAD_X", None, "BQLOAD_X_A")
+
+
+def test_the_homteste_swap_repoints_only_its_own_consumers(monkeypatch):
+    cursor = fake_database(monkeypatch, objects={"BQLOAD_X": ["SYNONYM"]}, comments={"BQLOAD_X_B": MARKED})
+    slots.swap_synonyms(homteste_config(), SlotPlan("BQLOAD_X", "BQLOAD_X_A", "BQLOAD_X_B"), HOMTESTE.synonym_owners)
+    assert cursor.ddl == [
+        f'CREATE OR REPLACE SYNONYM "{owner}"."BQLOAD_X" FOR "DFEN_TESTE"."BQLOAD_X_B"'
+        for owner in ("NFSE_SIGA_TESTE", "NFSE_USER_TESTE", "NFSE_TESTE", "DFEN_TESTE")
+    ]
+
+
+def test_the_homteste_grants_go_only_to_its_own_roles(monkeypatch):
+    cursor = fake_database(monkeypatch, objects={}, comments={"BQLOAD_X_B": MARKED})
+    slots.grant_access(homteste_config(), "BQLOAD_X_B", HOMTESTE.grants)
+    assert cursor.ddl == [
+        'GRANT SELECT ON "DFEN_TESTE"."BQLOAD_X_B" TO "RL_NFSE_TESTE"',
+        'GRANT SELECT ON "DFEN_TESTE"."BQLOAD_X_B" TO "RL_NFSE_SIGA_TESTE"',
+        'GRANT SELECT ON "DFEN_TESTE"."BQLOAD_X_B" TO "RL_NFSE_OWNER_DRL"',
+        'GRANT SELECT, ALTER, DELETE ON "DFEN_TESTE"."BQLOAD_X_B" TO "NFSE_TESTE"',
+    ]
