@@ -38,7 +38,7 @@ deployments:
         port: 1526
         database: P01.PCRJ
       cloud:
-        bucket: rj-iplanrio-dia
+        bucket: rj-iplanrio
         project: rj-iplanrio
         connection: rj-iplanrio.us.biglake
     work_pool:
