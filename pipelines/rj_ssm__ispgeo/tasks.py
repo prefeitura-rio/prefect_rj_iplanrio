@@ -1,6 +1,10 @@
 """Tasks do pipeline rj_ssm__ispgeo."""
 
+import os
+
 import pandas as pd
+from iplanrio.pipelines_utils.env import getenv_or_action
+from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_ssm__ispgeo import utils
@@ -59,3 +63,21 @@ def upload_ocorrencias_task(
         table_id=table_id,
         dump_mode=dump_mode,
     )
+
+
+@task()
+def add_token_github_repo(repository_url: str) -> str:
+    """
+    Add the GitHub token to the repository URL.Getting it from infisical variable GITHUB_TOKEN.
+
+    repository_url: str: The URL of the GitHub repository. This variable must be
+        somethintg like https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm-registry.git.
+
+    Returns:
+        str: The repository URL with the GitHub token added if it's a private repository.
+    """
+    if "GITHUB_TOKEN" in repository_url:
+        log("Adding GitHub token to the repository URL from infisical variable GITHUB_TOKEN")
+        token = getenv_or_action("GITHUB_TOKEN")
+        repository_url = repository_url.replace("GITHUB_TOKEN", token)
+    return repository_url
