@@ -57,25 +57,25 @@ deployments:
           INFISICAL_PATHS: /rj_smfp__ergon,/shared
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
     schedules:
-      # - cron: "0 23 * * *"
-      #   timezone: America/Sao_Paulo
-      #   slug: vantagens
-      #   parameters:
-      #     table:
-      #       dataset_id: brutos_recursos_humanos_ergon
-      #       table_id: vantagens
-      #     dump_mode: append
-      #     read:
-      #       table: ERGON.VANTAGENS
-      #     options:
-      #       columns:
-      #         add_timestamp: true
-      #       chunks:
-      #         column: DTINI
-      #         width: month
-      #         begin: "2026-11-24"
-      #         lookback: 1
-      - cron: "10 00 * * *"
+      - cron: "30 19 * * *"
+        timezone: America/Sao_Paulo
+        slug: vantagens
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vantagens
+          dump_mode: append
+          read:
+            table: ERGON.VANTAGENS
+          options:
+            columns:
+              add_timestamp: true
+            chunks:
+              column: DTINI
+              width: month
+              begin: "2026-11-24"
+              lookback: 1
+      - cron: "10 20 * * *"
         timezone: America/Sao_Paulo
         slug: vw_averbacoes_conta_gbp
         parameters:
@@ -88,7 +88,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "05 00 * * *"
+      - cron: "20 20 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_cargos_
         parameters:
@@ -101,7 +101,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "10 00 * * *"
+      - cron: "30 20 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_categorias_
         parameters:
@@ -114,7 +114,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "15 00 * * *"
+      - cron: "40 20 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_empresas
         parameters:
@@ -127,7 +127,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "10 0 * * *"
+      - cron: "50 20 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_erg_matriculas
         parameters:
@@ -140,7 +140,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "5 0 * * *"
+      - cron: "0 21 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_folhas_emp
         parameters:
@@ -153,7 +153,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "10 0 * * *"
+      - cron: "10 21 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_formas_prov_
         parameters:
@@ -166,7 +166,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      # - cron: "15 0 * * *"
+      # - cron: "20 21 * * *"
       #   timezone: America/Sao_Paulo
       #   slug: vw_dlk_erg_funcionarios
       #   parameters:
@@ -179,7 +179,7 @@ deployments:
       #     options:
       #       columns:
       #         add_timestamp: true
-      - cron: "20 0 * * *"
+      - cron: "30 21 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_horario_trab_
         parameters:
@@ -192,7 +192,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "25 0 * * *"
+      - cron: "40 21 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_hsetor_
         parameters:
@@ -205,7 +205,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "30 0 * * *"
+      - cron: "50 21 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_jornadas_
         parameters:
@@ -218,7 +218,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "35 0 * * *"
+      - cron: "0 22 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_orgaos_externos
         parameters:
@@ -231,7 +231,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "40 0 * * *"
+      - cron: "10 22 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_orgaos_regimes_jur_
         parameters:
@@ -244,7 +244,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "45 0 * * *"
+      - cron: "20 22 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_provimentos_ev
         parameters:
@@ -257,7 +257,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "50 0 * * *"
+      - cron: "30 22 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_regimes_jur_
         parameters:
@@ -270,7 +270,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "55 0 * * *"
+      - cron: "40 22 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_tipo_folha
         parameters:
@@ -283,7 +283,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "0 1 * * *"
+      - cron: "50 22 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_tipo_orgao
         parameters:
@@ -296,7 +296,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "5 1 * * *"
+      - cron: "0 23 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_tipo_vinc_
         parameters:
@@ -309,7 +309,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "10 1 * * *"
+      - cron: "10 23 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_vinculos
         parameters:
@@ -322,7 +322,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "15 1 * * *"
+      - cron: "20 23 * * *"
         timezone: America/Sao_Paulo
         slug: vw_frequencias_gbp
         parameters:
@@ -335,7 +335,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "20 1 * * *"
+      - cron: "30 23 * * *"
         timezone: America/Sao_Paulo
         slug: vw_lic_afast_gbp
         parameters:
@@ -348,7 +348,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "25 1 * * *"
+      - cron: "40 23 * * *"
         timezone: America/Sao_Paulo
         slug: vw_pre_conta_gbp
         parameters:
@@ -361,7 +361,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "30 1 * * *"
+      - cron: "50 23 * * *"
         timezone: America/Sao_Paulo
         slug: vw_simpa_sirhu_afastamento_gbp
         parameters:
@@ -374,7 +374,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "35 1 * * *"
+      - cron: "0 0 * * *"
         timezone: America/Sao_Paulo
         slug: vw_simpa_sirhu_frequencia_gbp
         parameters:
@@ -387,7 +387,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "40 1 * * *"
+      - cron: "10 0 * * *"
         timezone: America/Sao_Paulo
         slug: vw_vantagens_gbp
         parameters:
@@ -400,7 +400,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "45 1 * * *"
+      - cron: "20 0 * * *"
         timezone: America/Sao_Paulo
         slug: ipl_prefixos
         parameters:
@@ -413,7 +413,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "50 1 * * *"
+      - cron: "30 0 * * *"
         timezone: America/Sao_Paulo
         slug: averbacoes_conta
         parameters:
@@ -426,7 +426,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "55 1 * * *"
+      - cron: "40 0 * * *"
         timezone: America/Sao_Paulo
         slug: averb_oque_conta
         parameters:
@@ -439,7 +439,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "0 2 * * *"
+      - cron: "50 0 * * *"
         timezone: America/Sao_Paulo
         slug: concursos
         parameters:
@@ -452,7 +452,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "5 2 * * *"
+      - cron: "0 1 * * *"
         timezone: America/Sao_Paulo
         slug: folhas_emp
         parameters:
@@ -465,7 +465,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "10 2 * * *"
+      - cron: "10 1 * * *"
         timezone: America/Sao_Paulo
         slug: formas_vac
         parameters:
@@ -478,7 +478,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "15 2 * * *"
+      - cron: "20 1 * * *"
         timezone: America/Sao_Paulo
         slug: formas_vac_
         parameters:
@@ -491,7 +491,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "20 2 * * *"
+      - cron: "30 1 * * *"
         timezone: America/Sao_Paulo
         slug: frequencias
         parameters:
@@ -504,7 +504,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "25 2 * * *"
+      - cron: "40 1 * * *"
         timezone: America/Sao_Paulo
         slug: hist_cargo
         parameters:
@@ -517,7 +517,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "30 2 * * *"
+      - cron: "50 1 * * *"
         timezone: America/Sao_Paulo
         slug: hist_funcao
         parameters:
@@ -530,7 +530,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "35 2 * * *"
+      - cron: "0 2 * * *"
         timezone: America/Sao_Paulo
         slug: inscritos
         parameters:
@@ -543,7 +543,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "40 2 * * *"
+      - cron: "10 2 * * *"
         timezone: America/Sao_Paulo
         slug: lic_afast
         parameters:
@@ -556,7 +556,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "45 2 * * *"
+      - cron: "20 2 * * *"
         timezone: America/Sao_Paulo
         slug: pre_conta
         parameters:
@@ -569,7 +569,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "50 2 * * *"
+      - cron: "30 2 * * *"
         timezone: America/Sao_Paulo
         slug: rubricas
         parameters:
@@ -582,7 +582,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "55 2 * * *"
+      - cron: "40 2 * * *"
         timezone: America/Sao_Paulo
         slug: sirhu_afastamento
         parameters:
@@ -595,7 +595,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "0 3 * * *"
+      - cron: "50 2 * * *"
         timezone: America/Sao_Paulo
         slug: sirhu_dbtabelas_afastamento
         parameters:
@@ -608,7 +608,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "5 3 * * *"
+      - cron: "0 3 * * *"
         timezone: America/Sao_Paulo
         slug: tipo_tempo
         parameters:
@@ -634,7 +634,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "15 3 * * *"
+      - cron: "20 3 * * *"
         timezone: America/Sao_Paulo
         slug: total_conta
         parameters:
@@ -647,7 +647,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "20 3 * * *"
+      - cron: "30 3 * * *"
         timezone: America/Sao_Paulo
         slug: cid
         parameters:
@@ -660,7 +660,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "25 3 * * *"
+      - cron: "40 3 * * *"
         timezone: America/Sao_Paulo
         slug: designacoes_ev
         parameters:
@@ -673,7 +673,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "30 3 * * *"
+      - cron: "50 3 * * *"
         timezone: America/Sao_Paulo
         slug: erg_pm_cid10_capitulo
         parameters:
@@ -686,7 +686,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "35 3 * * *"
+      - cron: "0 4 * * *"
         timezone: America/Sao_Paulo
         slug: erg_pm_decisao
         parameters:
@@ -699,7 +699,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "40 3 * * *"
+      - cron: "10 4 * * *"
         timezone: America/Sao_Paulo
         slug: erg_pm_grupoexame
         parameters:
@@ -712,7 +712,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "45 3 * * *"
+      - cron: "20 4 * * *"
         timezone: America/Sao_Paulo
         slug: erg_pm_pront_med
         parameters:
@@ -725,7 +725,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "50 3 * * *"
+      - cron: "30 4 * * *"
         timezone: America/Sao_Paulo
         slug: erg_pm_resultpront
         parameters:
@@ -738,7 +738,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "55 3 * * *"
+      - cron: "40 4 * * *"
         timezone: America/Sao_Paulo
         slug: exames
         parameters:
@@ -751,7 +751,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "0 4 * * *"
+      - cron: "50 4 * * *"
         timezone: America/Sao_Paulo
         slug: funcoes_ev_
         parameters:
@@ -764,7 +764,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "5 4 * * *"
+      - cron: "0 5 * * *"
         timezone: America/Sao_Paulo
         slug: medicos
         parameters:
@@ -777,7 +777,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "10 4 * * *"
+      - cron: "10 5 * * *"
         timezone: America/Sao_Paulo
         slug: prontuario
         parameters:
@@ -790,7 +790,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "15 4 * * *"
+      - cron: "20 5 * * *"
         timezone: America/Sao_Paulo
         slug: tpmrj_pm_juntas
         parameters:
@@ -803,7 +803,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "20 4 * * *"
+      - cron: "30 5 * * *"
         timezone: America/Sao_Paulo
         slug: tpmrj_pm_periciasjunta
         parameters:
@@ -816,7 +816,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "25 4 * * *"
+      - cron: "40 5 * * *"
         timezone: America/Sao_Paulo
         slug: tpmrj_pm_resultjunta
         parameters:
@@ -829,7 +829,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "30 4 * * *"
+      - cron: "50 5 * * *"
         timezone: America/Sao_Paulo
         slug: tpmrj_pm_vwbim
         parameters:
@@ -842,7 +842,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "35 4 * * *"
+      - cron: "0 6 * * *"
         timezone: America/Sao_Paulo
         slug: tpmrj_pm_vwtpconclper
         parameters:
@@ -855,33 +855,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "40 4 * * *"
-        timezone: America/Sao_Paulo
-        slug: dependentes
-        parameters:
-          table:
-            dataset_id: brutos_recursos_humanos_ergon
-            table_id: dependentes
-          read:
-            table: ERGON.DEPENDENTES
-          dump_mode: overwrite
-          options:
-            columns:
-              add_timestamp: true
-      - cron: "45 4 * * *"
-        timezone: America/Sao_Paulo
-        slug: cargos_
-        parameters:
-          table:
-            dataset_id: brutos_recursos_humanos_ergon
-            table_id: cargos_
-          read:
-            table: ERGON.CARGOS_
-          dump_mode: overwrite
-          options:
-            columns:
-              add_timestamp: true
-      - cron: "10 00 * * *"
+      - cron: "40 19 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_fita_banco
         parameters:
@@ -899,7 +873,7 @@ deployments:
               lookback: 1
             columns:
               add_timestamp: true
-      - cron: "20 00 * * *"
+      - cron: "50 19 * * *"
         timezone: America/Sao_Paulo
         slug: fichas_financeiras
         parameters:
@@ -913,11 +887,11 @@ deployments:
             chunks:
               column: MES_ANO_FOLHA
               width: month
-              begin: "2010-01-01"
+              begin: "2020-01-01"
               lookback: 1
             columns:
               add_timestamp: true
-      - cron: "30 00 * * *"
+      - cron: "0 20 * * *"
         timezone: America/Sao_Paulo
         slug: ipl_pt_fichas
         parameters:
@@ -931,11 +905,10 @@ deployments:
             chunks:
               column: MES_ANO_FOLHA
               width: month
-              begin: "2010-01-01"
+              begin: "2020-01-01"
               lookback: 1
             columns:
               add_timestamp: true
-
   - name: rj-smfp--ergon--prod
     tags:
       - environment:prod
@@ -969,7 +942,7 @@ deployments:
           INFISICAL_PATHS: /rj_smfp__ergon,/shared
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
     schedules:
-      # - cron: "0 23 * * *"
+      # - cron: "30 19 * * *"
       #   timezone: America/Sao_Paulo
       #   slug: vantagens
       #   parameters:
@@ -987,7 +960,7 @@ deployments:
       #         width: month
       #         begin: "2026-11-24"
       #         lookback: 1
-      - cron: "40 23 * * *"
+      - cron: "10 20 * * *"
         timezone: America/Sao_Paulo
         slug: vw_averbacoes_conta_gbp
         parameters:
@@ -1000,7 +973,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "45 23 * * *"
+      - cron: "20 20 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_cargos_
         parameters:
@@ -1013,7 +986,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "50 23 * * *"
+      - cron: "30 20 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_categorias_
         parameters:
@@ -1026,7 +999,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "55 23 * * *"
+      - cron: "40 20 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_empresas
         parameters:
@@ -1039,7 +1012,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "0 10* * *"
+      - cron: "50 20 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_erg_matriculas
         parameters:
@@ -1052,7 +1025,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "5 0 * * *"
+      - cron: "0 21 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_folhas_emp
         parameters:
@@ -1065,7 +1038,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "10 0 * * *"
+      - cron: "10 21 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_formas_prov_
         parameters:
@@ -1078,7 +1051,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      # - cron: "15 0 * * *"
+      # - cron: "20 21 * * *"
       #   timezone: America/Sao_Paulo
       #   slug: vw_dlk_erg_funcionarios
       #   parameters:
@@ -1091,7 +1064,7 @@ deployments:
       #     options:
       #       columns:
       #         add_timestamp: true
-      - cron: "20 0 * * *"
+      - cron: "30 21 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_horario_trab_
         parameters:
@@ -1104,7 +1077,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "25 0 * * *"
+      - cron: "40 21 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_hsetor_
         parameters:
@@ -1117,7 +1090,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "30 0 * * *"
+      - cron: "50 21 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_jornadas_
         parameters:
@@ -1130,7 +1103,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "35 0 * * *"
+      - cron: "0 22 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_orgaos_externos
         parameters:
@@ -1143,7 +1116,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "40 0 * * *"
+      - cron: "10 22 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_orgaos_regimes_jur_
         parameters:
@@ -1156,7 +1129,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "45 0 * * *"
+      - cron: "20 22 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_provimentos_ev
         parameters:
@@ -1169,7 +1142,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "50 0 * * *"
+      - cron: "30 22 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_regimes_jur_
         parameters:
@@ -1182,7 +1155,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "55 0 * * *"
+      - cron: "40 22 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_tipo_folha
         parameters:
@@ -1195,7 +1168,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "0 1 * * *"
+      - cron: "50 22 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_tipo_orgao
         parameters:
@@ -1208,7 +1181,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "5 1 * * *"
+      - cron: "0 23 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_tipo_vinc_
         parameters:
@@ -1221,7 +1194,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "10 1 * * *"
+      - cron: "10 23 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_vinculos
         parameters:
@@ -1234,7 +1207,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "15 1 * * *"
+      - cron: "20 23 * * *"
         timezone: America/Sao_Paulo
         slug: vw_frequencias_gbp
         parameters:
@@ -1247,7 +1220,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "20 1 * * *"
+      - cron: "30 23 * * *"
         timezone: America/Sao_Paulo
         slug: vw_lic_afast_gbp
         parameters:
@@ -1260,7 +1233,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "25 1 * * *"
+      - cron: "40 23 * * *"
         timezone: America/Sao_Paulo
         slug: vw_pre_conta_gbp
         parameters:
@@ -1273,7 +1246,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "30 1 * * *"
+      - cron: "50 23 * * *"
         timezone: America/Sao_Paulo
         slug: vw_simpa_sirhu_afastamento_gbp
         parameters:
@@ -1286,7 +1259,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "35 1 * * *"
+      - cron: "0 0 * * *"
         timezone: America/Sao_Paulo
         slug: vw_simpa_sirhu_frequencia_gbp
         parameters:
@@ -1299,7 +1272,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "40 1 * * *"
+      - cron: "10 0 * * *"
         timezone: America/Sao_Paulo
         slug: vw_vantagens_gbp
         parameters:
@@ -1312,7 +1285,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "45 1 * * *"
+      - cron: "20 0 * * *"
         timezone: America/Sao_Paulo
         slug: ipl_prefixos
         parameters:
@@ -1325,7 +1298,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "50 1 * * *"
+      - cron: "30 0 * * *"
         timezone: America/Sao_Paulo
         slug: averbacoes_conta
         parameters:
@@ -1338,7 +1311,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "55 1 * * *"
+      - cron: "40 0 * * *"
         timezone: America/Sao_Paulo
         slug: averb_oque_conta
         parameters:
@@ -1351,7 +1324,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "0 2 * * *"
+      - cron: "50 0 * * *"
         timezone: America/Sao_Paulo
         slug: concursos
         parameters:
@@ -1364,7 +1337,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "5 2 * * *"
+      - cron: "0 1 * * *"
         timezone: America/Sao_Paulo
         slug: folhas_emp
         parameters:
@@ -1377,7 +1350,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "10 2 * * *"
+      - cron: "10 1 * * *"
         timezone: America/Sao_Paulo
         slug: formas_vac
         parameters:
@@ -1390,7 +1363,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "15 2 * * *"
+      - cron: "20 1 * * *"
         timezone: America/Sao_Paulo
         slug: formas_vac_
         parameters:
@@ -1403,7 +1376,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "20 2 * * *"
+      - cron: "30 1 * * *"
         timezone: America/Sao_Paulo
         slug: frequencias
         parameters:
@@ -1416,7 +1389,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "25 2 * * *"
+      - cron: "40 1 * * *"
         timezone: America/Sao_Paulo
         slug: hist_cargo
         parameters:
@@ -1429,7 +1402,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "30 2 * * *"
+      - cron: "50 1 * * *"
         timezone: America/Sao_Paulo
         slug: hist_funcao
         parameters:
@@ -1442,7 +1415,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "35 2 * * *"
+      - cron: "0 2 * * *"
         timezone: America/Sao_Paulo
         slug: inscritos
         parameters:
@@ -1455,7 +1428,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "40 2 * * *"
+      - cron: "10 2 * * *"
         timezone: America/Sao_Paulo
         slug: lic_afast
         parameters:
@@ -1468,7 +1441,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "45 2 * * *"
+      - cron: "20 2 * * *"
         timezone: America/Sao_Paulo
         slug: pre_conta
         parameters:
@@ -1481,7 +1454,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "50 2 * * *"
+      - cron: "30 2 * * *"
         timezone: America/Sao_Paulo
         slug: rubricas
         parameters:
@@ -1494,7 +1467,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "55 2 * * *"
+      - cron: "40 2 * * *"
         timezone: America/Sao_Paulo
         slug: sirhu_afastamento
         parameters:
@@ -1507,7 +1480,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "0 3 * * *"
+      - cron: "50 2 * * *"
         timezone: America/Sao_Paulo
         slug: sirhu_dbtabelas_afastamento
         parameters:
@@ -1520,7 +1493,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "5 3 * * *"
+      - cron: "0 3 * * *"
         timezone: America/Sao_Paulo
         slug: tipo_tempo
         parameters:
@@ -1546,7 +1519,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "15 3 * * *"
+      - cron: "20 3 * * *"
         timezone: America/Sao_Paulo
         slug: total_conta
         parameters:
@@ -1559,7 +1532,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "20 3 * * *"
+      - cron: "30 3 * * *"
         timezone: America/Sao_Paulo
         slug: cid
         parameters:
@@ -1572,7 +1545,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "25 3 * * *"
+      - cron: "40 3 * * *"
         timezone: America/Sao_Paulo
         slug: designacoes_ev
         parameters:
@@ -1585,7 +1558,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "30 3 * * *"
+      - cron: "50 3 * * *"
         timezone: America/Sao_Paulo
         slug: erg_pm_cid10_capitulo
         parameters:
@@ -1598,7 +1571,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "35 3 * * *"
+      - cron: "0 4 * * *"
         timezone: America/Sao_Paulo
         slug: erg_pm_decisao
         parameters:
@@ -1611,7 +1584,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "40 3 * * *"
+      - cron: "10 4 * * *"
         timezone: America/Sao_Paulo
         slug: erg_pm_grupoexame
         parameters:
@@ -1624,7 +1597,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "45 3 * * *"
+      - cron: "20 4 * * *"
         timezone: America/Sao_Paulo
         slug: erg_pm_pront_med
         parameters:
@@ -1637,7 +1610,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "50 3 * * *"
+      - cron: "30 4 * * *"
         timezone: America/Sao_Paulo
         slug: erg_pm_resultpront
         parameters:
@@ -1650,7 +1623,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "55 3 * * *"
+      - cron: "40 4 * * *"
         timezone: America/Sao_Paulo
         slug: exames
         parameters:
@@ -1663,7 +1636,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "0 4 * * *"
+      - cron: "50 4 * * *"
         timezone: America/Sao_Paulo
         slug: funcoes_ev_
         parameters:
@@ -1676,7 +1649,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "5 4 * * *"
+      - cron: "0 5 * * *"
         timezone: America/Sao_Paulo
         slug: medicos
         parameters:
@@ -1689,7 +1662,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "10 4 * * *"
+      - cron: "10 5 * * *"
         timezone: America/Sao_Paulo
         slug: prontuario
         parameters:
@@ -1702,7 +1675,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "15 4 * * *"
+      - cron: "20 5 * * *"
         timezone: America/Sao_Paulo
         slug: tpmrj_pm_juntas
         parameters:
@@ -1715,7 +1688,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "20 4 * * *"
+      - cron: "30 5 * * *"
         timezone: America/Sao_Paulo
         slug: tpmrj_pm_periciasjunta
         parameters:
@@ -1728,7 +1701,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "25 4 * * *"
+      - cron: "40 5 * * *"
         timezone: America/Sao_Paulo
         slug: tpmrj_pm_resultjunta
         parameters:
@@ -1741,7 +1714,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "30 4 * * *"
+      - cron: "50 5 * * *"
         timezone: America/Sao_Paulo
         slug: tpmrj_pm_vwbim
         parameters:
@@ -1754,7 +1727,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "35 4 * * *"
+      - cron: "0 6 * * *"
         timezone: America/Sao_Paulo
         slug: tpmrj_pm_vwtpconclper
         parameters:
@@ -1767,33 +1740,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "40 4 * * *"
-        timezone: America/Sao_Paulo
-        slug: dependentes
-        parameters:
-          table:
-            dataset_id: brutos_recursos_humanos_ergon
-            table_id: dependentes
-          read:
-            table: ERGON.DEPENDENTES
-          dump_mode: overwrite
-          options:
-            columns:
-              add_timestamp: true
-      - cron: "45 4 * * *"
-        timezone: America/Sao_Paulo
-        slug: cargos_
-        parameters:
-          table:
-            dataset_id: brutos_recursos_humanos_ergon
-            table_id: cargos_
-          read:
-            table: ERGON.CARGOS_
-          dump_mode: overwrite
-          options:
-            columns:
-              add_timestamp: true
-      - cron: "10 23 * * *"
+      - cron: "40 19 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_fita_banco
         parameters:
@@ -1811,7 +1758,7 @@ deployments:
               lookback: 1
             columns:
               add_timestamp: true
-      - cron: "20 23 * * *"
+      - cron: "50 19 * * *"
         timezone: America/Sao_Paulo
         slug: fichas_financeiras
         parameters:
@@ -1829,7 +1776,7 @@ deployments:
               lookback: 1
             columns:
               add_timestamp: true
-      - cron: "30 23 * * *"
+      - cron: "0 20 * * *"
         timezone: America/Sao_Paulo
         slug: ipl_pt_fichas
         parameters:
