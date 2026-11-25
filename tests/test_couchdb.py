@@ -1,6 +1,8 @@
 from dataclasses import replace
+from datetime import datetime
 from json import loads
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from deltalake import DeltaTable, write_deltalake
@@ -26,6 +28,9 @@ from utils.origins import read_request
 from utils.types import Database, DumpOptions, Read
 
 CPF_IDS = ["00000000272", "00000000353", "00000008001"]
+
+CAPTURED = datetime(2026, 11, 25, 3, 30, tzinfo=ZoneInfo("America/Sao_Paulo"))
+"""The capture time of a daily run of a bcadastro schedule."""
 
 
 def test_the_bcadastro_columns_are_those_of_the_destination_without_the_airbyte_ones() -> None:
@@ -258,13 +263,13 @@ async def test_a_database_that_reads_one_chunk_at_a_time_refuses_concurrency(mon
         pytest.param("rj_iplanrio__bcadastro_chcaepf", "chcaepf_bcadastros", None, id="activities"),
     ],
 )
-async def test_a_bcadastro_pipeline_merges_the_changes_daily_and_reloads_monthly(
+async def test_a_bcadastro_pipeline_appends_the_changes_daily_and_reloads_monthly(
     monkeypatch, pipeline, database, key_width
 ) -> None:
     """Build both dumps from the parameters of the prod schedules.
 
-    The daily one merges the changes by id from the sequence of the table, and the
-    monthly one overwrites every chunk from `_all_docs`.
+    The daily one appends the changes after the sequence of the table as the capture of
+    the run, and the monthly one overwrites every chunk from `_all_docs`.
     """
     seen = {}
 
@@ -277,6 +282,7 @@ async def test_a_bcadastro_pipeline_merges_the_changes_daily_and_reloads_monthly
     schedules = {schedule["slug"].rsplit("-", 1)[1]: schedule["parameters"] for schedule in prod["schedules"]}
     monkeypatch.setattr(tasks, "load_to_delta", load)
     monkeypatch.setattr(tasks, "read_resume_sequence", lambda uri: f"42-{uri}")
+    monkeypatch.setattr(tasks, "capture_time", lambda: CAPTURED)
     monkeypatch.setenv("DB_USERNAME", "user")
     monkeypatch.setenv("DB_PASSWORD", "password")
 
@@ -287,7 +293,7 @@ async def test_a_bcadastro_pipeline_merges_the_changes_daily_and_reloads_monthly
             parameters["table"],
             parameters["read"],
             bucket="b",
-            dump_mode=parameters["dump_mode"],
+            dump_mode=parameters.get("dump_mode", "append"),
             options=parameters["options"],
         )
 
@@ -300,9 +306,9 @@ async def test_a_bcadastro_pipeline_merges_the_changes_daily_and_reloads_monthly
     assert (seen["destination"].dataset_id, seen["destination"].table_id, seen["mode"]) == (
         "brutos_bcadastro",
         database,
-        "merge",
+        "append",
     )
-    assert seen["options"] == {"merge": {"key": ["id"]}, "columns": {"add_timestamp": True}}
+    assert seen["options"] == {"columns": {"add_timestamp": True}, "capture": CAPTURED}
 
     await dump(schedules["monthly"])
     source = seen["source"]
@@ -362,11 +368,12 @@ def test_changes_cannot_resume_without_a_loaded_table(tmp_path) -> None:
         read_resume_sequence(str(tmp_path / "missing"))
 
 
-async def test_the_changes_merge_into_a_loaded_table_by_id(fake_api, tmp_path) -> None:
-    """Load the people in chunks, then merge the changes after the load by id.
+async def test_the_changes_are_appended_to_a_loaded_table_and_the_reload_drops_them(fake_api, tmp_path) -> None:
+    """Load the people in chunks, append the changes after the load, then reload.
 
-    A person changed twice keeps the last change, a new person is added, and the
-    others stay as loaded. The next read resumes from the end of the changes.
+    A person changed twice keeps its last change in the capture, the newest
+    `_prefect_extracted_at` of an id is its current version, the next read resumes from
+    the end of the changes, and the monthly overwrite leaves one row for each document.
     """
     uri = str(tmp_path / "t")
     people = [cpf_document(number) for number in PEOPLE]
@@ -378,18 +385,19 @@ async def test_the_changes_merge_into_a_loaded_table_by_id(fake_api, tmp_path) -
     source = CouchDBSource(conn, shape=BCADASTRO, secure=False, key_width=11, concurrency=1)
     chunks: Chunks = {"column": "id", "width": 5_000, "begin": 0, "end": 9_999}
     load: DumpOptions = {"chunks": chunks, "columns": {"add_timestamp": True}}
-    merge: DumpOptions = {"merge": {"key": ["id"]}, "columns": {"add_timestamp": True}}
-    fake_api.replies.append((200, {"db_name": "ignored"}))
-    fake_api.replies.extend(
-        (200, loads(all_docs_page(documents, 3))) for documents in [[people[0], people[1]], [people[2]], [], []]
-    )
+    append: DumpOptions = {"columns": {"add_timestamp": True}, "capture": CAPTURED}
+    table = replace(source, origin=read_request("couchdb", {"table": "chcpf_bcadastros"}, True))
 
-    await dump_to_delta(
-        replace(source, origin=read_request("couchdb", {"table": "chcpf_bcadastros"}, True)),
-        uri,
-        "overwrite",
-        load,
-    )
+    def reply_all_docs(documents: list[dict[str, JsonValue]]) -> None:
+        """Queue the pages of an `_all_docs` read of the two chunks and the null one."""
+        fake_api.replies.append((200, {"db_name": "ignored"}))
+        fake_api.replies.extend(
+            (200, loads(all_docs_page(page, 3)))
+            for page in [[doc for doc in documents if doc["_id"] < "00000005000"], [documents[2]], [], []]
+        )
+
+    reply_all_docs(people)
+    await dump_to_delta(table, uri, "overwrite", load)
     since = read_resume_sequence(uri)
     changes = [(616823200, renamed), (616823201, newcomer), (616823202, again)]
     fake_api.replies.append((200, {"db_name": "ignored"}))
@@ -398,14 +406,22 @@ async def test_the_changes_merge_into_a_loaded_table_by_id(fake_api, tmp_path) -
     await dump_to_delta(
         replace(source, origin=read_request("couchdb", {"table": "chcpf_bcadastros", "since": since}, False)),
         uri,
-        "merge",
-        merge,
+        "append",
+        append,
     )
-    rows = {row["id"]: row for row in DeltaTable(uri).to_pyarrow_table().to_pylist()}
+    rows = DeltaTable(uri).to_pyarrow_table().to_pylist()
+    latest = {row["id"]: row for row in sorted(rows, key=lambda row: row["_prefect_extracted_at"])}
 
     assert since == UPDATE_SEQ
-    assert sorted(rows) == [*CPF_IDS, "00000009999"]
-    assert loads(rows[first]["doc"])["nomeContribuinte"] == "OUTRO NOME"
-    assert rows[first]["seq"] == "616823202-g1AAAAKTeJzLYWBg"
-    assert (rows[second]["seq"], loads(rows[second]["doc"])) == (None, people[1])
+    assert sorted(row["id"] for row in rows) == sorted([*CPF_IDS, first, "00000009999"])
+    assert {row["batch"] for row in rows if row["seq"]} == {CAPTURED.date().isoformat()}
+    assert loads(latest[first]["doc"])["nomeContribuinte"] == "OUTRO NOME"
+    assert (latest[second]["seq"], loads(latest[second]["doc"])) == (None, people[1])
     assert read_resume_sequence(uri) == "616823202-g1AAAAKTeJzLYWBg"
+
+    reply_all_docs([again, people[1], people[2]])
+    await dump_to_delta(table, uri, "overwrite", load)
+    reloaded = DeltaTable(uri).to_pyarrow_table().to_pylist()
+
+    assert sorted(row["id"] for row in reloaded) == CPF_IDS
+    assert {row["seq"] for row in reloaded} == {None}

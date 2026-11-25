@@ -1,9 +1,12 @@
 """The CouchDB databases of bcadastro, in the shape of `brutos_bcadastro_staging`.
 
 Load a database from `_all_docs` with an `overwrite`, which rewrites every chunk and
-drops the rows of the merges. Between two loads, merge `_changes` into the table by
-`id`, with `since` set to `table`: the read resumes from the sequence that the table
-holds (see `read_resume_sequence`).
+drops the chunks of the changes. Between two loads, append `_changes` with `since` set
+to `table`: the read resumes from the sequence that the table holds (see
+`read_resume_sequence`), and its rows go in the chunk of the day. A document is then in
+the table more than once, and the newest `_prefect_extracted_at` is its current version.
+A merge would rewrite nearly every file of the table, since a day of changes touches
+almost every chunk.
 """
 
 from typing import cast

@@ -66,7 +66,7 @@ from .types import (
     Read,
     Table,
 )
-from .utils import post_discord, read_nodes, render_query, summarize_dbt
+from .utils import capture_time, post_discord, read_nodes, render_query, summarize_dbt
 from .wetalkie import WetalkieApi
 from .whitelist import Selection, Whitelist, add_to_whitelist
 
@@ -157,7 +157,8 @@ async def dump_db_to_gcs(
       each child run of `shards`. A shard does not publish, sweep or maintain the table.
 
     A CouchDB `read` with `since: table` resumes the changes from the sequence that the
-    table holds (see `read_resume_sequence`), for a `merge` by `id` between two loads.
+    table holds (see `read_resume_sequence`). In `append` its rows are the capture of
+    the run, added in the chunk of its day, so a retry of the run adds nothing.
 
     `append` skips what did not change. `overwrite` writes every chunk again and
     deletes the chunks outside the range. `merge` matches the rows to the table by the
@@ -190,6 +191,9 @@ async def dump_db_to_gcs(
     if read.get("since") == SINCE_FROM_TABLE:
         resumed["since"] = await to_thread(read_resume_sequence, destination.uri)
         logger.info("Changes resumed: since=%s", resumed["since"])
+
+        if dump_mode == "append" and "capture" not in chosen:
+            chosen = {**chosen, "capture": capture_time()}
 
     await load_to_delta(
         get_source(database["type"])(
