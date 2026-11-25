@@ -160,7 +160,7 @@ deployments:
     schedules:
 
       # GET - Todos as jornadas do Content Builder (sem filtro)
-      - cron: "0 9,11,13,15,17 * * 1-5"
+      - cron: "0 8-20 * * 1-5"
         timezone: America/Sao_Paulo
         active: true
         slug: get-content-builder-journey
@@ -175,7 +175,7 @@ deployments:
           infisical_secret_path: /api-sfmc
 
       # GET - Event Definitions (liga jornadas aos templates HSM e DEs de entrada)
-      - cron: "0 9,11,13,15,17 * * 1-5"
+      - cron: "0 8-20 * * 1-5"
         timezone: America/Sao_Paulo
         active: true
         slug: get-event-definitions
@@ -222,7 +222,7 @@ deployments:
       #     infisical_secret_path: /api-sfmc
 
       # GET - Todos os assets do Content Builder (sem filtro)
-      - cron: "0 9,11,13,15,17 * * 1-5"
+      - cron: "0 8-20 * * 1-5"
         timezone: America/Sao_Paulo
         active: true
         slug: get-content-builder-asset
@@ -239,7 +239,7 @@ deployments:
           infisical_secret_path: /api-sfmc
 
       # POST /query - Templates (assetType.id = 235)
-      - cron: "0 9,11,13,15,17 * * 1-5"
+      - cron: "0 8-20 * * 1-5"
         timezone: America/Sao_Paulo
         active: true
         slug: post-content-builder-template
