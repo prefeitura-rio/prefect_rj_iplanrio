@@ -12,6 +12,44 @@ import requests
 import simplejson
 from iplanrio.pipelines_utils.logging import log
 
+Timeout = float | tuple[float, float]
+"""A ``requests`` timeout: seconds, or a ``(connect, read)`` pair of seconds."""
+
+LOGIN_TIMEOUT: float = 30.0
+"""Timeout in seconds for the login request."""
+
+GET_TIMEOUT: Timeout = 120
+"""Default timeout for ``get``."""
+
+DEFAULT_TIMEOUT: tuple[float, float] = (10.0, 300.0)
+"""Default ``(connect, read)`` timeout in seconds for ``post`` and ``put``.
+
+The read part is generous because a dispatch batch can take long to be accepted.
+"""
+
+
+_TIMEOUT_PAIR_LENGTH = 2
+
+
+def _is_positive_number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+
+
+def validate_timeout(timeout: Timeout) -> Timeout:
+    """Return the timeout if it is a positive number or a ``(connect, read)`` pair of them.
+
+    ``None`` is refused: it would make ``requests`` wait forever on a silent API.
+    """
+    if _is_positive_number(timeout):
+        return timeout
+    if (
+        isinstance(timeout, tuple)
+        and len(timeout) == _TIMEOUT_PAIR_LENGTH
+        and all(_is_positive_number(part) for part in timeout)
+    ):
+        return timeout
+    raise ValueError(f"timeout must be a positive number or a (connect, read) pair of them, got {timeout!r}")
+
 
 class ApiHandler:
     """
@@ -75,6 +113,7 @@ class ApiHandler:
                 "username": self._username,
                 "password": self._password,
             },
+            timeout=LOGIN_TIMEOUT,
         )
         log(f"Status code: {response.status_code}")
         if response.status_code == 200:
@@ -121,10 +160,11 @@ class ApiHandler:
         """
         return self._expires_at
 
-    def get(self, path: str, timeout: int = 120):
+    def get(self, path: str, timeout: Timeout = GET_TIMEOUT):
         """
         GET request
         """
+        timeout = validate_timeout(timeout)
         self._refresh_token_if_needed()
         response = requests.get(f"{self._base_url}{path}", headers=self._headers, timeout=timeout)
         response.raise_for_status()
@@ -133,18 +173,27 @@ class ApiHandler:
         except simplejson.JSONDecodeError:
             return response
 
-    def put(self, path, json=None):
+    def put(self, path, json=None, timeout: Timeout = DEFAULT_TIMEOUT):
         """
         PUT request
         """
+        timeout = validate_timeout(timeout)
         self._refresh_token_if_needed()
-        response = requests.put(f"{self._base_url}{path}", headers=self._headers, json=json)
+        response = requests.put(f"{self._base_url}{path}", headers=self._headers, json=json, timeout=timeout)
         return response
 
-    def post(self, path, data: dict = None, json: dict = None, files: dict = None):
+    def post(
+        self,
+        path,
+        data: dict = None,
+        json: dict = None,
+        files: dict = None,
+        timeout: Timeout = DEFAULT_TIMEOUT,
+    ):
         """
         POST request
         """
+        timeout = validate_timeout(timeout)
         self._refresh_token_if_needed()
         response = requests.post(
             url=f"{self._base_url}{path}",
@@ -152,5 +201,6 @@ class ApiHandler:
             data=data,
             json=json,
             files=files,
+            timeout=timeout,
         )
         return response
