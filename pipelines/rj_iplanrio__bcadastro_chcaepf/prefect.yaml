@@ -93,11 +93,7 @@ deployments:
           read:
             table: chcaepf_bcadastros
             since: table
-          dump_mode: merge
           options:
-            merge:
-              key:
-                - id
             columns:
               add_timestamp: true
       - cron: "30 4 4 * *"
