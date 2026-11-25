@@ -75,7 +75,7 @@ deployments:
       #         width: month
       #         begin: "2026-11-24"
       #         lookback: 1
-      - cron: "00 00 * * *"
+      - cron: "10 00 * * *"
         timezone: America/Sao_Paulo
         slug: vw_averbacoes_conta_gbp
         parameters:
@@ -127,7 +127,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "0 0 * * *"
+      - cron: "10 0 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_erg_matriculas
         parameters:
@@ -405,7 +405,7 @@ deployments:
         slug: ipl_prefixos
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: ipl_prefixos
           read:
             table: C_ERGON.IPL_PREFIXOS
@@ -418,7 +418,7 @@ deployments:
         slug: averbacoes_conta
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: averbacoes_conta
           read:
             table: ERGON.AVERBACOES_CONTA
@@ -431,7 +431,7 @@ deployments:
         slug: averb_oque_conta
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: averb_oque_conta
           read:
             table: ERGON.AVERB_OQUE_CONTA
@@ -444,7 +444,7 @@ deployments:
         slug: concursos
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: concursos
           read:
             table: ERGON.CONCURSOS
@@ -457,7 +457,7 @@ deployments:
         slug: folhas_emp
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: folhas_emp
           read:
             table: ERGON.FOLHAS_EMP
@@ -470,7 +470,7 @@ deployments:
         slug: formas_vac
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: formas_vac
           read:
             table: ERGON.FORMAS_VAC
@@ -483,7 +483,7 @@ deployments:
         slug: formas_vac_
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: formas_vac_
           read:
             table: ERGON.FORMAS_VAC_
@@ -496,7 +496,7 @@ deployments:
         slug: frequencias
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: frequencias
           read:
             table: ERGON.FREQUENCIAS
@@ -509,7 +509,7 @@ deployments:
         slug: hist_cargo
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: hist_cargo
           read:
             table: ERGON.HIST_CARGO
@@ -522,7 +522,7 @@ deployments:
         slug: hist_funcao
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: hist_funcao
           read:
             table: ERGON.HIST_FUNCAO
@@ -535,7 +535,7 @@ deployments:
         slug: inscritos
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: inscritos
           read:
             table: ERGON.INSCRITOS
@@ -548,7 +548,7 @@ deployments:
         slug: lic_afast
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: lic_afast
           read:
             table: ERGON.LIC_AFAST
@@ -561,7 +561,7 @@ deployments:
         slug: pre_conta
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: pre_conta
           read:
             table: ERGON.PRE_CONTA
@@ -574,7 +574,7 @@ deployments:
         slug: rubricas
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: rubricas
           read:
             table: ERGON.RUBRICAS
@@ -587,7 +587,7 @@ deployments:
         slug: sirhu_afastamento
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: sirhu_afastamento
           read:
             table: SIMPA.SIRHU_AFASTAMENTO
@@ -600,7 +600,7 @@ deployments:
         slug: sirhu_dbtabelas_afastamento
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: sirhu_dbtabelas_afastamento
           read:
             table: SIMPA.SIRHU_DBTABELAS_AFASTAMENTO
@@ -613,7 +613,7 @@ deployments:
         slug: tipo_tempo
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: tipo_tempo
           read:
             table: ERGON.TIPO_TEMPO
@@ -626,7 +626,7 @@ deployments:
         slug: vagas_concurso
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: vagas_concurso
           read:
             table: ERGON.VAGAS_CONCURSO
@@ -639,7 +639,7 @@ deployments:
         slug: total_conta
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: total_conta
           read:
             table: ERGON.TOTAL_CONTA
@@ -652,7 +652,7 @@ deployments:
         slug: cid
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: cid
           read:
             table: ERGON.CID
@@ -665,7 +665,7 @@ deployments:
         slug: designacoes_ev
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: designacoes_ev
           read:
             table: ERGON.DESIGNACOES_EV
@@ -678,7 +678,7 @@ deployments:
         slug: erg_pm_cid10_capitulo
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: erg_pm_cid10_capitulo
           read:
             table: ERGON.ERG_PM_CID10_CAPITULO
@@ -691,7 +691,7 @@ deployments:
         slug: erg_pm_decisao
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: erg_pm_decisao
           read:
             table: ERGON.ERG_PM_DECISAO
@@ -704,7 +704,7 @@ deployments:
         slug: erg_pm_grupoexame
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: erg_pm_grupoexame
           read:
             table: ERGON.ERG_PM_GRUPOEXAME
@@ -717,7 +717,7 @@ deployments:
         slug: erg_pm_pront_med
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: erg_pm_pront_med
           read:
             table: ERGON.ERG_PM_PRONT_MED
@@ -730,7 +730,7 @@ deployments:
         slug: erg_pm_resultpront
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: erg_pm_resultpront
           read:
             table: ERGON.ERG_PM_RESULTPRONT
@@ -743,7 +743,7 @@ deployments:
         slug: exames
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: exames
           read:
             table: ERGON.EXAMES
@@ -756,7 +756,7 @@ deployments:
         slug: funcoes_ev_
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: funcoes_ev_
           read:
             table: ERGON.FUNCOES_EV_
@@ -769,7 +769,7 @@ deployments:
         slug: medicos
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: medicos
           read:
             table: ERGON.MEDICOS
@@ -782,7 +782,7 @@ deployments:
         slug: prontuario
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: prontuario
           read:
             table: ERGON.PRONTUARIO
@@ -795,7 +795,7 @@ deployments:
         slug: tpmrj_pm_juntas
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: tpmrj_pm_juntas
           read:
             table: C_ERGON.TPMRJ_PM_JUNTAS
@@ -808,7 +808,7 @@ deployments:
         slug: tpmrj_pm_periciasjunta
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: tpmrj_pm_periciasjunta
           read:
             table: C_ERGON.TPMRJ_PM_PERICIASJUNTA
@@ -821,7 +821,7 @@ deployments:
         slug: tpmrj_pm_resultjunta
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: tpmrj_pm_resultjunta
           read:
             table: C_ERGON.TPMRJ_PM_RESULTJUNTA
@@ -834,7 +834,7 @@ deployments:
         slug: tpmrj_pm_vwbim
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: tpmrj_pm_vwbim
           read:
             table: C_ERGON.TPMRJ_PM_VWBIM
@@ -847,7 +847,7 @@ deployments:
         slug: tpmrj_pm_vwtpconclper
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: tpmrj_pm_vwtpconclper
           read:
             table: C_ERGON.TPMRJ_PM_VWTPCONCLPER
@@ -860,7 +860,7 @@ deployments:
         slug: dependentes
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: dependentes
           read:
             table: ERGON.DEPENDENTES
@@ -873,7 +873,7 @@ deployments:
         slug: cargos_
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: cargos_
           read:
             table: ERGON.CARGOS_
@@ -881,12 +881,12 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "10 23 * * *"
+      - cron: "10 00 * * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_fita_banco
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: vw_dlk_erg_fita_banco
           read:
             table: C_ERGON.VW_DLK_ERG_FITA_BANCO
@@ -899,12 +899,12 @@ deployments:
               lookback: 1
             columns:
               add_timestamp: true
-      - cron: "20 23 * * *"
+      - cron: "20 00 * * *"
         timezone: America/Sao_Paulo
         slug: fichas_financeiras
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: fichas_financeiras
           read:
             table: ERGON.FICHAS_FINANCEIRAS
@@ -913,16 +913,16 @@ deployments:
             chunks:
               column: MES_ANO_FOLHA
               width: month
-              begin: "2020-01-01"
+              begin: "2010-01-01"
               lookback: 1
             columns:
               add_timestamp: true
-      - cron: "30 23 * * *"
+      - cron: "30 00 * * *"
         timezone: America/Sao_Paulo
         slug: ipl_pt_fichas
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: ipl_pt_fichas
           read:
             table: ERGON.IPL_PT_FICHAS
@@ -931,7 +931,7 @@ deployments:
             chunks:
               column: MES_ANO_FOLHA
               width: month
-              begin: "2020-01-01"
+              begin: "2010-01-01"
               lookback: 1
             columns:
               add_timestamp: true
@@ -1039,7 +1039,7 @@ deployments:
           options:
             columns:
               add_timestamp: true
-      - cron: "0 0 * * *"
+      - cron: "0 10* * *"
         timezone: America/Sao_Paulo
         slug: vw_dlk_erg_erg_matriculas
         parameters:
@@ -1317,7 +1317,7 @@ deployments:
         slug: ipl_prefixos
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: ipl_prefixos
           read:
             table: C_ERGON.IPL_PREFIXOS
@@ -1330,7 +1330,7 @@ deployments:
         slug: averbacoes_conta
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: averbacoes_conta
           read:
             table: ERGON.AVERBACOES_CONTA
@@ -1343,7 +1343,7 @@ deployments:
         slug: averb_oque_conta
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: averb_oque_conta
           read:
             table: ERGON.AVERB_OQUE_CONTA
@@ -1356,7 +1356,7 @@ deployments:
         slug: concursos
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: concursos
           read:
             table: ERGON.CONCURSOS
@@ -1369,7 +1369,7 @@ deployments:
         slug: folhas_emp
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: folhas_emp
           read:
             table: ERGON.FOLHAS_EMP
@@ -1382,7 +1382,7 @@ deployments:
         slug: formas_vac
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: formas_vac
           read:
             table: ERGON.FORMAS_VAC
@@ -1395,7 +1395,7 @@ deployments:
         slug: formas_vac_
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: formas_vac_
           read:
             table: ERGON.FORMAS_VAC_
@@ -1408,7 +1408,7 @@ deployments:
         slug: frequencias
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: frequencias
           read:
             table: ERGON.FREQUENCIAS
@@ -1421,7 +1421,7 @@ deployments:
         slug: hist_cargo
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: hist_cargo
           read:
             table: ERGON.HIST_CARGO
@@ -1434,7 +1434,7 @@ deployments:
         slug: hist_funcao
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: hist_funcao
           read:
             table: ERGON.HIST_FUNCAO
@@ -1447,7 +1447,7 @@ deployments:
         slug: inscritos
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: inscritos
           read:
             table: ERGON.INSCRITOS
@@ -1460,7 +1460,7 @@ deployments:
         slug: lic_afast
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: lic_afast
           read:
             table: ERGON.LIC_AFAST
@@ -1473,7 +1473,7 @@ deployments:
         slug: pre_conta
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: pre_conta
           read:
             table: ERGON.PRE_CONTA
@@ -1486,7 +1486,7 @@ deployments:
         slug: rubricas
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: rubricas
           read:
             table: ERGON.RUBRICAS
@@ -1499,7 +1499,7 @@ deployments:
         slug: sirhu_afastamento
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: sirhu_afastamento
           read:
             table: SIMPA.SIRHU_AFASTAMENTO
@@ -1512,7 +1512,7 @@ deployments:
         slug: sirhu_dbtabelas_afastamento
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: sirhu_dbtabelas_afastamento
           read:
             table: SIMPA.SIRHU_DBTABELAS_AFASTAMENTO
@@ -1525,7 +1525,7 @@ deployments:
         slug: tipo_tempo
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: tipo_tempo
           read:
             table: ERGON.TIPO_TEMPO
@@ -1538,7 +1538,7 @@ deployments:
         slug: vagas_concurso
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: vagas_concurso
           read:
             table: ERGON.VAGAS_CONCURSO
@@ -1551,7 +1551,7 @@ deployments:
         slug: total_conta
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: total_conta
           read:
             table: ERGON.TOTAL_CONTA
@@ -1564,7 +1564,7 @@ deployments:
         slug: cid
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: cid
           read:
             table: ERGON.CID
@@ -1577,7 +1577,7 @@ deployments:
         slug: designacoes_ev
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: designacoes_ev
           read:
             table: ERGON.DESIGNACOES_EV
@@ -1590,7 +1590,7 @@ deployments:
         slug: erg_pm_cid10_capitulo
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: erg_pm_cid10_capitulo
           read:
             table: ERGON.ERG_PM_CID10_CAPITULO
@@ -1603,7 +1603,7 @@ deployments:
         slug: erg_pm_decisao
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: erg_pm_decisao
           read:
             table: ERGON.ERG_PM_DECISAO
@@ -1616,7 +1616,7 @@ deployments:
         slug: erg_pm_grupoexame
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: erg_pm_grupoexame
           read:
             table: ERGON.ERG_PM_GRUPOEXAME
@@ -1629,7 +1629,7 @@ deployments:
         slug: erg_pm_pront_med
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: erg_pm_pront_med
           read:
             table: ERGON.ERG_PM_PRONT_MED
@@ -1642,7 +1642,7 @@ deployments:
         slug: erg_pm_resultpront
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: erg_pm_resultpront
           read:
             table: ERGON.ERG_PM_RESULTPRONT
@@ -1655,7 +1655,7 @@ deployments:
         slug: exames
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: exames
           read:
             table: ERGON.EXAMES
@@ -1668,7 +1668,7 @@ deployments:
         slug: funcoes_ev_
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: funcoes_ev_
           read:
             table: ERGON.FUNCOES_EV_
@@ -1681,7 +1681,7 @@ deployments:
         slug: medicos
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: medicos
           read:
             table: ERGON.MEDICOS
@@ -1694,7 +1694,7 @@ deployments:
         slug: prontuario
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: prontuario
           read:
             table: ERGON.PRONTUARIO
@@ -1707,7 +1707,7 @@ deployments:
         slug: tpmrj_pm_juntas
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: tpmrj_pm_juntas
           read:
             table: C_ERGON.TPMRJ_PM_JUNTAS
@@ -1720,7 +1720,7 @@ deployments:
         slug: tpmrj_pm_periciasjunta
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: tpmrj_pm_periciasjunta
           read:
             table: C_ERGON.TPMRJ_PM_PERICIASJUNTA
@@ -1733,7 +1733,7 @@ deployments:
         slug: tpmrj_pm_resultjunta
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: tpmrj_pm_resultjunta
           read:
             table: C_ERGON.TPMRJ_PM_RESULTJUNTA
@@ -1746,7 +1746,7 @@ deployments:
         slug: tpmrj_pm_vwbim
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: tpmrj_pm_vwbim
           read:
             table: C_ERGON.TPMRJ_PM_VWBIM
@@ -1759,7 +1759,7 @@ deployments:
         slug: tpmrj_pm_vwtpconclper
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_pericia_medica_staging
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
             table_id: tpmrj_pm_vwtpconclper
           read:
             table: C_ERGON.TPMRJ_PM_VWTPCONCLPER
@@ -1772,7 +1772,7 @@ deployments:
         slug: dependentes
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: dependentes
           read:
             table: ERGON.DEPENDENTES
@@ -1785,7 +1785,7 @@ deployments:
         slug: cargos_
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: cargos_
           read:
             table: ERGON.CARGOS_
@@ -1798,7 +1798,7 @@ deployments:
         slug: vw_dlk_erg_fita_banco
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: vw_dlk_erg_fita_banco
           read:
             table: C_ERGON.VW_DLK_ERG_FITA_BANCO
@@ -1816,7 +1816,7 @@ deployments:
         slug: fichas_financeiras
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: fichas_financeiras
           read:
             table: ERGON.FICHAS_FINANCEIRAS
@@ -1834,7 +1834,7 @@ deployments:
         slug: ipl_pt_fichas
         parameters:
           table:
-            dataset_id: brutos_recursos_humanos_ergon_staging
+            dataset_id: brutos_recursos_humanos_ergon
             table_id: ipl_pt_fichas
           read:
             table: ERGON.IPL_PT_FICHAS
