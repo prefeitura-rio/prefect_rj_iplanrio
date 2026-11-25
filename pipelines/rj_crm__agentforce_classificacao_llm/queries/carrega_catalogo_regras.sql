@@ -5,5 +5,5 @@
 SELECT
     agrupamento_tipo, agrupamento, categoria_pai, nome_funcao, nome, descricao, inclui, nao_inclui,
     regra_python, criado_em
-FROM `{full_id}`
+FROM `${full_id}`
 WHERE etapa = @etapa AND agrupamento_tipo = @agrupamento_tipo AND ativo_indicador = TRUE

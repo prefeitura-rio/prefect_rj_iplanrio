@@ -12,14 +12,12 @@ para produção:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pandas as pd
 from prefect import task
 
+from pipelines.rj_crm__agentforce_classificacao_llm.constants import QUERIES_ANCHOR
 from pipelines.rj_crm__agentforce_classificacao_llm.utils.bigquery import get_bq_client
-
-_QUERIES_DIR = Path(__file__).resolve().parent.parent / "queries"
+from prefect_rj_iplanrio.sql import load_query
 
 
 @task(log_prints=True, retries=2, retry_delay_seconds=30)
@@ -35,8 +33,9 @@ def extrai_sessoes_nao_classificadas(
     cobre esse desincronismo — ver cabeçalho da query). Retorna 1 linha por sessão do agente
     (id_sessao_receptivo) pendente de classificação, com o HSM que o dbt ligou a ela (se
     houver) e a flag resposta_atrasada_btn."""
-    sql_template = (_QUERIES_DIR / "extract_sessoes.sql").read_text()
-    query = sql_template.format(
+    query = load_query(
+        QUERIES_ANCHOR,
+        "extract_sessoes",
         lookback_days=lookback_days,
         source_table=source_table,
         destino_full_table_id=destino_full_table_id,

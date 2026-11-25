@@ -32,7 +32,6 @@ import ast
 import re
 import unicodedata
 from datetime import date, datetime, timezone
-from pathlib import Path
 from typing import ClassVar
 
 import pandas as pd
@@ -42,9 +41,11 @@ from prefect import task
 from prefect.cache_policies import NO_CACHE
 from prefect.deployments import run_deployment
 
+from pipelines.rj_crm__agentforce_classificacao_llm.constants import QUERIES_ANCHOR
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.juiz import ConfigJuiz, julga
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import SCHEMA, _full_table_id
 from pipelines.rj_crm__agentforce_classificacao_llm.utils.bigquery import get_bq_client
+from prefect_rj_iplanrio.sql import load_query
 
 # Coluna da sessão que dá o valor de cada agrupamento_tipo do catálogo. Hierarquia:
 # agrupamento (hoje o macrotema) > tema > motivo — a sessão só recebe tema do seu próprio
@@ -190,8 +191,6 @@ class RulesSandbox:
 # Tasks
 # ---------------------------------------------------------------------------
 
-_QUERIES_DIR = Path(__file__).resolve().parent.parent / "queries"
-
 _COLUNAS_CATALOGO = [
     "agrupamento_tipo", "agrupamento", "categoria_pai", "nome_funcao", "nome", "descricao", "inclui",
     "nao_inclui", "regra_python", "criado_em",
@@ -214,7 +213,7 @@ def carrega_catalogo_regras(
         )
     client = get_bq_client(project_id)
     full_id = f"{project_id}.{dataset_id}.{table_id}"
-    query = (_QUERIES_DIR / "carrega_catalogo_regras.sql").read_text().format(full_id=full_id)
+    query = load_query(QUERIES_ANCHOR, "carrega_catalogo_regras", full_id=full_id)
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("etapa", "STRING", etapa),
@@ -565,7 +564,7 @@ def extrai_sessoes_para_recalculo_taxonomia(project_id: str, dataset_id: str, ta
     sem filtro de data."""
     client = get_bq_client(project_id)
     full_id = _full_table_id(project_id, dataset_id, table_id)
-    query = (_QUERIES_DIR / "extrai_sessoes_recalculo_taxonomia.sql").read_text().format(full_id=full_id)
+    query = load_query(QUERIES_ANCHOR, "extrai_sessoes_recalculo_taxonomia", full_id=full_id)
     df = client.query(query).to_dataframe()
     print(f"[TAXONOMIA] {len(df)} sessão(ões) relevante(s) carregada(s) da tabela destino pra recálculo de tema/motivo.")
     return df
@@ -610,21 +609,19 @@ def atualiza_tema_motivo(
     colunas_tmp = {"id_sessao", "classificado_em", "data_particao", *_COLUNAS_TAXONOMIA}
     schema_tmp = [f for f in SCHEMA if f.name in colunas_tmp]
 
-    client.query(f"TRUNCATE TABLE `{tmp_full}`").result()
+    client.query(load_query(QUERIES_ANCHOR, "trunca_tmp", tmp_full=tmp_full)).result()
     job_config = bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_APPEND, schema=schema_tmp)
     job = client.load_table_from_dataframe(df_carga, tmp_full, job_config=job_config)
     job.result()
     if job.errors:
         raise RuntimeError(f"[TAXONOMIA] Erro ao carregar tmp: {job.errors}")
 
-    merge_sql = (_QUERIES_DIR / "merge_tema_motivo.sql").read_text().format(
-        destino_full=destino_full, tmp_full=tmp_full
-    )
+    merge_sql = load_query(QUERIES_ANCHOR, "merge_tema_motivo", destino_full=destino_full, tmp_full=tmp_full)
     merge_job = client.query(merge_sql)
     merge_job.result()
     linhas = merge_job.num_dml_affected_rows or 0
 
-    client.query(f"TRUNCATE TABLE `{tmp_full}`").result()
+    client.query(load_query(QUERIES_ANCHOR, "trunca_tmp", tmp_full=tmp_full)).result()
     print(f"[TAXONOMIA] MERGE parcial concluído: {linhas} linha(s) de tema/motivo atualizada(s) em '{table_id}'.")
     return linhas
 

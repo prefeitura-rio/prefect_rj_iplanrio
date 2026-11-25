@@ -5,5 +5,5 @@
 SELECT
     id_sessao, resumo, motivo, macrotema_principal, conteudo_relevante,
     tema_julgamento, motivo_julgamento, modelo_juiz, prompt_versao_juiz
-FROM `{full_id}`
+FROM `${full_id}`
 WHERE conteudo_relevante = true
