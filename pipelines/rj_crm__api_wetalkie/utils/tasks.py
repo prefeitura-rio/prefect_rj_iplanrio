@@ -24,7 +24,7 @@ from mutagen.oggvorbis import OggVorbis
 from mutagen.wave import WAVE
 from prefect import task
 
-from pipelines.rj_crm__api_wetalkie.utils.api_handler import ApiHandler
+from prefect_rj_iplanrio.wetalkie import ApiHandler
 
 
 # Audio processing exceptions

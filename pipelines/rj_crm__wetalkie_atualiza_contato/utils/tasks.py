@@ -14,7 +14,7 @@ from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
-from pipelines.rj_crm__wetalkie_atualiza_contato.utils.api_handler import ApiHandler
+from prefect_rj_iplanrio.wetalkie import ApiHandler
 
 
 @task
