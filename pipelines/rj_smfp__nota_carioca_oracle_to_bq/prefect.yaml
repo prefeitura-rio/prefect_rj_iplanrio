@@ -58,7 +58,7 @@ deployments:
       cpu_request: "3"
       cpu_limit: "6"
       memory_request: 6Gi
-      memory_limit: 8Gi
+      memory_limit: 12Gi
 - name: rj-smfp--nota-carioca-oracle-to-bq--prod
   tags:
   - environment:prod
@@ -99,7 +99,7 @@ deployments:
       # request já derrubou um nó. Os nós são de 8 vCPU / 15,5 GiB; a conversão para Parquet é limitada por CPU.
       cpu_request: "3"
       cpu_limit: "6"
-      # O limite passa do request em 2 GiB: é a margem contra o crescimento de memória que matou o pod em 14/10, e o
-      # memory_pause_ratio é medido sobre ele (pausa a 6,8 GiB).
+      # O limite passa do request em 6 GiB (como está em prod desde novembro): é a margem contra o crescimento de memória
+      # que matou o pod em 14/10, e o memory_pause_ratio é medido sobre ele (pausa a 10,2 GiB).
       memory_request: 6Gi
-      memory_limit: 8Gi
+      memory_limit: 12Gi
