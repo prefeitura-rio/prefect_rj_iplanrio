@@ -131,6 +131,8 @@ def test_flow_refuses_to_start_when_a_target_deployment_has_an_active_run(fake_p
     ("deployment_name", "expected"),
     [
         ("rj-smfp--nota-carioca-carga-completa--staging", Environment.STAGING),
+        ("rj-smfp--nota-carioca-carga-completa--stagingteste", Environment.STAGINGTESTE),
+        ("rj-smfp--nota-carioca-carga-completa--dev", Environment.DEV),
         ("rj-smfp--nota-carioca-carga-completa--prod", Environment.PROD),
     ],
 )
@@ -179,6 +181,21 @@ def test_staging_chains_the_staging_extraction() -> None:
     )
 
 
+@pytest.mark.parametrize("environment", ["staging", "stagingteste", "dev"])
+def test_each_test_environment_chains_its_own_three_deployments_without_schedule(environment: str) -> None:
+    item = deployments()[f"rj-smfp--nota-carioca-carga-completa--{environment}"]
+
+    assert "schedules" not in item
+    parameters = item["parameters"]
+    for key, flow in (
+        ("extracao_xml_deployment", "extracao-xml"),
+        ("oracle_to_bq_deployment", "oracle-to-bq"),
+        ("bq_to_oracle_deployment", "bq-to-oracle"),
+    ):
+        assert parameters[key] == f"rj-smfp--nota-carioca-{flow}/rj-smfp--nota-carioca-{flow}--{environment}"
+    assert parameters["discord_alert_role_ids"] == ["1558828140166647901", "903644455582695494"]
+
+
 def test_both_environments_mention_the_same_alert_roles() -> None:
     found = deployments()
 
@@ -209,7 +226,7 @@ def test_restarted_flow_waits_for_its_own_running_step_instead_of_failing(fake_p
 
 
 @pytest.mark.parametrize(
-    "name", ["rj-smfp--nota-carioca-carga-completa--prod", "rj-smfp--nota-carioca-carga-completa--staging"]
+    "name", [f"rj-smfp--nota-carioca-carga-completa--{env}" for env in ("prod", "staging", "stagingteste", "dev")]
 )
 def test_orchestrator_pod_is_guaranteed_so_it_is_evicted_last(name: str) -> None:
     variables = deployments()[name]["work_pool"]["job_variables"]
