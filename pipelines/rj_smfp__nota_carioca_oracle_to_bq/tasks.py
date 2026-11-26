@@ -51,9 +51,9 @@ def ensure_exclusive_task() -> None:
 
 
 @task(cache_policy=NO_CACHE)
-def drop_leftover_chunk_tasks_task(infisical_secret_path: str) -> None:
-    """Apaga as tarefas ``DBMS_PARALLEL_EXECUTE`` deixadas por execuções interrompidas (pods mortos)."""
-    dropped = chunks.drop_leftover_chunk_tasks(oracle.read_oracle_config(infisical_secret_path))
+def drop_leftover_chunk_tasks_task(infisical_secret_path: str, prefix: str = chunks.TASK_PREFIX) -> None:
+    """Apaga as tarefas ``DBMS_PARALLEL_EXECUTE`` deixadas por execuções interrompidas (pods mortos) no ambiente."""
+    dropped = chunks.drop_leftover_chunk_tasks(oracle.read_oracle_config(infisical_secret_path), prefix)
     log(f"{len(dropped)} tarefas de chunking deixadas por execuções anteriores apagadas: {dropped}")
 
 
