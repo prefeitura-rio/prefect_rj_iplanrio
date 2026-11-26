@@ -13,9 +13,17 @@ from datetime import datetime
 
 import oracledb
 
-from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.oracle import OracleConfig, connect, fetch_rows, to_int
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.oracle import (
+    OracleConfig,
+    connect,
+    fetch_rows,
+    to_int,
+    validate_identifier,
+)
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.progress import format_duration
 
+# Dono da tabela TAREFAS da aplicação; no homteste é NFSE_TESTE.
+TASKS_OWNER = "NFSE_OWNER"
 TASK_EXTRACTION = 46
 TASK_POST_PROCESSING = 48
 TASK_RUNNING = 1
@@ -135,19 +143,22 @@ def optional_datetime(value: object) -> datetime | None:
     raise TypeError(f"Data esperada, recebido {value!r}")
 
 
-def read_running_tasks(config: OracleConfig) -> tuple[RunningTask, ...]:
-    """Lê em ``NFSE_OWNER.TAREFAS`` as tarefas de extração (tipos 46 e 48) em execução, com o relógio do banco.
+def read_running_tasks(config: OracleConfig, owner: str = TASKS_OWNER) -> tuple[RunningTask, ...]:
+    """Lê em ``<owner>.TAREFAS`` as tarefas de extração (tipos 46 e 48) em execução, com o relógio do banco.
 
     :param config: Configuração da conexão.
+    :param owner: Dono da tabela ``TAREFAS`` (``NFSE_OWNER``; no homteste, ``NFSE_TESTE``).
     :returns: As tarefas com ``STATUS = 1``, da mais antiga para a mais nova.
+    :raises ValueError: Se o dono não for um identificador válido do Oracle.
     """
     binds: dict[str, object] = {
         "tipo_extracao": TASK_EXTRACTION,
         "tipo_pos_processamento": TASK_POST_PROCESSING,
         "status_em_execucao": TASK_RUNNING,
     }
+    params = {"owner": validate_identifier(owner)}
     with connect(config) as connection, connection.cursor() as cursor:
-        rows = fetch_rows(cursor, "list_running_extractions", binds)
+        rows = fetch_rows(cursor, "list_running_extractions", binds, params)
     return tuple(
         RunningTask(
             task_id=to_int(row["tarefa"]),
