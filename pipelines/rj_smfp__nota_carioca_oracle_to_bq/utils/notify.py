@@ -56,8 +56,8 @@ class NotifierConfig:
     :param enabled: ``False`` (``discord_notifications=false``) desliga o Discord e a leitura dos JSONs.
     :param project: Projeto do GCS onde os filhos gravam o progresso.
     :param bucket: Bucket dos arquivos da carga.
-    :param environment: Ambiente do deployment: staging usa o webhook de staging e marca as mensagens com
-        ``🧪 STAGING · ``; o padrão é prod.
+    :param environment: Ambiente do deployment: um de teste usa o seu webhook e marca as mensagens com o seu marcador
+        (staging: ``🧪 STAGING · ``); o padrão é prod.
     """
 
     dataset_id: str
@@ -104,7 +104,7 @@ class ParentNotifier:
             workers=config.workers,
             elapsed_seconds=0.0,
             updated_at=datetime.now(UTC),
-            staging=config.environment is Environment.STAGING,
+            environment=config.environment,
         )
 
     @classmethod
