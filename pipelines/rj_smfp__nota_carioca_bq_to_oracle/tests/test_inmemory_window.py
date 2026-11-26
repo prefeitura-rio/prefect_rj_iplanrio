@@ -6,7 +6,7 @@ import pytest
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle import tasks as tasks_module
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import inmemory
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.slots import SlotPlan
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.slots import OracleTarget, SlotPlan
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import LOADED_TABLE_INMEMORY
 
 
@@ -171,7 +171,7 @@ def test_release_frees_the_tables_that_left_use_and_only_warns_on_failure(monkey
         SlotPlan("BQLOAD_X", "BQLOAD_X_B", "BQLOAD_X_A"),
         SlotPlan("BQLOAD_N", None, "BQLOAD_N_A"),
     ]
-    failed = tasks_module.release_inmemory_task.fn(infisical_secret_path="/x", plans=plans, delay_seconds=120)
+    failed = tasks_module.release_inmemory_task.fn(target=OracleTarget("/x"), plans=plans, delay_seconds=120)
     assert released == ["BQLOAD_T_A"]
     assert failed == ["BQLOAD_X_B"]
     assert slept == [120]
@@ -183,5 +183,5 @@ def test_release_does_nothing_on_the_first_swap(monkeypatch):
     monkeypatch.setattr(tasks_module.time, "sleep", slept.append)
     monkeypatch.setattr(tasks_module, "log", lambda *_, **__: None)
     first = [SlotPlan("B", None, "B_A")]
-    assert tasks_module.release_inmemory_task.fn(infisical_secret_path="/x", plans=first, delay_seconds=120) == []
+    assert tasks_module.release_inmemory_task.fn(target=OracleTarget("/x"), plans=first, delay_seconds=120) == []
     assert slept == []

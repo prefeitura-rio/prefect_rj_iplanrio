@@ -18,8 +18,9 @@ from pipelines.rj_smfp__nota_carioca_extracao_xml.constants import (
     TASK_EXTRACTION,
     TASK_KINDS,
     TASK_POST_PROCESSING,
+    TASKS_OWNER,
 )
-from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.config import OracleConfig
+from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.config import OracleConfig, validate_identifier
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.discord_format import format_duration
 from prefect_rj_iplanrio.sql import load_query
 
@@ -139,18 +140,24 @@ class OracleTaskStore:
 
     :param config: Configuração da conexão.
     :param open_connection: Abre a conexão (os testes não usam; o padrão é :func:`connect`).
+    :param tasks_owner: Dono da tabela ``TAREFAS`` (``NFSE_OWNER``; no homteste, ``NFSE_TESTE``).
+    :raises ValueError: Se o dono não for um identificador válido do Oracle.
     """
 
     def __init__(
-        self, config: OracleConfig, open_connection: Callable[[OracleConfig], oracledb.Connection] = connect
+        self,
+        config: OracleConfig,
+        open_connection: Callable[[OracleConfig], oracledb.Connection] = connect,
+        tasks_owner: str = TASKS_OWNER,
     ) -> None:
         self._config = config
         self._open = open_connection
+        self._owner = validate_identifier(tasks_owner)
 
     def _fetch(self, query: str, binds: dict[str, object]) -> list[TaskRow]:
         with self._open(self._config) as connection, connection.cursor() as cursor:
             cursor.execute("SET TRANSACTION READ ONLY")
-            cursor.execute(load_query(QUERIES_ANCHOR, query), binds)
+            cursor.execute(load_query(QUERIES_ANCHOR, query, owner=self._owner), binds)
             if cursor.description is None:
                 raise LookupError(f"A consulta {query} não retornou colunas.")
             names = [column.name.lower() for column in cursor.description]
