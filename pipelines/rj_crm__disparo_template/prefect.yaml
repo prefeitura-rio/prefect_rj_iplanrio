@@ -472,14 +472,32 @@ deployments:
         flow_run_name: smtr-rio-rotativo-novas-vagas
         parameters:
           flow_environment: staging
-          campaign_name: smtr_rio_rotativo_novas_vagas
+          campaign_name: smtr_rio_rotativo_novas_vagas_v2
           data_extension_filename: whatsapp_smtr_rio_rotativo_novas_vagas
           de_columns: ["nome_sobrenome", "relacao_local", "numero_vagas", "logradouros"]
           filter_duplicated_cpfs: true
           dispatch_interval_days: 30
-          batch_size: 10000
+          batch_size: 50000
           batch_sleep_minutes: 3
           query_file: queries/smtr/smtr_rio_rotativo_novas_vagas.sql
+
+      # SMTR - Sistema Rio - Novas linhas de ônibus (one-shot)
+      - cron: "0 17 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-smtr-sistema-rio-novas-linhas-onibus
+        flow_run_name: smtr-sistema-rio-novas-linhas-onibus
+        parameters:
+          flow_environment: staging
+          campaign_name: smtr_sistema_rio_novas_linhas_onibus_v12
+          data_extension_filename: whatsapp_smtr_sistema_rio_novas_linhas_onibus
+          de_columns: ["nome_sobrenome", "descricao_onibus", "bairro", "gancho", "recebimento",
+            "linhas", "destaque", "prazo"]
+          filter_duplicated_cpfs: true
+          dispatch_interval_days: 30
+          batch_size: 20000
+          batch_sleep_minutes: 3
+          query_file: queries/smtr/smtr_sistema_rio_novas_linhas_onibus_teste.sql
 
   - name: rj-crm--disparo-template-sf--prod
     version: '{{ get-commit-hash.stdout }}'
