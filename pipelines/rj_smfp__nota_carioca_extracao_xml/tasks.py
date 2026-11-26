@@ -24,6 +24,7 @@ def run_extraction_task(  # noqa: PLR0913, PLR0917
     limits: Limits,
     discord_notifications: bool,
     environment: Environment,
+    tasks_owner: str,
 ) -> str:
     """Lê token e Oracle do ambiente (falha antes de qualquer chamada se faltarem) e roda a extração.
 
@@ -32,13 +33,14 @@ def run_extraction_task(  # noqa: PLR0913, PLR0917
     :param infisical_secret_path: Pasta do Infisical com o Oracle.
     :param limits: Ritmo e limites do acompanhamento.
     :param discord_notifications: ``False`` desliga o Discord.
-    :param environment: Ambiente do deployment (webhook e marcador de staging).
+    :param environment: Ambiente do deployment (webhook e marcador do ambiente de teste).
+    :param tasks_owner: Dono da tabela ``TAREFAS``.
     :returns: Resumo do que aconteceu.
     """
     token = read_token()
-    store = OracleTaskStore(read_oracle_config(infisical_secret_path))
+    store = OracleTaskStore(read_oracle_config(infisical_secret_path), tasks_owner=tasks_owner)
     notify = make_notifier(discord_notifications, environment)
-    log(f"Extração XML: webservice {url} (proxy {proxy_url or 'nenhum'}); acompanhamento em NFSE_OWNER.TAREFAS.")
+    log(f"Extração XML: webservice {url} (proxy {proxy_url or 'nenhum'}); acompanhamento em {tasks_owner}.TAREFAS.")
     with httpx.Client(proxy=proxy_url, verify=build_tls_context(), follow_redirects=False) as client:
 
         def call() -> RoutineResponse:
