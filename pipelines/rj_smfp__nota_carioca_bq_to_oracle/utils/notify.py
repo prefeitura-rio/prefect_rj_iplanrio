@@ -67,8 +67,8 @@ class NotifierConfig:
     :param mode: ``full`` ou ``synonyms_only``.
     :param enabled: ``False`` (``discord_notifications=false``) desliga o Discord.
     :param heartbeat_seconds: Intervalo do batimento que republica a mensagem; ``0`` ou menos desliga o batimento.
-    :param environment: Ambiente do deployment: staging usa o webhook de staging e marca as mensagens com
-        ``🧪 STAGING · ``; o padrão é prod.
+    :param environment: Ambiente do deployment: um de teste usa o seu webhook e marca as mensagens com o seu marcador
+        (staging: ``🧪 STAGING · ``); o padrão é prod.
     """
 
     dataset_id: str
@@ -118,7 +118,7 @@ class LoadNotifier:
             sessions=config.sessions,
             elapsed_seconds=0.0,
             updated_at=datetime.now(UTC),
-            staging=config.environment is Environment.STAGING,
+            environment=config.environment,
         )
 
     @classmethod
