@@ -22,8 +22,11 @@ from prefect_rj_iplanrio.sql import load_query
 logger = get_logger(__name__)
 
 TASK_NAME_UNSAFE = re.compile(r"[^A-Z0-9_]")
-# Prefixo de todas as tarefas de chunking desta pipeline (ver ``chunk_task_name``).
+# Prefixo padrão das tarefas de chunking desta pipeline (ver ``chunk_task_name``). Um ambiente que divide banco e
+# usuário com outro (o homteste, com a homologação) usa um prefixo próprio, para a limpeza de um não apagar as do outro.
 TASK_PREFIX = "O2BQ_"
+# Letras e dígitos terminados num único ``_``: assim nenhum prefixo válido é o começo de outro.
+TASK_PREFIX_PATTERN = re.compile(r"^[A-Z][A-Z0-9]{0,15}_$")
 # Caractere de escape do ``LIKE`` de ``queries/list_chunk_tasks.sql``.
 LIKE_ESCAPE = "\\"
 
@@ -60,14 +63,29 @@ class ChunkRequest:
     chunk_size_blocks: int
 
 
-def chunk_task_name(table: str, run_id: str) -> str:
+def validate_task_prefix(prefix: str) -> str:
+    """Confere o prefixo das tarefas de chunking.
+
+    :param prefix: Prefixo, como ``O2BQ_``.
+    :returns: O prefixo.
+    :raises ValueError: Se não for letras e dígitos (começando por letra, até 16) terminados num único ``_``.
+    """
+    if not TASK_PREFIX_PATTERN.match(prefix):
+        raise ValueError(
+            f"chunk_task_prefix deve ser letras e dígitos terminados num único _ (como O2BQ_), recebido {prefix!r}."
+        )
+    return prefix
+
+
+def chunk_task_name(table: str, run_id: str, prefix: str = TASK_PREFIX) -> str:
     """Monta o nome único da tarefa de chunking: um por tabela e execução.
 
     :param table: Nome da tabela.
     :param run_id: Identificador do flow run.
+    :param prefix: Prefixo das tarefas desta pipeline no ambiente.
     :returns: Nome em maiúsculas, só com letras, dígitos e ``_``.
     """
-    return TASK_NAME_UNSAFE.sub("_", f"{TASK_PREFIX}{table}_{run_id}".upper())[:128]
+    return TASK_NAME_UNSAFE.sub("_", f"{prefix}{table}_{run_id}".upper())[:128]
 
 
 def prefix_like_pattern(prefix: str = TASK_PREFIX) -> str:
@@ -148,16 +166,17 @@ def drop_prefixed_tasks(store: ChunkTaskStore, prefix: str = TASK_PREFIX) -> lis
     return names
 
 
-def drop_leftover_chunk_tasks(config: OracleConfig) -> list[str]:
-    """Apaga as tarefas de chunking de execuções anteriores desta pipeline.
+def drop_leftover_chunk_tasks(config: OracleConfig, prefix: str = TASK_PREFIX) -> list[str]:
+    """Apaga as tarefas de chunking de execuções anteriores desta pipeline no ambiente.
 
-    Só é seguro quando nenhuma outra execução está ativa.
+    Só é seguro quando nenhuma outra execução com o mesmo prefixo está ativa.
 
     :param config: Conexão com o Oracle.
+    :param prefix: Prefixo das tarefas desta pipeline no ambiente.
     :returns: Nomes das tarefas apagadas.
     """
     with connect(config) as connection, connection.cursor() as cursor:
-        return drop_prefixed_tasks(OracleChunkTaskStore(cursor))
+        return drop_prefixed_tasks(OracleChunkTaskStore(cursor), validate_task_prefix(prefix))
 
 
 def read_chunks(request: ChunkRequest) -> list[Chunk]:
