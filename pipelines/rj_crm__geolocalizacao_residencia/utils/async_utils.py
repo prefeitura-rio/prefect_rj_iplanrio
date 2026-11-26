@@ -7,6 +7,7 @@ import asyncio
 import random
 from time import time
 from typing import Any, Dict, Optional
+from urllib.parse import parse_qs, urlsplit
 
 import aiohttp
 import pandas as pd
@@ -23,8 +24,19 @@ from .geo_utils import (
     MAX_BACKOFF_TIME,
     MAX_RETRIES_DEFAULT,
     _create_empty_geocoding_result,
+    _describe_request_error,
     _prepare_addresses_for_nominatim,
 )
+
+
+def _describe_async_error(error: Exception) -> str:
+    """Describe a request error by its type and HTTP status only, like ``_describe_request_error``.
+
+    ``str()`` of an ``aiohttp`` error carries the request URL, with the API key and the citizen's address.
+    """
+    if isinstance(error, aiohttp.ClientResponseError):
+        return f"{type(error).__name__} (HTTP {error.status})"
+    return _describe_request_error(error)
 
 
 async def _async_exponential_backoff_sleep(attempt: int, base_time: float = BASE_BACKOFF_TIME) -> None:
@@ -79,6 +91,7 @@ async def _geocode_single_nominatim_async(
     domain: str,
     sleep_time: float,
     use_exponential_backoff: bool,
+    row_index: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Geocode a single address using Nominatim API asynchronously."""
     async with semaphore:
@@ -107,7 +120,7 @@ async def _geocode_single_nominatim_async(
                 timeout=aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT),
             ) as response:
                 if response.status != 200:
-                    log(f"Nominatim request failed with status {response.status} for address: {address}")
+                    log(f"Nominatim: requisição do endereço da linha {row_index} falhou com HTTP {response.status}")
                     # Use utility function for empty result
                     empty_result = _create_empty_geocoding_result(updated_date)
                     geocode_result = dict(zip(GEOCODING_FIELDS, empty_result, strict=False))
@@ -426,16 +439,19 @@ async def _geocode_single_geocodexyz_async(
     max_retries: int = MAX_RETRIES_DEFAULT,
 ) -> Dict[str, Any]:
     """Geocode a single address using Geocode.xyz API asynchronously."""
-    from .geo_utils import _build_geocode_xyz_url, _is_valid_geocode_xyz_coordinates
+    from .geo_utils import _build_geocode_xyz_params, _build_geocode_xyz_url, _is_valid_geocode_xyz_coordinates
 
     async with semaphore:
         base_url = "https://geocode.xyz"
-        url = _build_geocode_xyz_url(base_url, address, api_key)
+        url = _build_geocode_xyz_url(base_url, address)
+        params = _build_geocode_xyz_params(api_key)
         updated_date = pd.Timestamp.now().strftime("%Y-%m-%d")
 
         for retry in range(max_retries):
             try:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT)) as response:
+                async with session.get(
+                    url, params=params, timeout=aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT)
+                ) as response:
                     if response.status == 402:
                         # Don't raise exception, just break to return empty result
                         break
@@ -515,11 +531,14 @@ async def _geocode_single_locationiq_async(
 ) -> Dict[str, Any]:
     """Geocode a single address using LocationIQ API asynchronously."""
     async with semaphore:
-        url = f"https://us1.locationiq.com/v1/search.php?key={api_key}&q={address}&format=json"
+        url = "https://us1.locationiq.com/v1/search.php"
+        params = {"key": api_key, "q": address, "format": "json"}
         updated_date = pendulum.now(tz="America/Sao_Paulo").to_date_string()
 
         try:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT)) as response:
+            async with session.get(
+                url, params=params, timeout=aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT)
+            ) as response:
                 if response.status == 402:
                     log("LocationIQ rate limited")
                     geocode_result = _create_empty_async_result(address, updated_date, "locationiq")
@@ -588,9 +607,9 @@ async def geocode_nominatim_async(
     async with aiohttp.ClientSession() as session:
         tasks = [
             _geocode_single_nominatim_async(
-                session, semaphore, address, user_agent, domain, sleep_time, use_exponential_backoff
+                session, semaphore, address, user_agent, domain, sleep_time, use_exponential_backoff, row_index
             )
-            for address in addresses
+            for row_index, address in enumerate(addresses)
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -899,12 +918,12 @@ async def geocode_locationiq_async(
     # Check API balance first
     try:
         async with aiohttp.ClientSession() as session:
-            balance_url = f"https://us1.locationiq.com/v1/balance?key={api_key}&format=json"
-            async with session.get(balance_url) as response:
+            balance_url = "https://us1.locationiq.com/v1/balance"
+            async with session.get(balance_url, params={"key": api_key, "format": "json"}) as response:
                 balance_data = await response.json()
                 num_requests_left = int(balance_data.get("balance", {}).get("day", 0))
     except Exception as e:
-        log(f"Erro ao verificar o saldo de requisições: {e}")
+        log(f"Erro ao verificar o saldo de requisições do LocationIQ: {_describe_async_error(e)}")
         return dataframe
 
     if num_requests_left == 0:
@@ -970,7 +989,8 @@ async def _submit_geoapify_batch_job(
     api_key: str,
 ) -> Optional[str]:
     """Submit a batch job to Geoapify and return job URL."""
-    url = f"https://api.geoapify.com/v1/batch/geocode/search?lang=pt&filter=countrycode:br&apiKey={api_key}"
+    url = "https://api.geoapify.com/v1/batch/geocode/search"
+    params = {"lang": "pt", "filter": "countrycode:br", "apiKey": api_key}
 
     # Geoapify Batch API expects a simple array of address strings
     batch_data = addresses
@@ -978,13 +998,14 @@ async def _submit_geoapify_batch_job(
     try:
         async with session.post(
             url,
+            params=params,
             json=batch_data,
             timeout=aiohttp.ClientTimeout(total=30),
         ) as response:
             if response.status == 200:
                 data = await response.json()
                 job_url = data.get("url")
-                log(f"Batch job submitted successfully: {job_url}")
+                log("Geoapify: lote enviado com sucesso")
                 return job_url
             elif response.status == 402:
                 log("Geoapify: API credits exhausted")
@@ -996,7 +1017,7 @@ async def _submit_geoapify_batch_job(
                 log(f"Geoapify batch submission failed: {response.status}")
                 return None
     except Exception as e:
-        log(f"Error submitting Geoapify batch job: {e}")
+        log(f"Error submitting Geoapify batch job: {_describe_async_error(e)}")
         return None
 
 
@@ -1006,9 +1027,11 @@ async def _check_geoapify_batch_status(
     api_key: str,
 ) -> Optional[Dict]:
     """Check the status of a Geoapify batch job."""
+    params = {} if "apiKey" in parse_qs(urlsplit(job_url).query) else {"apiKey": api_key}
     try:
         async with session.get(
-            f"{job_url}?apiKey={api_key}",
+            job_url,
+            params=params,
             timeout=aiohttp.ClientTimeout(total=15),
         ) as response:
             if response.status == 200:
@@ -1018,7 +1041,7 @@ async def _check_geoapify_batch_status(
                 log(f"Error checking Geoapify job status: {response.status}")
                 return None
     except Exception as e:
-        log(f"Error checking Geoapify batch status: {e}")
+        log(f"Error checking Geoapify batch status: {_describe_async_error(e)}")
         return None
 
 
@@ -1209,7 +1232,7 @@ def run_geocode_nominatim_async(
         if "rate" in str(e).lower() or "429" in str(e) or "503" in str(e):
             log("Nominatim rate limited")
         else:
-            log(f"Nominatim async geocoding failed: {e}")
+            log(f"Nominatim async geocoding failed: {_describe_async_error(e)}")
         # Return empty result dataframe
         output = dataframe.copy()
         for field in GEOCODING_FIELDS:
@@ -1240,7 +1263,7 @@ def run_geocode_waze_async(
         if "rate" in str(e).lower() or "limit" in str(e).lower():
             log("Waze rate limited")
         else:
-            log(f"Waze async geocoding failed: {e}")
+            log(f"Waze async geocoding failed: {_describe_async_error(e)}")
         # Return empty result dataframe
         output = dataframe.copy()
         for field in GEOCODING_FIELDS:
@@ -1273,7 +1296,7 @@ def run_geocode_maptiler_async(
         if "rate" in str(e).lower() or "limit" in str(e).lower() or "quota" in str(e).lower():
             log("MapTiler rate limited")
         else:
-            log(f"MapTiler async geocoding failed: {e}")
+            log(f"MapTiler async geocoding failed: {_describe_async_error(e)}")
         # Return empty result dataframe
         output = dataframe.copy()
         for field in GEOCODING_FIELDS:
@@ -1401,7 +1424,7 @@ def run_geoapify_batch_geocoding_async(
         if "rate" in str(e).lower() or "limit" in str(e).lower() or "quota" in str(e).lower():
             log("Geoapify rate limited")
         else:
-            log(f"Geoapify batch geocoding failed: {e}")
+            log(f"Geoapify batch geocoding failed: {_describe_async_error(e)}")
         # Return empty result dataframe
         output = dataframe.copy()
         for field in GEOCODING_FIELDS:
