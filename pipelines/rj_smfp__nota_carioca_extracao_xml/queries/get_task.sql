@@ -7,5 +7,5 @@ SELECT
     execucao_progresso,
     execucao_resumo,
     ROUND((SYSDATE - data_inicio) * 86400) AS segundos_em_execucao
-FROM nfse_owner.tarefas
+FROM "${owner}".tarefas
 WHERE tarefa = :tarefa

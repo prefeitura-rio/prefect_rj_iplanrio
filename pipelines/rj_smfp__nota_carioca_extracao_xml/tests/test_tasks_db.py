@@ -85,6 +85,32 @@ def test_get_reads_the_task_in_a_read_only_transaction() -> None:
     assert connection.rolled_back
 
 
+def test_every_query_reads_the_tasks_of_nfse_owner_by_default() -> None:
+    store, connection = store_with([])
+
+    store.get(1)
+    store.running()
+    store.extraction_in_progress()
+
+    queries = [sql for sql, _binds in connection.cursor_obj.executed if sql != "SET TRANSACTION READ ONLY"]
+    assert len(queries) == len(["get", "running", "extraction_in_progress"])
+    assert all('FROM "NFSE_OWNER".tarefas' in sql for sql in queries)
+
+
+def test_the_homteste_reads_the_tasks_of_its_own_owner() -> None:
+    connection = FakeConnection(FakeCursor([]))
+    store = OracleTaskStore(CONFIG, open_connection=lambda _config: connection, tasks_owner="nfse_teste")  # type: ignore[arg-type,return-value]
+
+    store.get(1)
+
+    assert 'FROM "NFSE_TESTE".tarefas' in connection.cursor_obj.executed[1][0]
+
+
+def test_an_owner_that_is_not_an_identifier_is_refused_before_any_query() -> None:
+    with pytest.raises(ValueError, match="Identificador inválido"):
+        OracleTaskStore(CONFIG, tasks_owner="NFSE_OWNER.TAREFAS --")
+
+
 def test_get_returns_none_when_the_task_is_not_visible() -> None:
     store, _ = store_with([])
 
