@@ -1,7 +1,7 @@
 """Acesso ao Oracle de origem: configuração, conexão, foto consistente, metadados e contagem."""
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -160,15 +160,18 @@ def to_int(value: object) -> int:
     raise TypeError(f"Valor não numérico: {value!r}")
 
 
-def fetch_rows(cursor: oracledb.Cursor, query: str, binds: dict[str, object]) -> list[dict[str, object]]:
+def fetch_rows(
+    cursor: oracledb.Cursor, query: str, binds: dict[str, object], params: Mapping[str, object] | None = None
+) -> list[dict[str, object]]:
     """Executa uma consulta de ``queries/`` e retorna as linhas como dicionários.
 
     :param cursor: Cursor de uma conexão aberta.
     :param query: Nome do arquivo em ``queries/``, sem a extensão.
     :param binds: Valores das variáveis de bind.
+    :param params: Valores do template da consulta (``${nome}``), como o dono de uma tabela já validado.
     :returns: Linhas com as colunas em minúsculas.
     """
-    cursor.execute(load_query(QUERIES_ANCHOR, query), binds)
+    cursor.execute(load_query(QUERIES_ANCHOR, query, **(params or {})), binds)
     if cursor.description is None:
         raise LookupError(f"A consulta {query} não retornou colunas.")
     names = [column.name.lower() for column in cursor.description]

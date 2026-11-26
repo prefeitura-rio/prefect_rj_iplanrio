@@ -9,6 +9,8 @@ REQUEST_ELEMENT = f"{OPERATION}Request"
 SOAP_ACTION = f"{SOAP_NAMESPACE}/{OPERATION}"
 URL_PROD = "https://notacarioca.rio.gov.br/intranet/RotinasAutomaticas.asmx"
 URL_STAGING = "https://notacariocahom.rio.gov.br/intranet/RotinasAutomaticas.asmx"
+URL_STAGINGTESTE = "https://notacariocahomteste.rio.gov.br/intranet/RotinasAutomaticas.asmx"
+URL_DEV = "https://notacariocades.rio.gov.br/intranet/RotinasAutomaticas.asmx"
 # Os pods do k3s levam "connection reset" ao chamar a intranet direto; pelo squid do cluster (Service proxy/proxy) o
 # webservice responde, em produção e em homologação.
 PROXY_URL = "http://proxy.proxy.svc.cluster.local:3128"
@@ -18,6 +20,9 @@ PROXY_URL = "http://proxy.proxy.svc.cluster.local:3128"
 INFISICAL_SECRET_PATH = "/db-oracle-nota-fiscal"
 # Token do webservice: chega ao pod com o nome literal da chave no Infisical (sem prefixo de pasta).
 TOKEN_KEY = "NOTA_CARIOCA_ROTINAS_TOKEN"
+
+# Dono da tabela TAREFAS da aplicação; no homteste é NFSE_TESTE.
+TASKS_OWNER = "NFSE_OWNER"
 
 # NFSE_OWNER.TAREFAS (Tarefa.vb: eTarefaTipo e eTarefaStatus).
 TASK_EXTRACTION = 46

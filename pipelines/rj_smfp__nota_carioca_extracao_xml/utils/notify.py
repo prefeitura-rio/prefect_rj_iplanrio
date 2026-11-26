@@ -1,7 +1,7 @@
 """Linhas avulsas da extração XML no Discord (sem mensagem editada), com o webhook das cargas da Nota Carioca.
 
 A extração avisa início, progresso, fim e falha; quem menciona os cargos nas falhas é a carga completa.
-Em staging a linha vai para o webhook de staging e leva o marcador ``🧪 STAGING · ``.
+Num ambiente de teste a linha vai para o webhook dele e leva o seu marcador (staging: ``🧪 STAGING · ``).
 Nada aqui levanta exceção: uma falha de notificação nunca falha a extração.
 """
 
@@ -17,7 +17,7 @@ from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.discord import (
     resolve_webhook,
     warn,
 )
-from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.discord_format import clip, mark_staging
+from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.discord_format import clip, mark_environment
 
 CONTENT_LIMIT = 2000
 NO_MENTIONS = {"parse": []}
@@ -32,14 +32,13 @@ def make_notifier(
     """Cria a função que posta uma linha avulsa no canal; nunca levanta exceção.
 
     :param enabled: ``False`` (``discord_notifications=false``) desliga o Discord.
-    :param environment: Ambiente do deployment: staging usa o webhook de staging e prefixa as linhas com
-        ``🧪 STAGING · ``; o padrão é prod.
+    :param environment: Ambiente do deployment: um de teste usa o seu webhook e prefixa as linhas com o seu marcador
+        (staging: ``🧪 STAGING · ``); o padrão é prod.
     :param resolve: Lê a URL do webhook; o padrão lê o do ambiente (variável do Infisical ou Secret block). ``None``
         como resultado desliga o Discord.
     :param transport: Transporte do ``httpx`` (os testes passam um ``MockTransport``).
     :returns: Função que recebe o texto da linha.
     """
-    staging = environment is Environment.STAGING
     read_webhook = resolve if resolve is not None else partial(resolve_webhook, environment=environment)
     try:
         client = DiscordStatusMessage(read_webhook() if enabled else None, transport=transport)
@@ -50,7 +49,7 @@ def make_notifier(
     @never_raises
     def announce(text: str) -> None:
         client.announce(
-            {"content": clip(mark_staging(text, staging), CONTENT_LIMIT), "allowed_mentions": dict(NO_MENTIONS)}
+            {"content": clip(mark_environment(text, environment), CONTENT_LIMIT), "allowed_mentions": dict(NO_MENTIONS)}
         )
 
     return announce
