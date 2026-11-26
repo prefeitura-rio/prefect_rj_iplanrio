@@ -15,7 +15,14 @@ from google.cloud import storage
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import GCS_PREFIX, QUERIES_ANCHOR
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.cgroup_memory import read_peak_bytes, read_pod_memory
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.checksum import ColumnChecksum, merge_checksums
-from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.chunks import Chunk, ChunkRequest, chunk_task_name, rowid_chunks
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.chunks import (
+    TASK_PREFIX,
+    Chunk,
+    ChunkRequest,
+    chunk_task_name,
+    rowid_chunks,
+    validate_task_prefix,
+)
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.columns import OracleColumn
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.gcs import blob_prefix, upload_file
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.memory import WorkerMemory, plan_worker_memory
@@ -56,6 +63,8 @@ class ExtractOptions:
         faixa lê ``AS OF SCN``, então a foto não depende da conexão.
     :param memory_pause_ratio: Fração do limite de memória do pod (cgroup) a partir da qual nenhuma faixa nova é
         iniciada até o uso cair 5 pontos percentuais abaixo; ``0`` desliga. Sem limite ou sem cgroup, não pausa.
+    :param chunk_task_prefix: Prefixo das tarefas ``DBMS_PARALLEL_EXECUTE`` (``O2BQ_``). Um ambiente que divide banco e
+        usuário com outro precisa de um próprio (o homteste usa ``O2BQT_``).
     """
 
     workers: int = 2
@@ -68,12 +77,13 @@ class ExtractOptions:
     max_pending_files: int = 4
     worker_max_tasks: int | None = 25
     memory_pause_ratio: float = 0.85
+    chunk_task_prefix: str = TASK_PREFIX
 
     def __post_init__(self) -> None:
         """Valida os parâmetros.
 
         :raises ValueError: Se ``upload_concurrency`` ou ``max_pending_files`` for menor que 1, ``worker_max_tasks``
-            for negativo ou ``memory_pause_ratio`` sair de 0 a 1.
+            for negativo, ``memory_pause_ratio`` sair de 0 a 1 ou ``chunk_task_prefix`` for inválido.
         """
         if self.upload_concurrency < 1:
             raise ValueError(f"upload_concurrency deve ser >= 1, recebido {self.upload_concurrency}.")
@@ -85,6 +95,7 @@ class ExtractOptions:
             raise ValueError(
                 f"memory_pause_ratio deve estar entre 0 e 1 (0 desliga), recebido {self.memory_pause_ratio}."
             )
+        validate_task_prefix(self.chunk_task_prefix)
 
 
 @dataclass(frozen=True)
@@ -305,7 +316,7 @@ def extract_table(
         config=request.config,
         schema=request.schema,
         table=request.table,
-        task_name=chunk_task_name(request.table, request.run_id),
+        task_name=chunk_task_name(request.table, request.run_id, request.options.chunk_task_prefix),
         chunk_size_blocks=request.options.chunk_size_blocks,
     )
     memory = worker_memory(request)
