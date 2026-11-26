@@ -560,16 +560,20 @@ STAGING_URL = "https://discord.example/api/webhooks/2/staging-token"
         ("rj-smfp--nota-carioca-oracle-to-bq--staging", Environment.STAGING),
         ("rj-smfp--nota-carioca-oracle-to-bq--prod", Environment.PROD),
         ("rj-smfp--nota-carioca-oracle-to-bq--staging-copy", Environment.PROD),
+        ("rj-smfp--nota-carioca-oracle-to-bq--stagingteste", Environment.STAGINGTESTE),
+        ("rj-smfp--nota-carioca-oracle-to-bq--dev", Environment.DEV),
+        ("rj-smfp--nota-carioca-oracle-to-bq--devops", Environment.PROD),
         ("", Environment.PROD),
         (None, Environment.PROD),
     ],
 )
-def test_environment_is_staging_only_when_the_deployment_name_ends_with_staging(
+def test_environment_comes_from_the_suffix_of_the_deployment_name(
     deployment_name: str | None, expected: Environment
 ) -> None:
     # Given a deployment name (or none, as in a local run)
     # When the environment is derived from it
-    # Then only a name ending in --staging is staging; everything else, including no deployment, is prod
+    # Then only a name ending in --staging, --stagingteste or --dev is that test environment; everything else,
+    # including no deployment, is prod
     assert environment_from_deployment(deployment_name) is expected
 
 
@@ -649,7 +653,7 @@ def test_prod_ignores_the_staging_variable_and_block() -> None:
 def test_staging_marks_the_embed_title_and_changes_nothing_else() -> None:
     # Given the same running view in prod and in staging
     prod = embed_of(build_payload(view()))
-    staging = embed_of(build_payload(view(staging=True)))
+    staging = embed_of(build_payload(view(environment="staging")))
     # Then only the title differs, with the marker in front
     assert prod["title"] == "Oracle → BigQuery · brutos_nota_fiscal"
     assert staging["title"] == "🧪 STAGING · Oracle → BigQuery · brutos_nota_fiscal"
@@ -667,8 +671,56 @@ def test_staging_marks_the_embed_title_and_changes_nothing_else() -> None:
 def test_staging_prefixes_every_final_announcement_line(status: RunStatus, extra: dict[str, object]) -> None:
     # Given a finished run in each final state, in prod and in staging
     prod = build_announcement(view(status, **extra))
-    staging = build_announcement(view(status, staging=True, **extra))
+    staging = build_announcement(view(status, environment="staging", **extra))
     # Then the staging line is the prod line behind the marker, and mentions stay disabled
     assert "STAGING" not in str(prod["content"])
     assert staging["content"] == f"🧪 STAGING · {prod['content']}"
     assert staging["allowed_mentions"] == {"parse": []}
+
+
+@pytest.mark.parametrize(
+    ("environment", "env_var", "block"),
+    [
+        (
+            Environment.STAGINGTESTE,
+            "DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGINGTESTE",
+            "discord-webhook-nota-carioca-stagingteste",
+        ),
+        (Environment.DEV, "DISCORD_WEBHOOK_URL_NOTA_CARIOCA_DEV", "discord-webhook-nota-carioca-dev"),
+    ],
+)
+def test_each_test_environment_reads_only_its_own_variable_and_block(
+    environment: Environment, env_var: str, block: str
+) -> None:
+    # Given prod and staging fully configured and a loader that serves only prod's and staging's blocks
+    loaded: list[str] = []
+
+    def load(name: str) -> str:
+        loaded.append(name)
+        if name in {PROD_BLOCK, STAGING_BLOCK}:
+            return PROD_URL if name == PROD_BLOCK else STAGING_URL
+        raise ValueError(f"block {name} not found")
+
+    others = {PROD_ENV: PROD_URL, STAGING_ENV: STAGING_URL}
+    # When the environment resolves its webhook without its own sources, Then it has none and read only its block
+    assert resolve_webhook(others, load, environment) is None
+    assert loaded == [block]
+    # And its own variable is the source when set
+    assert resolve_webhook({**others, env_var: "https://discord.example/api/webhooks/3/own"}, load, environment) == (
+        "https://discord.example/api/webhooks/3/own"
+    )
+
+
+@pytest.mark.parametrize(("environment", "mark"), [("stagingteste", "🧪 STAGINGTESTE · "), ("dev", "🛠️ DEV · ")])
+def test_each_test_environment_marks_the_title_and_the_final_line_with_its_own_name(
+    environment: str, mark: str
+) -> None:
+    # Given the same views in prod and in the test environment
+    prod_title = embed_of(build_payload(view()))["title"]
+    title = embed_of(build_payload(view(environment=environment)))["title"]
+    prod_line = build_announcement(view(RunStatus.SUCCESS))["content"]
+    line = build_announcement(view(RunStatus.SUCCESS, environment=environment))["content"]
+    # Then both carry the marker of that environment, and not the one of staging
+    assert title == f"{mark}{prod_title}"
+    assert line == f"{mark}{prod_line}"
+    assert "🧪 STAGING · " not in str(line)

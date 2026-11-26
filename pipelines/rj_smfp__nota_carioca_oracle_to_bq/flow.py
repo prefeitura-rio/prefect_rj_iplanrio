@@ -39,7 +39,8 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.tasks import (
     take_snapshot_task,
     wait_children_task,
 )
-from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.dfen import DEFAULT_STALE_HOURS
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.chunks import TASK_PREFIX
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.dfen import DEFAULT_STALE_HOURS, TASKS_OWNER
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.discord import current_environment
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.extract import ExtractOptions
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.notify import NotifierConfig, ParentNotifier
@@ -65,6 +66,7 @@ class ParentRun:
     :param check_dfen_extraction: Recusa a carga se a aplicação estiver extraindo notas nacionais para o DFEN.
     :param dfen_extraction_stale_hours: Horas em execução a partir das quais uma extração é tratada como travada.
     :param passthrough: Parâmetros repassados sem mudança aos filhos.
+    :param tasks_owner: Dono da tabela ``TAREFAS`` que a guarda consulta.
     """
 
     infisical_secret_path: str
@@ -79,6 +81,7 @@ class ParentRun:
     check_dfen_extraction: bool
     dfen_extraction_stale_hours: int
     passthrough: dict[str, object]
+    tasks_owner: str
 
 
 def _extract_tables(run: ParentRun, ctx: TableRunContext, plans: list[TablePlan], notifier: ParentNotifier) -> None:
@@ -104,8 +107,11 @@ def _run_parent(run: ParentRun, notifier: ParentNotifier) -> None:
             infisical_secret_path=run.infisical_secret_path,
             enabled=run.check_dfen_extraction,
             stale_hours=run.dfen_extraction_stale_hours,
+            tasks_owner=run.tasks_owner,
         )
-        drop_leftover_chunk_tasks_task(infisical_secret_path=run.infisical_secret_path)
+        drop_leftover_chunk_tasks_task(
+            infisical_secret_path=run.infisical_secret_path, prefix=run.options.chunk_task_prefix
+        )
         snapshot = take_snapshot_task(infisical_secret_path=run.infisical_secret_path)
         notifier.set_snapshot(snapshot)
         notifier.set_stage(ParentStage.PLAN)
@@ -168,6 +174,8 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
     discord_notifications: bool = True,
     check_dfen_extraction: bool = True,
     dfen_extraction_stale_hours: int = DEFAULT_STALE_HOURS,
+    tasks_owner: str = TASKS_OWNER,
+    chunk_task_prefix: str = TASK_PREFIX,
     table_id: str | None = None,
     scn: int | None = None,
     snapshot_taken_at: str | None = None,
@@ -188,6 +196,7 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
         max_pending_files=max_pending_files,
         worker_max_tasks=worker_max_tasks,
         memory_pause_ratio=memory_pause_ratio,
+        chunk_task_prefix=chunk_task_prefix,
     )
     if child is not None:
         ctx = TableRunContext(
@@ -226,6 +235,7 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
         "max_pending_files": max_pending_files,
         "worker_max_tasks": worker_max_tasks,
         "memory_pause_ratio": memory_pause_ratio,
+        "chunk_task_prefix": chunk_task_prefix,
         # Os filhos só gravam o JSON de progresso no GCS se o pai for usá-lo; eles nunca postam no Discord.
         "discord_notifications": notifier.enabled,
     }
@@ -243,6 +253,7 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
             check_dfen_extraction,
             dfen_extraction_stale_hours,
             passthrough,
+            tasks_owner,
         ),
         notifier,
     )
