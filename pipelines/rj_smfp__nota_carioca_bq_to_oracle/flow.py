@@ -37,6 +37,11 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.dbt import resolve_dbt_parameters, should_run_dbt
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord import current_environment
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify import LoadNotifier, NotifierConfig
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.slots import (
+    CONSUMER_GRANTS,
+    CONSUMER_SYNONYM_OWNERS,
+    OracleTarget,
+)
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.stages import Step, TableStep
 
 
@@ -63,7 +68,21 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
     dbt_parameters: dict[str, object] | None = None,
     dbt_timeout_minutes: int = 120,
     discord_notifications: bool = True,
+    target_schema: str | None = None,
+    consumer_synonym_owners: list[str] | None = None,
+    consumer_grants: dict[str, str] | None = None,
 ) -> None:
+    """Carrega as tabelas do BigQuery no Oracle, atrás de sinônimos.
+
+    Os três últimos parâmetros mudam onde a carga grava e quem a consome; vazios, valem o ``DB_SCHEMA`` do segredo e
+    os consumidores de prod e da homologação. O homteste, no mesmo banco da homologação, passa os seus.
+
+    :param target_schema: Schema das tabelas físicas (``DFEN_TESTE`` no homteste); vazio usa o ``DB_SCHEMA``.
+    :param consumer_synonym_owners: Donos dos sinônimos dos consumidores; vazio usa ``NFSE_SIGA``, ``NFSE_USER`` e
+        ``NFSE_OWNER``.
+    :param consumer_grants: Quem recebe acesso à tabela física e com quais privilégios (``{"NFSE_OWNER": "SELECT,
+        ALTER, DELETE"}``); vazio usa os de prod e da homologação.
+    """
     rename_current_flow_run_task(new_name=dataset_id)
     inject_bd_credentials_task(environment="prod")
     dbt_enabled = should_run_dbt(run_dbt, mode)
@@ -83,6 +102,14 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
     with notifier.guard():
         if inmemory_window_months < 0:
             raise ValueError(f"inmemory_window_months não pode ser negativo: {inmemory_window_months}")
+        target = OracleTarget(
+            infisical_secret_path=infisical_secret_path,
+            schema=target_schema,
+            synonym_owners=CONSUMER_SYNONYM_OWNERS
+            if consumer_synonym_owners is None
+            else tuple(consumer_synonym_owners),
+            grants=CONSUMER_GRANTS if consumer_grants is None else tuple(consumer_grants.items()),
+        )
         notifier.begin()
         dbt_finished_at = None
         if dbt_enabled:
@@ -96,7 +123,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
         tables = list_tables_task(project=project, dataset_id=dataset_id, table_ids=table_ids)
         notifier.set_tables(dict.fromkeys(tables, 1))
         if mode == "synonyms_only":
-            refresh_synonyms_task(infisical_secret_path=infisical_secret_path, table_ids=tables)
+            refresh_synonyms_task(target=target, table_ids=tables)
             return
         notifier.enter(Step.EXPORT)
         snapshot = export_snapshot_task(
@@ -117,7 +144,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             exported = snapshot[table_id]
             notifier.table_step(table_id, TableStep.PREPARATION)
             plan = plan_load_task(
-                infisical_secret_path=infisical_secret_path,
+                target=target,
                 template_schema=template_schema,
                 excluded_template_columns=excluded_template_columns,
                 table_id=table_id,
@@ -125,16 +152,16 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
                 raw_text_encoding=raw_text_encoding,
             )
             structure = plan_structure_task(
-                infisical_secret_path=infisical_secret_path,
+                target=target,
                 template_schema=template_schema,
                 table_id=table_id,
                 plan=plan,
             )
-            slots = resolve_slots_task(infisical_secret_path=infisical_secret_path, table_id=table_id)
+            slots = resolve_slots_task(target=target, table_id=table_id)
             notifier.table_step(table_id, TableStep.PREPARATION, slot=slots.slot)
             notifier.set_physical_table(table_id, slots.inactive)
             oracle_table = ensure_oracle_table_task(
-                infisical_secret_path=infisical_secret_path,
+                target=target,
                 project=project,
                 dataset_id=dataset_id,
                 table_id=table_id,
@@ -142,12 +169,12 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
                 plan=plan,
                 structure=structure,
             )
-            unindexed_table = drop_oracle_indexes_task(infisical_secret_path=infisical_secret_path, table=oracle_table)
-            released_table = disable_inmemory_task(infisical_secret_path=infisical_secret_path, table=unindexed_table)
-            empty_table = truncate_oracle_table_task(infisical_secret_path=infisical_secret_path, table=released_table)
+            unindexed_table = drop_oracle_indexes_task(target=target, table=oracle_table)
+            released_table = disable_inmemory_task(target=target, table=unindexed_table)
+            empty_table = truncate_oracle_table_task(target=target, table=released_table)
             notifier.table_step(table_id, TableStep.LOAD)
             loaded_rows = load_into_oracle_task(
-                infisical_secret_path=infisical_secret_path,
+                target=target,
                 table=empty_table,
                 plan=plan,
                 bucket=gcs_bucket,
@@ -158,7 +185,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             notifier.table_loaded(table_id, loaded_rows)
             notifier.table_step(table_id, TableStep.VALIDATION)
             validated_rows = validate_row_count_task(
-                infisical_secret_path=infisical_secret_path,
+                target=target,
                 table=empty_table,
                 table_schema=exported.schema,
                 loaded_rows=loaded_rows,
@@ -170,7 +197,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             cleanups.append(delete_gcs_files_task.submit(project=project, bucket=gcs_bucket, files=exported.files))
             notifier.table_step(table_id, TableStep.INDEXES)
             indexed_table = create_oracle_indexes_task(
-                infisical_secret_path=infisical_secret_path,
+                target=target,
                 table=empty_table,
                 structure=structure,
                 slot=slots.slot,
@@ -179,12 +206,12 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             )
             notifier.table_step(table_id, TableStep.STATS)
             analyzed_table = gather_oracle_stats_task(
-                infisical_secret_path=infisical_secret_path, table=indexed_table, parallel_degree=index_parallel_degree
+                target=target, table=indexed_table, parallel_degree=index_parallel_degree
             )
             notifier.table_step(table_id, TableStep.ACCESS)
-            granted_table = grant_access_task(infisical_secret_path=infisical_secret_path, table=analyzed_table)
+            granted_table = grant_access_task(target=target, table=analyzed_table)
             ready = record_load_task(
-                infisical_secret_path=infisical_secret_path,
+                target=target,
                 plan=slots,
                 table=granted_table,
                 source=f"{project}.{dataset_id}.{table_id}",
@@ -192,13 +219,13 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             )
             notifier.table_step(table_id, TableStep.INMEMORY)
             enable_inmemory_window_task(
-                infisical_secret_path=infisical_secret_path,
+                target=target,
                 table=granted_table,
                 window_months=inmemory_window_months,
                 wait_for=[ready],
             )
             start_inmemory_population_task(
-                infisical_secret_path=infisical_secret_path,
+                target=target,
                 table=granted_table,
                 structure=structure,
                 wait_minutes=inmemory_wait_minutes,
@@ -207,13 +234,9 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             loaded.append(ready)
 
         notifier.enter(Step.INMEMORY_WAIT)
-        populated = wait_inmemory_task(
-            infisical_secret_path=infisical_secret_path, plans=loaded, wait_minutes=inmemory_wait_minutes
-        )
+        populated = wait_inmemory_task(target=target, plans=loaded, wait_minutes=inmemory_wait_minutes)
         notifier.enter(Step.SWAP)
-        swap_synonyms_task(infisical_secret_path=infisical_secret_path, plans=populated)
-        release_inmemory_task(
-            infisical_secret_path=infisical_secret_path, plans=populated, delay_seconds=inmemory_release_delay_seconds
-        )
+        swap_synonyms_task(target=target, plans=populated)
+        release_inmemory_task(target=target, plans=populated, delay_seconds=inmemory_release_delay_seconds)
         for cleanup in cleanups:
             cleanup.result()

@@ -1,7 +1,7 @@
 """Formatação de texto para as mensagens do Discord: barra de progresso, números, durações e hora de Brasília.
 
-Este arquivo é idêntico nas três pipelines da Nota Carioca que notificam (oracle_to_bq, bq_to_oracle e carga_completa)
-e não importa nada de ``pipelines.*``.
+Este arquivo é idêntico nas pipelines da Nota Carioca que notificam (extracao_xml, oracle_to_bq, bq_to_oracle e
+carga_completa) e não importa nada de ``pipelines.*``.
 """
 
 import math
@@ -13,17 +13,22 @@ ELLIPSIS = "…"
 SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600
 KILOBYTE = 1024
-STAGING_MARK = "🧪 STAGING · "
+ENVIRONMENT_MARKS = {
+    "staging": "🧪 STAGING · ",
+    "stagingteste": "🧪 STAGINGTESTE · ",
+    "dev": "🛠️ DEV · ",
+}
 
 
-def mark_staging(text: str, staging: bool) -> str:
-    """Marca o texto como vindo do ambiente de staging, para não se confundir com o de prod.
+def mark_environment(text: str, environment: str) -> str:
+    """Marca o texto com o ambiente de teste de onde vem, para não se confundir com o de prod nem com outro de teste.
 
     :param text: Título do embed ou linha avulsa.
-    :param staging: ``True`` no deployment de staging.
-    :returns: ``🧪 STAGING · `` seguido do texto em staging; em prod, o texto como veio.
+    :param environment: Ambiente do deployment (``prod``, ``staging``, ``stagingteste`` ou ``dev``).
+    :returns: O marcador do ambiente (``🧪 STAGING · ``, ``🧪 STAGINGTESTE · `` ou ``🛠️ DEV · ``) seguido do texto; em
+        prod, o texto como veio.
     """
-    return f"{STAGING_MARK}{text}" if staging else text
+    return f"{ENVIRONMENT_MARKS.get(environment, '')}{text}"
 
 
 def clip(text: str, limit: int) -> str:

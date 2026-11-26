@@ -7,12 +7,22 @@ prefixo. Prod e staging usam as mesmas chaves, cada um com o valor do seu ambien
 """
 
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import assert_never
 
-from pipelines.rj_smfp__nota_carioca_extracao_xml.constants import PROXY_URL, TOKEN_KEY, URL_PROD, URL_STAGING
+from pipelines.rj_smfp__nota_carioca_extracao_xml.constants import (
+    PROXY_URL,
+    TOKEN_KEY,
+    URL_DEV,
+    URL_PROD,
+    URL_STAGING,
+    URL_STAGINGTESTE,
+)
 from pipelines.rj_smfp__nota_carioca_extracao_xml.utils.discord import Environment
+
+IDENTIFIER_PATTERN = re.compile(r"^[A-Z][A-Z0-9_$#]{0,127}$")
 
 
 @dataclass(frozen=True)
@@ -106,8 +116,24 @@ def resolve_proxy(proxy_url: str | None) -> str | None:
     return value
 
 
+def validate_identifier(name: str) -> str:
+    """Normaliza e valida um identificador do Oracle (o dono da tabela ``TAREFAS``).
+
+    :param name: Nome do schema.
+    :returns: O nome em maiúsculas.
+    :raises ValueError: Se o nome não for um identificador válido.
+    """
+    upper = name.strip().upper()
+    if not IDENTIFIER_PATTERN.match(upper):
+        raise ValueError(f"Identificador inválido para o Oracle: {name!r}")
+    return upper
+
+
 def resolve_url(url: str | None, environment: Environment) -> str:
-    """Endereço do webservice: o informado (só ``https``) ou o do ambiente (staging = homologação).
+    """Endereço do webservice: o informado (só ``https``) ou o do ambiente.
+
+    Staging é a homologação (``notacariocahom``), stagingteste o homteste (``notacariocahomteste``) e dev o
+    desenvolvimento (``notacariocades``).
 
     :param url: Endereço informado no parâmetro do flow, ou ``None``.
     :param environment: Ambiente do deployment.
@@ -123,5 +149,9 @@ def resolve_url(url: str | None, environment: Environment) -> str:
             return URL_PROD
         case Environment.STAGING:
             return URL_STAGING
+        case Environment.STAGINGTESTE:
+            return URL_STAGINGTESTE
+        case Environment.DEV:
+            return URL_DEV
         case unreachable:
             assert_never(unreachable)

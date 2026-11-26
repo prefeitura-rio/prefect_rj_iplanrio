@@ -31,6 +31,57 @@ CONSUMER_GRANTS = (
 REPLACEABLE_OBJECT_TYPES = {"TABLE", "TABLE PARTITION", "TABLE SUBPARTITION", "SYNONYM"}
 SNAPSHOT_PATTERN = re.compile(r"snapshot do BigQuery de ([0-9-]+ [0-9:]+) UTC; carregada em ([0-9-]+ [0-9:]+) UTC")
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
+# Privilégios de objeto que um consumidor pode receber na tabela física.
+GRANTABLE_PRIVILEGES = frozenset({"SELECT", "INSERT", "UPDATE", "DELETE", "ALTER"})
+
+
+@dataclass(frozen=True)
+class OracleTarget:
+    """Onde a carga grava e quem a consome: a pasta do segredo, o schema de destino e os consumidores.
+
+    Prod, homologação e desenvolvimento usam os consumidores padrão; o homteste, no mesmo banco da homologação, tem
+    os seus (``NFSE_SIGA_TESTE``, ``RL_NFSE_TESTE``...), para a troca de um ambiente não repontar os sinônimos do outro.
+
+    :param infisical_secret_path: Pasta do segredo do Oracle no Infisical.
+    :param schema: Schema das tabelas físicas; ``None`` usa o ``DB_SCHEMA`` do segredo.
+    :param synonym_owners: Donos dos sinônimos dos consumidores, além do próprio schema.
+    :param grants: Quem recebe acesso à tabela física, e com quais privilégios (``SELECT, ALTER, DELETE``).
+    :raises ValueError: Se algum nome não for um identificador válido ou algum privilégio não for permitido.
+    """
+
+    infisical_secret_path: str
+    schema: str | None = None
+    synonym_owners: tuple[str, ...] = CONSUMER_SYNONYM_OWNERS
+    grants: tuple[tuple[str, str], ...] = CONSUMER_GRANTS
+
+    def __post_init__(self) -> None:
+        """Normaliza os nomes para maiúsculas e confere nomes e privilégios."""
+        if self.schema is not None:
+            object.__setattr__(self, "schema", validate_identifier(self.schema))
+        object.__setattr__(self, "synonym_owners", tuple(validate_identifier(owner) for owner in self.synonym_owners))
+        object.__setattr__(
+            self,
+            "grants",
+            tuple(
+                (validate_identifier(grantee), validate_privileges(privileges)) for grantee, privileges in self.grants
+            ),
+        )
+
+
+def validate_privileges(privileges: str) -> str:
+    """Normaliza e confere a lista de privilégios de um grant.
+
+    :param privileges: Privilégios separados por vírgula, como ``SELECT, ALTER, DELETE``.
+    :returns: Os privilégios em maiúsculas, separados por ``, ``.
+    :raises ValueError: Se a lista estiver vazia ou tiver um privilégio fora de ``GRANTABLE_PRIVILEGES``.
+    """
+    items = [item.strip().upper() for item in privileges.split(",") if item.strip()]
+    invalid = sorted(set(items) - GRANTABLE_PRIVILEGES)
+    if not items or invalid:
+        raise ValueError(
+            f"Privilégios inválidos para o grant: {privileges!r} (permitidos: {sorted(GRANTABLE_PRIVILEGES)})."
+        )
+    return ", ".join(items)
 
 
 @dataclass(frozen=True)
@@ -79,16 +130,19 @@ def slot_table_name(base: str, slot: str) -> str:
     return validate_identifier(f"{base}_{slot}")
 
 
-def synonym_owners(schema: str) -> tuple[str, ...]:
+def synonym_owners(schema: str, consumers: tuple[str, ...] = CONSUMER_SYNONYM_OWNERS) -> tuple[str, ...]:
     """Lista os donos dos sinônimos da tabela, começando pelo schema de destino.
 
     :param schema: Schema das tabelas físicas.
+    :param consumers: Donos dos sinônimos dos consumidores.
     :returns: Schema de destino e schemas dos consumidores.
     """
-    return (schema, *CONSUMER_SYNONYM_OWNERS)
+    return (schema, *consumers)
 
 
-def choose_slots(base: str, schema: str, synonyms: list[SynonymTarget]) -> SlotPlan:
+def choose_slots(
+    base: str, schema: str, synonyms: list[SynonymTarget], consumers: tuple[str, ...] = CONSUMER_SYNONYM_OWNERS
+) -> SlotPlan:
     """Define a tabela em uso e a que recebe a carga a partir dos sinônimos.
 
     A tabela em uso é a apontada pelo sinônimo do schema de destino ou, se ele
@@ -98,12 +152,13 @@ def choose_slots(base: str, schema: str, synonyms: list[SynonymTarget]) -> SlotP
     :param base: Nome estável da tabela.
     :param schema: Schema das tabelas físicas.
     :param synonyms: Sinônimos com o nome ``base``, de qualquer dono.
+    :param consumers: Donos dos sinônimos dos consumidores.
     :returns: Tabela em uso e tabela que recebe a carga.
     :raises PermissionError: Se algum sinônimo da pipeline apontar para um objeto
         que ela não gerencia.
     """
     slot_tables = {slot_table_name(base, slot): slot for slot in SLOTS}
-    owners = synonym_owners(schema)
+    owners = synonym_owners(schema, consumers)
     ours = [synonym for synonym in synonyms if synonym.owner in owners]
     for synonym in ours:
         if synonym.table_owner != schema or (synonym.table_name not in slot_tables and synonym.table_name != base):
@@ -132,15 +187,18 @@ def synonyms_to_realign(plan: SlotPlan, synonyms: list[SynonymTarget]) -> list[s
     return [synonym.owner for synonym in synonyms if synonym.table_name == plan.inactive]
 
 
-def read_synonyms(cursor: oracledb.Cursor, schema: str, base: str) -> list[SynonymTarget]:
+def read_synonyms(
+    cursor: oracledb.Cursor, schema: str, base: str, consumers: tuple[str, ...] = CONSUMER_SYNONYM_OWNERS
+) -> list[SynonymTarget]:
     """Lê os sinônimos da pipeline com o nome estável da tabela.
 
     :param cursor: Cursor de uma conexão aberta.
     :param schema: Schema das tabelas físicas.
     :param base: Nome estável da tabela.
+    :param consumers: Donos dos sinônimos dos consumidores.
     :returns: Sinônimos do schema de destino e dos consumidores.
     """
-    owners = synonym_owners(schema)
+    owners = synonym_owners(schema, consumers)
     return [
         SynonymTarget(owner=str(row["owner"]), table_owner=str(row["table_owner"]), table_name=str(row["table_name"]))
         for row in fetch_rows(cursor, "get_synonyms", {"synonym_name": base})
@@ -190,11 +248,14 @@ def assert_replaceable_legacy_table(cursor: oracledb.Cursor, schema: str, base: 
     return True
 
 
-def resolve_slots(config: OracleConfig, base: str) -> tuple[SlotPlan, list[str]]:
+def resolve_slots(
+    config: OracleConfig, base: str, consumers: tuple[str, ...] = CONSUMER_SYNONYM_OWNERS
+) -> tuple[SlotPlan, list[str]]:
     """Descobre a tabela em uso e a que recebe a carga, corrigindo trocas interrompidas.
 
     :param config: Configuração da conexão.
     :param base: Nome estável da tabela.
+    :param consumers: Donos dos sinônimos dos consumidores.
     :returns: Plano das tabelas e donos dos sinônimos repontados para a tabela em
         uso.
     :raises PermissionError: Se faltar privilégio, se algum sinônimo apontar para
@@ -204,15 +265,15 @@ def resolve_slots(config: OracleConfig, base: str) -> tuple[SlotPlan, list[str]]
     with connect(config) as connection, connection.cursor() as cursor:
         assert_privileges(cursor, config.schema)
         assert_replaceable_legacy_table(cursor, config.schema, base)
-        synonyms = read_synonyms(cursor, config.schema, base)
-        plan = choose_slots(base, config.schema, synonyms)
+        synonyms = read_synonyms(cursor, config.schema, base, consumers)
+        plan = choose_slots(base, config.schema, synonyms, consumers)
         realigned = synonyms_to_realign(plan, synonyms)
         for owner in realigned:
             create_synonym(cursor, owner, base, config.schema, str(plan.active))
     return plan, realigned
 
 
-def grant_access(config: OracleConfig, table: str) -> None:
+def grant_access(config: OracleConfig, table: str, grants: tuple[tuple[str, str], ...] = CONSUMER_GRANTS) -> None:
     """Concede aos consumidores o acesso à tabela física.
 
     Roda a cada carga, antes da troca: recriar a tabela apaga os grants. Os
@@ -220,11 +281,12 @@ def grant_access(config: OracleConfig, table: str) -> None:
 
     :param config: Configuração da conexão.
     :param table: Tabela física.
+    :param grants: Quem recebe o acesso, e com quais privilégios.
     :raises PermissionError: Se a tabela não existir ou não pertencer à pipeline.
     """
     with connect(config) as connection, connection.cursor() as cursor:
         assert_managed_existing_table(cursor, config.schema, table)
-        for grantee, privileges in CONSUMER_GRANTS:
+        for grantee, privileges in grants:
             cursor.execute(
                 load_query(
                     QUERIES_ANCHOR,
@@ -288,7 +350,9 @@ def record_load(config: OracleConfig, table: str, source: str, snapshot_modified
     return comment
 
 
-def swap_synonyms(config: OracleConfig, plan: SlotPlan) -> list[str]:
+def swap_synonyms(
+    config: OracleConfig, plan: SlotPlan, consumers: tuple[str, ...] = CONSUMER_SYNONYM_OWNERS
+) -> list[str]:
     """Aponta os sinônimos para a tabela recém-carregada.
 
     Os sinônimos dos consumidores são trocados primeiro e o do schema de destino
@@ -299,6 +363,7 @@ def swap_synonyms(config: OracleConfig, plan: SlotPlan) -> list[str]:
 
     :param config: Configuração da conexão.
     :param plan: Tabela em uso e tabela recém-carregada.
+    :param consumers: Donos dos sinônimos dos consumidores.
     :returns: Ações executadas, em texto, para o log.
     :raises PermissionError: Se a tabela carregada ou a tabela única antiga não
         pertencerem à pipeline; a conferência acontece antes de qualquer
@@ -308,7 +373,7 @@ def swap_synonyms(config: OracleConfig, plan: SlotPlan) -> list[str]:
     with connect(config) as connection, connection.cursor() as cursor:
         assert_managed_existing_table(cursor, config.schema, plan.inactive)
         legacy = assert_replaceable_legacy_table(cursor, config.schema, plan.base)
-        for owner in CONSUMER_SYNONYM_OWNERS:
+        for owner in consumers:
             create_synonym(cursor, owner, plan.base, config.schema, plan.inactive)
             actions.append(f"{owner}.{plan.base} → {plan.inactive}")
         if legacy:
@@ -319,7 +384,12 @@ def swap_synonyms(config: OracleConfig, plan: SlotPlan) -> list[str]:
     return actions
 
 
-def refresh_synonyms(config: OracleConfig, base: str) -> list[str]:
+def refresh_synonyms(
+    config: OracleConfig,
+    base: str,
+    consumers: tuple[str, ...] = CONSUMER_SYNONYM_OWNERS,
+    grants: tuple[tuple[str, str], ...] = CONSUMER_GRANTS,
+) -> list[str]:
     """Reaponta todos os sinônimos para a tabela física já em uso, sem carga.
 
     Serve para criar sinônimos de um dono novo ou corrigir um sinônimo removido
@@ -328,6 +398,8 @@ def refresh_synonyms(config: OracleConfig, base: str) -> list[str]:
 
     :param config: Configuração da conexão.
     :param base: Nome estável da tabela.
+    :param consumers: Donos dos sinônimos dos consumidores.
+    :param grants: Quem recebe o acesso à tabela em uso, e com quais privilégios.
     :returns: Ações executadas, em texto, para o log.
     :raises LookupError: Se ainda não houver tabela A/B em uso.
     :raises PermissionError: Se faltar privilégio, se algum sinônimo apontar para
@@ -341,14 +413,14 @@ def refresh_synonyms(config: OracleConfig, base: str) -> list[str]:
                 f"{config.schema}.{base} ainda é a tabela única antiga; rode a carga completa (mode=full) "
                 "para terminar a migração para A/B. Nada foi alterado."
             )
-        plan = choose_slots(base, config.schema, read_synonyms(cursor, config.schema, base))
+        plan = choose_slots(base, config.schema, read_synonyms(cursor, config.schema, base, consumers), consumers)
         if plan.active is None:
             raise LookupError(f"{base}: nenhuma tabela A/B em uso; rode a carga completa (mode=full).")
         assert_managed_existing_table(cursor, config.schema, plan.active)
-    grant_access(config, plan.active)
+    grant_access(config, plan.active, grants)
     actions = []
     with connect(config) as connection, connection.cursor() as cursor:
-        for owner in (*CONSUMER_SYNONYM_OWNERS, config.schema):
+        for owner in (*consumers, config.schema):
             create_synonym(cursor, owner, base, config.schema, plan.active)
             actions.append(f"{owner}.{base} → {plan.active}")
     return actions
