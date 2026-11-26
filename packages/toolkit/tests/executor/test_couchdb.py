@@ -621,7 +621,7 @@ async def test_a_changes_read_after_a_sequence_gives_only_what_changed(
 
 
 def test_a_file_of_changes_keeps_the_last_change_of_each_document(tmp_path) -> None:
-    """Keep the newest row of a document that the feed gave twice, in feed order."""
+    """Keep the newest row of a document that the feed gave twice, across batches."""
     path = tmp_path / "changes.parquet"
     rows = [
         {
@@ -640,11 +640,14 @@ def test_a_file_of_changes_keeps_the_last_change_of_each_document(tmp_path) -> N
         },
         {"id": "a", "seq": "3-x", "last_seq": "3-x", "deleted": True, "doc": '{"v":2}'},
     ]
-    write_table(ArrowTable.from_pylist(rows, schema=CHANGES.columns), path)
+    write_table(
+        ArrowTable.from_pylist(rows, schema=CHANGES.columns), path, row_group_size=1
+    )
 
     keep_last_changes(path, CHANGES.columns)
     table = read_table(path)
 
+    assert [file.name for file in tmp_path.iterdir()] == ["changes.parquet"]
     assert table.schema == CHANGES.columns
     assert [(row["id"], row["seq"], row["deleted"]) for row in table.to_pylist()] == [
         ("b", "2-x", False),
