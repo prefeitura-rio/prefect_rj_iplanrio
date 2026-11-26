@@ -1,0 +1,11 @@
+[project]
+name = "rj_smfp__nota_carioca_paridade_f1"
+version = "1.0.0"
+description = "Runs the Nota Carioca F1 parity dbt build (tag:paridade_nc2), reads the parity summary from BigQuery, publishes a JSON report with counts per rule and class, notifies Discord and fails on any divergence or rule with nothing compared."
+dependencies = [
+    "prefect_rj_iplanrio",
+    "google-cloud-bigquery>=3.41.0",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
