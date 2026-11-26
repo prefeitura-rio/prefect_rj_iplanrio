@@ -19,7 +19,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.discord_format import (
     format_percent,
     format_short_duration,
     format_stamp,
-    mark_staging,
+    mark_environment,
     progress_bar,
 )
 
@@ -156,7 +156,8 @@ class RunView:
     :param error: Mensagem do erro, em caso de falha.
     :param failed_stage: Etapa em que a falha ocorreu.
     :param validation: Comparação de contagens por tabela, mostrada na mensagem final; vazio a esconde.
-    :param staging: ``True`` no deployment de staging: o título e a mensagem final levam o marcador ``🧪 STAGING · ``.
+    :param environment: Ambiente do deployment: num de teste, o título e a mensagem final levam o seu marcador
+        (staging: ``🧪 STAGING · ``).
     """
 
     flow_label: str
@@ -175,12 +176,12 @@ class RunView:
     error: str | None = None
     failed_stage: str | None = None
     validation: tuple[ValidationLine, ...] = ()
-    staging: bool = False
+    environment: str = "prod"
 
     @property
     def title(self) -> str:
-        """Título do embed: fluxo e dataset, com o marcador de staging quando for o caso."""
-        return mark_staging(f"{self.flow_label} · {self.dataset_id}", self.staging)
+        """Título do embed: fluxo e dataset, com o marcador do ambiente de teste quando for o caso."""
+        return mark_environment(f"{self.flow_label} · {self.dataset_id}", self.environment)
 
 
 _STATUS_LINE = {
@@ -374,4 +375,7 @@ def build_announcement(view: RunView) -> dict[str, object]:
             raise ValueError("A mensagem final só existe depois do término da execução.")
         case unreachable:
             assert_never(unreachable)
-    return {"content": clip(mark_staging(text, view.staging), CONTENT_LIMIT), "allowed_mentions": dict(NO_MENTIONS)}
+    return {
+        "content": clip(mark_environment(text, view.environment), CONTENT_LIMIT),
+        "allowed_mentions": dict(NO_MENTIONS),
+    }
