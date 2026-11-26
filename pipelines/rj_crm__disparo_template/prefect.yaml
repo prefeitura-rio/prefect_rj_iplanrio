@@ -476,7 +476,9 @@ deployments:
           data_extension_filename: whatsapp_smtr_rio_rotativo_novas_vagas
           de_columns: ["nome_sobrenome", "relacao_local", "numero_vagas", "logradouros"]
           filter_duplicated_cpfs: true
+          dispatch_interval_days: 30
           batch_size: 10000
+          batch_sleep_minutes: 3
           query_file: queries/smtr/smtr_rio_rotativo_novas_vagas.sql
 
   - name: rj-crm--disparo-template-sf--prod

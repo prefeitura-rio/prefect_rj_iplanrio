@@ -1,81 +1,172 @@
--- Residentes nos bairros selecionados, com os filtros da seção RMI
--- sem óbito, sem menor, sem NÃO ENVIAR
+WITH
+  -- 1. Configuração centralizada das frentes do Rio Rotativo Digital
+  config_campanhas AS (
+    SELECT * FROM UNNEST([
+      STRUCT(
+        1 AS prioridade,
+        ['IMPERIAL DE SAO CRISTOVAO', 'SAO CRISTOVAO'] AS bairros,
+        'frequenta a Quinta da Boa Vista' AS relacao_local,
+        '113' AS numero_vagas,
+        'nas ruas Dom Meinrado e General Herculano Gomes e na Avenida do Exército' AS logradouros
+      ),
+      STRUCT(
+        2 AS prioridade,
+        ['HUMAITA', 'BOTAFOGO'] AS bairros,
+        'estaciona no Humaitá' AS relacao_local,
+        '331' AS numero_vagas,
+        'nas ruas Humaitá, Marques, Conde de Irajá, Martins Ferreira e Capistrano de Abreu' AS logradouros
+      ),
+      STRUCT(
+        3 AS prioridade,
+        ['MARACANA'] AS bairros,
+        'estaciona no entorno do Maracanã' AS relacao_local,
+        '240' AS numero_vagas,
+        'nas ruas General Canabarro, Ibituruna, Morais e Silva, Pedro Guedes e Visconde de Cairu' AS logradouros
+      ),
+      STRUCT(
+        4 AS prioridade,
+        ['MADUREIRA', 'OSVALDO CRUZ', 'OSWALDO CRUZ'] AS bairros,
+        'estaciona em Madureira' AS relacao_local,
+        '245' AS numero_vagas,
+        'nas ruas Antônio de Abreu, Clara Nunes, Maria de Freitas, Dagmar da Fonseca, Américo Brasiliense, Manuel Marques, Alcina, São Geraldo e Dona Clara' AS logradouros
+      ),
+      STRUCT(
+        5 AS prioridade,
+        ['RECREIO DOS BANDEIRANTES'] AS bairros,
+        'frequenta a Praia da Reserva' AS relacao_local,
+        '1.800' AS numero_vagas,
+        'ao longo da Avenida Lúcio Costa, no trecho da Praia da Reserva' AS logradouros
+      ),
+      STRUCT(
+        6 AS prioridade,
+        ['CAMPO GRANDE'] AS bairros,
+        'circula por Campo Grande' AS relacao_local,
+        '250' AS numero_vagas,
+        'nas ruas Augusto Vasconcelos, Amaral Costa, Agostinho Coelho, Engenheiro Trindade, José Ferreira, Guaraí, Uruna, Tatuoca, Viúva Dantas, Doutor Caetano de Faria Castro, Mário Barbosa, Camanducaia e Sacramento Blake' AS logradouros
+      ),
+      STRUCT(
+        7 AS prioridade,
+        ['LEME', 'COPACABANA', 'IPANEMA', 'LEBLON'] AS bairros,
+        'frequenta as praias do Leme, Copacabana, Ipanema e Leblon' AS relacao_local,
+        'mais de 1.700' AS numero_vagas,
+        'distribuídas pelos quatro bairros' AS logradouros
+      ),
+      STRUCT(
+        8 AS prioridade,
+        ['BARRA DA TIJUCA', 'SAO CONRADO'] AS bairros,
+        'frequenta a Barra da Tijuca e São Conrado' AS relacao_local,
+        '1.400' AS numero_vagas,
+        'na Barra da Tijuca, no trecho entre a Praia dos Amores e o Alvorada, além de vagas em São Conrado' AS logradouros
+      ),
+      STRUCT(
+        9 AS prioridade,
+        ['TIJUCA'] AS bairros,
+        'circula pela Tijuca' AS relacao_local,
+        '187' AS numero_vagas,
+        'nas ruas Campos Sales, Afonso Pena, Martins Pena e Marechal Marques Porto' AS logradouros
+      )
+    ])
+  ),
 
-SELECT
-    pf.cpf AS cpf,
-    COALESCE(pf.nome_social, pf.nome) AS nome_sobrenome,
-    pf.endereco.principal.bairro AS bairro,
-    `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
+
+  -- 2. Bairros oficiais do DataRio (nome normalizado + geometria) vinculados à configuração
+  bairros_alvo AS (
+    SELECT
+      cfg.prioridade,
+      REGEXP_REPLACE(NORMALIZE(UPPER(TRIM(b.nome)), NFD), r'\pM', '') AS bairro_norm,
+      b.geometry
+    FROM `datario.dados_mestres.bairro` AS b
+    INNER JOIN config_campanhas AS cfg
+      ON REGEXP_REPLACE(NORMALIZE(UPPER(TRIM(b.nome)), NFD), r'\pM', '') IN UNNEST(cfg.bairros)
+  ),
+
+
+  -- 3. Base elegível da RMI com endereço normalizado e ponto geográfico (lat/long)
+  base_rmi AS (
+    SELECT
+      cpf,
+      cpf_particao,
+      `rj-crm-registry.udf.VALIDATE_AND_FORMAT_PHONE`(
         CONCAT(
-            IFNULL(pf.telefone.principal.ddi, "55"),
-            IFNULL(pf.telefone.principal.ddd, "21"),
-            pf.telefone.principal.valor
+          IFNULL(telefone.principal.ddi, '55'),
+          IFNULL(telefone.principal.ddd, '21'),
+          telefone.principal.valor
         )
-    ) AS telefone,
+      ) AS telefone,
+      `rj-crm-registry.udf.FORMAT_NAME`(
+        COALESCE(nome_social, nome), TRUE
+      ) AS nome_sobrenome,
+      endereco.principal.bairro AS bairro_original,
+      REGEXP_REPLACE(NORMALIZE(UPPER(TRIM(endereco.principal.bairro)), NFD), r'\pM', '') AS bairro_norm,
+      REGEXP_REPLACE(NORMALIZE(UPPER(TRIM(IFNULL(endereco.principal.municipio, 'RIO DE JANEIRO'))), NFD), r'\pM', '') AS municipio_norm,
+      UPPER(TRIM(IFNULL(endereco.principal.estado, 'RJ'))) AS estado_norm,
+      SAFE.ST_GEOGPOINT(
+        SAFE_CAST(endereco.principal.longitude AS FLOAT64),
+        SAFE_CAST(endereco.principal.latitude AS FLOAT64)
+      ) AS ponto_geo
+    FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`
+    WHERE
+      obito.indicador = FALSE
+      AND menor_idade = FALSE
+      AND (nome IS NOT NULL OR nome_social IS NOT NULL)
+      AND telefone.principal.estrategia_envio IN ('ENVIAR', 'TESTAR')
+  ),
 
-    CASE pf.endereco.principal.bairro
-        WHEN 'São Cristóvão' THEN 'Quinta da Boa Vista / São Cristóvão'
-        WHEN 'Humaitá' THEN 'Humaitá'
-        WHEN 'Maracanã' THEN 'Maracanã'
-        WHEN 'Tijuca' THEN 'Maracanã'
-        WHEN 'Madureira' THEN 'Madureira'
-        WHEN 'Oswaldo Cruz' THEN 'Madureira'
-        WHEN 'Barra da Tijuca' THEN 'Praia da Reserva'
-        WHEN 'Recreio dos Bandeirantes' THEN 'Praia da Reserva'
-        WHEN 'Campo Grande' THEN 'Campo Grande'
-    END AS Local,
 
-    CASE pf.endereco.principal.bairro
-        WHEN 'São Cristóvão' THEN 'frequenta a Quinta da Boa Vista'
-        WHEN 'Humaitá' THEN 'estaciona no Humaitá'
-        WHEN 'Maracanã' THEN 'estaciona no entorno do Maracanã'
-        WHEN 'Tijuca' THEN 'estaciona no entorno do Maracanã'
-        WHEN 'Madureira' THEN 'estaciona em Madureira'
-        WHEN 'Oswaldo Cruz' THEN 'estaciona em Madureira'
-        WHEN 'Barra da Tijuca' THEN 'frequenta a Praia da Reserva'
-        WHEN 'Recreio dos Bandeirantes' THEN 'frequenta a Praia da Reserva'
-        WHEN 'Campo Grande' THEN 'circula por Campo Grande'
-    END AS relacao_local,
+  -- 4. Consolida elegibilidade por nome do bairro OU interseção espacial (geometria)
+  registros_classificados AS (
+    -- 4a. Moradores por nome do bairro cadastrado
+    SELECT
+      rmi.cpf_particao,
+      cfg.prioridade
+    FROM base_rmi AS rmi
+    INNER JOIN config_campanhas AS cfg
+      ON rmi.bairro_norm IN UNNEST(cfg.bairros)
+    WHERE
+      rmi.municipio_norm = 'RIO DE JANEIRO'
+      AND rmi.estado_norm = 'RJ'
 
-    CASE pf.endereco.principal.bairro
-        WHEN 'São Cristóvão' THEN 113
-        WHEN 'Humaitá' THEN 331
-        WHEN 'Maracanã' THEN 240
-        WHEN 'Tijuca' THEN 240
-        WHEN 'Madureira' THEN 245
-        WHEN 'Oswaldo Cruz' THEN 245
-        WHEN 'Barra da Tijuca' THEN 1800
-        WHEN 'Recreio dos Bandeirantes' THEN 1800
-        WHEN 'Campo Grande' THEN 250
-    END AS numero_vagas,
 
-    CASE pf.endereco.principal.bairro
-        WHEN 'São Cristóvão' THEN 'nas ruas Dom Meinrado e General Herculano Gomes e na Avenida do Exército'
-        WHEN 'Humaitá' THEN 'nas ruas Humaitá, Marques, Conde de Irajá, Martins Ferreira e Capistrano de Abreu'
-        WHEN 'Maracanã' THEN 'nas ruas General Canabarro, Ibituruna, Morais e Silva, Pedro Guedes e Visconde de Cairu'
-        WHEN 'Tijuca' THEN 'nas ruas General Canabarro, Ibituruna, Morais e Silva, Pedro Guedes e Visconde de Cairu'
-        WHEN 'Madureira' THEN 'nas ruas Antônio de Abreu, Clara Nunes, Maria de Freitas, Dagmar da Fonseca, Américo Brasiliense, Manuel Marques, Alcina, São Geraldo e Dona Clara'
-        WHEN 'Oswaldo Cruz' THEN 'nas ruas Antônio de Abreu, Clara Nunes, Maria de Freitas, Dagmar da Fonseca, Américo Brasiliense, Manuel Marques, Alcina, São Geraldo e Dona Clara'
-        WHEN 'Barra da Tijuca' THEN 'ao longo da Avenida Lúcio Costa, no trecho da Praia da Reserva'
-        WHEN 'Recreio dos Bandeirantes' THEN 'ao longo da Avenida Lúcio Costa, no trecho da Praia da Reserva'
-        WHEN 'Campo Grande' THEN 'nas ruas Augusto Vasconcelos, Amaral Costa, Agostinho Coelho, Engenheiro Trindade, José Ferreira, Guaraí, Uruna, Tatuoca, Viúva Dantas, Doutor Caetano de Faria Castro, Mário Barbosa, Camanducaia e Sacramento Blake'
-    END AS logradouros
+    UNION ALL
 
-FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf
--- FROM `rj-rmi.rmi_dados_mestres.pessoa_fisica` pf
-WHERE pf.cpf IS NOT NULL
-    AND pf.telefone.principal.estrategia_envio != 'NÃO ENVIAR'
-    AND pf.obito.indicador IS FALSE
-    AND pf.menor_idade IS FALSE
-    AND pf.endereco.principal.bairro IN (
-        'São Cristóvão',
-        'Humaitá',
-        'Maracanã',
-        'Tijuca',
-        'Madureira',
-        'Oswaldo Cruz',
-        'Barra da Tijuca',
-        'Recreio dos Bandeirantes',
-        'Campo Grande'
-    )
-;
+
+    -- 4b. Moradores por interseção espacial (lat/long dentro do polígono do bairro)
+    SELECT
+      rmi.cpf_particao,
+      ba.prioridade
+    FROM base_rmi AS rmi
+    INNER JOIN bairros_alvo AS ba
+      ON ST_INTERSECTS(ba.geometry, rmi.ponto_geo)
+    WHERE
+      rmi.ponto_geo IS NOT NULL
+      AND ba.geometry IS NOT NULL
+  ),
+
+
+  -- 5. Deduplica por CPF (cpf_particao) escolhendo apenas 1 frente de envio
+  publico_unico AS (
+    SELECT
+      cpf_particao,
+      prioridade
+    FROM registros_classificados
+    QUALIFY ROW_NUMBER() OVER (
+      PARTITION BY cpf_particao
+      ORDER BY prioridade ASC
+    ) = 1
+  )
+
+
+-- 6. Monta o payload final para disparo
+SELECT
+  rmi.telefone,
+  rmi.cpf,
+  rmi.nome_sobrenome,
+  rmi.bairro_original AS bairro,
+  cfg.relacao_local,
+  cfg.numero_vagas,
+  cfg.logradouros
+FROM publico_unico AS pub
+INNER JOIN base_rmi AS rmi
+  ON rmi.cpf_particao = pub.cpf_particao
+INNER JOIN config_campanhas AS cfg
+  ON cfg.prioridade = pub.prioridade;
