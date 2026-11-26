@@ -294,7 +294,9 @@ def geocode_locationiq(
 
     # Obtém o número de requisições restantes na API
     try:
-        balance_response = requests.get(f"https://us1.locationiq.com/v1/balance?key={api_key}&format=json").json()
+        balance_response = requests.get(
+            f"https://us1.locationiq.com/v1/balance?key={api_key}&format=json", timeout=DEFAULT_TIMEOUT
+        ).json()
         num_requests_left = int(balance_response.get("balance", {}).get("day", 0))
     except Exception as e:
         print(f"Erro ao verificar o saldo de requisições: {e}")
@@ -311,7 +313,7 @@ def geocode_locationiq(
         url = f"https://us1.locationiq.com/v1/search.php?key={api_key}&q={endereco}&format=json"
 
         try:
-            response = session.get(url)
+            response = session.get(url, timeout=DEFAULT_TIMEOUT)
 
             if response.status_code == 402:  # Quota excedida
                 raise requests.exceptions.HTTPError("402 Payment Required - quota exceeded")
@@ -368,7 +370,7 @@ def geocode_opencage(
         params = {"q": address, "key": api_key, "language": "pt", "limit": 1}
 
         try:
-            response = requests.get(url, params=params)
+            response = requests.get(url, params=params, timeout=DEFAULT_TIMEOUT)
 
             if response.status_code == 402:  # Quota excedida
                 raise requests.exceptions.HTTPError("402 Payment Required - quota exceeded")
