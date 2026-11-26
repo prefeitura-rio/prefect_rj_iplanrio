@@ -9,7 +9,7 @@ from typing import ClassVar, Self, cast, override
 
 from httpx2 import HTTPError
 from polars import DataFrame
-from pyarrow import Schema, Table
+from pyarrow import Schema, Table, array, bool_
 from pyarrow.dataset import dataset
 from pyarrow.parquet import ParquetWriter
 from pydantic import JsonValue, TypeAdapter, ValidationError
@@ -80,20 +80,37 @@ def keep_last_changes(path: Path, columns: Schema) -> None:
 
     A document written while the feed is read comes back later in it with a newer
     sequence, so the file can hold it twice, and the last row is the newest. A file
-    with no id column, or with no repeated id, is left as it is.
+    with no id column, or with no repeated id, is left as it is. Only the ids are held
+    in memory: the rows go a batch at a time to a new file that replaces the old one,
+    so a feed of millions of documents fits in the memory of a job.
     """
     if COUCHDB_ID_COLUMN not in columns.names:
         return
 
-    table = dataset(path, format="parquet", schema=columns).to_table()
-    ids = cast("list[str | None]", table.column(COUCHDB_ID_COLUMN).to_pylist())
+    source = dataset(path, format="parquet", schema=columns)
+    column = source.to_table(columns=[COUCHDB_ID_COLUMN], use_threads=False).column(
+        COUCHDB_ID_COLUMN
+    )
+    ids = cast("list[str | None]", column.to_pylist())
     last = {key: index for index, key in enumerate(ids)}
 
     if len(last) == len(ids):
         return
 
-    with ParquetWriter(path, columns) as writer:
-        writer.write_table(table.take(sorted(last.values())))
+    keep = [False] * len(ids)
+    for index in last.values():
+        keep[index] = True
+
+    mask = array(keep, type=bool_())
+    target = path.with_name(f"{path.stem}.last{path.suffix}")
+    offset = 0
+
+    with ParquetWriter(target, columns) as writer:
+        for batch in source.scanner(use_threads=False).to_reader():
+            writer.write_batch(batch.filter(mask.slice(offset, batch.num_rows)))
+            offset += batch.num_rows
+
+    target.replace(path)
 
 
 @dataclass
