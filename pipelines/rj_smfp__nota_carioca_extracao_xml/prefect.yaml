@@ -52,6 +52,59 @@ deployments:
       cpu_limit: "250m"
       memory_request: 512Mi
       memory_limit: 512Mi
+# StagingTeste: chama o webservice do homteste (notacariocahomteste) e acompanha a tarefa no Oracle de homologação, o
+# mesmo banco de staging, mas na TAREFAS de NFSE_TESTE. O Discord posta no canal de stagingteste, com o marcador
+# 🧪 STAGINGTESTE.
+- name: rj-smfp--nota-carioca-extracao-xml--stagingteste
+  tags:
+  - environment:stagingteste
+  - severity:low
+  - code_owner:fredzolio
+  version: "{{ build-image.tag }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_extracao_xml/flow.py:rj_smfp__nota_carioca_extracao_xml
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  # Sem schedule: roda como primeiro passo da carga completa (ou manual).
+  parameters:
+    tasks_owner: NFSE_TESTE
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_extracao_xml -- prefect flow-run execute
+      secretName: prefect-jobs-secrets-staging
+      image_pull_policy: Always
+      cpu_request: "250m"
+      cpu_limit: "250m"
+      memory_request: 512Mi
+      memory_limit: 512Mi
+# Dev: chama o webservice de desenvolvimento (notacariocades) e acompanha a tarefa no Oracle de desenvolvimento (o
+# segredo de dev). O Discord posta no canal de dev, com o marcador 🛠️ DEV.
+- name: rj-smfp--nota-carioca-extracao-xml--dev
+  tags:
+  - environment:dev
+  - severity:low
+  - code_owner:fredzolio
+  version: "{{ build-image.tag }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_extracao_xml/flow.py:rj_smfp__nota_carioca_extracao_xml
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  # Sem schedule: roda como primeiro passo da carga completa (ou manual).
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_extracao_xml -- prefect flow-run execute
+      secretName: prefect-jobs-secrets-dev
+      image_pull_policy: Always
+      cpu_request: "250m"
+      cpu_limit: "250m"
+      memory_request: 512Mi
+      memory_limit: 512Mi
 # Prod: chama o webservice de produção e acompanha a tarefa no Oracle de produção.
 - name: rj-smfp--nota-carioca-extracao-xml--prod
   tags:
