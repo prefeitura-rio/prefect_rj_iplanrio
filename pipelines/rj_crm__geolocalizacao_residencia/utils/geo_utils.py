@@ -37,6 +37,19 @@ MAX_BACKOFF_TIME = 60.0
 JITTER_RANGE = 0.1
 
 
+def _describe_request_error(error: Exception) -> str:
+    """Describe a request error without its message.
+
+    The message of a ``requests`` exception carries the request URL, with the API key and the
+    citizen's address in the query string, so only the exception type and the HTTP status are logged.
+    """
+    response = getattr(error, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if status_code is None:
+        return type(error).__name__
+    return f"{type(error).__name__} (HTTP {status_code})"
+
+
 def _prepare_addresses_for_nominatim(addresses: list[str]) -> list[str]:
     """Prepare addresses for Nominatim geocoding by ensuring Rio de Janeiro context."""
     return [f"{address}, Rio de Janeiro" if "Rio de Janeiro" not in address else address for address in addresses]
@@ -294,27 +307,30 @@ def geocode_locationiq(
 
     # Obtém o número de requisições restantes na API
     try:
-        balance_response = requests.get(f"https://us1.locationiq.com/v1/balance?key={api_key}&format=json").json()
+        balance_response = requests.get(
+            "https://us1.locationiq.com/v1/balance", params={"key": api_key, "format": "json"}
+        ).json()
         num_requests_left = int(balance_response.get("balance", {}).get("day", 0))
     except Exception as e:
-        print(f"Erro ao verificar o saldo de requisições: {e}")
+        log(f"Erro ao verificar o saldo de requisições do LocationIQ: {_describe_request_error(e)}")
         return dataframe
 
     if num_requests_left == 0:
-        print("Sem requisições restantes na API do LocationIQ.")
+        log("Sem requisições restantes na API do LocationIQ.")
         return dataframe
 
     session = requests.Session()
     updated_date = pendulum.now(tz="America/Sao_Paulo").to_date_string()
 
     for idx, endereco in dataframe.iloc[:num_requests_left][address_column].items():
-        url = f"https://us1.locationiq.com/v1/search.php?key={api_key}&q={endereco}&format=json"
+        url = "https://us1.locationiq.com/v1/search.php"
+        params = {"key": api_key, "q": endereco, "format": "json"}
 
         try:
-            response = session.get(url)
+            response = session.get(url, params=params)
 
             if response.status_code == 402:  # Quota excedida
-                raise requests.exceptions.HTTPError("402 Payment Required - quota exceeded")
+                raise requests.exceptions.HTTPError("402 Payment Required - quota exceeded", response=response)
 
             data = response.json()
 
@@ -336,12 +352,12 @@ def geocode_locationiq(
                     dataframe.at[idx, "updated_date"] = updated_date
 
                 else:
-                    print(f"Endereço não encontrado: {endereco}")
+                    log(f"LocationIQ: endereço da linha {idx} não encontrado.")
             else:
-                print(f"Endereço não encontrado: {endereco}")
+                log(f"LocationIQ: endereço da linha {idx} não encontrado.")
 
         except Exception as e:
-            print(f"Erro ao processar '{endereco}': {e}")
+            log(f"LocationIQ: erro ao processar o endereço da linha {idx}: {_describe_request_error(e)}")
 
         if use_exponential_backoff:
             exponential_backoff_sleep(0, sleep_time)
@@ -371,7 +387,7 @@ def geocode_opencage(
             response = requests.get(url, params=params)
 
             if response.status_code == 402:  # Quota excedida
-                raise requests.exceptions.HTTPError("402 Payment Required - quota exceeded")
+                raise requests.exceptions.HTTPError("402 Payment Required - quota exceeded", response=response)
 
             data = response.json()
 
@@ -393,12 +409,12 @@ def geocode_opencage(
                 data_store["confianca"].append(result.get("confidence", 0) / 10)
                 data_store["updated_date"].append(pd.Timestamp.now().strftime("%Y-%m-%d"))
             else:
-                log(f"Endereço '{address}' não encontrado.")
+                log(f"OpenCage: endereço da linha {i} não encontrado.")
                 for field in GEOCODING_FIELDS:
                     data_store[field].append(None)
 
         except requests.RequestException as e:
-            log(f"Erro ao processar '{address}': {e}")
+            log(f"OpenCage: erro ao processar o endereço da linha {i}: {_describe_request_error(e)}")
             for field in GEOCODING_FIELDS:
                 data_store[field].append(None)
 
