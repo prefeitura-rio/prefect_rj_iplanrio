@@ -1,6 +1,7 @@
 """Tasks da carga BigQuery → GCS → SQL*Loader → Oracle."""
 
 import time
+from dataclasses import replace
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -22,6 +23,12 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
 )
 
 BRASILIA = ZoneInfo("America/Sao_Paulo")
+
+
+def target_config(target: slots.OracleTarget) -> oracle.OracleConfig:
+    """Lê o Oracle do segredo do ambiente e aplica o schema de destino do deployment, se houver."""
+    config = oracle.read_oracle_config(target.infisical_secret_path)
+    return config if target.schema is None else replace(config, schema=target.schema)
 
 
 @task(cache_policy=NO_CACHE)
@@ -80,7 +87,7 @@ def export_snapshot_task(  # noqa: PLR0913
 
 @task(cache_policy=NO_CACHE)
 def plan_load_task(  # noqa: PLR0913
-    infisical_secret_path: str,
+    target: slots.OracleTarget,
     template_schema: str | None,
     excluded_template_columns: list[str] | None,
     table_id: str,
@@ -88,7 +95,7 @@ def plan_load_task(  # noqa: PLR0913
     raw_text_encoding: RawTextEncoding,
 ) -> LoadPlan:
     """Monta o plano de carga a partir da tabela original no Oracle e do schema do BigQuery."""
-    config = oracle.read_oracle_config(infisical_secret_path)
+    config = target_config(target)
     template = oracle.fetch_template_columns(
         config=config,
         template_schema=oracle.validate_identifier(template_schema or config.schema),
@@ -104,10 +111,10 @@ def plan_load_task(  # noqa: PLR0913
 
 @task(cache_policy=NO_CACHE)
 def plan_structure_task(
-    infisical_secret_path: str, template_schema: str | None, table_id: str, plan: LoadPlan
+    target: slots.OracleTarget, template_schema: str | None, table_id: str, plan: LoadPlan
 ) -> StructurePlan:
     """Lê tablespace, partições e índices da tabela original e define os da tabela de destino."""
-    config = oracle.read_oracle_config(infisical_secret_path)
+    config = target_config(target)
     template = oracle.fetch_template_layout(
         config=config,
         template_schema=oracle.validate_identifier(template_schema or config.schema),
@@ -129,10 +136,10 @@ def plan_structure_task(
 
 
 @task(cache_policy=NO_CACHE)
-def resolve_slots_task(infisical_secret_path: str, table_id: str) -> slots.SlotPlan:
+def resolve_slots_task(target: slots.OracleTarget, table_id: str) -> slots.SlotPlan:
     """Descobre a tabela física em uso e a que recebe a carga, corrigindo trocas interrompidas."""
     base = oracle.oracle_table_name(table_id)
-    plan, realigned = slots.resolve_slots(config=oracle.read_oracle_config(infisical_secret_path), base=base)
+    plan, realigned = slots.resolve_slots(config=target_config(target), base=base, consumers=target.synonym_owners)
     if realigned:
         log(f"{base}: troca anterior incompleta; sinônimos de {realigned} voltaram para {plan.active}")
     log(f"{base}: em uso {plan.active or '(nenhuma; primeira carga em A/B)'}; a carga vai para {plan.inactive}")
@@ -141,7 +148,7 @@ def resolve_slots_task(infisical_secret_path: str, table_id: str) -> slots.SlotP
 
 @task(cache_policy=NO_CACHE)
 def ensure_oracle_table_task(  # noqa: PLR0913
-    infisical_secret_path: str,
+    target: slots.OracleTarget,
     project: str,
     dataset_id: str,
     table_id: str,
@@ -153,30 +160,28 @@ def ensure_oracle_table_task(  # noqa: PLR0913
     definition = oracle.TableDefinition(
         columns=plan.columns, layout=structure.layout, source=f"{project}.{dataset_id}.{table_id}"
     )
-    log(
-        oracle.ensure_table(config=oracle.read_oracle_config(infisical_secret_path), table=table, definition=definition)
-    )
+    log(oracle.ensure_table(config=target_config(target), table=table, definition=definition))
     return table
 
 
 @task(cache_policy=NO_CACHE)
-def drop_oracle_indexes_task(infisical_secret_path: str, table: str) -> str:
+def drop_oracle_indexes_task(target: slots.OracleTarget, table: str) -> str:
     """Apaga os índices da tabela de destino antes da carga paralela e retorna o nome dela."""
-    dropped = oracle.drop_managed_indexes(config=oracle.read_oracle_config(infisical_secret_path), table=table)
+    dropped = oracle.drop_managed_indexes(config=target_config(target), table=table)
     log(f"{table}: índices apagados para a carga: {dropped}" if dropped else f"{table}: sem índices para apagar")
     return table
 
 
 @task(cache_policy=NO_CACHE)
-def truncate_oracle_table_task(infisical_secret_path: str, table: str) -> str:
+def truncate_oracle_table_task(target: slots.OracleTarget, table: str) -> str:
     """Esvazia a tabela de destino e retorna o nome dela."""
-    oracle.truncate_table(config=oracle.read_oracle_config(infisical_secret_path), table=table)
+    oracle.truncate_table(config=target_config(target), table=table)
     return table
 
 
 @task(cache_policy=NO_CACHE)
 def load_into_oracle_task(  # noqa: PLR0913
-    infisical_secret_path: str,
+    target: slots.OracleTarget,
     table: str,
     plan: LoadPlan,
     bucket: str,
@@ -201,7 +206,7 @@ def load_into_oracle_task(  # noqa: PLR0913
             notifier.loading(snapshot)
 
     result = sqlldr.load_from_gcs(
-        config=oracle.read_oracle_config(infisical_secret_path),
+        config=target_config(target),
         job=job,
         on_progress=report,
         progress_interval_seconds=progress_interval_seconds,
@@ -220,7 +225,7 @@ def load_into_oracle_task(  # noqa: PLR0913
 
 @task(cache_policy=NO_CACHE)
 def validate_row_count_task(
-    infisical_secret_path: str, table: str, table_schema: dict[str, object], loaded_rows: int, parallel_degree: int
+    target: slots.OracleTarget, table: str, table_schema: dict[str, object], loaded_rows: int, parallel_degree: int
 ) -> int:
     """Confere se o BigQuery, o SQL*Loader e o Oracle têm o mesmo número de linhas.
 
@@ -229,9 +234,7 @@ def validate_row_count_task(
     :raises ValueError: Se as contagens divergirem.
     """
     expected = int(table_schema["num_rows"])
-    oracle_rows = oracle.count_rows(
-        config=oracle.read_oracle_config(infisical_secret_path), table=table, parallel_degree=parallel_degree
-    )
+    oracle_rows = oracle.count_rows(config=target_config(target), table=table, parallel_degree=parallel_degree)
     counts = ", ".join(
         f"{label}={sqlldr.format_count(value)}"
         for label, value in (("BigQuery", expected), ("SQL*Loader", loaded_rows), ("Oracle", oracle_rows))
@@ -243,10 +246,10 @@ def validate_row_count_task(
 
 
 @task(cache_policy=NO_CACHE)
-def grant_access_task(infisical_secret_path: str, table: str) -> str:
+def grant_access_task(target: slots.OracleTarget, table: str) -> str:
     """Concede aos consumidores o acesso à tabela física e retorna o nome dela."""
-    slots.grant_access(config=oracle.read_oracle_config(infisical_secret_path), table=table)
-    grantees = ", ".join(f"{grantee} ({privileges})" for grantee, privileges in slots.CONSUMER_GRANTS)
+    slots.grant_access(config=target_config(target), table=table, grants=target.grants)
+    grantees = ", ".join(f"{grantee} ({privileges})" for grantee, privileges in target.grants)
     log(f"{table}: acesso concedido a {grantees}")
     return table
 
@@ -264,10 +267,10 @@ def delete_gcs_files_task(project: str, bucket: str, files: list[bigquery.Export
 
 @task(cache_policy=NO_CACHE)
 def create_oracle_indexes_task(
-    infisical_secret_path: str, table: str, structure: StructurePlan, slot: str, parallel_degree: int
+    target: slots.OracleTarget, table: str, structure: StructurePlan, slot: str, parallel_degree: int
 ) -> str:
     """Cria os índices da tabela física, com o sufixo dela, um por vez, e retorna o nome dela."""
-    config = oracle.read_oracle_config(infisical_secret_path)
+    config = target_config(target)
     indexes = slot_indexes(structure.layout.indexes, slot)
     if not indexes:
         log(f"{table}: a original não tem índices para replicar")
@@ -293,23 +296,21 @@ def create_oracle_indexes_task(
 
 
 @task(cache_policy=NO_CACHE)
-def gather_oracle_stats_task(infisical_secret_path: str, table: str, parallel_degree: int) -> str:
+def gather_oracle_stats_task(target: slots.OracleTarget, table: str, parallel_degree: int) -> str:
     """Coleta as estatísticas da tabela física para o otimizador e retorna o nome dela."""
     started = time.monotonic()
-    oracle.gather_table_stats(
-        config=oracle.read_oracle_config(infisical_secret_path), table=table, parallel_degree=parallel_degree
-    )
+    oracle.gather_table_stats(config=target_config(target), table=table, parallel_degree=parallel_degree)
     log(f"{table}: estatísticas coletadas em {sqlldr.format_duration(time.monotonic() - started)}")
     return table
 
 
 @task(cache_policy=NO_CACHE)
 def record_load_task(
-    infisical_secret_path: str, plan: slots.SlotPlan, table: str, source: str, snapshot_modified: datetime
+    target: slots.OracleTarget, plan: slots.SlotPlan, table: str, source: str, snapshot_modified: datetime
 ) -> slots.SlotPlan:
     """Grava no comentário da tabela física a foto do BigQuery carregada e retorna o plano pronto para a troca."""
     comment = slots.record_load(
-        config=oracle.read_oracle_config(infisical_secret_path),
+        config=target_config(target),
         table=table,
         source=source,
         snapshot_modified=snapshot_modified,
@@ -319,26 +320,24 @@ def record_load_task(
 
 
 @task(cache_policy=NO_CACHE)
-def disable_inmemory_task(infisical_secret_path: str, table: str) -> str:
+def disable_inmemory_task(target: slots.OracleTarget, table: str) -> str:
     """Tira a tabela que vai receber a carga do In-Memory antes de esvaziá-la; retorna a tabela."""
-    inmemory.disable(config=oracle.read_oracle_config(infisical_secret_path), table=table, report=log)
+    inmemory.disable(config=target_config(target), table=table, report=log)
     log(f"{table}: fora do In-Memory até o fim da carga")
     return table
 
 
 @task(cache_policy=NO_CACHE)
-def enable_inmemory_window_task(infisical_secret_path: str, table: str, window_months: int) -> list[str]:
+def enable_inmemory_window_task(target: slots.OracleTarget, table: str, window_months: int) -> list[str]:
     """Coloca no In-Memory as partições da janela (mês corrente e ``window_months`` anteriores) e retorna quais."""
     start = inmemory.window_start(datetime.now(BRASILIA).date(), window_months)
-    chosen = inmemory.enable_window(
-        config=oracle.read_oracle_config(infisical_secret_path), table=table, start=start, report=log
-    )
+    chosen = inmemory.enable_window(config=target_config(target), table=table, start=start, report=log)
     log(f"{table}: In-Memory nas partições a partir de {start:%m/%Y} ({len(chosen)}): {', '.join(chosen) or 'nenhuma'}")
     return chosen
 
 
 @task(cache_policy=NO_CACHE)
-def release_inmemory_task(infisical_secret_path: str, plans: list[slots.SlotPlan], delay_seconds: int) -> list[str]:
+def release_inmemory_task(target: slots.OracleTarget, plans: list[slots.SlotPlan], delay_seconds: int) -> list[str]:
     """Tira do In-Memory as tabelas que saíram de uso na troca; retorna as que não puderam ser liberadas.
 
     Espera ``delay_seconds`` para as consultas já em andamento na tabela antiga terminarem. Uma falha só gera aviso:
@@ -350,7 +349,7 @@ def release_inmemory_task(infisical_secret_path: str, plans: list[slots.SlotPlan
         return []
     log(f"Liberação do In-Memory de {tables} em {delay_seconds}s, depois da troca")
     time.sleep(max(delay_seconds, 0))
-    config = oracle.read_oracle_config(infisical_secret_path)
+    config = target_config(target)
     failed = []
     for table in tables:
         try:
@@ -364,13 +363,13 @@ def release_inmemory_task(infisical_secret_path: str, plans: list[slots.SlotPlan
 
 @task(cache_policy=NO_CACHE)
 def start_inmemory_population_task(
-    infisical_secret_path: str, table: str, structure: StructurePlan, wait_minutes: int
+    target: slots.OracleTarget, table: str, structure: StructurePlan, wait_minutes: int
 ) -> None:
     """Pede ao Oracle para popular agora as partições da tabela que estão no In-Memory, se a espera está ligada."""
     if wait_minutes <= 0:
         return
     errors = inmemory.start_population(
-        config=oracle.read_oracle_config(infisical_secret_path),
+        config=target_config(target),
         table=table,
         partitioned=structure.layout.partitioning is not None,
     )
@@ -379,7 +378,7 @@ def start_inmemory_population_task(
 
 @task(cache_policy=NO_CACHE)
 def wait_inmemory_task(
-    infisical_secret_path: str, plans: list[slots.SlotPlan], wait_minutes: int
+    target: slots.OracleTarget, plans: list[slots.SlotPlan], wait_minutes: int
 ) -> list[slots.SlotPlan]:
     """Espera as tabelas carregadas ficarem no In-Memory antes da troca e retorna os planos."""
     if wait_minutes <= 0:
@@ -387,7 +386,7 @@ def wait_inmemory_task(
         return plans
     started = time.monotonic()
     complete = inmemory.wait_for_population(
-        config=oracle.read_oracle_config(infisical_secret_path),
+        config=target_config(target),
         tables=[plan.inactive for plan in plans],
         timeout_seconds=wait_minutes * 60,
         report=log,
@@ -398,21 +397,23 @@ def wait_inmemory_task(
 
 
 @task(cache_policy=NO_CACHE)
-def swap_synonyms_task(infisical_secret_path: str, plans: list[slots.SlotPlan]) -> None:
+def swap_synonyms_task(target: slots.OracleTarget, plans: list[slots.SlotPlan]) -> None:
     """Aponta os sinônimos de todas as tabelas para as recém-carregadas, uma tabela logo após a outra."""
-    config = oracle.read_oracle_config(infisical_secret_path)
+    config = target_config(target)
     for plan in plans:
-        actions = slots.swap_synonyms(config=config, plan=plan)
+        actions = slots.swap_synonyms(config=config, plan=plan, consumers=target.synonym_owners)
         log(f"{plan.base}: troca feita: {'; '.join(actions)}")
         kept = f"{plan.active} fica com a carga anterior" if plan.active else "não havia tabela A/B anterior"
         log(f"{plan.base}: em uso agora {plan.inactive}; {kept}")
 
 
 @task(cache_policy=NO_CACHE)
-def refresh_synonyms_task(infisical_secret_path: str, table_ids: list[str]) -> None:
+def refresh_synonyms_task(target: slots.OracleTarget, table_ids: list[str]) -> None:
     """Reaponta os sinônimos de todos os donos para as tabelas já em uso, sem carga."""
-    config = oracle.read_oracle_config(infisical_secret_path)
+    config = target_config(target)
     for table_id in table_ids:
         base = oracle.oracle_table_name(table_id)
-        actions = slots.refresh_synonyms(config=config, base=base)
+        actions = slots.refresh_synonyms(
+            config=config, base=base, consumers=target.synonym_owners, grants=target.grants
+        )
         log(f"{base}: sinônimos reapontados para a tabela em uso, sem carga: {'; '.join(actions)}")

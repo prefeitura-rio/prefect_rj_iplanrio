@@ -1,17 +1,17 @@
 """Cliente do webhook do Discord para o progresso das cargas: uma mensagem criada uma vez e editada no lugar.
 
-Este arquivo é idêntico nas três pipelines da Nota Carioca que notificam (oracle_to_bq, bq_to_oracle e carga_completa)
-e não importa nada de ``pipelines.*``.
+Este arquivo é idêntico nas pipelines da Nota Carioca que notificam (extracao_xml, oracle_to_bq, bq_to_oracle e
+carga_completa) e não importa nada de ``pipelines.*``.
 
 Regra de ouro: um problema de notificação NUNCA falha nem atrasa uma carga. Toda falha (rede, 4xx/5xx, 429, JSON) é
 registrada uma vez em log de aviso e engolida; depois de uma falha o cliente espera mais antes de tentar de novo
 (``min_interval_seconds`` dobrando a cada falha seguida, até 5 min), o que limita o tempo perdido com um Discord fora
 do ar ao timeout de uma requisição (10 s) por tentativa. A URL do webhook é um segredo e nunca vai para o log.
 
-Ambiente: o deployment cujo nome termina em ``--staging`` posta no webhook de staging (variável
-``DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGING`` ou Secret block ``discord-webhook-nota-carioca-staging``); qualquer outro,
-inclusive uma execução fora de deployment, no de prod. Staging NUNCA recorre ao webhook de prod: sem o seu, fica sem
-notificação.
+Ambiente: o deployment cujo nome termina em ``--staging`` (homologação), ``--stagingteste`` (homteste) ou ``--dev``
+(desenvolvimento) posta no webhook do seu ambiente (variável ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA_<AMBIENTE>`` ou Secret
+block ``discord-webhook-nota-carioca-<ambiente>``); qualquer outro, inclusive uma execução fora de deployment, no de
+prod. Um ambiente de teste NUNCA recorre ao webhook de outro: sem o seu, fica sem notificação.
 """
 
 import logging
@@ -29,11 +29,8 @@ from prefect.runtime import deployment
 
 from iplanrio.pipelines_utils.logging import log
 
-STAGING_DEPLOYMENT_SUFFIX = "--staging"
 WEBHOOK_ENV = "DISCORD_WEBHOOK_URL_NOTA_CARIOCA"
 WEBHOOK_SECRET_BLOCK = "discord-webhook-nota-carioca"
-STAGING_WEBHOOK_ENV = f"{WEBHOOK_ENV}_STAGING"
-STAGING_WEBHOOK_SECRET_BLOCK = f"{WEBHOOK_SECRET_BLOCK}-staging"
 TIMEOUT_SECONDS = 10.0
 DEFAULT_MIN_INTERVAL_SECONDS = 20.0
 MAX_BACKOFF_SECONDS = 300.0
@@ -97,10 +94,18 @@ def never_raises[**P](func: Callable[P, None]) -> Callable[P, None]:
 
 
 class Environment(StrEnum):
-    """Ambiente do deployment em execução: escolhe o webhook e o marcador das mensagens."""
+    """Ambiente do deployment em execução: escolhe o webhook e o marcador das mensagens.
+
+    Além de prod, os de teste: homologação (``STAGING``), homteste (``STAGINGTESTE``) e desenvolvimento (``DEV``).
+    """
 
     PROD = "prod"
     STAGING = "staging"
+    STAGINGTESTE = "stagingteste"
+    DEV = "dev"
+
+
+TEST_ENVIRONMENTS = (Environment.STAGING, Environment.STAGINGTESTE, Environment.DEV)
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,23 +121,32 @@ class WebhookSource:
 
 
 def webhook_source(environment: Environment) -> WebhookSource:
-    """Fontes do webhook do ambiente; as de staging nunca coincidem com as de prod."""
+    """Fontes do webhook do ambiente; as de cada ambiente de teste nunca coincidem com as de outro nem com as de prod.
+
+    Prod usa ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA`` e ``discord-webhook-nota-carioca``; os de teste acrescentam o nome do
+    ambiente (``DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGINGTESTE`` e ``discord-webhook-nota-carioca-stagingteste``).
+    """
     match environment:
         case Environment.PROD:
             return WebhookSource(WEBHOOK_ENV, WEBHOOK_SECRET_BLOCK)
-        case Environment.STAGING:
-            return WebhookSource(STAGING_WEBHOOK_ENV, STAGING_WEBHOOK_SECRET_BLOCK)
+        case Environment.STAGING | Environment.STAGINGTESTE | Environment.DEV:
+            return WebhookSource(
+                f"{WEBHOOK_ENV}_{environment.value.upper()}", f"{WEBHOOK_SECRET_BLOCK}-{environment.value}"
+            )
         case unreachable:
             assert_never(unreachable)
 
 
 def environment_from_deployment(name: str | None) -> Environment:
-    """Ambiente pelo nome do deployment: terminado em ``--staging`` é staging; o resto, inclusive sem nome, é prod.
+    """Ambiente pelo nome do deployment: terminado em ``--staging``, ``--stagingteste`` ou ``--dev`` é esse ambiente.
 
     :param name: Nome do deployment (``prefect.runtime.deployment.name``); ``None`` fora de um deployment.
-    :returns: ``STAGING`` ou ``PROD``.
+    :returns: O ambiente de teste do sufixo; qualquer outro nome, inclusive sem nome, é ``PROD``.
     """
-    return Environment.STAGING if name and name.endswith(STAGING_DEPLOYMENT_SUFFIX) else Environment.PROD
+    for environment in TEST_ENVIRONMENTS:
+        if name and name.endswith(f"--{environment.value}"):
+            return environment
+    return Environment.PROD
 
 
 def current_environment() -> Environment:
@@ -153,7 +167,7 @@ def webhook_from_env(
     """Lê a URL do webhook da variável de ambiente do ambiente (prod: ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA``).
 
     :param environ: Variáveis de ambiente; o padrão é ``os.environ``.
-    :param environment: Ambiente; staging lê só ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGING``.
+    :param environment: Ambiente; um de teste lê só a sua (staging: ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGING``).
     :returns: A URL, ou ``None`` se a variável não existir ou estiver vazia.
     """
     value = (environ if environ is not None else os.environ).get(webhook_source(environment).env_var, "").strip()
@@ -173,7 +187,7 @@ def webhook_from_secret_block(
     """Lê a URL do webhook do Secret block do ambiente (prod: ``discord-webhook-nota-carioca``) do Prefect.
 
     :param load: Leitor do bloco pelo nome; o padrão consulta a API do Prefect.
-    :param environment: Ambiente; staging lê só ``discord-webhook-nota-carioca-staging``.
+    :param environment: Ambiente; um de teste lê só o seu (staging: ``discord-webhook-nota-carioca-staging``).
     :returns: A URL, ou ``None`` se o bloco não existir, estiver vazio ou a leitura falhar.
     """
     block = webhook_source(environment).secret_block
@@ -193,8 +207,8 @@ def resolve_webhook(
     """URL do webhook do ambiente: a variável de ambiente (Infisical) ou, sem ela, o Secret block.
 
     Prod: ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA`` e ``discord-webhook-nota-carioca``. Staging:
-    ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGING`` e ``discord-webhook-nota-carioca-staging``; staging nunca recorre às de
-    prod, para o canal de prod não receber mensagem de staging.
+    ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGING`` e ``discord-webhook-nota-carioca-staging``, e assim para stagingteste e
+    dev; um ambiente de teste nunca recorre às de outro, para um canal não receber mensagem de outro ambiente.
 
     :param environ: Variáveis de ambiente; o padrão é ``os.environ``.
     :param load: Leitor do Secret block; o padrão consulta a API do Prefect.
