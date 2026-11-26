@@ -283,7 +283,25 @@ def test_read_binds_every_variable_of_the_query_and_maps_the_rows(monkeypatch: p
     assert set(re.findall(r"(?<![\w:]):(\w+)", sql)) == set(binds)
     assert {binds["tipo_extracao"], binds["tipo_pos_processamento"]} == {46, 48}
     assert binds["status_em_execucao"] == 1
-    assert sql == load_query(QUERIES_ANCHOR, "list_running_extractions")
+    assert sql == load_query(QUERIES_ANCHOR, "list_running_extractions", owner="NFSE_OWNER")
+    assert 'FROM "NFSE_OWNER".tarefas' in sql
+
+
+def test_read_uses_the_tasks_owner_of_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given the homteste, whose TAREFAS belongs to NFSE_TESTE
+    cursor = FakeCursor([])
+    monkeypatch.setattr(dfen_module, "connect", lambda _: FakeConnection(cursor))
+    # When the running tasks are read with that owner, written in lower case
+    read_running_tasks(CONFIG, "nfse_teste")
+    # Then the query reads the table of that owner
+    (sql, _binds), *_ = cursor.executed
+    assert 'FROM "NFSE_TESTE".tarefas' in sql
+
+
+def test_read_refuses_an_owner_that_is_not_an_identifier() -> None:
+    # Given an owner that would inject SQL, when the tasks are read, then nothing is queried
+    with pytest.raises(ValueError, match="Identificador inválido"):
+        read_running_tasks(CONFIG, "NFSE_OWNER.TAREFAS --")
 
 
 # --- fiação no flow ------------------------------------------------------------------------------------------------
@@ -382,6 +400,7 @@ def test_parent_checks_the_extraction_after_the_exclusion_check_and_before_any_s
         "infisical_secret_path": "/db-oracle-nota-fiscal",
         "enabled": True,
         "stale_hours": 6,
+        "tasks_owner": "NFSE_OWNER",
     }
 
 
@@ -405,6 +424,24 @@ def test_children_are_not_given_the_guard_parameters(monkeypatch: pytest.MonkeyP
     # Then the pass-through parameters of the children carry neither of them
     assert "check_dfen_extraction" not in harness.child_passthrough
     assert "dfen_extraction_stale_hours" not in harness.child_passthrough
+
+
+def test_the_homteste_guards_its_own_tasks_and_cleans_only_its_own_chunk_tasks(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given a parent run of the homteste: TAREFAS of NFSE_TESTE and its own prefix for the chunk tasks
+    harness = ParentHarness(monkeypatch)
+    cleaned: list[dict[str, object]] = []
+    monkeypatch.setattr(flow_module, "drop_leftover_chunk_tasks_task", lambda **kwargs: cleaned.append(kwargs))
+    # When it runs up to the child launch
+    with pytest.raises(LaunchStoppedError):
+        flow_module.rj_smfp__nota_carioca_oracle_to_bq.fn(
+            table_ids=["DPS"], discord_notifications=False, tasks_owner="NFSE_TESTE", chunk_task_prefix="O2BQT_"
+        )
+    # Then the guard reads the TAREFAS of NFSE_TESTE, the cleanup uses the homteste prefix
+    assert harness.guard_kwargs["tasks_owner"] == "NFSE_TESTE"
+    assert cleaned == [{"infisical_secret_path": "/db-oracle-nota-fiscal", "prefix": "O2BQT_"}]
+    # And the children get the prefix, to name their tasks with it, but not the owner, since they never guard
+    assert harness.child_passthrough["chunk_task_prefix"] == "O2BQT_"
+    assert "tasks_owner" not in harness.child_passthrough
 
 
 def test_a_child_never_runs_the_guard_even_if_the_parameter_is_given(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -470,9 +507,16 @@ def test_task_reads_with_the_pipeline_secret_and_raises_when_blocked(monkeypatch
         return CONFIG
 
     monkeypatch.setattr(dfen_task_module.oracle, "read_oracle_config", read_config)
-    monkeypatch.setattr(dfen_task_module.dfen, "read_running_tasks", lambda _: (task(9, 46, 120),))
+    owners: list[str] = []
+
+    def read_tasks(_config: OracleConfig, owner: str) -> tuple[RunningTask, ...]:
+        owners.append(owner)
+        return (task(9, 46, 120),)
+
+    monkeypatch.setattr(dfen_task_module.dfen, "read_running_tasks", read_tasks)
     # When the task runs enabled
     with pytest.raises(DfenExtractionError, match="tarefa 9"):
         dfen_task_module.check_dfen_extraction_task.fn("/db-oracle-nota-fiscal", True, 6)
-    # Then it used the same secret folder as the snapshot
+    # Then it used the same secret folder as the snapshot, and the TAREFAS of NFSE_OWNER
     assert secrets == ["/db-oracle-nota-fiscal"]
+    assert owners == ["NFSE_OWNER"]
