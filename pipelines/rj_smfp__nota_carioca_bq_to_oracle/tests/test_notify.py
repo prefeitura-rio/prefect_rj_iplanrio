@@ -380,7 +380,7 @@ def test_load_task_feeds_the_active_notifier_without_receiving_it(monkeypatch: p
         notifier.enter(Step.TABLES)
         notifier.table_step("A", TableStep.LOAD)
         rows = tasks_module.load_into_oracle_task.fn(
-            "/secret", "BQLOAD_A_B", plan, "bucket", [ExportedFile("f.csv.gz", 10)], 2, 30
+            slots.OracleTarget("/secret"), "BQLOAD_A_B", plan, "bucket", [ExportedFile("f.csv.gz", 10)], 2, 30
         )
     # Then the tick reached the table state
     assert rows == 5
