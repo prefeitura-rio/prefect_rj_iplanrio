@@ -1,0 +1,14 @@
+[project]
+name = "rj_crm__agent_quality_registry"
+version = "1.0.0"
+description = "Ingestão diária de artefatos de qualidade Agentforce do GitLab Registry"
+dependencies = [
+  "prefect_rj_iplanrio",
+  "google-cloud-bigquery>=3.11.0",
+  "prefect==3.4.9",
+  "prefect-docker>=0.6.5",
+  "requests>=2.31.0",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
