@@ -597,6 +597,27 @@ deployments:
           batch_sleep_minutes: 3
           query_file: queries/smtr/smtr_terminais_conexoes.sql
 
+      # SMS - Confirmação / lembrete de procedimento - Supercentro (one-shot)
+      # A tabela de origem é datada: atualizar o nome em queries/sms/sms_confirmacao_lembrete_procedimento.sql
+      - cron: "0 12 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-sms-confirmacao-lembrete-procedimento
+        flow_run_name: sms-confirmacao-lembrete-procedimento
+        parameters:
+          flow_environment: staging
+          campaign_name: sms_confirmacao_lembrete_procedimento
+          data_extension_filename: whatsapp_sms_confirmacao_lembrete_procedimento
+          de_columns: ["nome_sobrenome", "tipo_atendimento", "data", "horario", "unidade",
+            "id_agendamento", "id_solicitacao", "no_equipamento", "janela_confirmacao"]
+          filter_dispatched_phones_or_cpfs:
+          filter_duplicated_cpfs: false
+          filter_duplicated_phones: false
+          batch_size: 5000
+          batch_sleep_minutes: 15
+          dispatch_interval_days: 7
+          query_file: queries/sms/sms_confirmacao_lembrete_procedimento.sql
+
   - name: rj-crm--disparo-template-sf--prod
     version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template_sf
