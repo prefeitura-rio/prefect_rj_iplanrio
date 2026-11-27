@@ -49,7 +49,7 @@ WITH
       obito.indicador = FALSE
       AND menor_idade = FALSE
       AND (nome IS NOT NULL OR nome_social IS NOT NULL)
-      AND telefone.principal.estrategia_envio IN ('ENVIAR', 'TESTAR')
+      AND telefone.principal.estrategia_envio IN ('ENVIAR', 'TESTAR', 'EVITAR')
   ),
   -- 4. Consolida elegibilidade (moradores da região por nome/geometria + passageiros SPPO)
   registros_classificados AS (

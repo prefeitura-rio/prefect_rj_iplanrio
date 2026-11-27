@@ -71,7 +71,7 @@ WITH
       obito.indicador = FALSE
       AND menor_idade = FALSE
       AND (nome IS NOT NULL OR nome_social IS NOT NULL)
-      AND telefone.principal.estrategia_envio IN ('ENVIAR', 'TESTAR')
+      AND telefone.principal.estrategia_envio IN ('ENVIAR', 'TESTAR', 'EVITAR')
   ),
   -- 5. Público não-alvo (já impactado no Template 4) lido a partir da config_campanhas
   publico_nao_alvo AS (

@@ -53,7 +53,7 @@ WITH
       obito.indicador = FALSE
       AND menor_idade = FALSE
       AND (nome IS NOT NULL OR nome_social IS NOT NULL)
-      AND telefone.principal.estrategia_envio IN ('ENVIAR', 'TESTAR')
+      AND telefone.principal.estrategia_envio IN ('ENVIAR', 'TESTAR', 'EVITAR')
   ),
   -- 3. Consolida passageiros por código de estação/terminal (serviço) e por parada
   registros_classificados AS (
