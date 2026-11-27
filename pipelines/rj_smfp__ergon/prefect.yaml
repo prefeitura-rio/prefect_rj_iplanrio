@@ -2,33 +2,33 @@ name: rj_smfp__ergon
 prefect-version: 3.4.3
 
 build:
-- prefect.deployments.steps.run_shell_script:
-    id: get-commit-hash
-    script: git rev-parse --short HEAD
-    stream_output: false
-- prefect_docker.deployments.steps.build_docker_image:
-    id: build-image
-    requires: prefect-docker>=0.6.5
-    image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
-    tag: "rj_smfp__ergon-{{ get-commit-hash.stdout }}"
-    dockerfile: pipelines/rj_smfp__ergon/Dockerfile
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_smfp__ergon-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_smfp__ergon/Dockerfile
 
 push:
-- prefect_docker.deployments.steps.push_docker_image:
-    requires: prefect-docker>=0.6.5
-    image_name: "{{ build-image.image_name }}"
-    tag: "{{ build-image.tag }}"
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
 
 pull:
-- prefect.deployments.steps.set_working_directory:
-    directory: /opt/prefect/prefect_rj_iplanrio
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
   - name: rj-smfp--ergon--staging
     tags:
-    - environment:staging
-    - severity:medium
-    - code_owner:tricktx
+      - environment:staging
+      - severity:medium
+      - code_owner:tricktx
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_smfp__ergon/flow.py:rj_smfp__ergon
     parameters:
@@ -38,9 +38,9 @@ deployments:
         port: 1526
         database: P01.PCRJ
       cloud:
-        bucket: rj-iplanrio-dia-staging
-        project: rj-iplanrio-dia
-        connection: rj-iplanrio-dia.us.biglake
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -48,19 +48,872 @@ deployments:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --no-sync --package rj_smfp__ergon -- python -m utils.secrets -- prefect flow-run execute
         namespace: pipelines-staging
-        secretName: pipelines-infisical
+        secretName: pipelines-infisical-dados
         image_pull_policy: Always
         env:
-          INFISICAL_URL: https://infisical.iplan.dados.rio
-          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
-          INFISICAL_ENVIRONMENT: staging
+          INFISICAL_URL: https://secrets.dados.rio
+          INFISICAL_PROJECT_ID: 5cf5bfc3-e53f-4156-91f6-75714414a316
+          INFISICAL_ENVIRONMENT: stg
           INFISICAL_PATHS: /rj_smfp__ergon,/shared
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
+    schedules:
+      - cron: "30 19 * * *"
+        timezone: America/Sao_Paulo
+        slug: vantagens
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vantagens
+          dump_mode: append
+          read:
+            table: ERGON.VANTAGENS
+          options:
+            columns:
+              add_timestamp: true
+            chunks:
+              column: DTINI
+              width: month
+              begin: "2026-11-24"
+              lookback: 1
+      - cron: "10 20 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_averbacoes_conta_gbp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_averbacoes_conta_gbp
+          read:
+            table: C_ERGON.VW_AVERBACOES_CONTA_GBP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 20 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_cargos_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_cargos_
+          read:
+            table: C_ERGON.VW_DLK_ERG_CARGOS_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 20 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_categorias_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_categorias_
+          read:
+            table: C_ERGON.VW_DLK_ERG_CATEGORIAS_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 20 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_empresas
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_empresas
+          read:
+            table: C_ERGON.VW_DLK_ERG_EMPRESAS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 20 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_erg_matriculas
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_erg_matriculas
+          read:
+            table: C_ERGON.VW_DLK_ERG_ERG_MATRICULAS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 21 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_folhas_emp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_folhas_emp
+          read:
+            table: C_ERGON.VW_DLK_ERG_FOLHAS_EMP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 21 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_formas_prov_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_formas_prov_
+          read:
+            table: C_ERGON.VW_DLK_ERG_FORMAS_PROV_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      # - cron: "20 21 * * *"
+      #   timezone: America/Sao_Paulo
+      #   slug: vw_dlk_erg_funcionarios
+      #   parameters:
+      #     table:
+      #       dataset_id: brutos_recursos_humanos_ergon
+      #       table_id: vw_dlk_erg_funcionarios
+      #     read:
+      #       table: C_ERGON.VW_DLK_ERG_FUNCIONARIOS
+      #     dump_mode: overwrite
+      #     options:
+      #       columns:
+      #         add_timestamp: true
+      - cron: "30 21 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_horario_trab_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_horario_trab_
+          read:
+            table: C_ERGON.VW_DLK_ERG_HORARIO_TRAB_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 21 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_hsetor_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_hsetor_
+          read:
+            table: C_ERGON.VW_DLK_ERG_HSETOR_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 21 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_jornadas_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_jornadas_
+          read:
+            table: C_ERGON.VW_DLK_ERG_JORNADAS_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 22 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_orgaos_externos
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_orgaos_externos
+          read:
+            table: C_ERGON.VW_DLK_ERG_ORGAOS_EXTERNOS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 22 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_orgaos_regimes_jur_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_orgaos_regimes_jur_
+          read:
+            table: C_ERGON.VW_DLK_ERG_ORGAOS_REGIMES_JUR_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 22 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_provimentos_ev
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_provimentos_ev
+          read:
+            table: C_ERGON.VW_DLK_ERG_PROVIMENTOS_EV
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 22 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_regimes_jur_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_regimes_jur_
+          read:
+            table: C_ERGON.VW_DLK_ERG_REGIMES_JUR_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 22 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_tipo_folha
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_tipo_folha
+          read:
+            table: C_ERGON.VW_DLK_ERG_TIPO_FOLHA
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 22 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_tipo_orgao
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_tipo_orgao
+          read:
+            table: C_ERGON.VW_DLK_ERG_TIPO_ORGAO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 23 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_tipo_vinc_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_tipo_vinc_
+          read:
+            table: C_ERGON.VW_DLK_ERG_TIPO_VINC_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 23 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_vinculos
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_vinculos
+          read:
+            table: C_ERGON.VW_DLK_ERG_VINCULOS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 23 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_frequencias_gbp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_frequencias_gbp
+          read:
+            table: C_ERGON.VW_FREQUENCIAS_GBP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 23 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_lic_afast_gbp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_lic_afast_gbp
+          read:
+            table: C_ERGON.VW_LIC_AFAST_GBP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 23 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_pre_conta_gbp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_pre_conta_gbp
+          read:
+            table: C_ERGON.VW_PRE_CONTA_GBP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 23 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_simpa_sirhu_afastamento_gbp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_simpa_sirhu_afastamento_gbp
+          read:
+            table: C_ERGON.VW_SIMPA_SIRHU_AFASTAMENTO_GBP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 0 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_simpa_sirhu_frequencia_gbp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_simpa_sirhu_frequencia_gbp
+          read:
+            table: C_ERGON.VW_SIMPA_SIRHU_FREQUENCIA_GBP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 0 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_vantagens_gbp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_vantagens_gbp
+          read:
+            table: C_ERGON.VW_VANTAGENS_GBP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 0 * * *"
+        timezone: America/Sao_Paulo
+        slug: ipl_prefixos
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: ipl_prefixos
+          read:
+            table: C_ERGON.IPL_PREFIXOS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 0 * * *"
+        timezone: America/Sao_Paulo
+        slug: averbacoes_conta
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: averbacoes_conta
+          read:
+            table: ERGON.AVERBACOES_CONTA
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 0 * * *"
+        timezone: America/Sao_Paulo
+        slug: averb_oque_conta
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: averb_oque_conta
+          read:
+            table: ERGON.AVERB_OQUE_CONTA
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 0 * * *"
+        timezone: America/Sao_Paulo
+        slug: concursos
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: concursos
+          read:
+            table: ERGON.CONCURSOS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 1 * * *"
+        timezone: America/Sao_Paulo
+        slug: folhas_emp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: folhas_emp
+          read:
+            table: ERGON.FOLHAS_EMP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 1 * * *"
+        timezone: America/Sao_Paulo
+        slug: formas_vac
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: formas_vac
+          read:
+            table: ERGON.FORMAS_VAC
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 1 * * *"
+        timezone: America/Sao_Paulo
+        slug: formas_vac_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: formas_vac_
+          read:
+            table: ERGON.FORMAS_VAC_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 1 * * *"
+        timezone: America/Sao_Paulo
+        slug: frequencias
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: frequencias
+          read:
+            table: ERGON.FREQUENCIAS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 1 * * *"
+        timezone: America/Sao_Paulo
+        slug: hist_cargo
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: hist_cargo
+          read:
+            table: ERGON.HIST_CARGO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 1 * * *"
+        timezone: America/Sao_Paulo
+        slug: hist_funcao
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: hist_funcao
+          read:
+            table: ERGON.HIST_FUNCAO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 2 * * *"
+        timezone: America/Sao_Paulo
+        slug: inscritos
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: inscritos
+          read:
+            table: ERGON.INSCRITOS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 2 * * *"
+        timezone: America/Sao_Paulo
+        slug: lic_afast
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: lic_afast
+          read:
+            table: ERGON.LIC_AFAST
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 2 * * *"
+        timezone: America/Sao_Paulo
+        slug: pre_conta
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: pre_conta
+          read:
+            table: ERGON.PRE_CONTA
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 2 * * *"
+        timezone: America/Sao_Paulo
+        slug: rubricas
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: rubricas
+          read:
+            table: ERGON.RUBRICAS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 2 * * *"
+        timezone: America/Sao_Paulo
+        slug: sirhu_afastamento
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: sirhu_afastamento
+          read:
+            table: SIMPA.SIRHU_AFASTAMENTO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 2 * * *"
+        timezone: America/Sao_Paulo
+        slug: sirhu_dbtabelas_afastamento
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: sirhu_dbtabelas_afastamento
+          read:
+            table: SIMPA.SIRHU_DBTABELAS_AFASTAMENTO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 3 * * *"
+        timezone: America/Sao_Paulo
+        slug: tipo_tempo
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: tipo_tempo
+          read:
+            table: ERGON.TIPO_TEMPO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 3 * * *"
+        timezone: America/Sao_Paulo
+        slug: vagas_concurso
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vagas_concurso
+          read:
+            table: ERGON.VAGAS_CONCURSO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 3 * * *"
+        timezone: America/Sao_Paulo
+        slug: total_conta
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: total_conta
+          read:
+            table: ERGON.TOTAL_CONTA
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 3 * * *"
+        timezone: America/Sao_Paulo
+        slug: cid
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: cid
+          read:
+            table: ERGON.CID
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 3 * * *"
+        timezone: America/Sao_Paulo
+        slug: designacoes_ev
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: designacoes_ev
+          read:
+            table: ERGON.DESIGNACOES_EV
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 3 * * *"
+        timezone: America/Sao_Paulo
+        slug: erg_pm_cid10_capitulo
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: erg_pm_cid10_capitulo
+          read:
+            table: ERGON.ERG_PM_CID10_CAPITULO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 4 * * *"
+        timezone: America/Sao_Paulo
+        slug: erg_pm_decisao
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: erg_pm_decisao
+          read:
+            table: ERGON.ERG_PM_DECISAO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 4 * * *"
+        timezone: America/Sao_Paulo
+        slug: erg_pm_grupoexame
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: erg_pm_grupoexame
+          read:
+            table: ERGON.ERG_PM_GRUPOEXAME
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 4 * * *"
+        timezone: America/Sao_Paulo
+        slug: erg_pm_pront_med
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: erg_pm_pront_med
+          read:
+            table: ERGON.ERG_PM_PRONT_MED
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 4 * * *"
+        timezone: America/Sao_Paulo
+        slug: erg_pm_resultpront
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: erg_pm_resultpront
+          read:
+            table: ERGON.ERG_PM_RESULTPRONT
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 4 * * *"
+        timezone: America/Sao_Paulo
+        slug: exames
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: exames
+          read:
+            table: ERGON.EXAMES
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 4 * * *"
+        timezone: America/Sao_Paulo
+        slug: funcoes_ev_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: funcoes_ev_
+          read:
+            table: ERGON.FUNCOES_EV_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 5 * * *"
+        timezone: America/Sao_Paulo
+        slug: medicos
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: medicos
+          read:
+            table: ERGON.MEDICOS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 5 * * *"
+        timezone: America/Sao_Paulo
+        slug: prontuario
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: prontuario
+          read:
+            table: ERGON.PRONTUARIO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 5 * * *"
+        timezone: America/Sao_Paulo
+        slug: tpmrj_pm_juntas
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: tpmrj_pm_juntas
+          read:
+            table: C_ERGON.TPMRJ_PM_JUNTAS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 5 * * *"
+        timezone: America/Sao_Paulo
+        slug: tpmrj_pm_periciasjunta
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: tpmrj_pm_periciasjunta
+          read:
+            table: C_ERGON.TPMRJ_PM_PERICIASJUNTA
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 5 * * *"
+        timezone: America/Sao_Paulo
+        slug: tpmrj_pm_resultjunta
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: tpmrj_pm_resultjunta
+          read:
+            table: C_ERGON.TPMRJ_PM_RESULTJUNTA
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 5 * * *"
+        timezone: America/Sao_Paulo
+        slug: tpmrj_pm_vwbim
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: tpmrj_pm_vwbim
+          read:
+            table: C_ERGON.TPMRJ_PM_VWBIM
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 6 * * *"
+        timezone: America/Sao_Paulo
+        slug: tpmrj_pm_vwtpconclper
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: tpmrj_pm_vwtpconclper
+          read:
+            table: C_ERGON.TPMRJ_PM_VWTPCONCLPER
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 19 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_fita_banco
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_fita_banco
+          read:
+            table: C_ERGON.VW_DLK_ERG_FITA_BANCO
+          dump_mode: append
+          options:
+            chunks:
+              column: MES_ANO
+              width: month
+              begin: "2020-01-01"
+              lookback: 1
+            columns:
+              add_timestamp: true
+      - cron: "50 19 * * *"
+        timezone: America/Sao_Paulo
+        slug: fichas_financeiras
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: fichas_financeiras
+          read:
+            table: ERGON.FICHAS_FINANCEIRAS
+          dump_mode: append
+          options:
+            chunks:
+              column: MES_ANO_FOLHA
+              width: month
+              begin: "2020-01-01"
+              lookback: 1
+            columns:
+              add_timestamp: true
+      - cron: "0 20 * * *"
+        timezone: America/Sao_Paulo
+        slug: ipl_pt_fichas
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: ipl_pt_fichas
+          read:
+            table: ERGON.IPL_PT_FICHAS
+          dump_mode: append
+          options:
+            chunks:
+              column: MES_ANO_FOLHA
+              width: month
+              begin: "2020-01-01"
+              lookback: 1
+            columns:
+              add_timestamp: true
   - name: rj-smfp--ergon--prod
     tags:
-    - environment:prod
-    - severity:medium
-    - code_owner:tricktx
+      - environment:prod
+      - severity:medium
+      - code_owner:tricktx
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smfp__ergon/flow.py:rj_smfp__ergon
     parameters:
@@ -80,31 +933,864 @@ deployments:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --no-sync --package rj_smfp__ergon -- python -m utils.secrets -- prefect flow-run execute
         namespace: pipelines-prod
-        secretName: pipelines-infisical
+        secretName: pipelines-infisical-dados
         image_pull_policy: Always
         env:
-          INFISICAL_URL: https://infisical.iplan.dados.rio
-          INFISICAL_PROJECT_ID: 17f5c1ee-4ee5-446e-9ce4-9910b2657fd0
+          INFISICAL_URL: https://secrets.dados.rio
+          INFISICAL_PROJECT_ID: 5cf5bfc3-e53f-4156-91f6-75714414a316
           INFISICAL_ENVIRONMENT: prod
           INFISICAL_PATHS: /rj_smfp__ergon,/shared
           GOOGLE_APPLICATION_CREDENTIALS: /var/run/gcp/credential.json
     schedules:
-    - cron: "0 3 * * *"
-      timezone: America/Sao_Paulo
-      slug: daily
-      parameters:
-        table:
-          dataset_id: brutos_recursos_humanos_ergon_staging
-          table_id: vantagens
-        dump_mode: append
-        read:
-          table: ERGON.VANTAGENS
-        options:
-          columns:
-            add_timestamp: true
-          chunks:
-            column: DTINI
-            width: month
-            begin: 1980-01-30
-            end: 2030
-            lookback: 1
+      # - cron: "30 19 * * *"
+      #   timezone: America/Sao_Paulo
+      #   slug: vantagens
+      #   parameters:
+      #     table:
+      #       dataset_id: brutos_recursos_humanos_ergon
+      #       table_id: vantagens
+      #     dump_mode: append
+      #     read:
+      #       table: ERGON.VANTAGENS
+      #     options:
+      #       columns:
+      #         add_timestamp: true
+      #       chunks:
+      #         column: DTINI
+      #         width: month
+      #         begin: "2026-11-24"
+      #         lookback: 1
+      - cron: "10 20 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_averbacoes_conta_gbp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_averbacoes_conta_gbp
+          read:
+            table: C_ERGON.VW_AVERBACOES_CONTA_GBP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 20 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_cargos_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_cargos_
+          read:
+            table: C_ERGON.VW_DLK_ERG_CARGOS_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 20 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_categorias_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_categorias_
+          read:
+            table: C_ERGON.VW_DLK_ERG_CATEGORIAS_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 20 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_empresas
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_empresas
+          read:
+            table: C_ERGON.VW_DLK_ERG_EMPRESAS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 20 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_erg_matriculas
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_erg_matriculas
+          read:
+            table: C_ERGON.VW_DLK_ERG_ERG_MATRICULAS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 21 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_folhas_emp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_folhas_emp
+          read:
+            table: C_ERGON.VW_DLK_ERG_FOLHAS_EMP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 21 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_formas_prov_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_formas_prov_
+          read:
+            table: C_ERGON.VW_DLK_ERG_FORMAS_PROV_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      # - cron: "20 21 * * *"
+      #   timezone: America/Sao_Paulo
+      #   slug: vw_dlk_erg_funcionarios
+      #   parameters:
+      #     table:
+      #       dataset_id: brutos_recursos_humanos_ergon
+      #       table_id: vw_dlk_erg_funcionarios
+      #     read:
+      #       table: C_ERGON.VW_DLK_ERG_FUNCIONARIOS
+      #     dump_mode: overwrite
+      #     options:
+      #       columns:
+      #         add_timestamp: true
+      - cron: "30 21 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_horario_trab_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_horario_trab_
+          read:
+            table: C_ERGON.VW_DLK_ERG_HORARIO_TRAB_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 21 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_hsetor_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_hsetor_
+          read:
+            table: C_ERGON.VW_DLK_ERG_HSETOR_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 21 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_jornadas_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_jornadas_
+          read:
+            table: C_ERGON.VW_DLK_ERG_JORNADAS_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 22 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_orgaos_externos
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_orgaos_externos
+          read:
+            table: C_ERGON.VW_DLK_ERG_ORGAOS_EXTERNOS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 22 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_orgaos_regimes_jur_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_orgaos_regimes_jur_
+          read:
+            table: C_ERGON.VW_DLK_ERG_ORGAOS_REGIMES_JUR_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 22 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_provimentos_ev
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_provimentos_ev
+          read:
+            table: C_ERGON.VW_DLK_ERG_PROVIMENTOS_EV
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 22 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_regimes_jur_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_regimes_jur_
+          read:
+            table: C_ERGON.VW_DLK_ERG_REGIMES_JUR_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 22 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_tipo_folha
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_tipo_folha
+          read:
+            table: C_ERGON.VW_DLK_ERG_TIPO_FOLHA
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 22 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_tipo_orgao
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_tipo_orgao
+          read:
+            table: C_ERGON.VW_DLK_ERG_TIPO_ORGAO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 23 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_tipo_vinc_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_tipo_vinc_
+          read:
+            table: C_ERGON.VW_DLK_ERG_TIPO_VINC_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 23 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_vinculos
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_vinculos
+          read:
+            table: C_ERGON.VW_DLK_ERG_VINCULOS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 23 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_frequencias_gbp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_frequencias_gbp
+          read:
+            table: C_ERGON.VW_FREQUENCIAS_GBP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 23 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_lic_afast_gbp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_lic_afast_gbp
+          read:
+            table: C_ERGON.VW_LIC_AFAST_GBP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 23 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_pre_conta_gbp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_pre_conta_gbp
+          read:
+            table: C_ERGON.VW_PRE_CONTA_GBP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 23 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_simpa_sirhu_afastamento_gbp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_simpa_sirhu_afastamento_gbp
+          read:
+            table: C_ERGON.VW_SIMPA_SIRHU_AFASTAMENTO_GBP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 0 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_simpa_sirhu_frequencia_gbp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_simpa_sirhu_frequencia_gbp
+          read:
+            table: C_ERGON.VW_SIMPA_SIRHU_FREQUENCIA_GBP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 0 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_vantagens_gbp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_vantagens_gbp
+          read:
+            table: C_ERGON.VW_VANTAGENS_GBP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 0 * * *"
+        timezone: America/Sao_Paulo
+        slug: ipl_prefixos
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: ipl_prefixos
+          read:
+            table: C_ERGON.IPL_PREFIXOS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 0 * * *"
+        timezone: America/Sao_Paulo
+        slug: averbacoes_conta
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: averbacoes_conta
+          read:
+            table: ERGON.AVERBACOES_CONTA
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 0 * * *"
+        timezone: America/Sao_Paulo
+        slug: averb_oque_conta
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: averb_oque_conta
+          read:
+            table: ERGON.AVERB_OQUE_CONTA
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 0 * * *"
+        timezone: America/Sao_Paulo
+        slug: concursos
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: concursos
+          read:
+            table: ERGON.CONCURSOS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 1 * * *"
+        timezone: America/Sao_Paulo
+        slug: folhas_emp
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: folhas_emp
+          read:
+            table: ERGON.FOLHAS_EMP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 1 * * *"
+        timezone: America/Sao_Paulo
+        slug: formas_vac
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: formas_vac
+          read:
+            table: ERGON.FORMAS_VAC
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 1 * * *"
+        timezone: America/Sao_Paulo
+        slug: formas_vac_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: formas_vac_
+          read:
+            table: ERGON.FORMAS_VAC_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 1 * * *"
+        timezone: America/Sao_Paulo
+        slug: frequencias
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: frequencias
+          read:
+            table: ERGON.FREQUENCIAS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 1 * * *"
+        timezone: America/Sao_Paulo
+        slug: hist_cargo
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: hist_cargo
+          read:
+            table: ERGON.HIST_CARGO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 1 * * *"
+        timezone: America/Sao_Paulo
+        slug: hist_funcao
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: hist_funcao
+          read:
+            table: ERGON.HIST_FUNCAO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 2 * * *"
+        timezone: America/Sao_Paulo
+        slug: inscritos
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: inscritos
+          read:
+            table: ERGON.INSCRITOS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 2 * * *"
+        timezone: America/Sao_Paulo
+        slug: lic_afast
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: lic_afast
+          read:
+            table: ERGON.LIC_AFAST
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 2 * * *"
+        timezone: America/Sao_Paulo
+        slug: pre_conta
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: pre_conta
+          read:
+            table: ERGON.PRE_CONTA
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 2 * * *"
+        timezone: America/Sao_Paulo
+        slug: rubricas
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: rubricas
+          read:
+            table: ERGON.RUBRICAS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 2 * * *"
+        timezone: America/Sao_Paulo
+        slug: sirhu_afastamento
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: sirhu_afastamento
+          read:
+            table: SIMPA.SIRHU_AFASTAMENTO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 2 * * *"
+        timezone: America/Sao_Paulo
+        slug: sirhu_dbtabelas_afastamento
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: sirhu_dbtabelas_afastamento
+          read:
+            table: SIMPA.SIRHU_DBTABELAS_AFASTAMENTO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 3 * * *"
+        timezone: America/Sao_Paulo
+        slug: tipo_tempo
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: tipo_tempo
+          read:
+            table: ERGON.TIPO_TEMPO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 3 * * *"
+        timezone: America/Sao_Paulo
+        slug: vagas_concurso
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vagas_concurso
+          read:
+            table: ERGON.VAGAS_CONCURSO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 3 * * *"
+        timezone: America/Sao_Paulo
+        slug: total_conta
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: total_conta
+          read:
+            table: ERGON.TOTAL_CONTA
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 3 * * *"
+        timezone: America/Sao_Paulo
+        slug: cid
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: cid
+          read:
+            table: ERGON.CID
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 3 * * *"
+        timezone: America/Sao_Paulo
+        slug: designacoes_ev
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: designacoes_ev
+          read:
+            table: ERGON.DESIGNACOES_EV
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 3 * * *"
+        timezone: America/Sao_Paulo
+        slug: erg_pm_cid10_capitulo
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: erg_pm_cid10_capitulo
+          read:
+            table: ERGON.ERG_PM_CID10_CAPITULO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 4 * * *"
+        timezone: America/Sao_Paulo
+        slug: erg_pm_decisao
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: erg_pm_decisao
+          read:
+            table: ERGON.ERG_PM_DECISAO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 4 * * *"
+        timezone: America/Sao_Paulo
+        slug: erg_pm_grupoexame
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: erg_pm_grupoexame
+          read:
+            table: ERGON.ERG_PM_GRUPOEXAME
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 4 * * *"
+        timezone: America/Sao_Paulo
+        slug: erg_pm_pront_med
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: erg_pm_pront_med
+          read:
+            table: ERGON.ERG_PM_PRONT_MED
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 4 * * *"
+        timezone: America/Sao_Paulo
+        slug: erg_pm_resultpront
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: erg_pm_resultpront
+          read:
+            table: ERGON.ERG_PM_RESULTPRONT
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 4 * * *"
+        timezone: America/Sao_Paulo
+        slug: exames
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: exames
+          read:
+            table: ERGON.EXAMES
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 4 * * *"
+        timezone: America/Sao_Paulo
+        slug: funcoes_ev_
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: funcoes_ev_
+          read:
+            table: ERGON.FUNCOES_EV_
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 5 * * *"
+        timezone: America/Sao_Paulo
+        slug: medicos
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: medicos
+          read:
+            table: ERGON.MEDICOS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "10 5 * * *"
+        timezone: America/Sao_Paulo
+        slug: prontuario
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: prontuario
+          read:
+            table: ERGON.PRONTUARIO
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "20 5 * * *"
+        timezone: America/Sao_Paulo
+        slug: tpmrj_pm_juntas
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: tpmrj_pm_juntas
+          read:
+            table: C_ERGON.TPMRJ_PM_JUNTAS
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "30 5 * * *"
+        timezone: America/Sao_Paulo
+        slug: tpmrj_pm_periciasjunta
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: tpmrj_pm_periciasjunta
+          read:
+            table: C_ERGON.TPMRJ_PM_PERICIASJUNTA
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 5 * * *"
+        timezone: America/Sao_Paulo
+        slug: tpmrj_pm_resultjunta
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: tpmrj_pm_resultjunta
+          read:
+            table: C_ERGON.TPMRJ_PM_RESULTJUNTA
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "50 5 * * *"
+        timezone: America/Sao_Paulo
+        slug: tpmrj_pm_vwbim
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: tpmrj_pm_vwbim
+          read:
+            table: C_ERGON.TPMRJ_PM_VWBIM
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "0 6 * * *"
+        timezone: America/Sao_Paulo
+        slug: tpmrj_pm_vwtpconclper
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon_pericia_medica
+            table_id: tpmrj_pm_vwtpconclper
+          read:
+            table: C_ERGON.TPMRJ_PM_VWTPCONCLPER
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - cron: "40 19 * * *"
+        timezone: America/Sao_Paulo
+        slug: vw_dlk_erg_fita_banco
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: vw_dlk_erg_fita_banco
+          read:
+            table: C_ERGON.VW_DLK_ERG_FITA_BANCO
+          dump_mode: append
+          options:
+            chunks:
+              column: MES_ANO
+              width: month
+              begin: "2020-01-01"
+              lookback: 1
+            columns:
+              add_timestamp: true
+      - cron: "50 19 * * *"
+        timezone: America/Sao_Paulo
+        slug: fichas_financeiras
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: fichas_financeiras
+          read:
+            table: ERGON.FICHAS_FINANCEIRAS
+          dump_mode: append
+          options:
+            chunks:
+              column: MES_ANO_FOLHA
+              width: month
+              begin: "2020-01-01"
+              lookback: 1
+            columns:
+              add_timestamp: true
+      - cron: "0 20 * * *"
+        timezone: America/Sao_Paulo
+        slug: ipl_pt_fichas
+        parameters:
+          table:
+            dataset_id: brutos_recursos_humanos_ergon
+            table_id: ipl_pt_fichas
+          read:
+            table: ERGON.IPL_PT_FICHAS
+          dump_mode: append
+          options:
+            chunks:
+              column: MES_ANO_FOLHA
+              width: month
+              begin: "2020-01-01"
+              lookback: 1
+            columns:
+              add_timestamp: true
