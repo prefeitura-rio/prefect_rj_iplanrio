@@ -27,7 +27,7 @@ def test_the_models_are_committed_and_pushed_to_the_branch(origin: Path, tmp_pat
     pushed = push_models(str(origin), "cadunico", {"a.sql": "select 1\n", "a.yml": "version: 2\n"}, "feat: models")
 
     head = Repo(origin).commit("cadunico")
-    assert pushed
+    assert pushed == head.hexsha
     assert head.message == "feat: models"
     assert head.author.name == "CadUnico Pipeline"
     check = Repo.clone_from(str(origin), tmp_path / "check", branch="cadunico")
@@ -35,11 +35,11 @@ def test_the_models_are_committed_and_pushed_to_the_branch(origin: Path, tmp_pat
 
 
 def test_a_second_push_of_the_same_files_changes_nothing(origin: Path) -> None:
-    """Return `False` when the files are the same as the ones on the branch."""
+    """Return nothing when the files are the same as the ones on the branch."""
     files = {"a.sql": "select 1\n"}
     push_models(str(origin), "cadunico", files, "first")
 
-    assert not push_models(str(origin), "cadunico", files, "second")
+    assert push_models(str(origin), "cadunico", files, "second") is None
     assert Repo(origin).commit("cadunico").message == "first"
 
 

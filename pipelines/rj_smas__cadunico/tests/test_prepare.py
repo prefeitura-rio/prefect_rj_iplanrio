@@ -21,6 +21,12 @@ def test_a_zip_becomes_parquet_files_with_the_partition_columns(
 
     frame = read_parquet(partition.folder / "*.parquet")
     assert (partition.date, partition.layout_version, partition.extracted) == ("2024-01-31", "701", "2024-01-31")
+    assert (partition.archive_bytes, partition.texts, partition.rows, partition.files) == (
+        archive.stat().st_size,
+        1,
+        2,
+        1,
+    )
     assert frame["text"].to_list() == [HEADER, "second"]
     assert frame.row(0, named=True)["ano_particao"] == "2024"
     assert frame.row(0, named=True)["mes_particao"] == "1"

@@ -108,6 +108,19 @@ def kind_of(row: Record, bigquery_type: str) -> str:
     return {"DATE": "date", "INT64": "int", "FLOAT64": "float"}.get(bigquery_type, "text")
 
 
+def decode_pattern(key: str) -> str:
+    """Return the regex of a key of the dictionary of values, without `^` and `$`.
+
+    A numeric key matches with or without zeros on the left, so `1` matches `01`.
+
+    ```python
+    decode_pattern("01")  # "0*1"
+    decode_pattern("A")  # "A"
+    ```
+    """
+    return f"0*{int(key)}" if key.isdecimal() else key
+
+
 def make_field(row: Record) -> Field:
     """Return how the model reads a column of the text line.
 
@@ -136,7 +149,7 @@ def make_field(row: Record) -> Field:
         "date_format": row["date_format"] or "",
         "divisor": row["ajuste_decimal"] or "",
         "mapped_alias": mapped_alias,
-        "mapping": [{"key": key, "value": value} for key, value in (attributes or {}).items()],
+        "mapping": [{"key": decode_pattern(key), "value": value} for key, value in (attributes or {}).items()],
     }
 
 
@@ -234,7 +247,7 @@ def render_model_files(
 
     for model in build_models(rows, dataset_id):
         for column in find_long_descriptions(model):
-            logger.warning("%s.%s: the description is over the limit of BigQuery", model["name"], column)
+            logger.warning("⚠️ %s.%s: descrição maior que o limite do BigQuery", model["name"], column)
 
         files[f"{MODEL_PREFIX}__{model['name']}.sql"] = render_query(
             anchor,
