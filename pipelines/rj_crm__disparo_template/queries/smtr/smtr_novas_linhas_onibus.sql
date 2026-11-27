@@ -229,17 +229,14 @@ WITH
   ),
 
 
-  -- 5d. Quem já foi impactado hoje por ESTA HSM e não deve receber de novo:
+  -- 5d. Quem já foi impactado hoje por QUALQUER HSM (inclusive esta) e não deve receber esta:
   --     envio com sucesso (sent/delivered/read) ou falha 131026 (número sem WhatsApp)
-  impactados_hsm_hoje AS (
+  impactados_hoje AS (
     SELECT cpf, telefone
     FROM disparos_hoje
     WHERE
-      nome_hsm = 'smtr_novas_linhas_onibus_v3'
-      AND (
-        indicador_enviada
-        OR falha_codigo = '131026'
-      )
+      indicador_enviada
+      OR falha_codigo = '131026'
   ),
 
 
@@ -267,10 +264,10 @@ WHERE
 UNION DISTINCT
 
 --    6b. + quem falhou hoje nesta HSM com falha diferente de 131026, desde que não tenha sido
---        impactado hoje por ela de outra forma (sucesso ou 131026), por CPF e por telefone
+--        impactado hoje por qualquer HSM (sucesso ou 131026), por CPF e por telefone
 SELECT p.*
 FROM payload AS p
 WHERE
   p.cpf IN (SELECT cpf FROM falhas_reenviar)
-  AND p.cpf NOT IN (SELECT cpf FROM impactados_hsm_hoje WHERE cpf IS NOT NULL)
-  AND p.telefone NOT IN (SELECT telefone FROM impactados_hsm_hoje WHERE telefone IS NOT NULL)
+  AND p.cpf NOT IN (SELECT cpf FROM impactados_hoje WHERE cpf IS NOT NULL)
+  AND p.telefone NOT IN (SELECT telefone FROM impactados_hoje WHERE telefone IS NOT NULL)

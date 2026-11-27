@@ -502,6 +502,9 @@ deployments:
           query_file: queries/smtr/smtr_sistema_rio_novas_linhas_onibus_teste.sql
 
       # SMTR - Novas linhas de ônibus Conexão BRT (Ilha e Jacarepaguá) (one-shot)
+      # Reenvio de 27/11/2026: a query já exclui quem teve disparo hoje e devolve quem falhou nesta
+      # HSM com falha diferente de 131026 (ex.: 132018, \n na variável). Por isso o filtro diário
+      # do flow fica desligado (filter_dispatched_phones_or_cpfs vazio = None) e o intervalo é 0.
       - cron: "0 17 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -512,12 +515,13 @@ deployments:
           campaign_name: smtr_novas_linhas_onibus_v3
           data_extension_filename: whatsapp_smtr_novas_linhas_onibus
           de_columns: ["nome_sobrenome", "chamada", "descricao", "linhas", "itinerario", "horario"]
+          filter_dispatched_phones_or_cpfs:
           filter_duplicated_cpfs: true
           filter_duplicated_phones: true
-          dispatch_interval_days: 30
+          dispatch_interval_days: 0
           batch_size: 6000
           batch_sleep_minutes: 5
-          query_file: queries/smtr/smtr_novas_linhas_onibus_teste.sql
+          query_file: queries/smtr/smtr_novas_linhas_onibus.sql
 
       # SMTR - Sistema Rio - Aviso de próxima etapa na região (Template 3, one-shot)
       - cron: "0 17 * * *"
