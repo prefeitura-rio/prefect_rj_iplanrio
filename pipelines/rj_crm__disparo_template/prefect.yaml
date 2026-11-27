@@ -499,6 +499,23 @@ deployments:
           batch_sleep_minutes: 3
           query_file: queries/smtr/smtr_sistema_rio_novas_linhas_onibus_teste.sql
 
+      # SMTR - Novas linhas de ônibus Conexão BRT (Ilha e Jacarepaguá) (one-shot)
+      - cron: "0 17 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-smtr-novas-linhas-onibus
+        flow_run_name: smtr-novas-linhas-onibus
+        parameters:
+          flow_environment: staging
+          campaign_name: smtr_novas_linhas_onibus_v3
+          data_extension_filename: whatsapp_smtr_novas_linhas_onibus
+          de_columns: ["nome_sobrenome", "chamada", "descricao", "linhas", "itinerario", "horario"]
+          filter_duplicated_cpfs: true
+          dispatch_interval_days: 30
+          batch_size: 6000
+          batch_sleep_minutes: 5
+          query_file: queries/smtr/smtr_novas_linhas_onibus_teste.sql
+
   - name: rj-crm--disparo-template-sf--prod
     version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template_sf
