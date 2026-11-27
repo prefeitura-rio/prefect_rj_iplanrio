@@ -23,6 +23,7 @@ from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
 from prefect.exceptions import PrefectException  # pylint: disable=E0611, E0401
 from prefect.runtime import flow_run as prefect_flow_run
+from prefect_rj_iplanrio.logging import get_logger
 from prefect_rj_iplanrio.sql import load_query
 from pytz import timezone
 
@@ -44,6 +45,33 @@ from pipelines.rj_crm__disparo_template.utils.whitelist import (
     normalize_numbers,
     validate_environment_config,
 )
+
+logger = get_logger(__name__)
+
+
+def describe_dataframe(df: pd.DataFrame | None) -> str:
+    """Resume um DataFrame em quantidade de linhas e nomes de colunas, sem nenhum valor.
+
+    Os DataFrames do disparo trazem CPF, telefone, nome e dados de dívida/saúde do
+    cidadão: para log, use este resumo em vez de ``head()``/``to_dict()``.
+
+    :param df: DataFrame a resumir; ``None`` é tratado como vazio.
+    :returns: Texto como ``"3 linha(s), colunas=['cpf', 'telefone']"``.
+    """
+    if df is None:
+        return "0 linha(s), colunas=[]"
+    return f"{len(df)} linha(s), colunas={[str(column) for column in df.columns]}"
+
+
+def _keys_of(destination: Any) -> list[str]:
+    """Devolve só os nomes dos campos de um destinatário, para log sem valores.
+
+    :param destination: Destinatário lido da query (normalmente um ``dict``).
+    :returns: Nomes dos campos em ordem alfabética, ou lista vazia se não for ``dict``.
+    """
+    if not isinstance(destination, dict):
+        return []
+    return sorted(str(key) for key in destination)
 
 
 @task
@@ -74,7 +102,7 @@ def add_contacts_to_whitelist(
             if phone:
                 phone_numbers.append(phone)
         except Exception as err:
-            print(f"\n⚠️  Warning: Could not process destination: {dest_json}, error: {err}")
+            logger.warning("Não foi possível ler o telefone de um destinatário da whitelist: %s", type(err).__name__)
 
     if not phone_numbers:
         print("\n⚠️  No valid phone numbers found in destinations to add on whitelist.")
@@ -179,11 +207,10 @@ def remove_contacts_from_whitelist(
     for dest in destinations:
         try:
             phone = dest.get("telefone")
-            print(f"DEBUG: Processing destinations for removal, found phone: {phone} in destination: {dest}")
             if phone:
                 phone_numbers.append(phone)
         except Exception as err:
-            print(f"\n⚠️  Warning: Could not process destination for removal: {dest}, error: {err}")
+            logger.warning("Não foi possível ler o telefone de um destinatário a remover da whitelist: %s", type(err).__name__)
 
     if not phone_numbers:
         print("\n⚠️  No valid phone numbers found in destinations to remove from whitelist.")
@@ -610,7 +637,7 @@ def get_destinations(
             log("No destinations found from query. Returning empty list.")
             return []
 
-        log(f"Resposta da query: {destinations_df.iloc[0]}")
+        log(f"Resposta da query: {describe_dataframe(destinations_df)}")
         
         # Pega a primeira coluna (que deve ser o JSON STRING)
         destinations_list = destinations_df.iloc[:, 0].tolist()
@@ -623,10 +650,10 @@ def get_destinations(
             return []
 
     if destinations:
-        print(f"Exemplo de destino antes da normalização: {destinations[0]}")
+        logger.info("Chaves do primeiro destino antes da normalização: %s", _keys_of(destinations[0]))
         # Normaliza as chaves (ex: EXTERNALID -> cpf, celular_disparo -> telefone)
         destinations = [normalize_keys(d) for d in destinations]
-        print(f"Exemplo de destino após a normalização: {destinations[0]}")
+        logger.info("Chaves do primeiro destino após a normalização: %s", _keys_of(destinations[0]))
 
         validated_destinations, validation_stats = validate_destinations(destinations)
         log_validation_summary(validation_stats, "get_destinations")
@@ -657,14 +684,12 @@ def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
 
     for destination in validated_destinations:
         phone = destination.telefone  # Pydantic model attribute
-        cpf = destination.cpf
 
         if phone not in seen_phones:
             seen_phones.add(phone)
             unique_destinations.append(destination.model_dump())  # Convert back to dict
         else:
             duplicates_count += 1
-            log(f"Duplicate phone removed: {phone[:8]}**** (cpf: {cpf})")
 
     log(f"Removed {duplicates_count} duplicate phone numbers")
     log(f"Total unique destinations: {len(unique_destinations)}")
@@ -700,7 +725,6 @@ def remove_duplicate_cpfs(destinations: List[Dict]) -> List[Dict]:
             unique_destinations.append(destination.model_dump())  # Convert back to dict
         else:
             duplicates_count += 1
-            log(f"Duplicate CPF removed: {cpf[:4]}**** (phone: {destination.telefone})")
 
     log(f"Removed {duplicates_count} duplicate CPFs")
     log(f"Total unique destinations: {len(unique_destinations)}")
@@ -978,7 +1002,7 @@ def get_failed_phones(billing_project_id: str, campaign_name: str = None) -> set
             bucket_name=billing_project_id
         )
         if not failed_df.empty:
-            print(f"DEBUG: Primeiro ID com falha detectado: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
+            logger.info("Telefones com falha detectados: %s", failed_df.shape[0])
         failed_phones = set(str(x) for x in failed_df['telefone'].tolist())
         return failed_phones
     except Exception as e:
@@ -1008,9 +1032,8 @@ def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
             bucket_name=billing_project_id
         )
         if not failed_df.empty:
-            print(f"DEBUG: Primeiro ID com falha detectado para retentativa: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
+            logger.info("CPFs com falha detectados para retentativa: %s", failed_df.shape[0])
         failed_cpfs = set(str(x) for x in failed_df['cpf'].tolist())
-        print(f"DEBUG failed_cpfs {failed_cpfs}")
     except Exception as e:
         log(f"Erro ao buscar falhas para retentativa: {e}")
         return set()

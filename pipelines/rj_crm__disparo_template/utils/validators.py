@@ -68,14 +68,8 @@ def validate_destinations(destinations: List[Dict]) -> Tuple[List[DestinationInp
             error_msg = f"Registro {i + 1}: {'; '.join(error_details)}"
             validation_errors.append(error_msg)
 
-            # Log do destinatário inválido (sem dados sensíveis completos)
-            to_partial = destination.get("telefone", "N/A")
-            if isinstance(to_partial, str) and len(to_partial) > 8:
-                to_partial = to_partial[:8] + "****"
-
-            cpf_raw = destination.get("cpf", "N/A")
-            cpf_partial = cpf_raw[:4] + "****" if isinstance(cpf_raw, str) and len(cpf_raw) > 4 else cpf_raw
-            log(f"Destinatário inválido - telefone: {to_partial}, cpf: {cpf_partial}, erros: {error_msg}")
+            # Log do destinatário inválido sem nenhum dado dele (nem CPF nem telefone parciais)
+            log(f"Destinatário inválido - {error_msg}")
 
         except Exception as e:
             # Erro inesperado durante validação
