@@ -28,6 +28,25 @@ WITH
     INNER JOIN config_campanhas AS cfg
       ON REGEXP_REPLACE(NORMALIZE(UPPER(TRIM(b.nome)), NFD), r'\pM', '') IN UNNEST(cfg.bairros)
   ),
+  -- 2b. Todos os bairros oficiais do DataRio: o raio de 1 km das estações (6c) atravessa
+  --     bairros vizinhos, então é preciso saber em qual bairro o ponto cai para validá-lo.
+  bairros_todos AS (
+    SELECT
+      REGEXP_REPLACE(NORMALIZE(UPPER(TRIM(b.nome)), NFD), r'\pM', '') AS bairro_norm,
+      b.geometry
+    FROM `datario.dados_mestres.bairro` AS b
+    WHERE b.geometry IS NOT NULL
+  ),
+  -- 2c. Pontos das portas por CEP (numeração de porta oficial do DataRio),
+  --     usados para validar se o ponto da RMI está perto do CEP cadastrado.
+  portas_cep AS (
+    SELECT
+      LPAD(REGEXP_REPLACE(np.cep, r'\D', ''), 8, '0') AS cep,
+      np.geometry
+    FROM `datario.dados_mestres.numero_porta` AS np
+    WHERE np.cep IS NOT NULL
+      AND np.geometry IS NOT NULL
+  ),
   -- 3. Pontos de referência oficiais do GTFS (Metrô Colégio e Metrô Coelho Neto)
   stops_gtfs AS (
     SELECT
@@ -62,6 +81,7 @@ WITH
       REGEXP_REPLACE(NORMALIZE(UPPER(TRIM(endereco.principal.bairro)), NFD), r'\pM', '') AS bairro_norm,
       REGEXP_REPLACE(NORMALIZE(UPPER(TRIM(IFNULL(endereco.principal.municipio, 'RIO DE JANEIRO'))), NFD), r'\pM', '') AS municipio_norm,
       UPPER(TRIM(IFNULL(endereco.principal.estado, 'RJ'))) AS estado_norm,
+      LPAD(REGEXP_REPLACE(IFNULL(endereco.principal.cep, ''), r'\D', ''), 8, '0') AS cep_norm,
       SAFE.ST_GEOGPOINT(
         SAFE_CAST(endereco.principal.longitude AS FLOAT64),
         SAFE_CAST(endereco.principal.latitude AS FLOAT64)
@@ -72,6 +92,53 @@ WITH
       AND menor_idade = FALSE
       AND (nome IS NOT NULL OR nome_social IS NOT NULL)
       AND telefone.principal.estrategia_envio IN ('ENVIAR', 'TESTAR', 'EVITAR')
+  ),
+  -- 4b. Ponto validado no polígono dos bairros-alvo (usado em 6b): o ponto cai num
+  --     bairro-alvo e é coerente com o endereço cadastrado, ou seja:
+  --       - o bairro onde o ponto cai é o bairro de endereco.principal.bairro
+  --         (ignorando sufixo entre parênteses), OU
+  --       - o ponto está a no máximo 500 m de alguma porta do CEP de endereco.principal.cep.
+  ponto_validado_bairro AS (
+    SELECT DISTINCT
+      rmi.cpf_particao,
+      ba.prioridade
+    FROM base_rmi AS rmi
+    INNER JOIN bairros_alvo AS ba
+      ON ST_INTERSECTS(ba.geometry, rmi.ponto_geo)
+    LEFT JOIN portas_cep AS p
+      ON p.cep = rmi.cep_norm
+      AND ST_DWITHIN(p.geometry, rmi.ponto_geo, 500)
+    WHERE
+      rmi.ponto_geo IS NOT NULL
+      AND ba.geometry IS NOT NULL
+      AND (
+        ba.bairro_norm = rmi.bairro_norm
+        OR REGEXP_REPLACE(ba.bairro_norm, r'\s*\(.*\)', '') = rmi.bairro_norm
+        OR p.cep IS NOT NULL
+      )
+  ),
+  -- 4c. Ponto validado no raio das estações GTFS (usado em 6c): o ponto está no raio e é
+  --     coerente com o endereço cadastrado, com a mesma regra de 4b, usando o bairro
+  --     (qualquer bairro do Rio) onde o ponto cai.
+  ponto_validado_raio AS (
+    SELECT DISTINCT
+      rmi.cpf_particao,
+      st.prioridade
+    FROM base_rmi AS rmi
+    INNER JOIN stops_gtfs AS st
+      ON ST_DWITHIN(st.ponto_estacao, rmi.ponto_geo, st.raio_metros)
+    INNER JOIN bairros_todos AS bt
+      ON ST_INTERSECTS(bt.geometry, rmi.ponto_geo)
+    LEFT JOIN portas_cep AS p
+      ON p.cep = rmi.cep_norm
+      AND ST_DWITHIN(p.geometry, rmi.ponto_geo, 500)
+    WHERE
+      rmi.ponto_geo IS NOT NULL
+      AND (
+        bt.bairro_norm = rmi.bairro_norm
+        OR REGEXP_REPLACE(bt.bairro_norm, r'\s*\(.*\)', '') = rmi.bairro_norm
+        OR p.cep IS NOT NULL
+      )
   ),
   -- 5. Público não-alvo (já impactado no Template 4) lido a partir da config_campanhas
   publico_nao_alvo AS (
@@ -102,26 +169,18 @@ WITH
       rmi.municipio_norm = 'RIO DE JANEIRO'
       AND rmi.estado_norm = 'RJ'
     UNION ALL
-    -- 6b. Moradores por interseção espacial (lat/long dentro do polígono dos bairros)
+    -- 6b. Moradores por interseção espacial, só com ponto validado por bairro ou CEP (ver 4b)
     SELECT
-      rmi.cpf_particao,
-      ba.prioridade
-    FROM base_rmi AS rmi
-    INNER JOIN bairros_alvo AS ba
-      ON ST_INTERSECTS(ba.geometry, rmi.ponto_geo)
-    WHERE
-      rmi.ponto_geo IS NOT NULL
-      AND ba.geometry IS NOT NULL
+      cpf_particao,
+      prioridade
+    FROM ponto_validado_bairro
     UNION ALL
-    -- 6c. Moradores em um raio de até 1 km dos pontos GTFS (Metrô Colégio e Metrô Coelho Neto)
+    -- 6c. Moradores em um raio de até 1 km dos pontos GTFS (Metrô Colégio e Metrô Coelho Neto),
+    --     só com ponto validado por bairro ou CEP (ver 4c)
     SELECT
-      rmi.cpf_particao,
-      st.prioridade
-    FROM base_rmi AS rmi
-    INNER JOIN stops_gtfs AS st
-      ON ST_DWITHIN(st.ponto_estacao, rmi.ponto_geo, st.raio_metros)
-    WHERE
-      rmi.ponto_geo IS NOT NULL
+      cpf_particao,
+      prioridade
+    FROM ponto_validado_raio
   ),
   -- 7. Deduplica por CPF (cpf_particao) e exclui o público não-alvo da respectiva campanha
   publico_unico AS (

@@ -42,6 +42,18 @@ WITH
   ),
 
 
+  -- 2b. Pontos das portas por CEP (numeração de porta oficial do DataRio),
+  --     usados para validar se o ponto da RMI está perto do CEP cadastrado.
+  portas_cep AS (
+    SELECT
+      LPAD(REGEXP_REPLACE(np.cep, r'\D', ''), 8, '0') AS cep,
+      np.geometry
+    FROM `datario.dados_mestres.numero_porta` AS np
+    WHERE np.cep IS NOT NULL
+      AND np.geometry IS NOT NULL
+  ),
+
+
   -- 3. Base elegível da RMI com endereço normalizado e ponto geográfico (lat/long)
   base_rmi AS (
     SELECT
@@ -60,6 +72,7 @@ WITH
       REGEXP_REPLACE(NORMALIZE(UPPER(TRIM(endereco.principal.bairro)), NFD), r'\pM', '') AS bairro_norm,
       REGEXP_REPLACE(NORMALIZE(UPPER(TRIM(IFNULL(endereco.principal.municipio, 'RIO DE JANEIRO'))), NFD), r'\pM', '') AS municipio_norm,
       UPPER(TRIM(IFNULL(endereco.principal.estado, 'RJ'))) AS estado_norm,
+      LPAD(REGEXP_REPLACE(IFNULL(endereco.principal.cep, ''), r'\D', ''), 8, '0') AS cep_norm,
       SAFE.ST_GEOGPOINT(
         SAFE_CAST(endereco.principal.longitude AS FLOAT64),
         SAFE_CAST(endereco.principal.latitude AS FLOAT64)
@@ -70,6 +83,34 @@ WITH
       AND menor_idade = FALSE
       AND (nome IS NOT NULL OR nome_social IS NOT NULL)
       AND telefone.principal.estrategia_envio IN ('ENVIAR', 'TESTAR', 'EVITAR')
+  ),
+
+
+  -- 3b. Ponto geográfico validado: ponto da RMI dentro do polígono de um bairro-alvo e
+  --     coerente com o endereço cadastrado, ou seja:
+  --       - o bairro onde o ponto cai é o bairro de endereco.principal.bairro
+  --         (ignorando sufixo entre parênteses), OU
+  --       - o ponto está a no máximo 500 m de alguma porta do CEP de endereco.principal.cep.
+  --     Evita usar pontos georreferenciados errado.
+  ponto_validado AS (
+    SELECT DISTINCT
+      rmi.cpf_particao,
+      ba.prioridade
+    FROM base_rmi AS rmi
+    INNER JOIN bairros_alvo AS ba
+      ON ST_INTERSECTS(ba.geometry, rmi.ponto_geo)
+    LEFT JOIN portas_cep AS p
+      ON p.cep = rmi.cep_norm
+      AND ST_DWITHIN(p.geometry, rmi.ponto_geo, 500)
+    WHERE
+      rmi.ponto_geo IS NOT NULL
+      AND ba.geometry IS NOT NULL
+      AND (
+        ba.bairro_norm = rmi.bairro_norm
+        -- aceita grafia sem sufixo: 'FREGUESIA' bate com 'FREGUESIA (ILHA)' / 'FREGUESIA (JACAREPAGUA)'
+        OR REGEXP_REPLACE(ba.bairro_norm, r'\s*\(.*\)', '') = rmi.bairro_norm
+        OR p.cep IS NOT NULL
+      )
   ),
 
 
@@ -90,16 +131,13 @@ WITH
     UNION ALL
 
 
-    -- 4b. Moradores por interseção espacial (lat/long dentro do polígono do bairro)
+    -- 4b. Moradores por interseção espacial, só com ponto validado por bairro ou CEP (ver 3b).
+    --     Pontos incoerentes são descartados; o CPF ainda pode entrar pelo 4a (bairro cadastrado)
+    --     ou 4c (linhas).
     SELECT
-      rmi.cpf_particao,
-      ba.prioridade
-    FROM base_rmi AS rmi
-    INNER JOIN bairros_alvo AS ba
-      ON ST_INTERSECTS(ba.geometry, rmi.ponto_geo)
-    WHERE
-      rmi.ponto_geo IS NOT NULL
-      AND ba.geometry IS NOT NULL
+      cpf_particao,
+      prioridade
+    FROM ponto_validado
 
 
     UNION ALL
