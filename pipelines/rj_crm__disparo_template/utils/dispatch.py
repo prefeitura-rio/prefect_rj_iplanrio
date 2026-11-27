@@ -129,7 +129,6 @@ def add_contacts_to_whitelist(
     try:
         config = get_environment_config(environment)
         validate_environment_config(config)
-        print(f"Whitelist config {config}")
     except ValueError as err:
         print(f"\n⚠️  Configuration error: {err}")
         return
@@ -172,12 +171,14 @@ def add_contacts_to_whitelist(
     normalized_numbers = []
     for num in new_numbers_to_add:
         normalized_numbers.extend(normalize_numbers(num))
-    print(f"New numbers to add: {new_numbers_to_add}")
-    print(f"Normalized numbers to add: {normalized_numbers}")
-    
     # Remove duplicates to avoid redundant API calls
     unique_normalized_numbers = list(set(normalized_numbers))
-    print(f"Unique Normalized numbers to add: {unique_normalized_numbers}")
+    logger.info(
+        "Telefones a adicionar na whitelist: %s (%s normalizados, %s únicos)",
+        len(new_numbers_to_add),
+        len(normalized_numbers),
+        len(unique_normalized_numbers),
+    )
 
     if manager.add_numbers_to_group(group_id, unique_normalized_numbers):
         print("\n✅  Successfully added contacts to the whitelist.")
@@ -220,12 +221,14 @@ def remove_contacts_from_whitelist(
     normalized_numbers = []
     for num in phone_numbers:
         normalized_numbers.extend(normalize_numbers(num))
-    print(f"Numbers to remove from whitelist: {phone_numbers}")
-    print(f"Normalized numbers to remove: {normalized_numbers}")
-    
     # Remove duplicates to get the final list of numbers to remove
     selected_numbers = list(set(normalized_numbers))
-    print(f"DEBUG: All phone_numbers {phone_numbers} \nUnique phone numbers identified for removal: {selected_numbers}")
+    logger.info(
+        "Telefones a remover da whitelist: %s (%s normalizados, %s únicos)",
+        len(phone_numbers),
+        len(normalized_numbers),
+        len(selected_numbers),
+    )
 
     print(f"Selected {len(selected_numbers)} contacts to remove from whitelist.")
 
@@ -1182,7 +1185,6 @@ def remove_failed_phones(
             # Atualiza o campo 'telefone' com None para os telefones que falharam, forçando a retentativa a usar o próximo número da lista 'others'
             new_dest = dest.copy()
             new_dest['telefone'] = None
-            print(f"DEBUG: {to_number} falhou no último disparo e foi alterado para None = {new_dest}")
             new_destinations.append(new_dest)
         else:
             new_destinations.append(dest)
@@ -1231,7 +1233,6 @@ def get_retry_destinations(
         ext_id = get_value_from_case_insensitive_key(dest, 'cpf')
         others = get_value_from_case_insensitive_key(dest, 'others') or []
         to_number = get_value_from_case_insensitive_key(dest, 'telefone')
-        log(f"DEBUG dest {dest}")
 
         # Condições de elegibilidade para retry: telefone faltando/inválido + retry attempt válido
         is_ext_missing = (ext_id is None)
@@ -1243,7 +1244,6 @@ def get_retry_destinations(
             new_dest = dest.copy()
             # Atualiza o campo 'telefone' com o número da repescagem (tentativa 1 pega others[0])
             new_dest['telefone'] = others[attempt_number - 1]
-            log(f"DEBUG: new_dest alterado = {new_dest}")
             retry_destinations.append(new_dest)
         elif attempt_number == 0:
             retry_destinations.append(dest)            

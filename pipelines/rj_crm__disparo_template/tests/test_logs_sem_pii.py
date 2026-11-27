@@ -12,7 +12,7 @@ import pytest
 import requests
 
 from pipelines.rj_crm__disparo_template import flow
-from pipelines.rj_crm__disparo_template.utils import dispatch, validators
+from pipelines.rj_crm__disparo_template.utils import dispatch, validators, whitelist
 from pipelines.rj_crm__disparo_template.utils.enrichers import consulta_debitos
 
 CAMPANHA = "campanha_sintetica"
@@ -217,6 +217,110 @@ def test_whitelist_com_destino_invalido_nao_loga_o_destino(tarefa, registros, ca
     texto = registros(capsys)
     assert _sem_dado_pessoal(texto) == []
     assert "AttributeError" in texto
+
+
+class _WhitelistFalsa:
+    """API da whitelist sem rede: aceita a autenticação, o grupo e as operações."""
+
+    def __init__(self, *_args, **_kwargs):
+        self.adicionados: list[str] = []
+        self.removidos: list[str] = []
+
+    def authenticate(self) -> bool:
+        return True
+
+    def find_group_by_name(self, group_name):
+        return {"id": 7, "name": group_name}
+
+    def get_existing_numbers_set(self, force_add_on_whitelist_group):
+        return set()
+
+    def add_numbers_to_group(self, group_id, phone_numbers):
+        self.adicionados.extend(phone_numbers)
+        return True
+
+    def remove_numbers_bulk(self, phone_numbers):
+        self.removidos.extend(phone_numbers)
+        return True
+
+
+SEGREDO = "segredo-sintetico-da-whitelist"
+
+
+@pytest.fixture
+def whitelist_falsa(monkeypatch):
+    instancias: list[_WhitelistFalsa] = []
+
+    def _fabrica(*args, **kwargs):
+        instancia = _WhitelistFalsa(*args, **kwargs)
+        instancias.append(instancia)
+        return instancia
+
+    config = {"issuer": "https://exemplo.invalid", "client_id": "cliente", "client_secret": SEGREDO, "api_base_url": "https://exemplo.invalid/api"}
+    monkeypatch.setattr(dispatch, "get_environment_config", lambda _env: config)
+    monkeypatch.setattr(dispatch, "validate_environment_config", lambda _config: None)
+    monkeypatch.setattr(dispatch, "BetaGroupManager", _fabrica)
+    return instancias
+
+
+def test_whitelist_add_com_telefones_validos_nao_loga_telefone_nem_segredo(whitelist_falsa, registros, capsys):
+    destinos = [{"telefone": TELEFONE_1}, {"telefone": TELEFONE_2}]
+
+    dispatch.add_contacts_to_whitelist.fn(
+        destinations=destinos, percentage_to_insert=100, group_name="grupo", environment="staging"
+    )
+
+    assert whitelist_falsa[0].adicionados  # chegou à API
+    texto = registros(capsys)
+    assert _sem_dado_pessoal(texto) == []
+    assert SEGREDO not in texto
+    assert "Telefones a adicionar na whitelist: 2" in texto
+
+
+def test_whitelist_remove_com_telefones_validos_nao_loga_telefone_nem_segredo(whitelist_falsa, registros, capsys):
+    dispatch.remove_contacts_from_whitelist.fn(
+        destinations=[{"telefone": TELEFONE_1}, {"telefone": TELEFONE_2}], environment="staging"
+    )
+
+    assert whitelist_falsa[0].removidos  # chegou à API
+    texto = registros(capsys)
+    assert _sem_dado_pessoal(texto) == []
+    assert SEGREDO not in texto
+    assert "Telefones a remover da whitelist: 2" in texto
+
+
+class _Resposta:
+    def __init__(self, status_code: int = 200, texto: str = ""):
+        self.status_code = status_code
+        self.text = texto
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise requests.exceptions.HTTPError(f"{self.status_code} para {TELEFONE_1}", response=self)
+
+    def json(self) -> dict:
+        return {"access_token": "token-sintetico"}
+
+
+def test_beta_group_manager_nao_loga_segredo_nem_telefone(monkeypatch, registros, capsys):
+    gerente = whitelist.BetaGroupManager("https://exemplo.invalid", "cliente", SEGREDO, "https://exemplo.invalid/api")
+    monkeypatch.setattr(whitelist.requests, "post", lambda *_args, **_kwargs: _Resposta())
+    assert gerente.authenticate() is True
+
+    monkeypatch.setattr(whitelist.requests, "delete", lambda *_args, **_kwargs: _Resposta())
+    assert gerente.remove_number_from_whitelist(TELEFONE_1) is True
+    monkeypatch.setattr(whitelist.requests, "delete", lambda *_args, **_kwargs: _Resposta(500))
+    assert gerente.remove_number_from_whitelist(TELEFONE_1) is False
+
+    eco = _Resposta(400, texto=f'{{"phone_numbers": ["{TELEFONE_1}"]}}')
+    monkeypatch.setattr(whitelist.requests, "post", lambda *_args, **_kwargs: eco)
+    assert gerente.add_numbers_to_group(7, [TELEFONE_1]) is False
+    assert gerente.remove_numbers_bulk([TELEFONE_1]) is False
+
+    texto = registros(capsys)
+    assert SEGREDO not in texto
+    assert _sem_dado_pessoal(texto) == []
+    assert "Resposta da API da whitelist: HTTP 400" in texto
 
 
 def test_get_destinations_loga_so_as_chaves(registros, capsys):
