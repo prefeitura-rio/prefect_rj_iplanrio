@@ -10,7 +10,7 @@ WITH
         ['BRT_MARE', 'BRT_TERMINAL_FUNDAO', 'BRT_GALEAO'] AS paradas,
         'Novas linhas de ônibus ligam a Ilha do Governador ao metrô de Del Castilho' AS chamada,
         'Desde 7 de novembro, duas novas linhas do serviço Conexão BRT fazem a ligação direta entre a Ilha do Governador e a estação de metrô de Del Castilho' AS descricao,
-        '🚌 Linha 91: Bananal ↔️ Del Castilho, passando pela Estação das Barcas de Cocotá.\n🚌 Linha 95: Aeroporto do Galeão ↔️ Del Castilho, atendendo os terminais 1 e 2 do aeroporto' AS linhas,
+        '🚌 *Linha 91:* Bananal ↔️ Del Castilho, passando pela Estação das Barcas de Cocotá.   |   🚌 *Linha 95:* Aeroporto do Galeão ↔️ Del Castilho, atendendo os terminais 1 e 2 do aeroporto' AS linhas,
         'as duas linhas passam pelo Terminal Fundão do BRT e pela estação de trem de Bonsucesso' AS itinerario,
         'das 4h às 23h' AS horario
       ),
@@ -22,7 +22,7 @@ WITH
         ['BRT_CENTRO_OLIMPICO', 'BRT_MORRO_DO_OUTEIRO', 'BRT_RIOCENTRO', 'BRT_OLOF_PALME', 'BRT_ASA_BRANCA', 'BRT_OUTEIRO_SANTO', 'BRT_TAQUARA'] AS paradas,
         'Nova linha de ônibus liga o Terminal Centro Olímpico ao Anil' AS chamada,
         'A Prefeitura do Rio criou a Linha 54 do serviço Conexão BRT, que faz a ligação entre o Terminal Centro Olímpico e o bairro do Anil, ampliando as opções de deslocamento pela Barra e por Jacarepaguá' AS descricao,
-        'Linha 54: Terminal Centro Olímpico ↔️ Anil' AS linhas,
+        '🚌 *Linha 54:* Terminal Centro Olímpico ↔️ Anil' AS linhas,
         'a linha passa pelo Riocentro, Camorim, Curicica, Largo da Preguiça, Centro da Taquara, Largo do Pechincha, Praça Mac Gregor, Largo da Freguesia e Park Jacarepaguá' AS itinerario,
         'todos os dias, das 4h às 23h' AS horario
       )
@@ -189,23 +189,88 @@ WITH
       PARTITION BY cpf_particao, cpf
       ORDER BY prioridade ASC
     ) = 1
+  ),
+
+
+  -- 5b. Payload completo do público (antes dos filtros de disparo)
+  payload AS (
+    SELECT
+      rmi.telefone,
+      pub.cpf,
+      rmi.nome_sobrenome,
+      cfg.chamada,
+      cfg.descricao,
+      cfg.linhas,
+      cfg.itinerario,
+      cfg.horario
+    FROM publico_unico AS pub
+    INNER JOIN base_rmi AS rmi
+      ON rmi.cpf_particao = pub.cpf_particao
+    INNER JOIN config_campanhas AS cfg
+      ON cfg.campanha = pub.campanha
+    WHERE
+      rmi.telefone IS NOT NULL
+  ),
+
+
+  -- 5c. Disparos de HSM de hoje (qualquer HSM, qualquer status) registrados no chatbot
+  disparos_hoje AS (
+    SELECT
+      contato.cpf AS cpf,
+      contato.contato_telefone AS telefone,
+      hsm.nome_hsm AS nome_hsm,
+      indicador_enviada,
+      indicador_falha,
+      falha_codigo
+    FROM `rj-crm-registry.rmi_conversas.chatbot`
+    WHERE
+      data_particao >= CURRENT_DATE('America/Sao_Paulo')
+      AND fonte = 'HSM'
+  ),
+
+
+  -- 5d. Quem já foi impactado hoje por ESTA HSM e não deve receber de novo:
+  --     envio com sucesso (sent/delivered/read) ou falha 131026 (número sem WhatsApp)
+  impactados_hsm_hoje AS (
+    SELECT cpf, telefone
+    FROM disparos_hoje
+    WHERE
+      nome_hsm = 'smtr_novas_linhas_onibus_v3'
+      AND (
+        indicador_enviada
+        OR falha_codigo = '131026'
+      )
+  ),
+
+
+  -- 5e. Quem teve falha hoje nesta HSM por outro motivo que não o 131026 e deve ser reenviado
+  --     (ex.: 132018 'Param text cannot have new-line/tab characters...', causada pelo \n na variável linhas)
+  falhas_reenviar AS (
+    SELECT DISTINCT cpf
+    FROM disparos_hoje
+    WHERE
+      nome_hsm = 'smtr_novas_linhas_onibus_v3'
+      AND indicador_falha
+      AND IFNULL(falha_codigo, '') != '131026'
+      AND cpf IS NOT NULL
   )
 
 
--- 6. Monta o payload final para disparo
-SELECT
-  rmi.telefone,
-  pub.cpf,
-  rmi.nome_sobrenome,
-  cfg.chamada,
-  cfg.descricao,
-  cfg.linhas,
-  cfg.itinerario,
-  cfg.horario
-FROM publico_unico AS pub
-INNER JOIN base_rmi AS rmi
-  ON rmi.cpf_particao = pub.cpf_particao
-INNER JOIN config_campanhas AS cfg
-  ON cfg.campanha = pub.campanha
+-- 6. Payload final:
+--    6a. público que não teve nenhum disparo hoje (qualquer HSM), por CPF e por telefone
+SELECT p.*
+FROM payload AS p
 WHERE
-  rmi.telefone IS NOT NULL
+  p.cpf NOT IN (SELECT cpf FROM disparos_hoje WHERE cpf IS NOT NULL)
+  AND p.telefone NOT IN (SELECT telefone FROM disparos_hoje WHERE telefone IS NOT NULL)
+
+UNION DISTINCT
+
+--    6b. + quem falhou hoje nesta HSM com falha diferente de 131026, desde que não tenha sido
+--        impactado hoje por ela de outra forma (sucesso ou 131026), por CPF e por telefone
+SELECT p.*
+FROM payload AS p
+WHERE
+  p.cpf IN (SELECT cpf FROM falhas_reenviar)
+  AND p.cpf NOT IN (SELECT cpf FROM impactados_hsm_hoje WHERE cpf IS NOT NULL)
+  AND p.telefone NOT IN (SELECT telefone FROM impactados_hsm_hoje WHERE telefone IS NOT NULL)
