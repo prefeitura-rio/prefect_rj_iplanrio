@@ -98,7 +98,7 @@ def rj_crm__disparo_template_sf(
     filter_dispatched_phones_or_cpfs: str | None = "cpf",
     filter_duplicated_phones: bool = False,
     filter_duplicated_cpfs: bool = True,
-    filter_failed_phones: bool = False,
+    filter_failed_phones: bool = True,
     enrich_with_api_name: str | None = None,
     enrich_with_api_params: dict | None = None,
     dispatch_interval_days: int = 0,
@@ -494,10 +494,11 @@ def rj_crm__disparo_template_sf(
         all_log_dfs = []
         last_dispatch_date = None
 
+        print(f"⚠️  Sleep {sleep_minutes} minuto(s) antes de iniciar. Verifique data e campaign_name!")
+        time.sleep(sleep_minutes * 60)
+        
         for b_idx, batch_df in enumerate(batches):
             print(f"\n📦 Batch {b_idx + 1}/{n_batches} — {len(batch_df)} destinatários")
-            print(f"⚠️  Sleep {sleep_minutes} minuto(s) antes do batch. Verifique data e campaign_name!")
-            time.sleep(sleep_minutes * 60)
 
             # Salva CSV (restrito a telefone/SubscriberKey/de_columns) e registra data do disparo
             csv_path, dispatch_date = save_csv_for_sftp(

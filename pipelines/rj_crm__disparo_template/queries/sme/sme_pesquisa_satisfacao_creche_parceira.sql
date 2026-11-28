@@ -17,20 +17,21 @@ WITH rmi AS (
   ) = 1
 ),
 
-respondeu AS (
-  -- Quem já respondeu a pesquisa (HSM original ou lembrete) nos últimos 30 dias.
-  -- Cruza por CPF e por telefone, pois o mesmo responsável pode aparecer com outro número.
+concluiu_pesquisa AS (
+  -- Quem chegou ao fim da pesquisa: recebeu a mensagem de sessão final
+  -- "Você gostaria de deixar algum comentário, elogio ou sugestão?".
+  -- No chatbot, mensagem de sessão é linha fonte = 'HSM' com hsm.indicador = FALSE
+  -- (só template tem indicador TRUE) e o texto em mensagem_texto.
+  -- Quem não respondeu nada ou parou antes dessa pergunta continua no público.
   SELECT DISTINCT
-    c.contato.cpf AS cpf,
-    c.contato.contato_telefone AS telefone
+    c.contato.contato_telefone AS telefone,
+    c.contato.cpf AS cpf
   FROM `rj-crm-registry.rmi_conversas.chatbot` c
-  WHERE c.data_particao >= DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 30 DAY)
-    AND c.hsm.indicador IS TRUE
-    AND c.hsm.nome_hsm IN (
-      'sme_pesquisa_satisfacao_creche_parceira',
-      'sme_pesquisa_satisfacao_creche_parceira_lembrete'
-    )
-    AND c.foi_respondida IS TRUE
+  WHERE c.data_particao >= '2026-11-01'  -- início da campanha da pesquisa
+    AND c.fonte IN ('HSM')
+    AND c.indicador_falha IS NOT TRUE
+    AND LOWER(COALESCE(c.mensagem_texto_renderizado, c.mensagem_texto))
+        LIKE '%gostaria de deixar algum coment%'
 ),
 
 obitos AS (
@@ -151,12 +152,13 @@ SELECT
   denominacao
 FROM dados
 WHERE telefone IS NOT NULL
-  -- AND nome_responsavel IS NOT NULL
-  -- AND nome_aluno IS NOT NULL
+  AND nome_responsavel IS NOT NULL
+  AND nome_aluno IS NOT NULL
   AND denominacao IS NOT NULL
-  -- Já respondeu a pesquisa nos últimos 30 dias (por CPF ou telefone): não dispara de novo
-  AND cpf NOT IN (SELECT cpf FROM respondeu WHERE cpf IS NOT NULL)
-  AND telefone NOT IN (SELECT telefone FROM respondeu WHERE telefone IS NOT NULL)
+  -- Já concluiu a pesquisa (chegou à pergunta de comentário), por CPF ou telefone:
+  -- não dispara de novo. Quem não respondeu ou parou no meio recebe.
+  AND cpf NOT IN (SELECT cpf FROM concluiu_pesquisa WHERE cpf IS NOT NULL)
+  AND telefone NOT IN (SELECT telefone FROM concluiu_pesquisa WHERE telefone IS NOT NULL)
   AND nome_aluno != "173.561.157-35"
 -- Um disparo por responsável, mesmo com mais de um filho
 QUALIFY ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY cpf_aluno) = 1;

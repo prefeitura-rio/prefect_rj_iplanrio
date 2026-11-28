@@ -465,19 +465,159 @@ deployments:
           query_file: queries/sme/sme_pesquisa_satisfacao_creche_parceira.sql
 
       # SMTR - Rio Rotativo - Novas vagas (one-shot)
-      - cron: "0 12 * * *"
+      - cron: "0 9 * * *"
         timezone: America/Sao_Paulo
         active: false
         slug: oneshot-smtr-rio-rotativo-novas-vagas
         flow_run_name: smtr-rio-rotativo-novas-vagas
         parameters:
           flow_environment: staging
-          campaign_name: smtr_rio_rotativo_novas_vagas
+          campaign_name: smtr_rio_rotativo_novas_vagas_v2
           data_extension_filename: whatsapp_smtr_rio_rotativo_novas_vagas
           de_columns: ["nome_sobrenome", "relacao_local", "numero_vagas", "logradouros"]
           filter_duplicated_cpfs: true
-          batch_size: 10000
+          filter_duplicated_phones: true
+          dispatch_interval_days: 30
+          batch_size: 8500
+          batch_sleep_minutes: 5
           query_file: queries/smtr/smtr_rio_rotativo_novas_vagas.sql
+
+      # SMTR - Sistema Rio - Novas linhas de ônibus (one-shot)
+      - cron: "0 17 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-smtr-sistema-rio-novas-linhas-onibus
+        flow_run_name: smtr-sistema-rio-novas-linhas-onibus
+        parameters:
+          flow_environment: staging
+          campaign_name: smtr_sistema_rio_novas_linhas_onibus_v12
+          data_extension_filename: whatsapp_smtr_sistema_rio_novas_linhas_onibus
+          de_columns: ["nome_sobrenome", "descricao_onibus", "bairro", "gancho", "recebimento",
+            "linhas", "destaque", "prazo"]
+          filter_duplicated_cpfs: true
+          filter_duplicated_phones: true
+          dispatch_interval_days: 30
+          batch_size: 20000
+          batch_sleep_minutes: 3
+          query_file: queries/smtr/smtr_sistema_rio_novas_linhas_onibus_teste.sql
+
+      # SMTR - Novas linhas de ônibus Conexão BRT (Ilha e Jacarepaguá) (one-shot)
+      # Reenvio de 27/11/2026: a query já exclui quem teve disparo hoje e devolve quem falhou nesta
+      # HSM com falha diferente de 131026 (ex.: 132018, \n na variável). Por isso o filtro diário
+      # do flow fica desligado (filter_dispatched_phones_or_cpfs vazio = None) e o intervalo é 0.
+      - cron: "0 17 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-smtr-novas-linhas-onibus
+        flow_run_name: smtr-novas-linhas-onibus
+        parameters:
+          flow_environment: staging
+          campaign_name: smtr_novas_linhas_onibus_v3
+          data_extension_filename: whatsapp_smtr_novas_linhas_onibus
+          de_columns: ["nome_sobrenome", "chamada", "descricao", "linhas", "itinerario", "horario"]
+          filter_dispatched_phones_or_cpfs:
+          filter_duplicated_cpfs: true
+          filter_duplicated_phones: true
+          dispatch_interval_days: 0
+          batch_size: 6000
+          batch_sleep_minutes: 5
+          query_file: queries/smtr/smtr_novas_linhas_onibus.sql
+
+      # SMTR - Sistema Rio - Aviso de próxima etapa na região (Template 3, one-shot)
+      - cron: "0 17 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-smtr-sistema-rio-proxima-etapa
+        flow_run_name: smtr-sistema-rio-proxima-etapa
+        parameters:
+          flow_environment: staging
+          campaign_name: smtr_sistema_rio_proxima_etapa
+          data_extension_filename: whatsapp_smtr_sistema_rio_proxima_etapa
+          de_columns: ["regiao", "bairros", "previsao", "frota_atual", "frota_nova"]
+          filter_duplicated_cpfs: true
+          filter_duplicated_phones: true
+          dispatch_interval_days: 30
+          batch_size: 20000
+          batch_sleep_minutes: 3
+          query_file: queries/smtr/smtr_sistema_rio_proxima_etapa.sql
+
+      # SMTR - Novo terminal no bairro (Template 4, one-shot)
+      # TODO: confirmar nome do HSM e da Data Extension (provisórios)
+      - cron: "0 17 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-smtr-novos-terminais-no-bairro
+        flow_run_name: smtr-novos-terminais-no-bairro
+        parameters:
+          flow_environment: staging
+          campaign_name: smtr_novos_terminais_no_bairro
+          data_extension_filename: whatsapp_smtr_novos_terminais_no_bairro
+          de_columns: ["bairro", "terminal", "detalhes"]
+          filter_duplicated_cpfs: true
+          filter_duplicated_phones: true
+          dispatch_interval_days: 30
+          batch_size: 20000
+          batch_sleep_minutes: 3
+          query_file: queries/smtr/smtr_novos_terminais_no_bairro.sql
+
+      # SMTR - Novos terminais: resumo regional (Template 5, one-shot)
+      - cron: "0 17 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-smtr-novos-terminais
+        flow_run_name: smtr-novos-terminais
+        parameters:
+          flow_environment: staging
+          campaign_name: smtr_novos_terminais
+          data_extension_filename: whatsapp_smtr_novos_terminais
+          de_columns: ["regiao", "bairros", "local_terminais", "detalhes"]
+          filter_duplicated_cpfs: true
+          filter_duplicated_phones: true
+          dispatch_interval_days: 30
+          batch_size: 20000
+          batch_sleep_minutes: 3
+          query_file: queries/smtr/smtr_novos_terminais.sql
+
+      # SMTR - Terminais: conexões disponíveis (Template 6, one-shot)
+      # TODO: confirmar nome do HSM e da Data Extension (provisórios)
+      - cron: "0 17 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-smtr-terminais-conexoes
+        flow_run_name: smtr-terminais-conexoes
+        parameters:
+          flow_environment: staging
+          campaign_name: smtr_terminais_conexoes
+          data_extension_filename: whatsapp_smtr_terminais_conexoes
+          de_columns: ["nome_sobrenome", "chamada", "local", "descricao", "conexoes", "destaque"]
+          filter_duplicated_cpfs: true
+          filter_duplicated_phones: true
+          dispatch_interval_days: 30
+          batch_size: 20000
+          batch_sleep_minutes: 3
+          query_file: queries/smtr/smtr_terminais_conexoes.sql
+
+      # SMS - Confirmação / lembrete de procedimento - Supercentro (one-shot)
+      # A tabela de origem é datada: atualizar o nome em queries/sms/sms_confirmacao_lembrete_procedimento.sql
+      - cron: "0 12 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-sms-confirmacao-lembrete-procedimento
+        flow_run_name: sms-confirmacao-lembrete-procedimento
+        parameters:
+          flow_environment: staging
+          campaign_name: sms_confirmacao_lembrete_procedimento
+          data_extension_filename: whatsapp_sms_confirmacao_lembrete_procedimento
+          de_columns: ["nome_sobrenome", "tipo_atendimento", "data", "horario", "unidade",
+            "id_agendamento", "id_solicitacao", "no_equipamento", "janela_confirmacao"]
+          filter_dispatched_phones_or_cpfs:
+          filter_duplicated_cpfs: false
+          filter_duplicated_phones: false
+          filter_failed_phones: true
+          batch_size: 5000
+          batch_sleep_minutes: 15
+          dispatch_interval_days: 7
+          query_file: queries/sms/sms_confirmacao_lembrete_procedimento.sql
 
   - name: rj-crm--disparo-template-sf--prod
     version: '{{ get-commit-hash.stdout }}'
