@@ -7,6 +7,10 @@ import pendulum
 import pandas as pd
 from prefect import task
 
+from prefect_rj_iplanrio.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 def identificar_sessoes_cliente(group):
         nova_sessao = []
@@ -124,21 +128,22 @@ def calculate_24h_sessions(df: pd.DataFrame, report_month: str) -> tuple[pd.Data
     df = df.sort_values(by=['contato_telefone', 'inicio_datetime'])
 
     df['nova_sessao'] = df.groupby('contato_telefone', group_keys=False).apply(identificar_sessoes_cliente)
-    print(f"dtypes: {df.dtypes}")
-    print(f"iloc: {df.iloc[0]}")
     df['nova_sessao'] = df['nova_sessao'].fillna(False).astype(int)
     df['id_sessao_24h'] = df['contato_telefone'] + '_' + df.groupby('contato_telefone')['nova_sessao'].cumsum().astype(str)
 
     # Extrair o mês e ano do início da interação
     df['mes_ano'] = df['inicio_datetime'].dt.to_period('M')
 
-    print(f"Dataframe after calculating 24h sessions: {df.head()}")
-    print(f"Dataframe after calculating 24h sessions: {df.iloc[0]}")
+    # Só contagens no log: as linhas trazem o telefone do cidadão (contato_telefone).
+    logger.info(
+        "Sessões de 24h calculadas: %d linhas, %d sessões",
+        len(df),
+        int(df['nova_sessao'].sum()),
+    )
 
     df_filtered = df[df['mes_ano'] == report_month]
 
-    print(f"Dataframe after filtering for report month: {df_filtered.head()}")
-    print(f"Dataframe after filtering for report month: {df_filtered.iloc[0]}")
+    logger.info("Linhas no mês do relatório %s: %d", report_month, len(df_filtered))
 
     # Calcular as estatísticas mensais e semanais
     estatisticas_mensais = estatisticas_mensais_sessoes(df_filtered)
