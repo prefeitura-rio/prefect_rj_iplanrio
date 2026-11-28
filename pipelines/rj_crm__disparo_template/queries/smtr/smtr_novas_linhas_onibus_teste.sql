@@ -11,7 +11,7 @@ WITH
         1 AS prioridade,
         'Novas linhas de ônibus ligam a Ilha do Governador ao metrô de Del Castilho' AS chamada,
         'Desde 7 de novembro, duas novas linhas do serviço Conexão BRT fazem a ligação direta entre a Ilha do Governador e a estação de metrô de Del Castilho' AS descricao,
-        '🚌 Linha 91: Bananal ↔️ Del Castilho, passando pela Estação das Barcas de Cocotá.\n🚌 Linha 95: Aeroporto do Galeão ↔️ Del Castilho, atendendo os terminais 1 e 2 do aeroporto' AS linhas,
+        '🚌 *Linha 91:* Bananal ↔️ Del Castilho, passando pela Estação das Barcas de Cocotá.  |  🚌 *Linha 95:* Aeroporto do Galeão ↔️ Del Castilho, atendendo os terminais 1 e 2 do aeroporto' AS linhas,
         'as duas linhas passam pelo Terminal Fundão do BRT e pela estação de trem de Bonsucesso' AS itinerario,
         'das 4h às 23h' AS horario
       ),
@@ -30,7 +30,7 @@ WITH
   contatos_teste AS (
     SELECT * FROM UNNEST([
       STRUCT('5511984677798' AS telefone, '00000000350' AS cpf, 'patricia' AS nome, 1 AS prioridade),
-      -- STRUCT('5521980375732' AS telefone, '00000000349' AS cpf, 'rodolpho' AS nome, 2 AS prioridade),
+      STRUCT('5521980375732' AS telefone, '00000000349' AS cpf, 'rodolpho' AS nome, 2 AS prioridade),
       STRUCT('5521989190512' AS telefone, '00000000032' AS cpf, 'maria salesforce' AS nome, 2 AS prioridade)
     ])
   )

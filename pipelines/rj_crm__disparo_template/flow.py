@@ -392,26 +392,22 @@ def rj_crm__disparo_template_sf(
         #   - Filtramos por "telefone" para garantir que o número de retry não recebeu a campanha antes,
         #     permitindo que o mesmo CPF tente um telefone alternativo.
         # --------------------------------------------------------------------------------------
-        # TEMPORÁRIO (27/11/2026): PASSO 1 desativado para reenviar smtr_novas_linhas_onibus_v3 a quem
-        # teve falha no disparo de hoje (\n na variável linhas). Esse filtro bloqueava também as falhas.
-        # A exclusão de quem já recebeu/131026 está na própria query. REATIVAR depois do reenvio.
-        print("⚠️  PASSO 1 (filtro de mesma campanha / dispatch_interval_days) DESATIVADO temporariamente.")
-        # qnt_pessoas = current_df.shape[0]
-        # if not already_dispatched_df.empty:  # Vale para qq tentativa, mas no retry só avalia o tefone
-        #     print(f"🔍 Aplicando filtro de mesma campanha ({campaign_name})...")
-        #     df_same_campaign = already_dispatched_df[already_dispatched_df["nome_campanha"] == campaign_name]
-        #     print(f"[DEBUG] Mesma campanha data:\n{df_same_campaign.head(10).to_dict('records')}") if debug else None
-        #
-        #     # Determina a coluna para o filtro da mesma campanha
-        #     same_campaign_filter = "cpf" if i == 0 else "telefone"
-        #
-        #     current_df = filter_already_dispatched_phones_or_cpfs(
-        #         df=current_df,
-        #         already_dispatched_df=df_same_campaign,
-        #         current_filter=same_campaign_filter,
-        #     )
-        #     print(f"🔍 Foram removidas {qnt_pessoas - current_df.shape[0]} pessoas da lista de envio que já receberam essa campanha nos último(s) {dispatch_interval_days} dia(s).")
-        #     print(f"[DEBUG] Após remoção de mesma campanha:\n{current_df.head(10).to_dict('records')}") if debug else None
+        qnt_pessoas = current_df.shape[0]
+        if not already_dispatched_df.empty:  # Vale para qq tentativa, mas no retry só avalia o tefone
+            print(f"🔍 Aplicando filtro de mesma campanha ({campaign_name})...")
+            df_same_campaign = already_dispatched_df[already_dispatched_df["nome_campanha"] == campaign_name]
+            print(f"[DEBUG] Mesma campanha data:\n{df_same_campaign.head(10).to_dict('records')}") if debug else None
+
+            # Determina a coluna para o filtro da mesma campanha
+            same_campaign_filter = "cpf" if i == 0 else "telefone"
+
+            current_df = filter_already_dispatched_phones_or_cpfs(
+                df=current_df,
+                already_dispatched_df=df_same_campaign,
+                current_filter=same_campaign_filter,
+            )
+            print(f"🔍 Foram removidas {qnt_pessoas - current_df.shape[0]} pessoas da lista de envio que já receberam essa campanha nos último(s) {dispatch_interval_days} dia(s).")
+            print(f"[DEBUG] Após remoção de mesma campanha:\n{current_df.head(10).to_dict('records')}") if debug else None
 
         # --------------------------------------------------------------------------------------
         # PASSO 2: FILTRO DIÁRIO CRUZADO DE CANAL (Qualquer Campanha Hoje)
