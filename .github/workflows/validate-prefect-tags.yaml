@@ -1,0 +1,42 @@
+name: Validate prefect.yaml tags
+
+# STYLEGUIDE.md §13.5: every deployment a pull request adds or edits in pipelines/*/prefect.yaml
+# must carry the environment, severity and code_owner tags. Deployments the PR does not touch are not checked.
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - pipelines/*/prefect.yaml
+      - .github/scripts/validate_prefect_tags.py
+      - .github/scripts/tests/test_validate_prefect_tags.py
+      - .github/workflows/validate-prefect-tags.yaml
+
+concurrency:
+  group: validate-prefect-tags-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  validate-prefect-tags:
+    name: Validate prefect.yaml tags
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+
+      - name: Test the validator
+        run: uv run --no-project --python 3.13 --with pytest --with pyyaml pytest -q .github/scripts/tests
+
+      - name: Validate the tags of the deployments this PR adds or edits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: uv run .github/scripts/validate_prefect_tags.py --base "$BASE_SHA"
