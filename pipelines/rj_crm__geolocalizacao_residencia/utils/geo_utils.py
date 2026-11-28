@@ -37,6 +37,19 @@ MAX_BACKOFF_TIME = 60.0
 JITTER_RANGE = 0.1
 
 
+def _describe_request_error(error: Exception) -> str:
+    """Describe a request error without its message.
+
+    The message of a ``requests`` exception carries the request URL, with the API key and the
+    citizen's address in the query string, so only the exception type and the HTTP status are logged.
+    """
+    response = getattr(error, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if status_code is None:
+        return type(error).__name__
+    return f"{type(error).__name__} (HTTP {status_code})"
+
+
 def _prepare_addresses_for_nominatim(addresses: list[str]) -> list[str]:
     """Prepare addresses for Nominatim geocoding by ensuring Rio de Janeiro context."""
     return [f"{address}, Rio de Janeiro" if "Rio de Janeiro" not in address else address for address in addresses]
@@ -100,7 +113,7 @@ def geocode_nominatim(
             geolocated_addresses = _parse_nominatim_result(location, updated_date)
             consecutive_errors = 0
         except Exception as e:
-            log(f"Error georeferencing address {i} - {address}: {e}")
+            log(f"Nominatim: erro ao georreferenciar o endereço da linha {i}: {_describe_request_error(e)}")
             geolocated_addresses = _create_empty_geocoding_result(updated_date)
             consecutive_errors += 1
 
@@ -134,19 +147,21 @@ def _is_real_number(value) -> bool:
         return False
 
 
-def _build_geocode_xyz_url(base_url: str, address: str, api_key: str = None) -> str:
-    """Build URL for Geocode.xyz API request."""
-    url = f"{base_url}/{address}?json=1"
-    if api_key:
-        url += f"&auth={api_key}"
-    return url
+def _build_geocode_xyz_url(base_url: str, address: str) -> str:
+    """Build URL for Geocode.xyz API request. The API key goes in ``_build_geocode_xyz_params``."""
+    return f"{base_url}/{address}?json=1"
 
 
-def _handle_geocode_xyz_throttling(url: str, attempt: int = 0) -> dict:
+def _build_geocode_xyz_params(api_key: str | None = None) -> dict:
+    """Query parameters of a Geocode.xyz request: the API key, kept out of the URL string."""
+    return {"auth": api_key} if api_key else {}
+
+
+def _handle_geocode_xyz_throttling(url: str, attempt: int = 0, params: dict | None = None) -> dict:
     """Handle API throttling for Geocode.xyz."""
     log("Throttled! Waiting before retrying...")
     exponential_backoff_sleep(attempt, 2.0)
-    response = requests.get(url, timeout=DEFAULT_TIMEOUT)
+    response = requests.get(url, params=params, timeout=DEFAULT_TIMEOUT)
     return response.json()
 
 
@@ -220,6 +235,7 @@ def geocode_geocodexyz(
     """Geocode addresses using Geocode.xyz API."""
     base_url = "https://geocode.xyz"
     data_store = {field: [None] * len(dataframe) for field in GEOCODING_FIELDS}
+    params = _build_geocode_xyz_params(api_key)
     retry_count = 0
     start_index = 0
 
@@ -228,12 +244,12 @@ def geocode_geocodexyz(
 
         for i, address in enumerate(dataframe[address_column].iloc[start_index:], start=start_index):
             try:
-                url = _build_geocode_xyz_url(base_url, address, api_key)
-                response = requests.get(url, timeout=DEFAULT_TIMEOUT)
+                url = _build_geocode_xyz_url(base_url, address)
+                response = requests.get(url, params=params, timeout=DEFAULT_TIMEOUT)
 
                 if response.status_code == 402:  # Quota excedida
                     log("Lim. de reqs. atingido no Geocode.xyz. Saltando para próximo provider.")
-                    raise requests.exceptions.HTTPError("402 Payment Required - quota exceeded")
+                    raise requests.exceptions.HTTPError("402 Payment Required - quota exceeded", response=response)
 
                 if response.status_code not in (429, 200):
                     continue
@@ -241,7 +257,7 @@ def geocode_geocodexyz(
                 data = response.json()
 
                 if response.status_code == 429 or data.get("latt", "").startswith("Throttled"):
-                    data = _handle_geocode_xyz_throttling(url, retry_count)
+                    data = _handle_geocode_xyz_throttling(url, retry_count, params)
 
                 if response.status_code == 200 and data.get("error"):
                     should_retry, retry_count, start_index = _check_credit_exhaustion(
@@ -262,8 +278,11 @@ def geocode_geocodexyz(
                     sleep(sleep_time)
 
             except Exception as e:
-                log(f"Error geocoding {address} with Geocode.xyz: {e}")
+                log(f"Geocode.xyz: erro ao processar o endereço da linha {i}: {_describe_request_error(e)}")
                 continue
+        else:
+            # Every row was processed: without this, start_index stays put and the rows are geocoded again forever.
+            break
 
         if should_break or start_index >= len(dataframe):
             break
@@ -440,10 +459,10 @@ def geocode_maptiler(
             response = requests.get(url, params=params, timeout=DEFAULT_TIMEOUT)
 
             if response.status_code == 402:  # Quota excedida
-                raise requests.exceptions.HTTPError("402 Payment Required - quota exceeded")
+                raise requests.exceptions.HTTPError("402 Payment Required - quota exceeded", response=response)
 
             if response.status_code == 429:  # Rate limit
-                raise requests.exceptions.HTTPError("429 Too Many Requests - rate limited")
+                raise requests.exceptions.HTTPError("429 Too Many Requests - rate limited", response=response)
 
             data = response.json()
 
@@ -503,7 +522,7 @@ def geocode_maptiler(
                     data_store[field].append(None)
 
         except Exception as e:
-            log(f"Error geocoding address '{address}' with MapTiler: {e}")
+            log(f"MapTiler: erro ao processar o endereço da linha {i}: {_describe_request_error(e)}")
             for field in GEOCODING_FIELDS:
                 data_store[field].append(None)
 
