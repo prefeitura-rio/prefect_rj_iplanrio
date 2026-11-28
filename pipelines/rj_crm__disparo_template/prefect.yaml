@@ -478,8 +478,8 @@ deployments:
           filter_duplicated_cpfs: true
           filter_duplicated_phones: true
           dispatch_interval_days: 30
-          batch_size: 50000
-          batch_sleep_minutes: 3
+          batch_size: 8500
+          batch_sleep_minutes: 5
           query_file: queries/smtr/smtr_rio_rotativo_novas_vagas.sql
 
       # SMTR - Sistema Rio - Novas linhas de ônibus (one-shot)
@@ -613,6 +613,7 @@ deployments:
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_cpfs: false
           filter_duplicated_phones: false
+          filter_failed_phones: true
           batch_size: 5000
           batch_sleep_minutes: 15
           dispatch_interval_days: 7

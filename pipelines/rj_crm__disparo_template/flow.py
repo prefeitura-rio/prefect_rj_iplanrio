@@ -98,7 +98,7 @@ def rj_crm__disparo_template_sf(
     filter_dispatched_phones_or_cpfs: str | None = "cpf",
     filter_duplicated_phones: bool = False,
     filter_duplicated_cpfs: bool = True,
-    filter_failed_phones: bool = False,
+    filter_failed_phones: bool = True,
     enrich_with_api_name: str | None = None,
     enrich_with_api_params: dict | None = None,
     dispatch_interval_days: int = 0,
