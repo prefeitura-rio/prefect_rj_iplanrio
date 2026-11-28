@@ -2,15 +2,17 @@
 
 > **Atenção:** Este template é um guia para o PR — **não o copie como mensagem de commit**. Cada commit deve ter sua própria mensagem descritiva.
 
+> **PRs de automação** (como os da esteira da IPLAN): o título segue `<tipo>(<escopo>): <resumo> [KEY]` (Conventional Commits mais a chave da issue), o PR é aberto pronto para revisão, sem Draft, e o `[WIP]` não se aplica. Os itens de título, Draft e Assignee do checklist valem para os PRs abertos por pessoas.
+
 ---
 
 ## Checklist obrigatório
 
-- [ ] O título do PR segue o padrão `[WIP][Tipo] descrição curta`
-- [ ] O PR foi aberto como **Draft**
-- [ ] O PR possui ao menos um **Assignee** definido
+- [ ] O título do PR segue o padrão `[WIP][Tipo] descrição curta` (PR de automação: `<tipo>(<escopo>): <resumo> [KEY]`)
+- [ ] O PR foi aberto como **Draft** (exceto PR de automação)
+- [ ] O PR possui ao menos um **Assignee** definido (exceto PR de automação)
 - [ ] Cada commit tem sua própria mensagem descritiva seguindo Conventional Commits
-- [ ] O código foi testado localmente antes de solicitar revisão
+- [ ] O código foi testado localmente antes de solicitar revisão (comandos no `AGENTS.md`)
 
 ---
 
