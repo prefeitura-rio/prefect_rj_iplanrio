@@ -7,10 +7,10 @@ Carregamento de DataFrames no BigQuery: staging (tabela fixa, uma por tabela
 final — ex.: 'ai_agent_session_staging', schema em utils/schemas.py) + MERGE
 por chave primária, sempre. A staging é limpa (TRUNCATE) só depois de um
 MERGE bem-sucedido; o MERGE deduplica a staging antes de casar (ver
-sql/bigquery/merge_staging.sql), então sobra de MERGE falho ou id repetido na
+queries/merge_staging.sql), então sobra de MERGE falho ou id repetido na
 fonte não trava mais os ticks seguintes.
 
-SQL em sql/bigquery/ (lido via utils/queries.py).
+SQL em queries/ (renderizado com load_query, STYLEGUIDE §7).
 
 Sem validação de contagem pós-carga (removida 2026-09-29): o MERGE é atômico
 — terminou sem erro, as linhas estão lá, e as contagens exatas vêm do próprio
@@ -25,9 +25,9 @@ import pandas as pd
 from google.cloud import bigquery
 from prefect import task
 
-from pipelines.rj_crm__salesforce_datacloud.utils.queries import ler_query
+from pipelines.rj_crm__salesforce_datacloud.constants import QUERIES_ANCHOR
 from pipelines.rj_crm__salesforce_datacloud.utils.schemas import PARTITIONED_TABLES, SCHEMAS
-
+from prefect_rj_iplanrio.sql import load_query
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -179,7 +179,9 @@ def merge_staging_to_target(
     insert_cols = ", ".join([primary_key] + cols)
     insert_vals = ", ".join([f"s.{primary_key}"] + [f"s.{c}" for c in cols])
 
-    merge_sql = ler_query("bigquery/merge_staging.sql").format(
+    merge_sql = load_query(
+        QUERIES_ANCHOR,
+        "merge_staging",
         target=target_full,
         staging=staging_full,
         primary_key=primary_key,
@@ -198,6 +200,6 @@ def merge_staging_to_target(
     }
 
     # Limpar staging após merge bem-sucedido
-    client.query(ler_query("bigquery/truncate_staging.sql").format(staging=staging_full)).result()
+    client.query(load_query(QUERIES_ANCHOR, "truncate_staging", staging=staging_full)).result()
 
     return resultado

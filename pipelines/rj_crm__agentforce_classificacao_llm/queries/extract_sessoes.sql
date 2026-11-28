@@ -11,10 +11,10 @@
 -- "Já classificada" é checado duas vezes: llm.classificacao_datahora na fonte (barato, mas
 -- até 15min atrasado) e anti-join contra a tabela destino no final (garantia).
 --
--- ATENÇÃO: este arquivo passa por str.format() em Python — nunca escrever chaves soltas
--- (nem em comentário), senão quebra com KeyError.
+-- ATENÇÃO: este arquivo passa por load_query (string.Template, STYLEGUIDE §7) — cifrão
+-- solto (nem em comentário) vira placeholder; um cifrão literal se escreve duplicado.
 
-DECLARE data_inicio DATETIME DEFAULT DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {lookback_days} DAY);
+DECLARE data_inicio DATETIME DEFAULT DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL ${lookback_days} DAY);
 -- o Agentforce encerra a sessão 2 h depois da última mensagem
 DECLARE encerrada_ate DATETIME DEFAULT DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 2 HOUR);
 
@@ -59,7 +59,7 @@ sessoes AS (
             '\n'
             ORDER BY mensagem_datahora, mensagem_sequencia
         ) AS conversa_completa
-    FROM `{source_table}`
+    FROM `${source_table}`
     WHERE
         id_sessao_receptivo IS NOT NULL
         AND fonte IN ('AI_AGENT_CIDADAO', 'AI_AGENT_AGENTE')
@@ -83,7 +83,7 @@ SELECT
     s.qtd_mensagens_usuario = 1 AND s.qtd_cliques_botao = 1 AS resposta_atrasada_btn
 FROM sessoes s
 LEFT JOIN
-    `{destino_full_table_id}` d
+    `${destino_full_table_id}` d
     ON
         d.id_sessao = s.id_sessao
         AND d.data_particao >= DATE(data_inicio)

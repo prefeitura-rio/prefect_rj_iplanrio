@@ -16,7 +16,7 @@ from typing import Literal
 
 import yaml
 
-_DIR = Path(__file__).parent.parent  # raiz do pipeline (tabelas.yaml, sql/)
+_DIR = Path(__file__).parent.parent  # raiz do pipeline (tabelas.yaml, queries/)
 _SOURCES = ("data_cloud", "crm_rest")
 
 
@@ -65,8 +65,8 @@ def _carrega(caminho: Path) -> list[Tabela]:
             raise ValueError(f"{onde}: {exc}") from exc
         if tabela.source not in _SOURCES:
             raise ValueError(f"{onde}: source '{tabela.source}' inválido. Use {list(_SOURCES)}.")
-        if not (_DIR / "sql" / tabela.query).is_file():
-            raise ValueError(f"{onde}: query sql/{tabela.query} não existe.")
+        if not (_DIR / "queries" / f"{tabela.query}.sql").is_file():
+            raise ValueError(f"{onde}: query queries/{tabela.query}.sql não existe.")
         tabelas.append(tabela)
 
     repetidos = {t.nome for t in tabelas if [x.nome for x in tabelas].count(t.nome) > 1}

@@ -17,7 +17,9 @@ from google.api_core.exceptions import Forbidden, NotFound
 from google.cloud import bigquery
 from prefect import task
 
+from pipelines.rj_crm__agentforce_classificacao_llm.constants import QUERIES_ANCHOR
 from pipelines.rj_crm__agentforce_classificacao_llm.utils.bigquery import get_bq_client
+from prefect_rj_iplanrio.sql import load_query
 
 _TIMESTAMP = bigquery.enums.SqlTypeNames.TIMESTAMP
 _STRING = bigquery.enums.SqlTypeNames.STRING
@@ -269,6 +271,21 @@ def ensure_destino_table(project_id: str, dataset_id: str, table_id: str, tmp_ta
     print(f"[LOAD] Tabelas OK: '{table_id}' (destino) e '{tmp_table_id}' (tmp).")
 
 
+def monta_merge_classificacoes(destino_full: str, tmp_full: str) -> str:
+    """SQL do MERGE (upsert por id_sessao) de carrega_classificacoes, com as listas de
+    colunas montadas a partir do SCHEMA (queries/merge_classificacoes.sql)."""
+    return load_query(
+        QUERIES_ANCHOR,
+        "merge_classificacoes",
+        destino_full=destino_full,
+        tmp_full=tmp_full,
+        primary_key=_PRIMARY_KEY,
+        set_clause=", ".join(f"t.{c} = s.{c}" for c in _COLUNAS if c != _PRIMARY_KEY),
+        insert_cols=", ".join(_COLUNAS),
+        insert_vals=", ".join(f"s.{c}" for c in _COLUNAS),
+    )
+
+
 @task(log_prints=True, retries=3, retry_delay_seconds=[30, 60, 120])
 def carrega_classificacoes(
     df_final: pd.DataFrame,
@@ -303,25 +320,12 @@ def carrega_classificacoes(
     if job.errors:
         raise RuntimeError(f"[LOAD] Erro ao carregar tmp: {job.errors}")
 
-    set_clause = ", ".join(f"t.{c} = s.{c}" for c in _COLUNAS if c != _PRIMARY_KEY)
-    insert_cols = ", ".join(_COLUNAS)
-    insert_vals = ", ".join(f"s.{c}" for c in _COLUNAS)
-
-    merge_sql = f"""
-        MERGE `{destino_full}` AS t
-        USING `{tmp_full}` AS s
-        ON t.{_PRIMARY_KEY} = s.{_PRIMARY_KEY}
-        WHEN MATCHED THEN
-            UPDATE SET {set_clause}
-        WHEN NOT MATCHED THEN
-            INSERT ({insert_cols})
-            VALUES ({insert_vals})
-    """
+    merge_sql = monta_merge_classificacoes(destino_full=destino_full, tmp_full=tmp_full)
     merge_job = client.query(merge_sql)
     merge_job.result()
     linhas_afetadas = merge_job.num_dml_affected_rows or 0
 
-    client.query(f"TRUNCATE TABLE `{tmp_full}`").result()
+    client.query(load_query(QUERIES_ANCHOR, "trunca_tmp", tmp_full=tmp_full)).result()
 
     print(f"[LOAD] MERGE concluído: {linhas_afetadas} linha(s) afetada(s) em '{table_id}'. Tmp limpa.")
     return linhas_afetadas

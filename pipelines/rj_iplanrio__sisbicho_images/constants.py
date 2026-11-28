@@ -2,6 +2,9 @@
 
 from enum import Enum
 
+# Âncora do load_query: os .sql ficam em queries/, ao lado deste arquivo (STYLEGUIDE §7.3).
+QUERIES_ANCHOR = __file__
+
 
 class SisbichoImagesConstants(Enum):
     """Valores padrão utilizados pelo fluxo rj_iplanrio__sisbicho_images."""

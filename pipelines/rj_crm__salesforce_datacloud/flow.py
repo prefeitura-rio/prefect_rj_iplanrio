@@ -34,7 +34,7 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
-from pipelines.rj_crm__salesforce_datacloud.constants import DataCloudConstants
+from pipelines.rj_crm__salesforce_datacloud.constants import QUERIES_ANCHOR, DataCloudConstants
 from pipelines.rj_crm__salesforce_datacloud.tasks.auth import get_data_cloud_session
 from pipelines.rj_crm__salesforce_datacloud.tasks.bigquery import (
     ensure_bq_tables,
@@ -51,9 +51,9 @@ from pipelines.rj_crm__salesforce_datacloud.tasks.notify import (
     notify_resumo,
 )
 from pipelines.rj_crm__salesforce_datacloud.utils.janela import fmt_janela, janela_utc, janelas_do_run
-from pipelines.rj_crm__salesforce_datacloud.utils.queries import ler_query
 from pipelines.rj_crm__salesforce_datacloud.utils.tabelas import TABELAS, NomeTabela, Tabela
 from pipelines.rj_crm__salesforce_datacloud.utils.transform import transform_dataframe
+from prefect_rj_iplanrio.sql import load_query
 
 
 def processar_tabela(
@@ -88,7 +88,7 @@ def processar_tabela(
         (inicio_q, fim_q), extras = janela_utc(data_inicio, data_fim)
     else:
         (inicio_q, fim_q), extras = (data_inicio, data_fim), {}
-    query = ler_query(tabela.query).format(data_inicio=inicio_q, data_fim=fim_q, **extras)
+    query = load_query(QUERIES_ANCHOR, tabela.query, data_inicio=inicio_q, data_fim=fim_q, **extras)
 
     # --- Extrair (única etapa que muda por source) ---
     if tabela.source == "data_cloud":

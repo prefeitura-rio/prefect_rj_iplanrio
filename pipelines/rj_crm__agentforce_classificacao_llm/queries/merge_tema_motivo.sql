@@ -1,7 +1,7 @@
 -- MERGE parcial do recálculo (tasks/taxonomia.py::atualiza_tema_motivo): só as colunas de
 -- tema/motivo e do juiz, por id_sessao — nenhuma outra coluna da destino é tocada.
-MERGE `{destino_full}` AS t
-USING `{tmp_full}` AS s
+MERGE `${destino_full}` AS t
+USING `${tmp_full}` AS s
 ON t.id_sessao = s.id_sessao
 WHEN MATCHED THEN
     UPDATE SET

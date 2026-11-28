@@ -38,7 +38,9 @@ from pathlib import Path
 
 from prefect import task
 
+from pipelines.rj_crm__agentforce_classificacao_llm.constants import QUERIES_ANCHOR
 from pipelines.rj_crm__agentforce_classificacao_llm.utils.bigquery import get_bq_client
+from prefect_rj_iplanrio.sql import load_query
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 _TEMPLATE_MACROTEMA_BASE = (_PROMPTS_DIR / "classificacao_macrotema.txt").read_text()
@@ -142,18 +144,10 @@ def carrega_taxonomia_roteamento(
     versões diferentes falha o flow: sem taxonomia não há como rotear."""
     client = get_bq_client(project_id)
     df_mt = client.query(
-        f"""
-        SELECT nome, descricao, secretarias, prompt_versao_macrotema
-        FROM `{project_id}.{dataset_id}.{macrotemas_table_id}`
-        ORDER BY ordem
-        """
+        load_query(QUERIES_ANCHOR, "carrega_macrotemas", full_id=f"{project_id}.{dataset_id}.{macrotemas_table_id}")
     ).to_dataframe()
     df_sec = client.query(
-        f"""
-        SELECT sigla, nome, descricao, prompt_versao_secretaria
-        FROM `{project_id}.{dataset_id}.{secretarias_table_id}`
-        ORDER BY ordem
-        """
+        load_query(QUERIES_ANCHOR, "carrega_secretarias", full_id=f"{project_id}.{dataset_id}.{secretarias_table_id}")
     ).to_dataframe()
     if df_mt.empty or df_sec.empty:
         raise ValueError(

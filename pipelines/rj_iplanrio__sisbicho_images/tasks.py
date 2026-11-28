@@ -17,11 +17,13 @@ from google.cloud.exceptions import NotFound
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
+from pipelines.rj_iplanrio__sisbicho_images.constants import QUERIES_ANCHOR
 from pipelines.rj_iplanrio__sisbicho_images.utils.tasks import (
     MAGIC_NUMBERS,
     PdfDetectedError,
     detect_and_decode,
 )
+from prefect_rj_iplanrio.sql import load_query
 
 
 def _ensure_staging_dataset(dataset_id: str) -> str:
@@ -34,7 +36,7 @@ def _ensure_staging_dataset(dataset_id: str) -> str:
 def _try_query_row_count(client: bigquery.Client, table: str) -> int | None:
     """Executa SELECT COUNT(*) para obter contagem real de linhas."""
 
-    query = f"SELECT COUNT(*) AS total FROM `{table}`"
+    query = load_query(QUERIES_ANCHOR, "conta_linhas", table=table)
     job_config = bigquery.QueryJobConfig(
         use_query_cache=True,
         use_legacy_sql=False,
@@ -282,14 +284,13 @@ def _get_total_count(
 
     if table_exists:
         # Query incremental com LEFT JOIN
-        count_query = f"""
-            SELECT COUNT(*) as total
-            FROM `{source_table}` AS src
-            LEFT JOIN `{target_table}` AS tgt
-                ON CAST(src.{identifier_field} AS STRING) = tgt.id_animal
-            WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
-              AND tgt.id_animal IS NULL
-        """
+        count_query = load_query(
+            QUERIES_ANCHOR,
+            "conta_pendentes_incremental",
+            identifier_field=identifier_field,
+            source_table=source_table,
+            target_table=target_table,
+        )
 
         try:
             result = client.query(count_query).result()
@@ -308,11 +309,11 @@ def _get_total_count(
                 raise
 
     # Query completa (primeira carga ou tabela vazia)
-    count_query = f"""
-        SELECT COUNT(*) as total
-        FROM `{source_table}` AS src
-        WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
-    """
+    count_query = load_query(
+        QUERIES_ANCHOR,
+        "conta_pendentes_carga_completa",
+        source_table=source_table,
+    )
 
     result = client.query(count_query).result()
     total = next(result).total
@@ -395,34 +396,16 @@ def fetch_batch(
 
     if table_exists:
         # Query incremental com LEFT JOIN
-        query = f"""
-            WITH animal_unico AS (
-                SELECT
-                    {identifier_field},
-                    qrcode_dados,
-                    foto_dados,
-                    ROW_NUMBER() OVER (PARTITION BY {identifier_field} ORDER BY datalake_loaded_at DESC) as rn
-                FROM `{source_table}`
-                WHERE qrcode_dados IS NOT NULL OR foto_dados IS NOT NULL
-            )
-            SELECT
-                CAST(a.{identifier_field} AS STRING) AS animal_identifier,
-                prop.cpf_numero AS cpf,
-                a.qrcode_dados,
-                a.foto_dados
-            FROM animal_unico a
-            LEFT JOIN `{target_table}` AS tgt
-                ON CAST(a.{identifier_field} AS STRING) = tgt.id_animal
-            LEFT JOIN `{project_dataset}.animal_proprietario` AS ap
-                ON a.{identifier_field} = ap.id_animal
-                AND ap.fim_datahora IS NULL
-            LEFT JOIN `{project_dataset}.proprietario` AS prop
-                ON ap.id_proprietario = prop.id_proprietario
-            WHERE a.rn = 1
-              AND tgt.id_animal IS NULL
-            LIMIT {batch_size}
-            OFFSET {offset}
-        """.strip()
+        query = load_query(
+            QUERIES_ANCHOR,
+            "busca_lote_incremental",
+            batch_size=batch_size,
+            identifier_field=identifier_field,
+            offset=offset,
+            project_dataset=project_dataset,
+            source_table=source_table,
+            target_table=target_table,
+        )
 
         job_config = bigquery.QueryJobConfig(
             use_query_cache=True,
@@ -444,31 +427,15 @@ def fetch_batch(
                 raise
 
     # Query completa (primeira carga ou tabela vazia)
-    query = f"""
-        WITH animal_unico AS (
-            SELECT
-                {identifier_field},
-                qrcode_dados,
-                foto_dados,
-                ROW_NUMBER() OVER (PARTITION BY {identifier_field} ORDER BY datalake_loaded_at DESC) as rn
-            FROM `{source_table}`
-            WHERE qrcode_dados IS NOT NULL OR foto_dados IS NOT NULL
-        )
-        SELECT
-            CAST(a.{identifier_field} AS STRING) AS animal_identifier,
-            prop.cpf_numero AS cpf,
-            a.qrcode_dados,
-            a.foto_dados
-        FROM animal_unico a
-        LEFT JOIN `{project_dataset}.animal_proprietario` AS ap
-            ON a.{identifier_field} = ap.id_animal
-            AND ap.fim_datahora IS NULL
-        LEFT JOIN `{project_dataset}.proprietario` AS prop
-            ON ap.id_proprietario = prop.id_proprietario
-        WHERE a.rn = 1
-        LIMIT {batch_size}
-        OFFSET {offset}
-    """.strip()
+    query = load_query(
+        QUERIES_ANCHOR,
+        "busca_lote_carga_completa",
+        batch_size=batch_size,
+        identifier_field=identifier_field,
+        offset=offset,
+        project_dataset=project_dataset,
+        source_table=source_table,
+    )
 
     job_config = bigquery.QueryJobConfig(
         use_query_cache=True,

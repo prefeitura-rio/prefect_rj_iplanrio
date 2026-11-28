@@ -10,6 +10,9 @@ validacao_taxonomia) continuam só no repo de análise por enquanto.
 
 from enum import Enum
 
+# Âncora do load_query: os .sql ficam em queries/, ao lado deste arquivo (STYLEGUIDE §7.3).
+QUERIES_ANCHOR = __file__
+
 
 class ClassificacaoConstants(Enum):
     # Projeto GCP onde tudo (fonte e destino) vive
