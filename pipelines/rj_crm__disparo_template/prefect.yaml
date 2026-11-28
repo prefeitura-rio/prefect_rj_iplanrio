@@ -465,7 +465,7 @@ deployments:
           query_file: queries/sme/sme_pesquisa_satisfacao_creche_parceira.sql
 
       # SMTR - Rio Rotativo - Novas vagas (one-shot)
-      - cron: "0 12 * * *"
+      - cron: "0 9 * * *"
         timezone: America/Sao_Paulo
         active: false
         slug: oneshot-smtr-rio-rotativo-novas-vagas
