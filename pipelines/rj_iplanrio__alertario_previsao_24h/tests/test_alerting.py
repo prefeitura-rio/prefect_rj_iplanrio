@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
 from datetime import date, datetime, timezone
+from pathlib import Path
 
 import pandas as pd
+from prefect.logging import disable_run_logger
 
 from pipelines.rj_iplanrio__alertario_previsao_24h.alerting import (
     PrecipitationAlert,
     build_alert_log_rows,
     extract_precipitation_alerts,
     format_precipitation_alert_message,
-    insert_alert_log_rows,
 )
+from pipelines.rj_iplanrio__alertario_previsao_24h.utils.tasks import create_date_partitions
 
 
 def test_extract_precipitation_alerts_only_keeps_intense_values():
@@ -93,24 +95,19 @@ def test_format_precipitation_alert_message_without_synoptic_keeps_layout():
     assert formatted.startswith("⚠️ Previsão de chuva – próximos dias (AlertaRio)\n\n27/11/2025")
 
 
-class _DummyBigQueryClient:
-    def __init__(self):
-        self.project = "test-project"
-        self.insert_calls: list[tuple[str, list[dict]]] = []
-
-    def insert_rows_json(self, table_ref, rows):
-        self.insert_calls.append((table_ref, rows))
-        return []
-
-
-def test_insert_alert_log_rows_serializes_date_fields():
-    dummy_client = _DummyBigQueryClient()
+def test_alert_log_rows_are_partitioned_and_serialized_like_the_flow_uploads_them(tmp_path: Path) -> None:
+    """Grava as linhas do log de alertas como o flow e confere a partição de ``alert_date`` e as datas ISO."""
     alerts = [
         PrecipitationAlert(
             forecast_date=date(2025, 12, 3),
             periodo="Manhã",
             precipitacao="Pancadas de chuva isoladas",
-        )
+        ),
+        PrecipitationAlert(
+            forecast_date=date(2025, 12, 4),
+            periodo="Tarde",
+            precipitacao="Chuva moderada a forte",
+        ),
     ]
     rows = build_alert_log_rows(
         alert_date=date(2025, 12, 3),
@@ -120,20 +117,27 @@ def test_insert_alert_log_rows_serializes_date_fields():
         sent_at=datetime(2025, 12, 3, 12, 0, tzinfo=timezone.utc),
         discord_message_id="disc-1",
         webhook_channel="channel",
-        message_excerpt="Mensagem completa",
+        message_excerpt="M" * 600,
         severity_level="info",
     )
 
-    insert_alert_log_rows(
-        client=dummy_client,
-        dataset_id="dataset",
-        table_id="table",
-        rows=rows,
-    )
+    # Same call the flow makes for the alertario_precipitacao_alerts_log table.
+    with disable_run_logger():
+        root_folder = create_date_partitions.fn(
+            dataframe=pd.DataFrame(rows),
+            partition_column="alert_date",
+            file_format="csv",
+            root_folder=str(tmp_path) + "/",
+        )
 
-    assert len(dummy_client.insert_calls) == 1
-    table_ref, inserted_rows = dummy_client.insert_calls[0]
-    assert table_ref == "test-project.dataset.table"
-    assert inserted_rows[0]["alert_date"] == "2025-12-03"
-    assert inserted_rows[0]["forecast_date"] == "2025-12-03"
-    assert inserted_rows[0]["sent_at"].startswith("2025-12-03T12:00:00")
+    files = list(Path(root_folder).rglob("*.csv"))
+    assert len(files) == 1
+    assert files[0].parent.relative_to(tmp_path) == Path("ano_particao=2025/mes_particao=12/data_particao=2025-12-03")
+
+    written = pd.read_csv(files[0], dtype=str)
+    assert "alert_date" not in written.columns
+    assert written["forecast_date"].tolist() == ["2025-12-03", "2025-12-04"]
+    assert written["sent_at"].tolist() == ["2025-12-03 12:00:00+00:00"] * 2
+    assert written["id_execucao"].tolist() == ["abc", "abc"]
+    assert written["discord_message_id"].tolist() == ["disc-1", "disc-1"]
+    assert written["message_excerpt"].str.len().tolist() == [500, 500]
