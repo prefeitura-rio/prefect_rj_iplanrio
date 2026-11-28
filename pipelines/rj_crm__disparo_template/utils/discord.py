@@ -7,7 +7,6 @@ Módulo de notificações Discord para pipeline de disparo PIC lembrete.
 """
 
 import asyncio
-import json
 import os
 from datetime import datetime
 
@@ -113,7 +112,7 @@ def send_dispatch_success_notification(
         campaign_name: Nome da campanha
         cost_center_id: ID do centro de custo
         total_batches: Número total de lotes enviados
-        sample_destination: Exemplo de destinatário (opcional)
+        sample_destination: Exemplo de destinatário (opcional); só os nomes dos campos vão na mensagem
         test_mode: Indica se é um disparo de teste (opcional)
         attempt_number: Número da tentativa de repescagem
         max_dispatch_retries: Número máximo de tentativas de repescagem
@@ -134,13 +133,10 @@ def send_dispatch_success_notification(
 # 📄 **Porcentagem de pessoas na Whitelist:** {whitelist_percentage}%
 # 📖 **Quantidade de pessoas na Whitelist:** {int(whitelist_percentage*total_dispatches/100)}
 
-    # Add sample destination if provided
+    # Só os nomes dos campos do destinatário: os valores são dados pessoais do cidadão
     if sample_destination:
         message += f"""
-📱 **Exemplo de Disparo:**
-```json
-{_format_sample_destination(sample_destination)}
-```
+📱 **Campos do destinatário:** {_format_sample_destination(sample_destination)}
 """
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
     send_discord_notification(webhook_url, message)
@@ -326,36 +322,15 @@ def send_retry_dispatch_result_notification(
 
 def _format_sample_destination(destination: dict) -> str:
     """
-    Formata um destinatário de exemplo para exibição.
+    Lista os nomes dos campos de um destinatário, sem os valores.
+
+    Os valores (CPF, telefone, nome, endereço, dados da campanha) são dados
+    pessoais do cidadão e não vão para o Discord.
 
     Args:
         destination: Dicionário com dados do destinatário
 
     Returns:
-        String formatada em JSON
+        Nomes dos campos, separados por vírgula
     """
-
-    # Mascarar CPF exibindo apenas os 3 primeiros dígitos
-    raw_cpf = destination.get("cpf", "") or ""
-    masked_cpf = raw_cpf[:3] + "*" * max(0, len(str(raw_cpf)) - 3)
-
-    # Campos excluídos do sample (exibidos com tratamento especial ou omitidos)
-    excluded_fields = {"telefone", "cpf"}
-
-    # Todos os demais campos do destination, sem telefone e cpf
-    extra_fields = {
-        k: v for k, v in destination.items()
-        if k not in excluded_fields
-    }
-
-    # Create a clean sample: telefone, cpf mascarado e demais campos na raiz
-    sample = {
-        "telefone": destination.get("telefone", ""),
-        "cpf": masked_cpf,
-        **extra_fields,
-    }
-
-    sample = {k: str(v) for k, v in sample.items()}
-
-    return json.dumps(sample, indent=2, ensure_ascii=False)
-
+    return ", ".join(f"`{field}`" for field in destination)
