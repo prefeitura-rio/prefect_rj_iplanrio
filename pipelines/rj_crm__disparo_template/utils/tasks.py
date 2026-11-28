@@ -20,7 +20,7 @@ from google.cloud import bigquery  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.env import getenv_or_action  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.utils.api_handler import ApiHandler  # pylint: disable=E0611, E0401
+from prefect_rj_iplanrio.wetalkie import ApiHandler  # pylint: disable=E0611, E0401
 
 
 @task

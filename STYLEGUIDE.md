@@ -722,6 +722,7 @@ Promoção especulativa ("isso pode ser útil em outro lugar") não é motivo. C
 | ----------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `prefect_rj_iplanrio.logging` | `get_logger(name)`                        | Retorna um logger pré-configurado com integração OpenTelemetry. Passe `__name__` como argumento.      |
 | `prefect_rj_iplanrio.sql`     | `load_query(caller_file, name, **params)` | Carrega e renderiza um arquivo `.sql` do diretório `queries/` relativo ao chamador. Passe `__file__`. |
+| `prefect_rj_iplanrio.wetalkie` | `ApiHandler(base_url, username, password, login_route, token_type, *, timeout)` | Cliente da API WeTalkie: login, renovação do token em 401 e `timeout` em toda requisição (padrão `DEFAULT_TIMEOUT`, sobrescrevível por chamada; `None` é recusado). |
 
 ## 12. Higiene do repositório
 
