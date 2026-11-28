@@ -12,7 +12,8 @@ import os
 
 from pipelines.rj_pic__disparos_email.engine import TemplateEngine
 from pipelines.rj_pic__disparos_email.engine import EmailSender
-from pipelines.rj_pic__disparos_email.env import FILTER_EMAILS
+
+FILTER_EMAILS = os.getenv("PIC_DISPAROS_EMAIL_FILTER_EMAILS", "")
 
 
 @task(log_prints=True)
@@ -37,7 +38,8 @@ def read_bigquery_task(
     if not project_id or not dataset_id or not table_id:
         raise ValueError(
             "É necessário fornecer project_id, dataset_id e table_id, "
-            "ou definir BIGQUERY_PROJECT_ID, BIGQUERY_DATASET_ID e BIGQUERY_TABLE_ID no .env, "
+            "ou definir PIC_DISPAROS_EMAIL_BIGQUERY_PROJECT_ID, PIC_DISPAROS_EMAIL_BIGQUERY_DATASET_ID "
+            "e PIC_DISPAROS_EMAIL_BIGQUERY_TABLE_ID no ambiente do container, "
             "ou fornecer uma query SQL customizada."
         )
     # Constrói query padrão para ler toda a tabela

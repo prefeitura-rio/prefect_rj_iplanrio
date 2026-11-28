@@ -9,6 +9,7 @@ Deve ser usado como context manager:
 """
 
 import asyncio
+import os
 from typing import Optional
 
 import httpx
@@ -21,7 +22,6 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
-from pipelines.rj_segur__forca_municipal import env
 from pipelines.rj_segur__forca_municipal.constants import (
     API_CONNECT_TIMEOUT,
     API_TIMEOUT,
@@ -71,14 +71,16 @@ class FMApi:
     )
 
     def __init__(self) -> None:
-        self._base_url: str = (env.API_FORCA_MUNICIPAL__API_URL or "").rstrip("/")
+        api_url: str = os.getenv("API_FORCA_MUNICIPAL__API_URL") or ""
+        self._base_url: str = api_url.rstrip("/")
+        use_proxy_url: bool = str(
+            os.getenv("API_FORCA_MUNICIPAL__USE_PROXY_URL") or ""
+        ).strip().lower() in ("true", "1", "yes")
         self._proxy_url: Optional[str] = (
-            env.API_FORCA_MUNICIPAL__PROXY_URL
-            if env.API_FORCA_MUNICIPAL__USE_PROXY_URL
-            else None
+            os.getenv("API_FORCA_MUNICIPAL__PROXY_URL") if use_proxy_url else None
         )
-        self._username: Optional[str] = env.API_FORCA_MUNICIPAL__API_LOGIN
-        self._password: Optional[str] = env.API_FORCA_MUNICIPAL__API_PASSWORD
+        self._username: Optional[str] = os.getenv("API_FORCA_MUNICIPAL__API_LOGIN")
+        self._password: Optional[str] = os.getenv("API_FORCA_MUNICIPAL__API_PASSWORD")
         self._token: Optional[str] = None
         self._lock: asyncio.Lock = asyncio.Lock()
         self._client: Optional[httpx.AsyncClient] = None
