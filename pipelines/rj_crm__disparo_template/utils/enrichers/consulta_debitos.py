@@ -145,11 +145,11 @@ def consultar_debitos(cpf: str, api_url: str, timeout: int = 90, max_retries: in
             response.raise_for_status()
             return response.json()
         except requests.RequestException as error:
-            log(f"consulta_debitos falhou para cpf={cpf} (tentativa {attempt + 1}/{max_retries}): {error}")
+            log(f"consulta_debitos falhou (tentativa {attempt + 1}/{max_retries}): {type(error).__name__}")
             if attempt < max_retries - 1:
                 time.sleep(2**attempt)
 
-    log(f"consulta_debitos esgotou as retentativas para cpf={cpf}")
+    log("consulta_debitos esgotou as retentativas para um CPF")
     return None
 
 

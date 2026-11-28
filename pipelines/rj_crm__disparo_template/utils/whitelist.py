@@ -8,7 +8,9 @@ from typing import Dict, List, Optional
 import requests
 
 from iplanrio.pipelines_utils.env import getenv_or_action  # pylint: disable=E0611, E0401
+from prefect_rj_iplanrio.logging import get_logger
 
+logger = get_logger(__name__)
 
 TIMEOUT_SECONDS = 60
 
@@ -81,7 +83,7 @@ class BetaGroupManager:
             "grant_type": "client_credentials",
             "scope": "profile email",
         }
-        print(f"Authenticating with URL {url} using payload {payload}") ## TODO: remover
+        logger.info("Autenticando na API da whitelist em %s", url)
         try:
             response = requests.post(url, data=payload, timeout=TIMEOUT_SECONDS)
             response.raise_for_status()
@@ -266,9 +268,9 @@ class BetaGroupManager:
             return True
 
         except (requests.exceptions.RequestException, requests.exceptions.Timeout) as err:
-            print(f"Error adding numbers to group: {err}")
+            logger.warning("Erro ao adicionar telefones ao grupo da whitelist: %s", type(err).__name__)
             if hasattr(err, "response") and err.response is not None:
-                print(f"Server response: {err.response.text}")
+                logger.warning("Resposta da API da whitelist: HTTP %s", err.response.status_code)
             return False
 
     def remove_number_from_whitelist(self, phone_number: str) -> bool:
@@ -282,10 +284,10 @@ class BetaGroupManager:
                 url, headers=self.get_headers(), timeout=TIMEOUT_SECONDS
             )
             response.raise_for_status()
-            print(f"✅  Number {phone_number} removed from whitelist successfully!")
+            logger.info("Telefone removido da whitelist.")
             return True
         except (requests.exceptions.RequestException, requests.exceptions.Timeout) as err:
-            print(f"⚠️  Error removing number {phone_number} from whitelist: {err}")
+            logger.warning("Erro ao remover um telefone da whitelist: %s", type(err).__name__)
             return False
 
     def remove_numbers_bulk(self, phone_numbers: List[str]) -> bool:
@@ -304,9 +306,9 @@ class BetaGroupManager:
             print(f"✅  Successfully removed {len(phone_numbers)} numbers from whitelist!")
             return True
         except (requests.exceptions.RequestException, requests.exceptions.Timeout) as err:
-            print(f"⚠️  Error removing numbers in bulk: {err}")
+            logger.warning("Erro ao remover telefones da whitelist em lote: %s", type(err).__name__)
             if hasattr(err, "response") and err.response is not None:
-                print(f"Server response: {err.response.text}")
+                logger.warning("Resposta da API da whitelist: HTTP %s", err.response.status_code)
             return False
 
 

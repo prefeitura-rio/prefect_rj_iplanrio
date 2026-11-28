@@ -17,6 +17,7 @@ from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
 from prefect import flow  # pylint: disable=E0611, E0401
 from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
+from prefect_rj_iplanrio.logging import get_logger
 
 from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
@@ -31,6 +32,7 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     apply_df_enricher,
     check_flow_status,
     create_log_df,
+    describe_dataframe,
     filter_already_dispatched_phones_or_cpfs,
     filter_duplicated,
     format_query,
@@ -53,6 +55,8 @@ from pipelines.rj_crm__disparo_template.utils.tasks import (
     create_date_partitions,
     task_download_data_from_bigquery,
 )
+
+logger = get_logger(__name__)
 
 
 def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: State):
@@ -269,7 +273,6 @@ def rj_crm__disparo_template_sf(
     validate_sf_dataframe(df, campaign_name)
 
     print(f"Query retornou {len(df)} linhas. Colunas: {list(df.columns)}")
-    print(f"[DEBUG] Sample data:\n{df.head(10).to_dict('records')}")
 
     # Dedup por CPF — base para o loop de retentativas
     df = filter_duplicated(
@@ -278,7 +281,8 @@ def rj_crm__disparo_template_sf(
         filter_indicator=filter_duplicated_cpfs,
         label="CPFs",
     )
-    print(f"[DEBUG] Após filtrar cpfs duplicados:\n{df.head(10).to_dict('records')}") if debug else None
+    if debug:
+        logger.info("Após filtrar CPFs duplicados: %s", describe_dataframe(df))
     if df.empty:
         send_dispatch_no_destinations_found(campaign_name, test_mode)
         return
@@ -293,7 +297,8 @@ def rj_crm__disparo_template_sf(
                 df.loc[df["telefone"].isin(failed_phones), "telefone"] = None
             else:
                 df = df[~df["telefone"].isin(failed_phones)]
-            print(f"[DEBUG] Após filtrar quarentena:\n{df.head(10).to_dict('records')}") if debug else None
+            if debug:
+                logger.info("Após filtrar quarentena: %s", describe_dataframe(df))
 
         if df.empty:
             send_dispatch_no_destinations_found(campaign_name, test_mode)
@@ -396,7 +401,8 @@ def rj_crm__disparo_template_sf(
         if not already_dispatched_df.empty:  # Vale para qq tentativa, mas no retry só avalia o tefone
             print(f"🔍 Aplicando filtro de mesma campanha ({campaign_name})...")
             df_same_campaign = already_dispatched_df[already_dispatched_df["nome_campanha"] == campaign_name]
-            print(f"[DEBUG] Mesma campanha data:\n{df_same_campaign.head(10).to_dict('records')}") if debug else None
+            if debug:
+                logger.info("Já disparados da mesma campanha: %s", describe_dataframe(df_same_campaign))
 
             # Determina a coluna para o filtro da mesma campanha
             same_campaign_filter = "cpf" if i == 0 else "telefone"
@@ -407,7 +413,8 @@ def rj_crm__disparo_template_sf(
                 current_filter=same_campaign_filter,
             )
             print(f"🔍 Foram removidas {qnt_pessoas - current_df.shape[0]} pessoas da lista de envio que já receberam essa campanha nos último(s) {dispatch_interval_days} dia(s).")
-            print(f"[DEBUG] Após remoção de mesma campanha:\n{current_df.head(10).to_dict('records')}") if debug else None
+            if debug:
+                logger.info("Após remoção de mesma campanha: %s", describe_dataframe(current_df))
 
         # --------------------------------------------------------------------------------------
         # PASSO 2: FILTRO DIÁRIO CRUZADO DE CANAL (Qualquer Campanha Hoje)
@@ -444,7 +451,8 @@ def rj_crm__disparo_template_sf(
             )
             
             print(f"🔍 Foram removidas {qnt_pessoas - current_df.shape[0]} pessoas da lista de envio que já receberam alguma campanha hoje.")
-            print(f"[DEBUG] Já tiveram disparo hoje:\n{df_dispatched_today.head().to_dict('records')}") if debug else None
+            if debug:
+                logger.info("Já tiveram disparo hoje: %s", describe_dataframe(df_dispatched_today))
 
         # Dedup por telefone (retries podem introduzir duplicatas)
         current_df = filter_duplicated(
@@ -475,7 +483,7 @@ def rj_crm__disparo_template_sf(
             )
 
         print(f"\nStarting SF dispatch for campaign_name={campaign_name}, attempt={i}")
-        print(f"Sample data:\n{current_df.head(5).to_dict('records')}")
+        logger.info("Destinatários do attempt %s: %s", i, describe_dataframe(current_df))
 
         # ------------------------------------------------------------------
         # BATCH LOOP
@@ -577,7 +585,7 @@ def rj_crm__disparo_template_sf(
         # ------------------------------------------------------------------
         if not test_mode:
             if all_log_dfs:
-                print(f"Sample dispatched destination: {current_df.iloc[:5].to_dict()}")
+                logger.info("Destinatários disparados: %s", describe_dataframe(current_df))
                 # Log para BQ: schema fixo com coluna `data` em JSON para camada bronze
                 log_df = pd.concat(all_log_dfs, ignore_index=True)
 
