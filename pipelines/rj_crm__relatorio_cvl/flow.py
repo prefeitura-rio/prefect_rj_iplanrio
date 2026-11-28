@@ -52,7 +52,7 @@ def rj_crm__relatorio_cvl(
 
     # Read the query from query.sql
     if not query:
-        with open("pipelines/rj_crm__relatorio_cvl/query.sql", "r", encoding="utf-8") as f:
+        with open("pipelines/rj_crm__relatorio_cvl/queries/query.sql", "r", encoding="utf-8") as f:
             query_template = f.read()
 
             query = query_template.replace("{START_DATE_PLACEHOLDER}", start_date)

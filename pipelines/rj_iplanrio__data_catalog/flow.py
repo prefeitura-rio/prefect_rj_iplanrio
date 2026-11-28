@@ -24,7 +24,7 @@ def get_catalog():
     """Query BigQuery to get the data catalog and save it as a raw JSON file."""
     credentials = get_credentials()
     client = bigquery.Client(credentials=credentials)
-    query = (Path(__file__).parent / "bigquery.sql").read_text()
+    query = (Path(__file__).parent / "queries" / "bigquery.sql").read_text()
     result = client.query_and_wait(query).to_arrow()
 
     df = pl.from_arrow(result)
